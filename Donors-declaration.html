@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blood Donor Form</title>
+    <style>
+        /* General Styles */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f8f8;
+        }
+        .donor-declaration-container {
+            width: 70%;
+            margin: auto;
+            padding: 25px;
+            text-align: center;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.349);
+        }
+        
+        /* Grid Layout */
+        .donor-declaration-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            align-items: center;
+            margin-bottom: 15px;
+            gap: 10%;
+        }
+        .donor-declaration-header-row {
+            grid-template-columns: 2fr 1fr;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        /* Button & Input Styling */
+        .donor-declaration-button {
+            padding: 12px 18px;
+            border: 2px solid #c00;
+            background-color: #c00; /* Red Cross Red */
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: 0.3s;
+            font-size: 16px;
+        }
+        .donor-declaration-button:hover {
+            background-color: white;
+            color: #c00;
+        }
+        
+        .donor-declaration-input {
+            padding: 10px;
+            border: 2px solid rgba(0, 0, 0, 0.575);
+            border-radius: 5px;
+            text-align: center;
+            font-size: 16px;
+        }
+
+        .declaration-title {
+            padding: 20px;
+            text-align: justify;
+            font-family: Arial, sans-serif;
+        }
+
+        .declaration-title h2 {
+            color: #b22222; /* Red cross theme color */
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+
+        .declaration-title p {
+            font-size: 16px;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        .bold {
+            font-weight: bold;
+            color: #b22222; /* Highlighted words in red */
+        }
+        /* Styled HR - Professional Look */
+        .styled-hr {
+            border: 0;
+            height: 4px;
+            background: #b22222;
+            margin-top: 1%;
+            margin-bottom: 2%;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="donor-declaration-container">
+        <div class="declaration-container">
+            <div class="declaration-title"><h2>III. Donor's Declaration</h2>
+            <p>
+                I <span class="bold">certify</span> that I am the person referred to above and that all the entries are read and well <span class="bold">understood</span> by me and to the best of my knowledge, <span class="bold">truthfully</span> answered all the questions in this Blood Donor Interview Sheet.
+            </p>
+            <p>
+                I <span class="bold">understand</span> that all questions are pertinent for my safety and for the benefit of the patient who will undergo blood transfusion.
+            </p>
+            <p>
+                I am <span class="bold">voluntarily</span> giving my blood through the Philippine Red Cross, without remuneration, for the use of persons in need of this vital fluid without regard to rank, race, color, creed, religion, or political persuasion.
+            </p>
+            <p>
+                I <span class="bold">understand</span> that my blood will be screened for malaria, syphilis, hepatitis B, hepatitis C, and HIV. I am aware that the screening tests are not diagnostic and may yield false positive results. Should any of the screening tests give a reactive result, I <span class="bold">authorize</span> the Red Cross to inform me utilizing the information I have supplied, subject the results to confirmatory tests, offer counseling, and to dispose of my donated blood in any way it may deem advisable for the safety of the majority of the populace.
+            </p>
+            <p>
+                I <span class="bold">confirm</span> that I am over the age of 18 years.
+            </p>
+            <p>
+                I <span class="bold">understand</span> that all information hereinto is treated confidential in compliance with the <span class="bold">Data Privacy Act of 2012</span>. I therefore <span class="bold">authorize</span> the Philippine Red Cross to utilize the information I supplied for purposes of research or studies for the benefit and safety of the community.
+            </p>
+    </div>
+    <hr class="styled-hr">
+        <div class="donor-declaration-row donor-declaration-header-row">
+            <div><strong>For those ages 16-17</strong></div>
+            <div><strong>Donor's Signature</strong></div>
+        </div>
+        <div class="donor-declaration-row">
+            <div><strong>Signature of Parent/Guardian</strong></div>
+            <div><strong>Relationship to Blood Donor</strong></div>
+        </div>
+        <div class="donor-declaration-row">
+            <button class="donor-declaration-button" onclick="alert('Upload Parent/Guardian Signature')">Upload Signature</button>
+            <input class="donor-declaration-input" type="text" placeholder="Enter Relationship">
+            <button class="donor-declaration-button" onclick="alert('Upload Donor Signature')">Upload Signature</button>
+        </div>
+    </div>
+
+</body>
+</html>

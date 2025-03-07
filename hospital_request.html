@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blood Shipment Slip</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        .form-container {
+            width: 90%;
+            max-width: 600px;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            border-left: 5px solid #a51c1c;
+        }
+        .form-title {
+            text-align: center;
+            font-weight: bold;
+            font-size: 22px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #a51c1c;
+            color: #a51c1c;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        .form-input, .form-select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: all 0.3s ease-in-out;
+            display: block;
+            box-sizing: border-box;
+        }
+        .form-input:focus, .form-select:focus {
+            border-color: #007bff;
+            outline: none;
+            box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+        }
+        @media (max-width: 480px) {
+            .form-container {
+                padding: 20px;
+            }
+            .form-title {
+                font-size: 18px;
+            }
+            .form-input, .form-select {
+                font-size: 12px;
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <div class="form-title">Referral for Blood Shipment Slip</div>
+        <div class="form-group">
+            <label class="form-label">Patient Name:</label>
+            <input type="text" class="form-input">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Age:</label>
+            <input type="number" class="form-input">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Gender:</label>
+            <select class="form-select">
+                <option value="">Select Gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Diagnosis:</label>
+            <input type="text" class="form-input">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Blood Type:</label>
+            <select class="form-select">
+                <option value="">Select Blood Type</option>
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="AB">AB</option>
+                <option value="O">O</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">RH:</label>
+            <select class="form-select">
+                <option value="">Select RH</option>
+                <option value="Positive">Positive</option>
+                <option value="Negative">Negative</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Component:</label>
+            <input type="text" class="form-input">
+        </div>
+        <div class="form-group">
+            <label class="form-label">No. of Units:</label>
+            <input type="number" class="form-input">
+        </div>
+        <div class="form-group">
+            <label class="form-label">When Needed:</label>
+            <input type="text" class="form-input">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Scheduled:</label>
+            <input type="text" class="form-input">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Hospital Admitted:</label>
+            <input type="text" class="form-input">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Requesting Physician:</label>
+            <input type="text" class="form-input">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Signature Over Printed Name (PNRC Staff):</label>
+            <input type="text" class="form-input">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Signature Over Printed Name (Hospital Staff):</label>
+            <input type="text" class="form-input">
+        </div>
+    </div>
+</body>
+</html>
