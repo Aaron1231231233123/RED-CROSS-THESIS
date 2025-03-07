@@ -1,22 +1,52 @@
-Red Cross Inventory System
-Team Members:
+🏥 Red Cross Inventory System
+📌 Team Members:
 Aaron Paul Villanueva
 Trixie Sabisol
 Kristine Joy Casaquite
 Victoria Clarrize Lozada
 Kelly John Noca
-Project Overview
-This research aims to systemize and digitize the Red Cross inventory system by integrating data-driven analysis and a user-friendly interface. The system will enhance blood inventory management, streamline operations, and introduce predictive analytics to anticipate demand spikes.
 
-Key Features:
-Digital Inventory Management: Transitioning from manual to automated tracking of blood stocks.
-Time Series Analysis: Predicting blood demand based on historical trends and upcoming events (e.g., Dinagyang, elections, fiestas in Iloilo).
-Mobile Application for Donors: Allowing blood donors to track their donations, similar to parcel tracking in e-commerce platforms.
-Current Development:
-Implementing time series forecasting for demand prediction.
-Designing a mobile application for donor transparency and engagement.
-Developing a web-based system for Red Cross administrators to manage inventory efficiently.
-Future Enhancements:
-Real-time notifications for low stock alerts.
-Integration with local event databases to refine demand predictions.
-A feature for donors to receive updates on their blood donations.
+👥 Developed by:
+Aaron Paul Villanueva
+Kelly John Noca
+
+📖 Project Overview
+🚀 Our goal is to systemize and digitize the Red Cross inventory system by integrating a predictive blood demand analysis and a mobile tracking system for donors.
+
+🔥 Key Features
+✅ Digital Inventory Management – Automated tracking of blood stocks.
+✅ Time Series Analysis – Predicting blood demand based on events like Dinagyang, elections, fiestas in Iloilo.
+✅ Donor Tracking Mobile App – Allowing donors to track their blood donations like a parcel delivery system.
+✅ Event-Based Blood Demand Forecasting – Anticipating accidents and medical needs based on local events.
+
+🖥️ Web Dashboard for Red Cross
+
+Manage blood inventory efficiently
+
+🛠️ Tech Stack
+🔹 Frontend: React Native / Flutter (for mobile app)
+🔹 Backend: Node.js (with Infura for blockchain integration)
+🔹 Database: MySQL / Firebase
+🔹 Machine Learning: Python (for time series analysis and forecasting)
+
+📌 Future Enhancements
+⚡ Real-time notifications for low stock alerts
+⚡ Event database integration for refined demand predictions
+⚡ Donor engagement features – blood donation history, badges, and rewards
+
+🚀 Get Started
+💻 Installation
+bash
+Copy
+Edit
+# Clone the repository
+git clone https://github.com/your-repo/red-cross-inventory.git  
+
+# Install dependencies
+npm install  
+
+# Run the server
+npm start  
+
+💖 Made with dedication for the Red Cross!
+
