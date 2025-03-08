@@ -104,7 +104,7 @@ To develop an **integrated Blood Donation and Inventory Management System** for 
 ### 💻 Installation  
 ```bash
 # Clone the repository
-git clone https://github.com/your-repo/red-cross-inventory.git  
+git clone https://github.com/Aaron1231231233123/RED-CROSS-THESIS.git
 
 # Install dependencies
 npm install  
