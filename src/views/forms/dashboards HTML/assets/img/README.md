@@ -1,13 +1,13 @@
 # Gojo Satoru: The Strongest Sorcerer 🧢💙
 
-![Gojo Satoru](https://i.imgur.com/z6xZ6Z5.gif)
+![Gojo Satoru](https://media.tenor.com/g66Q5UMnbWoAAAAM/gojo-satoru-gojo.gif)
 
 ## "Throughout heaven and earth, I alone am the honored one."
 
 Gojo Satoru, the enigmatic powerhouse of **Jujutsu Kaisen**, isn't just any sorcerer—he's a walking **domain expansion** of charisma and raw power. With his **Limitless** technique and **Six Eyes**, Gojo reigns as the strongest jujutsu sorcerer alive. 💥
 
 ---
-
+![Gojo Satoru](https://media1.tenor.com/m/6cB00Fl1QXYAAAAd/gojo-satoru-gojo.gif)
 ## 🔥 Why is Gojo the GOAT?
 
 - **Limitless Cursed Technique** 🌀 – Manipulates space at will.
@@ -36,5 +36,8 @@ Despite his goofy and carefree nature, Gojo harbors a deep desire to change the 
 > "No matter how many allies you have around you, when you die, you'll be alone."
 
 ---
-
-🔹 **#GojoSatoru** 🔹 **#JujutsuKaisen** 🔹 **#LimitlessDrip**
+![Gojo Satoru](https://i.kym-cdn.com/photos/images/original/002/619/259/239.gif)
+---
+🔹 **#GojoSatoru** 🔹 **#JujutsuKaisen** 🔹 **#LimitlessDrip** 🔹 **#Dead**
+---
+![Gojo Satoru](https://i.ytimg.com/vi/4lT2ZpYqgYE/maxresdefault.jpg)
