@@ -36,15 +36,14 @@
 ✅ **Event-Based Blood Demand Forecasting** – Anticipating **accidents and medical needs** based on local events.  
 ✅ **Secure Data Handling** – Protecting donor & patient records with **ISO 27001-compliant encryption**.  
 ✅ **Hospital Blood Request System** – Allowing hospitals to request blood in **real time**.  
-### ✅ Donor Tracking Mobile App
-A Shopee-style tracking system where donors can:
-- 📍 **Track their donated blood** from collection to usage.
-- 🔍 **Get verified** after donation and receive real-time updates.
-- 🏥 **Check if their blood was used properly** and where it was delivered.
-- 🚨 **Receive notifications** if their blood type is urgently needed.
-- 📊 **Monitor blood bank levels** and their eligibility for the next donation.
-- 🗺️ **View a GIS map** of all Red Cross locations for easy access.
-
+✅ **Donor Tracking Mobile App:**
+  - 📍 **Track their donated blood** from collection to usage.
+  - 🔍 **Get verified** after donation and receive real-time updates.
+  - 🏥 **Check if their blood was used properly** and where it was delivered.
+  - 🚨 **Receive notifications** if their blood type is urgently needed.
+  - 📊 **Monitor blood bank levels** and their eligibility for the next donation.
+  - 🗺️ **View a GIS map** of all Red Cross locations for easy access.
+ 
 ---
 
 ## 🎯 **Objectives**  
