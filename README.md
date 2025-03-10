@@ -101,9 +101,22 @@ To develop an **integrated Blood Donation and Inventory Management System** for 
 ---
 
 ## 📌 **Future Enhancements**  
-⚡ **Real-time notifications** for low stock alerts.  
-⚡ **Event database integration** for refined demand predictions.  
-⚡ **Donor engagement features** – blood donation history, badges, and rewards.  
+⚡ **Comprehensive System Evaluation** – Assess usability, performance, and security based on the latest **ISO standards**.
+
+⚡ **Machine Learning for Advanced Blood Demand Forecasting** – Enhance predictive analytics using **real-time data trends**.
+
+⚡ **Automated Matching for Urgent Blood Requests** – Notify the most **suitable donors** instantly when their blood type is needed.
+
+⚡ **Enhanced Donor Engagement Features** – Personalized messages, donation history visualization, and **reminders for upcoming eligibility**.
+
+⚡ **Improved Staff Dashboard** – A **streamlined** interface for Red Cross personnel to efficiently manage blood stocks, donor records, and hospital requests.
+
+⚡ **Expanded GIS Integration** – A **fully interactive map** showing **real-time blood availability** across different Red Cross branches.
+
+⚡ **Automated Blood Inventory Optimization** – Predict **expiring blood stocks** and suggest **redistribution** to avoid wastage.
+
+⚡ **Dynamic Blood Shortage Alerts** – Automatically detect and notify **regional shortages**, allowing Red Cross branches to **redistribute supply** efficiently.
+
 
 ---
 
@@ -124,12 +137,25 @@ npm start
 
 ## 🔹 Planned Features & Improvements
 
-✅ **Planned ISO 9001 & ISO 27001 compliance** (Quality & Security standards to be integrated in future phases).  
-✅ **Reorganized team roles** (Project Leader → System Analytics → Developers).  
-✅ **Included event-based demand prediction** for blood stock management.  
-✅ **Refined progress tracking with Unicode-based bars**.  
-✅ **Enhanced donor engagement features** (tracking, notifications, history).  
-✅ **Dashboard updates**: Improved UI/UX, better data visualization, and Supabase integration testing.  
+# 🚀 Project Updates
+
+## ✅ Latest Enhancements
+
+- **Planned ISO 9001 & ISO 27001 Compliance** – Future integration of **Quality & Security standards**.
+- **Reorganized Team Roles** – Structured workflow: **Project Leader → System Analytics → Developers**.
+- **Event-Based Demand Prediction** – Implemented forecasting for **blood stock management**.
+- **Refined Progress Tracking** – Integrated **Unicode-based progress bars** for better visualization.
+- **Enhanced Donor Engagement Features** – Donors can now **track donations, receive notifications, and view donation history**.
+- **Dashboard Updates** –
+  - Improved **UI/UX** for a cleaner and more intuitive experience.
+  - **Better data visualization** for real-time tracking.
+  - **Supabase integration testing** underway for scalable backend solutions.
+
+## 🔥 Landing Page Update (Today)
+- **New Header Design** – Features an updated **Red Cross logo** with improved layout.
+- **Better Responsiveness** – Optimized for **desktop & mobile devices**.
+
+---
 
 ---
 
