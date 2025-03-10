@@ -115,9 +115,47 @@ npm start
 
 ---
 
-### **🔹 Updates & Improvements**
-✅ **Added ISO 9001 & ISO 27001 compliance** (Quality & Security).  
+## 🔹 Planned Features & Improvements
+
+✅ **Planned ISO 9001 & ISO 27001 compliance** (Quality & Security standards to be integrated in future phases).  
 ✅ **Reorganized team roles** (Project Leader → System Analytics → Developers).  
 ✅ **Included event-based demand prediction** for blood stock management.  
 ✅ **Refined progress tracking with Unicode-based bars**.  
 ✅ **Enhanced donor engagement features** (tracking, notifications, history).  
+✅ **Dashboard updates**: Improved UI/UX, better data visualization, and Supabase integration testing.  
+
+---
+
+## 📅 Development Timeline & Updates
+
+### **✅ February 1, 2025 – Coding Phase Started**
+- Implemented **Login & Register (Frontend)**
+- Developed **Mobile Application Login (React Native)**
+
+### **✅ February 10, 2025 – Adjustment & Brainstorming**
+- No major code updates
+- Consultation and technical planning
+
+### **✅ February 20, 2025 – Donor Form Digitalization**
+- **Donor Information (✔️ Done)**
+- **Medical History (✔️ Done)**
+- **Donor’s Declaration (✔️ Done)**
+- **Screening/Testing (🛠️ In Progress)**
+- CRUD functionality planning
+- API integration for location-based registration
+
+### **✅ March 10, 2025 – Dashboard Testing**
+- **Testing of Supabase integration**
+- **Account level testing (0 - Admin, 1 - Staff, 2 - Hospital, 3 - Backup, 4 - Mobile)**
+- **Refining redirection and access control**
+
+---
+
+## ⚠️ Notes
+- This setup is for **testing purposes only** and will evolve over time.
+- Future iterations will refine permissions, security, and user access flows.
+- The current dashboards are placeholders and subject to changes based on evaluations and feedback.
+
+---
+
+📌 *This document is part of the ongoing development of the Red Cross Inventory System. All features and access levels are subject to modification.* 🚀
