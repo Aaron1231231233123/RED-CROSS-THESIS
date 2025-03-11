@@ -1,18 +1,47 @@
 <?php
-// Start the session (optional, useful if you want to store user data later)
+// Start the session
 session_start();
+
+// Include the Supabase configuration file
+require_once '../src/config/database.php';
+
+// Initialize variables for error messages
+$error_message = '';
+$success_message = '';
 
 // Check if the form was submitted
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Retrieve the submitted email and password
     $email = $_POST['email'];
     $password = $_POST['password'];
-
-    // For now, we'll just print the submitted data (no validation or connection yet)
-    echo "Email: " . htmlspecialchars($email) . "<br>";
-    echo "Password: " . htmlspecialchars($password) . "<br>";
-
-    // TODO: Add your authentication logic here (e.g., connect to Supabase or a database)
+    
+    // Validate input (basic validation)
+    if (empty($email) || empty($password)) {
+        $error_message = "Email and password are required.";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error_message = "Please enter a valid email address.";
+    } else {
+        // Attempt to authenticate the user
+        $auth_result = authenticateUser($email, $password);
+        
+        if ($auth_result['success']) {
+            // Authentication successful
+            
+            // Store user information in session
+            $_SESSION['user_id'] = $auth_result['user']['id'];
+            $_SESSION['user_email'] = $auth_result['user']['email'];
+            $_SESSION['access_token'] = $auth_result['access_token'];
+            
+            // Set success message
+            $success_message = "Login successful! Redirecting...";
+            
+            // Redirect to dashboard (you can change this to your desired page)
+            header("Refresh: 2; URL=dashboard.php");
+        } else {
+            // Authentication failed
+            $error_message = $auth_result['message'];
+        }
+    }
 }
 ?>
 
@@ -132,6 +161,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             color: #b71c1c; /* Darker red on hover */
             text-decoration: underline;
         }
+        
+        /* Message styling */
+        .error-message {
+            color: #d32f2f;
+            margin-bottom: 15px;
+            font-size: 14px;
+            text-align: left;
+        }
+        
+        .success-message {
+            color: #4CAF50;
+            margin-bottom: 15px;
+            font-size: 14px;
+            text-align: left;
+        }
     </style>
 </head>
 <body>
@@ -140,9 +184,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <h2>Red Cross</h2>
         <hr>
         <h2>Login</h2>
+        
+        <?php if (!empty($error_message)): ?>
+            <div class="error-message"><?php echo $error_message; ?></div>
+        <?php endif; ?>
+        
+        <?php if (!empty($success_message)): ?>
+            <div class="success-message"><?php echo $success_message; ?></div>
+        <?php endif; ?>
+        
         <form method="POST" action="">
             <label for="email">Email:</label>
-            <input type="email" id="email" name="email" placeholder="Enter your email" required>
+            <input type="email" id="email" name="email" placeholder="Enter your email" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
 
             <label for="password">Password:</label>
             <input type="password" id="password" name="password" placeholder="Enter your password" required>
