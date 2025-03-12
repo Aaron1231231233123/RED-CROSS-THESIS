@@ -1,33 +1,86 @@
 <?php
-// Include a library for making HTTP requests
-// You may need to install this via Composer: composer require guzzlehttp/guzzle
-require 'vendor/autoload.php';
+// File: config/database.php
 
-use GuzzleHttp\Client;
+// Supabase API credentials
+define('SUPABASE_URL', 'https://bsxbrvxhjslsaeizdxsr.supabase.co');
+define('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJzeGJydnhoanNsc2FlaXpkeHNyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTIzMzksImV4cCI6MjA1Mzk4ODMzOX0.Yy1FGkU6IVTjFbBPWobQ3S5XdMFtH2v28O57O7mZGSM');
 
-// Your Supabase credentials
-$supabaseUrl = 'https://bsxbrvxhjslsaeizdxsr.supabase.co';
-$supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJzeGJydnhoanNsc2FlaXpkeHNyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTIzMzksImV4cCI6MjA1Mzk4ODMzOX0.Yy1FGkU6IVTjFbBPWobQ3S5XdMFtH2v28O57O7mZGSM';
-
-// Create a new HTTP client
-$client = new Client();
-
-// Example: Fetch data from a table
-try {
-    $response = $client->request('GET', $supabaseUrl . '/rest/v1/your_table', [
-        'headers' => [
-            'apikey' => $supabaseKey,
-            'Authorization' => 'Bearer ' . $supabaseKey
-        ]
+// Function to create a cURL request to Supabase
+function createSupabaseRequest($endpoint, $method = 'GET', $data = null) {
+    $url = SUPABASE_URL . $endpoint;
+    
+    // Initialize cURL
+    $curl = curl_init();
+    
+    // Set cURL options
+    curl_setopt_array($curl, [
+        CURLOPT_URL => $url,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_ENCODING => '',
+        CURLOPT_MAXREDIRS => 10,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+        CURLOPT_CUSTOMREQUEST => $method,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_KEY,
+            'Authorization: Bearer ' . SUPABASE_KEY,
+            'Content-Type: application/json'
+        ],
     ]);
     
-    // Get and process the response
-    $data = json_decode($response->getBody(), true);
+    // Add request body if data is provided
+    if ($data !== null) {
+        curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($data));
+    }
     
-    // Display or use the data
-    print_r($data);
+    // Execute the request
+    $response = curl_exec($curl);
+    $error = curl_error($curl);
     
-} catch (Exception $e) {
-    echo 'Error: ' . $e->getMessage();
+    // Close cURL
+    curl_close($curl);
+    
+    // Handle errors
+    if ($error) {
+        throw new Exception("cURL Error: " . $error);
+    }
+    
+    // Return the response
+    return json_decode($response, true);
 }
-?>
+
+// Function to authenticate a user with Supabase
+function authenticateUser($email, $password) {
+    try {
+        $data = [
+            'email' => $email,
+            'password' => $password
+        ];
+        
+        // Use Supabase Auth API endpoint
+        $response = createSupabaseRequest('/auth/v1/token?grant_type=password', 'POST', $data);
+        
+        // Check if authentication was successful (response contains access_token)
+        if (isset($response['access_token'])) {
+            return [
+                'success' => true,
+                'user' => $response['user'],
+                'access_token' => $response['access_token'],
+                'refresh_token' => $response['refresh_token']
+            ];
+        } else {
+            // Authentication failed
+            return [
+                'success' => false,
+                'message' => isset($response['error_description']) 
+                    ? $response['error_description'] 
+                    : 'Authentication failed'
+            ];
+        }
+    } catch (Exception $e) {
+        return [
+            'success' => false,
+            'message' => $e->getMessage()
+        ];
+    }
+}
