@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Red Cross Screening Form</title>
+    <style>
+       /* General Styling */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f9f9f9;
+    margin: 0;
+    padding: 20px;
+}
+
+/* Screening Form Container */
+.screening-form {
+    background: #fff;
+    padding: 2%;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    max-width: 900px;
+    margin: auto;
+}
+
+/* Title Styling */
+.screening-form-title {
+    text-align: center;
+    font-size: 22px;
+    font-weight: bold;
+    margin-bottom: 20px;
+}
+
+/* Tables Styling */
+.screening-form-table, 
+.screening-form-patient, 
+.screening-form-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+.screening-form-table th,
+.screening-form-table td,
+.screening-form-patient th,
+.screening-form-patient td,
+.screening-form-history-table th,
+.screening-form-history-table td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: center;
+}
+
+.screening-form-table th,
+.screening-form-patient th,
+.screening-form-history-table th {
+    background-color: #d9534f;
+    color: white;
+    font-weight: bold;
+}
+
+/* Input Fields inside Tables */
+.screening-form-table input,
+.screening-form-patient input,
+.screening-form-history-table input {
+    width: 95%;
+    padding: 5px 2px 5px 2px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+}
+
+/* Donation Section Styling */
+.screening-form-donation {
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    border: 1px solid #ddd;
+}
+
+/* Donation Title Styling */
+.screening-form-donation p {
+    font-weight: bold;
+    color: #721c24;
+    margin-bottom: 10px;
+    font-size: 18px;
+}
+
+/* Donation Type Options */
+.donation-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.donation-option {
+    display: flex;
+    align-items: center;
+    font-weight: bold;
+    color: #721c24;
+    gap: 8px;
+    background: #fff;
+    padding: 10px 15px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.donation-option:hover {
+    background-color: #f0f0f0;
+    transform: translateY(-2px);
+}
+
+/* Custom Checkbox Styling */
+.donation-option input {
+    opacity: 0;
+    position: absolute;
+}
+
+.checkmark {
+    width: 18px;
+    height: 18px;
+    background-color: #fff;
+    border: 2px solid #721c24;
+    border-radius: 4px;
+    display: inline-block;
+    position: relative;
+    transition: background-color 0.3s ease;
+}
+
+.donation-option input:checked ~ .checkmark {
+    background-color: #721c24;
+}
+
+.checkmark::after {
+    content: "";
+    position: absolute;
+    display: none;
+    left: 5px;
+    top: 1px;
+    width: 5px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.donation-option input:checked ~ .checkmark::after {
+    display: block;
+}
+
+/* Mobile Donation Section */
+.mobile-donation-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: #fff;
+    padding: 15px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+}
+
+.mobile-donation-label {
+    display: flex;
+    align-items: center;
+    font-weight: bold;
+    color: #721c24;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.mobile-donation-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.mobile-donation-fields label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-weight: bold;
+    color: #721c24;
+}
+
+.mobile-donation-fields input[type="text"] {
+    width: 100%;
+    max-width: 400px;
+    padding: 8px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+}
+
+.mobile-donation-fields input[type="text"]:focus {
+    border-color: #721c24;
+    outline: none;
+}
+
+/* Placeholder Styling */
+.mobile-donation-fields input::placeholder {
+    color: #999;
+    font-style: italic;
+}
+
+/* History Section */
+.screening-form-history {
+    background: #d1ecf1;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 15px;
+}
+
+.screening-form-history p {
+    font-weight: bold;
+    color: #0c5460;
+}
+
+/* Footer Styling */
+.screening-form-footer {
+    text-align: center;
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 20px;
+}
+
+.screening-form-footer input {
+    border: none;
+    border-bottom: 1px solid #000;
+    padding: 3px;
+    width: 50%;
+    text-align: center;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 600px) {
+    .donation-options {
+        flex-direction: column;
+    }
+
+    .mobile-donation-fields input[type="text"] {
+        max-width: 100%;
+    }
+
+    .screening-form-footer input {
+        width: 80%;
+    }
+
+    .screening-form-table th,
+    .screening-form-table td,
+    .screening-form-patient th,
+    .screening-form-patient td,
+    .screening-form-history-table th,
+    .screening-form-history-table td {
+        padding: 6px;
+        font-size: 14px;
+    }
+
+    .screening-form-donation p {
+        font-size: 16px;
+    }
+
+    .screening-form-title {
+        font-size: 20px;
+    }
+}
+
+/* Physical Examination Section */
+.physical-examination {
+    margin-top: 50px;
+    margin-bottom: 20px;
+}
+
+.physical-examination h3 {
+    font-size: 18px;
+    font-weight: bold;
+    color: #721c24;
+    margin-bottom: 15px;
+}
+
+/* Table Styling */
+.physical-examination-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+.physical-examination-table th,
+.physical-examination-table td {
+    border: 1px solid #ccc;
+    padding: 10px;
+    text-align: center;
+}
+
+.physical-examination-table th {
+    background-color: #d9534f;
+    color: white;
+    font-weight: bold;
+}
+
+.physical-examination-table input[type="text"] {
+    width: 90%;
+    padding: 6px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+}
+
+.physical-examination-table input[type="text"]:focus {
+    border-color: #721c24;
+    outline: none;
+}
+
+/* Remarks Section */
+.remarks-section {
+    margin-bottom: 20px;
+}
+
+.remarks-section h4 {
+    font-size: 16px;
+    font-weight: bold;
+    color: #721c24;
+    margin-bottom: 10px;
+}
+
+.remarks-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-bottom: 10px;
+}
+
+.remarks-option {
+    display: flex;
+    align-items: center;
+    font-weight: bold;
+    color: #721c24;
+    gap: 8px;
+    background: #fff;
+    padding: 10px 15px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    cursor: pointer;
+}
+
+/* Custom Radio Button Styling */
+.remarks-option input {
+    opacity: 0;
+    position: absolute;
+}
+
+.radio-mark {
+    width: 18px;
+    height: 18px;
+    background-color: #fff;
+    border: 2px solid #721c24;
+    border-radius: 50%;
+    display: inline-block;
+    position: relative;
+    transition: background-color 0.3s ease;
+}
+
+.remarks-option input:checked ~ .radio-mark {
+    background-color: #721c24;
+}
+
+.radio-mark::after {
+    content: "";
+    position: absolute;
+    display: none;
+    left: 50%;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    background-color: white;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.remarks-option input:checked ~ .radio-mark::after {
+    display: block;
+}
+
+/* Reason Input Styling */
+.reason-input input[type="text"] {
+    width: 100%;
+    max-width: 400px;
+    padding: 8px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+}
+
+.reason-input input[type="text"]:focus {
+    border-color: #721c24;
+    outline: none;
+}
+
+.reason-input input[type="text"] {
+    width: 100%;
+    max-width: 400px;
+    padding: 8px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+}
+
+.reason-input input[type="text"]:focus {
+    border-color: #721c24;
+    outline: none;
+}
+
+/* Blood Bag Section */
+.blood-bag-section {
+    margin-bottom: 20px;
+}
+
+.blood-bag-section h4 {
+    font-size: 16px;
+    font-weight: bold;
+    color: #721c24;
+    margin-bottom: 10px;
+}
+
+.blood-bag-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.blood-bag-option {
+    display: flex;
+    align-items: center;
+    font-weight: bold;
+    color: #721c24;
+    gap: 8px;
+    background: #fff;
+    padding: 10px 15px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    cursor: pointer;
+}
+
+/* Custom Checkbox Styling */
+.blood-bag-option input {
+    opacity: 0;
+    position: absolute;
+}
+
+.checkmark {
+    width: 18px;
+    height: 18px;
+    background-color: #fff;
+    border: 2px solid #721c24;
+    border-radius: 4px;
+    display: inline-block;
+    position: relative;
+    transition: background-color 0.3s ease;
+}
+
+.blood-bag-option input:checked ~ .checkmark {
+    background-color: #721c24;
+}
+
+.checkmark::after {
+    content: "";
+    position: absolute;
+    display: none;
+    left: 5px;
+    top: 1px;
+    width: 5px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.blood-bag-option input:checked ~ .checkmark::after {
+    display: block;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 600px) {
+    .physical-examination-table th,
+    .physical-examination-table td {
+        padding: 8px;
+        font-size: 14px;
+    }
+
+    .remarks-options,
+    .blood-bag-option {
+        flex-direction: column;
+    }
+
+    .reason-input input[type="text"] {
+        max-width: 100%;
+    }
+}
+    </style>
+</head>
+<body>
+    <div class="screening-form">
+        <h2 class="screening-form-title">IV. INITIAL SCREENING <span>(To be filled up by the interviewer)</span></h2>
+        
+        <table class="screening-form-table">
+            <tr>
+                <th>BODY WT</th>
+                <th>SP. GR</th>
+                <th>HGB</th>
+                <th>HCT</th>
+                <th>RBC</th>
+                <th>WBC</th>
+                <th>PLT Count</th>
+                <th>BLOOD TYPE</th>
+            </tr>
+            <tr>
+                <td><input type="text" name="body-wt"></td>
+                <td><input type="text" name="sp-gr"></td>
+                <td><input type="text" name="hgb"></td>
+                <td><input type="text" name="hct"></td>
+                <td><input type="text" name="rbc"></td>
+                <td><input type="text" name="wbc"></td>
+                <td><input type="text" name="plt-count"></td>
+                <td><input type="text" name="blood-type"></td>
+            </tr>
+        </table>
+
+        <div class="screening-form-donation">
+            <p>TYPE OF DONATION (Donor's Choice):</p>
+            <div class="donation-options">
+                <label class="donation-option">
+                    <input type="radio" name="donation-type"> 
+                    <span class="checkmark"></span>
+                    IN-HOUSE
+                </label>
+                <label class="donation-option">
+                    <input type="radio" name="donation-type"> 
+                    <span class="checkmark"></span>
+                    WALK-IN/VOLUNTARY
+                </label>
+                <label class="donation-option">
+                    <input type="radio" name="donation-type"> 
+                    <span class="checkmark"></span>
+                    REPLACEMENT
+                </label>
+                <label class="donation-option">
+                    <input type="radio" name="donation-type"> 
+                    <span class="checkmark"></span>
+                    PATIENT-DIRECTED
+                </label>
+                <label class="donation-option">
+                    <input type="radio" name="donation-type"> 
+                    <span class="checkmark"></span>
+                    Mobile Blood Donation
+                </label>
+            </div>
+            
+            <div class="mobile-donation-section">
+                <div class="mobile-donation-fields">
+                    <label>
+                        PLACE: 
+                        <input type="text" name="mobile-place" placeholder="Enter place">
+                    </label>
+                    <label>
+                        ORGANIZER: 
+                        <input type="text" name="mobile-organizer" placeholder="Enter organizer">
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+
+        <table class="screening-form-patient">
+            <tr>
+                <th>Patient Name</th>
+                <th>Hospital</th>
+                <th>Blood Type</th>
+                <th>WB/Component</th>
+                <th>No. of units</th>
+            </tr>
+            <tr>
+                <td><input type="text" name="patient-name"></td>
+                <td><input type="text" name="hospital"></td>
+                <td><input type="text" name="blood-type-patient"></td>
+                <td><input type="text" name="wb-component"></td>
+                <td><input type="text" name="no-units"></td>
+            </tr>
+        </table>
+
+        <div class="screening-form-history">
+            <p>History of previous donation? (Donor's Opinion)</p>
+            <label><input type="radio" name="history" value="yes"> YES</label>
+            <label><input type="radio" name="history" value="no"> NO</label>
+        </div>
+
+        <table class="screening-form-history-table">
+            <tr>
+                <th></th>
+                <th>Red Cross</th>
+                <th>Hospital</th>
+            </tr>
+            <tr>
+                <th>No. of times</th>
+                <td><input type="text" name="red-cross"></td>
+                <td><input type="text" name="hospital-history"></td>
+            </tr>
+            <tr>
+                <th>Date of last donation</th>
+                <td colspan="1"><input type="date" name="last-donation-date"></td>
+                <td colspan="1"><input type="date" name="last-donation-date"></td>
+            </tr>
+            <tr>
+                <th>Place of last donation</th>
+                <td colspan="1"><input type="text" name="last-donation-place"></td>
+                <td colspan="1"><input type="text" name="last-donation-place"></td>
+            </tr>
+
+        </table>
+
+        <div class="screening-form-footer">
+            <label>INTERVIEWER (print name & sign): <input type="text" name="interviewer"></label>
+            <label>PRC Office</label>
+            <p>Date: <span id="current-date"></span></p>
+        </div>
+
+        <div class="physical-examination">
+            <h3>V. PHYSICAL EXAMINATION (To be accomplished by the Blood Bank Physician)</h3>
+            <table class="physical-examination-table">
+                <thead>
+                    <tr>
+                        <th>Blood Pressure</th>
+                        <th>Pulse Rate</th>
+                        <th>Body Temp.</th>
+                        <th>Gen. Appearance</th>
+                        <th>Skin</th>
+                        <th>HEENT</th>
+                        <th>Heart and Lungs</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><input type="text" placeholder="Enter value"></td>
+                        <td><input type="text" placeholder="Enter value"></td>
+                        <td><input type="text" placeholder="Enter value"></td>
+                        <td><input type="text" placeholder="Enter value"></td>
+                        <td><input type="text" placeholder="Enter value"></td>
+                        <td><input type="text" placeholder="Enter value"></td>
+                        <td><input type="text" placeholder="Enter value"></td>
+                    </tr>
+                </tbody>
+            </table>
+        
+            <div class="remarks-section">
+                <h4>REMARKS:</h4>
+                <div class="remarks-options">
+                    <label class="remarks-option">
+                        <input type="radio" name="remarks"> 
+                        <span class="radio-mark"></span>
+                        Accepted
+                    </label>
+                    <label class="remarks-option">
+                        <input type="radio" name="remarks"> 
+                        <span class="radio-mark"></span>
+                        Temporarily Deferred
+                    </label>
+                    <label class="remarks-option">
+                        <input type="radio" name="remarks"> 
+                        <span class="radio-mark"></span>
+                        Permanently Deferred
+                    </label>
+                    <label class="remarks-option">
+                        <input type="radio" name="remarks"> 
+                        <span class="radio-mark"></span>
+                        Refused
+                    </label>
+                </div>
+                <div class="reason-input">
+                    <label>Reason: <input type="text" placeholder="Enter reason"></label>
+                </div>
+            </div>
+        
+            <div class="blood-bag-section">
+                <h4>Blood bag to be used: (mark [√] appropriate box)</h4>
+                <div class="blood-bag-options">
+                    <label class="blood-bag-option">
+                        <input type="radio" name="blood-bag-type"> 
+                        <span class="checkmark"></span>
+                        Single
+                    </label>
+                    <label class="blood-bag-option">
+                        <input type="radio" name="blood-bag-type"> 
+                        <span class="checkmark"></span>
+                        Multiple
+                    </label>
+                    <label class="blood-bag-option">
+                        <input type="radio" name="blood-bag-type"> 
+                        <span class="checkmark"></span>
+                        Top & Bottom
+                    </label>
+                    <label class="blood-bag-option">
+                        <input type="radio" name="blood-bag-type"> 
+                        <span class="checkmark"></span>
+                        Apheresis
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.getElementById("current-date").textContent = new Date().toLocaleDateString();
+    </script>
+</body>
+</html>
