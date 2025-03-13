@@ -62,103 +62,103 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         /* Body Styling */
         body {
             font-family: 'Arial', sans-serif;
-            background-color: #f9f9f9; /* Light gray background */
+            background-color: #f9f9f9;
             display: flex;
-            justify-content: center; /* Center horizontally */
-            align-items: center; /* Center vertically */
+            justify-content: center; 
+            align-items: center; 
             height: 100vh;
             margin: 0;
         }
 
         /* Form Container */
         .login-form {
-            background-color: #ffffff; /* White background for the form */
-            padding: 40px 30px; /* Increased padding for better spacing */
-            border-radius: 12px; /* Slightly rounded corners */
-            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
+            background-color: #ffffff; 
+            padding: 40px 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1); 
             width: 100%;
-            max-width: 400px; /* Fixed max-width for consistency */
-            text-align: center; /* Center-align headings and buttons */
+            max-width: 400px; 
+            text-align: center; 
         }
 
         /* Logo and Title */
         .login-form h2:first-of-type {
-            color: #d32f2f; /* Red Cross red */
-            font-size: 24px; /* Larger font size for branding */
-            margin-bottom: 10px; /* Reduced spacing between logo and subtitle */
+            color: #d32f2f; 
+            font-size: 24px;
+            margin-bottom: 10px; 
         }
 
         .login-form hr {
             border: 0;
             height: 2px;
-            background-color: #d32f2f; /* Red Cross red */
-            margin: 10px auto 20px; /* Spacing above and below the line */
-            width: 50px; /* Short horizontal line */
+            background-color: #d32f2f; 
+            margin: 10px auto 20px;
+            width: 50px; 
         }
 
         .login-form h2:last-of-type {
-            color: #333333; /* Dark gray for the login title */
-            font-size: 20px; /* Slightly smaller than the logo */
-            margin-bottom: 25px; /* Space before the form fields */
+            color: #333333; 
+            font-size: 20px;
+            margin-bottom: 25px; 
         }
 
         /* Labels */
         .login-form label {
-            color: #555555; /* Medium gray for labels */
+            color: #555555; 
             font-weight: bold;
-            display: block; /* Ensure labels are stacked above inputs */
-            margin-bottom: 8px; /* Space between label and input */
-            text-align: left; /* Align labels to the left */
+            display: block; 
+            margin-bottom: 8px; 
+            text-align: left; 
         }
 
         /* Input Fields */
         .login-form input[type="email"],
         .login-form input[type="password"] {
-            width: 100%; /* Full width of the form */
-            padding: 14px; /* Increased padding for better touch targets */
-            margin-bottom: 15px; /* Space between inputs */
-            border: 1px solid #d32f2f; /* Red Cross red border */
-            border-radius: 8px; /* Rounded corners */
-            font-size: 16px; /* Consistent font size */
-            transition: border-color 0.3s ease; /* Smooth border color change */
+            width: 100%; 
+            padding: 14px; 
+            margin-bottom: 15px; 
+            border: 1px solid #d32f2f; 
+            border-radius: 8px; 
+            font-size: 16px; 
+            transition: border-color 0.3s ease;
         }
 
         .login-form input[type="email"]:focus,
         .login-form input[type="password"]:focus {
-            border-color: #b71c1c; /* Darker red on focus */
-            outline: none; /* Remove default focus outline */
+            border-color: #b71c1c; 
+            outline: none; 
         }
 
         /* Submit Button */
         .login-form input[type="submit"] {
-            width: 100%; /* Full width of the form */
-            padding: 14px; /* Match input field padding */
-            background-color: #d32f2f; /* Red Cross red */
+            width: 100%; 
+            padding: 14px; 
+            background-color: #d32f2f; 
             border: none;
             color: white;
-            font-size: 18px; /* Larger font size for emphasis */
+            font-size: 18px; 
             font-weight: bold;
-            border-radius: 8px; /* Rounded corners */
+            border-radius: 8px; 
             cursor: pointer;
-            transition: background-color 0.3s ease; /* Smooth hover effect */
+            transition: background-color 0.3s ease; 
         }
 
         .login-form input[type="submit"]:hover {
-            background-color: #b71c1c; /* Darker red on hover */
+            background-color: #b71c1c; 
         }
 
         /* Forgot Password Link */
         .login-form a {
             display: inline-block;
-            margin-top: 20px; /* Space above the link */
-            color: #d32f2f; /* Red Cross red */
+            margin-top: 20px; 
+            color: #d32f2f; 
             text-decoration: none;
             font-size: 14px;
-            transition: color 0.3s ease; /* Smooth hover effect */
+            transition: color 0.3s ease; 
         }
 
         .login-form a:hover {
-            color: #b71c1c; /* Darker red on hover */
+            color: #b71c1c; 
             text-decoration: underline;
         }
         
