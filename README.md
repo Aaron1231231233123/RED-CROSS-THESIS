@@ -178,10 +178,16 @@ npm start
 - API integration for location-based registration
 
 ### **✅ March 10, 2025 – Dashboard Testing**
+- **Landing Page (✔️ Done)**
+- **Dashboards (🛠️ In Progress waiting for the backend's update)**
 - **Testing of Supabase integration**
 - **Account level testing (0 - Admin, 1 - Staff, 2 - Hospital, 3 - Backup, 4 - Mobile)**
 - **Refining redirection and access control**
 
+### **✅ March 13, 2025 – Donor Form Digitalization (✔️ Done)**
+- **Screening (✔️ Done but will update due to error of understanding will move this to Medical History)**
+- **Physical Examination (✔️ Done)**
+- **Blood Collection (✔️ Done)**
 ---
 
 ## ⚠️ Notes
