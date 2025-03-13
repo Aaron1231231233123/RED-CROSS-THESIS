@@ -1,211 +1,157 @@
-<?php
-// Start the session
-session_start();
-
-// Include the Supabase configuration file
-require_once '../src/config/database.php';
-
-// Initialize variables for error messages
-$error_message = '';
-$success_message = '';
-
-// Check if the form was submitted
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    // Retrieve the submitted email and password
-    $email = $_POST['email'];
-    $password = $_POST['password'];
-    
-    // Validate input (basic validation)
-    if (empty($email) || empty($password)) {
-        $error_message = "Email and password are required.";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error_message = "Please enter a valid email address.";
-    } else {
-        // Attempt to authenticate the user
-        $auth_result = authenticateUser($email, $password);
-        
-        if ($auth_result['success']) {
-            // Authentication successful
-            
-            // Store user information in session
-            $_SESSION['user_id'] = $auth_result['user']['id'];
-            $_SESSION['user_email'] = $auth_result['user']['email'];
-            $_SESSION['access_token'] = $auth_result['access_token'];
-            
-            // Set success message
-            $success_message = "Login successful! Redirecting...";
-            
-            // Redirect to dashboard (you can change this to your desired page)
-            header("Refresh: 2; URL=dashboard.php");
-        } else {
-            // Authentication failed
-            $error_message = $auth_result['message'];
-        }
-    }
-}
-?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Red Cross Login</title>
+    <title>Red Cross Blood Bank - Inventory Management System</title>
     <style>
-        /* General Reset */
-        * {
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
+            background-color: #f8f8f8;
         }
 
-        /* Body Styling */
-        body {
-            font-family: 'Arial', sans-serif;
-            background-color: #f9f9f9; /* Light gray background */
+        .title-container {
             display: flex;
-            justify-content: center; /* Center horizontally */
-            align-items: center; /* Center vertically */
-            height: 100vh;
-            margin: 0;
+            align-items: center;
+            justify-content: center;
+            margin-top: 20px;
         }
 
-        /* Form Container */
-        .login-form {
-            background-color: #ffffff; /* White background for the form */
-            padding: 40px 30px; /* Increased padding for better spacing */
-            border-radius: 12px; /* Slightly rounded corners */
-            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
-            width: 100%;
-            max-width: 400px; /* Fixed max-width for consistency */
-            text-align: center; /* Center-align headings and buttons */
+        .cross {
+            width: 80px;  
+            height: 80px;  
+            position: relative;
         }
 
-        /* Logo and Title */
-        .login-form h2:first-of-type {
-            color: #d32f2f; /* Red Cross red */
-            font-size: 24px; /* Larger font size for branding */
-            margin-bottom: 10px; /* Reduced spacing between logo and subtitle */
+        .cross::before,
+        .cross::after {
+            content: "";
+            position: absolute;
+            background-color: #9c1818; /* Red cross color */
         }
 
-        .login-form hr {
-            border: 0;
-            height: 2px;
-            background-color: #d32f2f; /* Red Cross red */
-            margin: 10px auto 20px; /* Spacing above and below the line */
-            width: 50px; /* Short horizontal line */
+        .cross::before {
+            width: 80px;   
+            height: 20px;  
+            top: 30px;     
+            left: 0;
         }
 
-        .login-form h2:last-of-type {
-            color: #333333; /* Dark gray for the login title */
-            font-size: 20px; /* Slightly smaller than the logo */
-            margin-bottom: 25px; /* Space before the form fields */
+        .cross::after {
+            width: 20px;   
+            height: 80px;  
+            top: 0;
+            left: 30px;    
         }
 
-        /* Labels */
-        .login-form label {
-            color: #555555; /* Medium gray for labels */
+        .header-title {
+            font-size: 48px;  
             font-weight: bold;
-            display: block; /* Ensure labels are stacked above inputs */
-            margin-bottom: 8px; /* Space between label and input */
-            text-align: left; /* Align labels to the left */
+            color: #9c1818;  
+            margin-left: 30px;  
+            text-align: left;
         }
 
-        /* Input Fields */
-        .login-form input[type="email"],
-        .login-form input[type="password"] {
-            width: 100%; /* Full width of the form */
-            padding: 14px; /* Increased padding for better touch targets */
-            margin-bottom: 15px; /* Space between inputs */
-            border: 1px solid #d32f2f; /* Red Cross red border */
-            border-radius: 8px; /* Rounded corners */
-            font-size: 16px; /* Consistent font size */
-            transition: border-color 0.3s ease; /* Smooth border color change */
+        .container {
+            display: flex;
+            justify-content: center;
+            gap: 60px;
+            flex-wrap: wrap;
         }
 
-        .login-form input[type="email"]:focus,
-        .login-form input[type="password"]:focus {
-            border-color: #b71c1c; /* Darker red on focus */
-            outline: none; /* Remove default focus outline */
-        }
-
-        /* Submit Button */
-        .login-form input[type="submit"] {
-            width: 100%; /* Full width of the form */
-            padding: 14px; /* Match input field padding */
-            background-color: #d32f2f; /* Red Cross red */
-            border: none;
-            color: white;
-            font-size: 18px; /* Larger font size for emphasis */
-            font-weight: bold;
-            border-radius: 8px; /* Rounded corners */
+        .card {
+            background: white;
+            padding: 50px 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.301);
+            text-align: center;
+            width: 240px;
+            transition: transform 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-top: 5%;
+            /* Added cursor pointer to make it clear cards are clickable */
             cursor: pointer;
-            transition: background-color 0.3s ease; /* Smooth hover effect */
         }
 
-        .login-form input[type="submit"]:hover {
-            background-color: #b71c1c; /* Darker red on hover */
+        .card:hover {
+            transform: scale(1.05);
         }
 
-        /* Forgot Password Link */
-        .login-form a {
-            display: inline-block;
-            margin-top: 20px; /* Space above the link */
-            color: #d32f2f; /* Red Cross red */
+        .icon {
+            margin-top: 20%;
+            width: 70px;
+            height: 70px;
+            opacity: 0.8;
+        }
+
+        .card p {
+            font-size: 1.6em;
+            font-weight: bold;
+            color: #7a1010;
+        }
+
+        /* Added styling for links to maintain design consistency */
+        .card-link {
             text-decoration: none;
-            font-size: 14px;
-            transition: color 0.3s ease; /* Smooth hover effect */
+            color: inherit;
         }
 
-        .login-form a:hover {
-            color: #b71c1c; /* Darker red on hover */
-            text-decoration: underline;
-        }
-        
-        /* Message styling */
-        .error-message {
-            color: #d32f2f;
-            margin-bottom: 15px;
-            font-size: 14px;
-            text-align: left;
-        }
-        
-        .success-message {
-            color: #4CAF50;
-            margin-bottom: 15px;
-            font-size: 14px;
-            text-align: left;
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                align-items: center;
+                gap: 20px;
+            }
         }
     </style>
 </head>
 <body>
+    <header>
+        <div class="title-container">
+            <div class="cross"></div>
+            <h1 class="header-title">
+                Red Cross Blood Bank <br>
+                Inventory Management System
+            </h1>
+        </div>
+    </header>
+    <main>
+        <div class="container">
+            <!-- Added links around each card that redirect to login.php -->
+            <!-- Added role parameter to differentiate user types in the login form -->
+            <a href="login.php?role=hospital" class="card-link">
+                <div class="card">
+                    <div class="icon-wrapper">
+                        <img src="assets/img/hospital-icon.png" alt="Hospitals" class="icon">
+                    </div>
+                    <p>Hospitals</p>
+                </div>
+            </a>
 
-    <div class="login-form">
-        <h2>Red Cross</h2>
-        <hr>
-        <h2>Login</h2>
-        
-        <?php if (!empty($error_message)): ?>
-            <div class="error-message"><?php echo $error_message; ?></div>
-        <?php endif; ?>
-        
-        <?php if (!empty($success_message)): ?>
-            <div class="success-message"><?php echo $success_message; ?></div>
-        <?php endif; ?>
-        
-        <form method="POST" action="">
-            <label for="email">Email:</label>
-            <input type="email" id="email" name="email" placeholder="Enter your email" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
+            <a href="login.php?role=staff" class="card-link">
+                <div class="card">
+                    <div class="icon-wrapper">
+                        <img src="assets/img/staff-icon.png" alt="Staff" class="icon">
+                    </div>
+                    <p>Staff</p>
+                </div>
+            </a>
 
-            <label for="password">Password:</label>
-            <input type="password" id="password" name="password" placeholder="Enter your password" required>
-
-            <input type="submit" value="Login">
-
-            <!-- Optional: Forgot Password Link -->
-            <a href="#">Forgot Password?</a>
-        </form>
-    </div>
-
+            <a href="login.php?role=admin" class="card-link">
+                <div class="card">
+                    <div class="icon-wrapper">
+                        <img src="assets/img/admin-icon.png" alt="Admin" class="icon">
+                    </div>
+                    <p>Admin</p>
+                </div>
+            </a>
+        </div>
+    </main>
 </body>
 </html>
