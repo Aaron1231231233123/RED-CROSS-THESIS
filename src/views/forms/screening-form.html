@@ -263,6 +263,143 @@ body {
 .submit-button:active {
     transform: translateY(0);
 }
+ /* Submit Button Section */
+ .submit-section {
+            text-align: right;
+            margin-top: 20px;
+        }
+
+        .submit-button {
+            background-color: #d9534f;
+            color: white;
+            font-weight: bold;
+            padding: 12px 22px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            font-size: 15px;
+        }
+
+        .submit-button:hover {
+            background-color: #c9302c;
+            transform: translateY(-2px);
+        }
+
+        .submit-button:active {
+            transform: translateY(0);
+        }
+
+        /* Loader Animation -- Modal Design */
+        .loading-spinner {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 8px solid #ddd;
+            border-top: 8px solid #a82020;
+            animation: rotateSpinner 1s linear infinite;
+            display: none;
+            z-index: 10000;
+            transform: translate(-50%, -50%);
+        }
+
+        @keyframes rotateSpinner {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        /* Confirmation Modal */
+        .confirmation-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 25px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            z-index: 9999;
+            border-radius: 10px;
+            width: 300px;
+            display: none;
+            opacity: 0;
+        }
+
+        /* Fade-in and Fade-out Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -55%);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%);
+            }
+        }
+
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+                transform: translate(-50%, -50%);
+            }
+            to {
+                opacity: 0;
+                transform: translate(-50%, -55%);
+            }
+        }
+
+        .confirmation-modal.show {
+            display: block;
+            animation: fadeIn 0.3s ease-in-out forwards;
+        }
+
+        .confirmation-modal.hide {
+            animation: fadeOut 0.3s ease-in-out forwards;
+        }
+
+        .modal-header {
+            font-size: 18px;
+            font-weight: bold;
+            color: #d50000;
+            margin-bottom: 15px;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+
+        .modal-button {
+            width: 45%;
+            padding: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .cancel-action {
+            background: #aaa;
+            color: white;
+        }
+
+        .cancel-action:hover {
+            background: #888;
+        }
+
+        .confirm-action {
+            background: #c9302c;
+            color: white;
+        }
+
+        .confirm-action:hover {
+            background: #691b19;
+        }
 /* Responsive Adjustments */
 @media (max-width: 600px) {
     .donation-options {
@@ -423,11 +560,62 @@ body {
             <p>Date: <span id="current-date"></span></p>
         </div>
         <div class="submit-section">
-            <button class="submit-button">Submit</button>
+            <button class="submit-button" id="triggerModalButton">Next</button>
         </div>
     </div>
+    <!-- Confirmation Modal -->
+    <div class="confirmation-modal" id="confirmationDialog">
+        <div class="modal-header">Do you want to continue?</div>
+        <div class="modal-actions">
+            <button class="modal-button cancel-action" id="cancelButton">No</button>
+            <button class="modal-button confirm-action" id="confirmButton">Yes</button>
+        </div>
+    </div>    
+
+    <!-- Loading Spinner -->
+    <div class="loading-spinner" id="loadingSpinner"></div>
     <script>
         document.getElementById("current-date").textContent = new Date().toLocaleDateString();
+
+        let confirmationDialog = document.getElementById("confirmationDialog");
+        let loadingSpinner = document.getElementById("loadingSpinner");
+        let triggerModalButton = document.getElementById("triggerModalButton");
+        let cancelButton = document.getElementById("cancelButton");
+        let confirmButton = document.getElementById("confirmButton");
+
+        // Open Modal
+        triggerModalButton.addEventListener("click", function() {
+            confirmationDialog.classList.remove("hide");
+            confirmationDialog.classList.add("show");
+            confirmationDialog.style.display = "block";
+            triggerModalButton.disabled = true; // Disable button while modal is open
+        });
+
+        // Close Modal Function
+        function closeModal() {
+            confirmationDialog.classList.remove("show");
+            confirmationDialog.classList.add("hide");
+            setTimeout(() => {
+                confirmationDialog.style.display = "none";
+                triggerModalButton.disabled = false; // Re-enable button
+            }, 300);
+        }
+
+        // Yes Button (Triggers Loading Spinner)
+        confirmButton.addEventListener("click", function() {
+            closeModal();
+            loadingSpinner.style.display = "block"; // Show loader
+            setTimeout(() => {
+                loadingSpinner.style.display = "none"; // Hide loader after 2 seconds
+            }, 2000);
+        });
+
+        // No Button (Closes Modal)
+        cancelButton.addEventListener("click", function() {
+            closeModal();
+        });
+
+
     </script>
 </body>
 </html>
