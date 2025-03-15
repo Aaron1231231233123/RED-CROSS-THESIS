@@ -268,7 +268,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Blood type availability data (Placeholder)
+        // Blood type availability data (Placeholder data can be removed)
         const bloodAvailabilityData = [
             { type: "A+", level: 85 },
             { type: "A-", level: 40 }, // Critical
@@ -334,5 +334,31 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         generateBloodAvailability();
         generateDSSInsights();
     </script>
+        <!-- 🔗 PHP Integration Guide -->
+        <!--
+        1 Remove the JavaScript static data in bloodAvailabilityData[].
+        2 Connect your PHP backend to fetch blood stock levels from the database.
+        3 Use PHP to echo the data inside the <div id="blood-availability">.
+    
+        Example PHP Code:
+        ---------------------------------
+        <?php
+            include 'db_connection.php'; // Your database connection file
+            $result = mysqli_query($conn, "SELECT blood_type, stock_level FROM blood_inventory");
+            while ($row = mysqli_fetch_assoc($result)) {
+                echo '<div class="col">
+                          <div class="card p-3 shadow-sm">
+                              <h5>🩸 Blood Type: ' . $row['blood_type'] . '</h5>
+                              <p>Availability: <span>' . $row['stock_level'] . '%</span></p>
+                              <div class="progress" style="height: 10px;">
+                                  <div class="progress-bar bg-success" role="progressbar" style="width: ' . $row['stock_level'] . '%" aria-valuenow="' . $row['stock_level'] . '" aria-valuemin="0" aria-valuemax="100"></div>
+                              </div>
+                          </div>
+                      </div>';
+            }
+        ?>
+        ---------------------------------
+        4️⃣ Insert this PHP snippet inside the <div id="blood-availability"> to replace JS-generated cards.
+        -->
 </body>
 </html>

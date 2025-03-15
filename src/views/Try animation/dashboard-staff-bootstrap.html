@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Red Cross Staff Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #fff;
+            --sidebar-bg: #1c1c1c;
+            --card-bg: #2a2a2a;
+            --hover-bg: #333;
+        }
+        body.light-mode {
+            --bg-color: #f8f9fa;
+            --text-color: #000;
+            --sidebar-bg: #ffffff;
+            --card-bg: #e9ecef;
+            --hover-bg: #dee2e6;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+        .sidebar {
+            background: var(--sidebar-bg);
+            height: 100vh;
+            padding: 1rem;
+        }
+        .sidebar .nav-link {
+            color: #bbb;
+            transition: all 0.3s ease;
+        }
+        .sidebar .nav-link:hover, .sidebar .nav-link.active {
+            color: var(--text-color);
+            background: var(--hover-bg);
+            border-radius: 5px;
+        }
+        .main-content { padding: 1.5rem; }
+        .card {
+            background: var(--card-bg);
+            color: var(--text-color);
+            transition: transform 0.2s ease-in-out;
+        }
+        .card:hover { transform: scale(1.03); }
+        .alert { font-size: 1.1rem; }
+        .btn-toggle {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+        }
+    </style>
+</head>
+<body>
+    <button class="btn btn-secondary btn-toggle" onclick="toggleMode()">Toggle Mode</button>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-3 col-lg-2 d-md-block sidebar">
+                <h4 class="text-light">Red Cross Staff</h4>
+                <ul class="nav flex-column">
+                    <li class="nav-item"><a class="nav-link active" href="#">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#">Donor Interviews Submissions</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#">Physical Exams Submissions</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#">Blood Collection Submissions</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#">Logout</a></li>
+                </ul>
+            </nav>
+            
+            <!-- Main Content -->
+            <main class="col-md-9 col-lg-10 main-content">
+                <h2>Dashboard</h2>
+                
+                <!-- Alerts Section -->
+                <div class="alert alert-danger">⚠️ Urgent: Donor needs immediate attention.</div>
+                <div class="alert alert-warning">⏳ Reminder: Pending blood test results.</div>
+                <div class="alert alert-info">🆕 New donor registered for screening.</div>
+                
+                <!-- Dashboard Panels -->
+                <div class="row mt-4">
+                    <div class="col-md-4">
+                        <div class="card p-3">
+                            <h5>Interviewer</h5>
+                            <p>Pending Interviews: <strong>5</strong></p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card p-3">
+                            <h5>Blood Bank Physician</h5>
+                            <p>Pending Exams: <strong>3</strong></p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card p-3">
+                            <h5>Phlebotomist</h5>
+                            <p>Pending Collections: <strong>7</strong></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Latest Donor Submissions -->
+                <h3 class="mt-4">Latest Donor Submissions</h3>
+                <table class="table table-dark table-striped">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Donor Name</th>
+                            <th>Blood Type</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>2025-03-15</td><td>*****</td><td>A+</td><td class="text-success">Approved</td></tr>
+                        <tr><td>2025-03-14</td><td>*****</td><td>O-</td><td class="text-danger">Rejected</td></tr>
+                        <tr><td>2025-03-13</td><td>*****</td><td>B+</td><td class="text-warning">Pending</td></tr>
+                        <tr><td>2025-03-12</td><td>*****</td><td>AB-</td><td class="text-success">Approved</td></tr>
+                    </tbody>
+                </table>
+            </main>
+        </div>
+    </div>
+    
+    <script>
+        function toggleMode() {
+            document.body.classList.toggle("light-mode");
+        }
+    </script>
+</body>
+</html>
