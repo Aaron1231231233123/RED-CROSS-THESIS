@@ -8,59 +8,111 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <style>
         :root {
-            --bg-color: #121212;
-            --text-color: #fff;
-            --sidebar-bg: #1c1c1c;
-            --card-bg: #2a2a2a;
-            --hover-bg: #333;
+            --bg-color: #f8f9fa; /* Light background */
+            --text-color: #000; /* Dark text */
+            --sidebar-bg: #ffffff; /* White sidebar */
+            --card-bg: #e9ecef; /* Light gray cards */
+            --hover-bg: #dee2e6; /* Light gray hover */
         }
+
         body.light-mode {
-            --bg-color: #f8f9fa;
-            --text-color: #000;
-            --sidebar-bg: #ffffff;
-            --card-bg: #e9ecef;
-            --hover-bg: #dee2e6;
-        }
-        body {
             background-color: var(--bg-color);
             color: var(--text-color);
         }
+
         .sidebar {
             background: var(--sidebar-bg);
             height: 100vh;
             padding: 1rem;
         }
+
         .sidebar .nav-link {
-            color: #bbb;
+            color: #666; /* Darker text for links */
             transition: all 0.3s ease;
         }
+
         .sidebar .nav-link:hover, .sidebar .nav-link.active {
             color: var(--text-color);
             background: var(--hover-bg);
             border-radius: 5px;
         }
-        .main-content { padding: 1.5rem; }
+
+        .main-content {
+            padding: 1.5rem;
+        }
+
         .card {
             background: var(--card-bg);
             color: var(--text-color);
             transition: transform 0.2s ease-in-out;
         }
-        .card:hover { transform: scale(1.03); }
-        .alert { font-size: 1.1rem; }
+
+        .card:hover {
+            transform: scale(1.03);
+        }
+
+        .alert {
+            font-size: 1.1rem;
+        }
+
         .btn-toggle {
             position: absolute;
             top: 10px;
             right: 20px;
         }
+
+        .table-hover tbody tr {
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .table-hover tbody tr:hover {
+            background-color: var(--hover-bg); /* Light gray hover for rows */
+        }
+
+        /* Additional styles for light mode */
+        .table-dark {
+            background-color: var(--card-bg);
+            color: var(--text-color);
+        }
+
+        .table-dark thead th {
+            background-color: var(--sidebar-bg);
+            color: var(--text-color);
+        }
+
+        .table-dark tbody tr:hover {
+            background-color: var(--hover-bg);
+        }
+
+        .modal-content {
+            background-color: var(--card-bg);
+            color: var(--text-color);
+        }
+
+        .modal-header, .modal-footer {
+            border-color: var(--hover-bg);
+        }
+
+        .donor_form_input[readonly], .donor_form_input[disabled] {
+            background-color: var(--bg-color);
+            cursor: not-allowed;
+            border: 1px solid #ddd;
+        }
+
+        .donor-declaration-button[disabled] {
+            background-color: var(--hover-bg);
+            cursor: not-allowed;
+        }
     </style>
 </head>
-<body>
+<body class="light-mode"> <!-- Add light-mode class by default -->
     <button class="btn btn-secondary btn-toggle" onclick="toggleMode()">Toggle Mode</button>
     <div class="container-fluid">
         <div class="row">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block sidebar">
-                <h4 class="text-light">Red Cross Staff</h4>
+                <h4 class="text-dark">Red Cross Staff</h4> 
                 <ul class="nav flex-column">
                     <li class="nav-item"><a class="nav-link active" href="#">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="#">Donor Interviews Submissions</a></li>
@@ -103,30 +155,41 @@
                 
                 <!-- Latest Donor Submissions -->
                 <h3 class="mt-4">Latest Donor Submissions</h3>
-                <table class="table table-dark table-striped">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Donor Name</th>
-                            <th>Blood Type</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr><td>2025-03-15</td><td>*****</td><td>A+</td><td class="text-success">Approved</td></tr>
-                        <tr><td>2025-03-14</td><td>*****</td><td>O-</td><td class="text-danger">Rejected</td></tr>
-                        <tr><td>2025-03-13</td><td>*****</td><td>B+</td><td class="text-warning">Pending</td></tr>
-                        <tr><td>2025-03-12</td><td>*****</td><td>AB-</td><td class="text-success">Approved</td></tr>
-                    </tbody>
-                </table>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Date</th>
+                                <th>Donor Name</th>
+                                <th>Blood Type</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr data-bs-toggle="modal">
+                                <td>2025-03-15</td>
+                                <td>J*********</td>
+                                <td>A+</td>
+                            </tr>
+                            <tr data-bs-toggle="modal">
+                                <td>2025-03-14</td>
+                                <td>Jane Smith</td>
+                                <td>O-</td>
+                            </tr>
+                            <tr data-bs-toggle="modal">
+                                <td>2025-03-13</td>
+                                <td>Alice Johnson</td>
+                                <td>B+</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </main>
         </div>
     </div>
+
     
+
     <script>
-        function toggleMode() {
-            document.body.classList.toggle("light-mode");
-        }
     </script>
 </body>
 </html>
