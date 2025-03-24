@@ -1,3 +1,20 @@
+<?php
+session_start();
+
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: index.php");
+    exit();
+}
+
+// Check for correct role (example for admin dashboard)
+$required_role = 1; // Admin role
+if ($_SESSION['role_id'] !== $required_role) {
+    header("Location: unauthorized.php");
+    exit();
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -344,7 +361,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         Example PHP Code:
         ---------------------------------
         <?php
-            include 'db_connection.php'; // Your database connection file
+            include '../src/config/database/php'; // Your database connection file
             $result = mysqli_query($conn, "SELECT blood_type, stock_level FROM blood_inventory");
             while ($row = mysqli_fetch_assoc($result)) {
                 echo '<div class="col">

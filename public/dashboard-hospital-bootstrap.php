@@ -1,3 +1,20 @@
+<?php
+session_start();
+
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: index.php");
+    exit();
+}
+
+// Check for correct role (example for admin dashboard)
+$required_role = 3; // Hospital Role
+if ($_SESSION['role_id'] !== $required_role) {
+    header("Location: index.php");
+    exit();
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>

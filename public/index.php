@@ -1,157 +1,206 @@
+<?php
+// Start the session
+session_start();
+
+// Include the Supabase configuration file
+require_once '../src/config/database.php';
+
+// Initialize variables for error messages
+$error_message = '';
+
+// Check if the form was submitted
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    // Retrieve the submitted email and password
+    $email = $_POST['email'];
+    $password = $_POST['password'];
+    
+    // Validate input (basic validation)
+    if (empty($email) || empty($password)) {
+        $error_message = "Email and password are required.";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error_message = "Please enter a valid email address.";
+    } else {
+        // Attempt to authenticate the user
+        $auth_result = authenticateUser($email, $password);
+        
+        if ($auth_result['success']) {
+            // Authentication successful
+            
+            // Store user information in session
+            $_SESSION['user_id'] = $auth_result['user']['id'];
+            $_SESSION['user_email'] = $auth_result['user']['email'];
+            $_SESSION['access_token'] = $auth_result['access_token'];
+            $_SESSION['role_id'] = $auth_result['role_id'];
+            
+            // Redirect to appropriate dashboard
+            redirectToDashboard($auth_result['role_id']);
+            exit(); // Ensure no further code execution
+        } else {
+            // Authentication failed
+            $error_message = $auth_result['message'];
+        }
+    }
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Red Cross Blood Bank - Inventory Management System</title>
+    <title>Red Cross Login</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
+        /* General Reset */
+        * {
             margin: 0;
             padding: 0;
-            background-color: #f8f8f8;
+            box-sizing: border-box;
         }
 
-        .title-container {
+        /* Body Styling */
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f9f9f9;
             display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-top: 20px;
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh;
+            margin: 0;
         }
 
-        .cross {
-            width: 80px;  
-            height: 80px;  
-            position: relative;
+        /* Form Container */
+        .login-form {
+            background-color: #ffffff; 
+            padding: 40px 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1); 
+            width: 100%;
+            max-width: 400px; 
+            text-align: center; 
         }
 
-        .cross::before,
-        .cross::after {
-            content: "";
-            position: absolute;
-            background-color: #9c1818; /* Red cross color */
+        /* Logo and Title */
+        .login-form h2:first-of-type {
+            color: #d32f2f; 
+            font-size: 24px;
+            margin-bottom: 10px; 
         }
 
-        .cross::before {
-            width: 80px;   
-            height: 20px;  
-            top: 30px;     
-            left: 0;
+        .login-form hr {
+            border: 0;
+            height: 2px;
+            background-color: #d32f2f; 
+            margin: 10px auto 20px;
+            width: 50px; 
         }
 
-        .cross::after {
-            width: 20px;   
-            height: 80px;  
-            top: 0;
-            left: 30px;    
+        .login-form h2:last-of-type {
+            color: #333333; 
+            font-size: 20px;
+            margin-bottom: 25px; 
         }
 
-        .header-title {
-            font-size: 48px;  
+        /* Labels */
+        .login-form label {
+            color: #555555; 
             font-weight: bold;
-            color: #9c1818;  
-            margin-left: 30px;  
+            display: block; 
+            margin-bottom: 8px; 
+            text-align: left; 
+        }
+
+        /* Input Fields */
+        .login-form input[type="email"],
+        .login-form input[type="password"] {
+            width: 100%; 
+            padding: 14px; 
+            margin-bottom: 15px; 
+            border: 1px solid #d32f2f; 
+            border-radius: 8px; 
+            font-size: 16px; 
+            transition: border-color 0.3s ease;
+        }
+
+        .login-form input[type="email"]:focus,
+        .login-form input[type="password"]:focus {
+            border-color: #b71c1c; 
+            outline: none; 
+        }
+
+        /* Submit Button */
+        .login-form input[type="submit"] {
+            width: 100%; 
+            padding: 14px; 
+            background-color: #d32f2f; 
+            border: none;
+            color: white;
+            font-size: 18px; 
+            font-weight: bold;
+            border-radius: 8px; 
+            cursor: pointer;
+            transition: background-color 0.3s ease; 
+        }
+
+        .login-form input[type="submit"]:hover {
+            background-color: #b71c1c; 
+        }
+
+        /* Forgot Password Link */
+        .login-form a {
+            display: inline-block;
+            margin-top: 20px; 
+            color: #d32f2f; 
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.3s ease; 
+        }
+
+        .login-form a:hover {
+            color: #b71c1c; 
+            text-decoration: underline;
+        }
+        
+        /* Message styling */
+        .error-message {
+            color: #d32f2f;
+            margin-bottom: 15px;
+            font-size: 14px;
             text-align: left;
         }
-
-        .container {
-            display: flex;
-            justify-content: center;
-            gap: 60px;
-            flex-wrap: wrap;
-        }
-
-        .card {
-            background: white;
-            padding: 50px 40px;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.301);
-            text-align: center;
-            width: 240px;
-            transition: transform 0.2s;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            margin-top: 5%;
-            /* Added cursor pointer to make it clear cards are clickable */
-            cursor: pointer;
-        }
-
-        .card:hover {
-            transform: scale(1.05);
-        }
-
-        .icon {
-            margin-top: 20%;
-            width: 70px;
-            height: 70px;
-            opacity: 0.8;
-        }
-
-        .card p {
-            font-size: 1.6em;
-            font-weight: bold;
-            color: #7a1010;
-        }
-
-        /* Added styling for links to maintain design consistency */
-        .card-link {
-            text-decoration: none;
-            color: inherit;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                flex-direction: column;
-                align-items: center;
-                gap: 20px;
-            }
+        
+        .success-message {
+            color: #4CAF50;
+            margin-bottom: 15px;
+            font-size: 14px;
+            text-align: left;
         }
     </style>
 </head>
 <body>
-    <header>
-        <div class="title-container">
-            <div class="cross"></div>
-            <h1 class="header-title">
-                Red Cross Blood Bank <br>
-                Inventory Management System
-            </h1>
-        </div>
-    </header>
-    <main>
-        <div class="container">
-            <!-- Added links around each card that redirect to login.php -->
-            <!-- Added role parameter to differentiate user types in the login form -->
-            <a href="login.php?role=hospital" class="card-link">
-                <div class="card">
-                    <div class="icon-wrapper">
-                        <img src="assets/img/hospital-icon.png" alt="Hospitals" class="icon">
-                    </div>
-                    <p>Hospitals</p>
-                </div>
-            </a>
 
-            <a href="login.php?role=staff" class="card-link">
-                <div class="card">
-                    <div class="icon-wrapper">
-                        <img src="assets/img/staff-icon.png" alt="Staff" class="icon">
-                    </div>
-                    <p>Staff</p>
-                </div>
-            </a>
+    <div class="login-form">
+        <h2>Red Cross</h2>
+        <hr>
+        <h2>Login</h2>
+        
+        <?php if (!empty($error_message)): ?>
+            <div class="error-message"><?php echo $error_message; ?></div>
+        <?php endif; ?>
+        
+        <form method="POST" action="">
+            <label for="email">Email:</label>
+            <input type="email" id="email" name="email" placeholder="Enter your email" required 
+                value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
 
-            <a href="login.php?role=admin" class="card-link">
-                <div class="card">
-                    <div class="icon-wrapper">
-                        <img src="assets/img/admin-icon.png" alt="Admin" class="icon">
-                    </div>
-                    <p>Admin</p>
-                </div>
-            </a>
-        </div>
-    </main>
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" placeholder="Enter your password" required>
+
+            <input type="submit" value="Login">
+
+            <!-- Optional: Forgot Password Link -->
+            <a href="#">Forgot Password?</a>
+        </form>
+    </div>
+
 </body>
 </html>
