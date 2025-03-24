@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Red Cross Landing Page</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+        }
+
+    .navbar {
+        background: rgba(20, 20, 20, 0.95);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        position: fixed;
+        top: 0;
+        width: 100%;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 40px;
+        font-weight: bold;
+        z-index: 100;
+        transition: all 0.3s ease-in-out;
+    }
+
+    .navbar h1 {
+        font-size: 22px;
+        color: white;
+        letter-spacing: 1px;
+    }
+
+    .navbar ul {
+        display: flex;
+        gap: 20px;
+    }
+
+    .navbar a {
+        color: white;
+        font-size: 16px;
+        transition: 0.3s;
+        padding: 10px 15px;
+    }
+
+    .navbar a:hover {
+        color: #ff4d4d;
+        border-bottom: 2px solid #ff4d4d;
+    }
+
+
+        .spline-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -2;
+        }
+        .spline-container iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .navbar {
+            background: rgba(30, 30, 30, 0.9);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            transition: background 0.3s ease-in-out;
+            position: fixed;
+            top: 0;
+            width: 100%;
+            padding: 15px 0;
+            text-align: center;
+            font-weight: bold;
+            z-index: 10;
+            opacity: 0;
+            animation: navbarEntry 2s ease-in-out 2.5s forwards;
+        }
+        @keyframes navbarEntry {
+            from { opacity: 0; transform: scale(1.1); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .navbar a {
+            color: white;
+            transition: color 0.3s ease-in-out;
+        }
+        .navbar a:hover {
+            color: #f44336;
+            text-decoration: underline;
+        }
+        .content {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(5px);
+            padding: 20px;
+            opacity: 0;
+            animation: fadeIn 1.5s ease-in-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes textZoom {
+            from { transform: scale(1.2); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .junior {
+            animation: textZoom 1.8s ease-in-out 1.2s forwards;
+            opacity: 0;
+        }
+        .donate-btn {
+            background: linear-gradient(90deg, #d32f2f, #b71c1c);
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        .donate-btn:hover {
+            transform: scale(1.1);
+            background: linear-gradient(90deg, #b71c1c, #d32f2f);
+        }
+    </style>
+</head>
+<body>
+    <div class="spline-container">
+        <iframe src="https://my.spline.design/nexbotrobotcharacterconcept-628fa68cf0858b4e866f5a14c95df3da/" frameborder="0"></iframe>
+    </div>
+
+    <div class="navbar">
+        <nav class="flex justify-between px-10">
+            <h1 class="text-xl">Red Cross</h1>
+            <ul class="flex space-x-6">
+                <li><a href="#">Home</a></li>
+                <li><a href="#">About</a></li>
+                <li><a href="#">Services</a></li>
+                <li><a href="#">Contact</a></li>
+            </ul>
+        </nav>
+    </div>
+
+    <div class="content text-white">
+        <h1 class="text-5xl font-bold mb-4 junior">Join Us in Saving Lives</h1>
+        <p class="text-lg mb-6 junior">Your donation and support help us provide emergency relief and healthcare.</p>
+        <a href="#" class="donate-btn text-white">Donate Now</a>
+    </div>
+</body>
+</html>

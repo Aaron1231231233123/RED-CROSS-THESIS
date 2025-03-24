@@ -1,49 +1,103 @@
 <?php
-// Start the session
-session_start();
+session_start(); // Start session to store user data
 
-// Include the Supabase configuration file
-require_once '../src/config/database.php';
+// Supabase API credentials
+$api_url = "https://cjxxpajcelpqkbcvixmk.supabase.co/auth/v1/token?grant_type=password";
+$api_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqeHhwYWpjZWxwcWtiY3ZpeG1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI4MTI5NzMsImV4cCI6MjA1ODM4ODk3M30.FlVNNjl5MK8pFBvVJup2FESsoS7lqH4kcTNldDDgAjM";
 
-// Initialize variables for error messages
-$error_message = '';
-$success_message = '';
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $email = $_POST["email"];
+    $password = $_POST["password"];
 
-// Check if the form was submitted
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    // Retrieve the submitted email and password
-    $email = $_POST['email'];
-    $password = $_POST['password'];
-    
-    // Validate input (basic validation)
-    if (empty($email) || empty($password)) {
-        $error_message = "Email and password are required.";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error_message = "Please enter a valid email address.";
-    } else {
-        // Attempt to authenticate the user
-        $auth_result = authenticateUser($email, $password);
-        
-        if ($auth_result['success']) {
-            // Authentication successful
-            
-            // Store user information in session
-            $_SESSION['user_id'] = $auth_result['user']['id'];
-            $_SESSION['user_email'] = $auth_result['user']['email'];
-            $_SESSION['access_token'] = $auth_result['access_token'];
-            
-            // Set success message
-            $success_message = "Login successful! Redirecting...";
-            
-            // Redirect to dashboard (you can change this to your desired page)
-            header("Refresh: 2; URL=inventory-dashboard.php");
+    // Prepare the JSON payload for authentication
+    $data = json_encode([
+        "email" => $email,
+        "password" => $password
+    ]);
+
+    // Initialize cURL request
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $api_url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "Content-Type: application/json",
+        "apikey: $api_key",
+        "Authorization: Bearer $api_key"
+    ]);
+
+    $response = curl_exec($ch);
+    curl_close($ch);
+    $result = json_decode($response, true);
+
+    // Check if authentication was successful
+    if (isset($result["access_token"])) {
+        $_SESSION["user_token"] = $result["access_token"]; // Store token in session
+        $_SESSION["user_id"] = $result["user"]["id"]; // Store user ID
+
+        // Fetch user details from database
+        $user_details = getUserDetails($_SESSION["user_id"], $_SESSION["user_token"], $api_key);
+
+        if ($user_details) {
+            $_SESSION["full_name"] = $user_details["full_name"];
+            $_SESSION["role_id"] = $user_details["role_id"] ?? 0; // Ensure role_id is set
+
+            // Redirect based on role
+            switch ($_SESSION["role_id"]) {
+                case 1:
+                    header("Location: staff-volunteer-dashboard.php");
+                    exit;
+                case 2:
+                    header("Location: hospital_dashboard.php");
+                    exit;
+                case 3:
+                    header("Location: admin_dashboard.php");
+                    exit;
+                default:
+                    echo "Invalid role!";
+                    exit;
+            }
         } else {
-            // Authentication failed
-            $error_message = $auth_result['message'];
+            echo "User role not found! Please contact support.";
         }
+    } else {
+        // Display login error
+        $error_message = isset($result["error_description"]) ? $result["error_description"] : "Invalid email or password.";
+        echo "Login failed: " . $error_message;
     }
 }
+
+/**
+ * Fetch user details from the database
+ */
+function getUserDetails($user_id, $token, $api_key) {
+    $user_url = "https://cjxxpajcelpqkbcvixmk.supabase.co/rest/v1/user_details?user_id=eq.$user_id";
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $user_url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "Content-Type: application/json",
+        "apikey: $api_key",
+        "Authorization: Bearer " . $token
+    ]);
+
+    $user_response = curl_exec($ch);
+    curl_close($ch);
+    $user_data = json_decode($user_response, true);
+
+    if (empty($user_data)) {
+        return null; // Return null if no user details found
+    }
+
+    return $user_data[0] ?? null;
+}
+
+
 ?>
+
+
 
 <!DOCTYPE html>
 <html lang="en">
@@ -179,6 +233,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     </style>
 </head>
 <body>
+
 
     <div class="login-form">
         <h2>Red Cross</h2>
