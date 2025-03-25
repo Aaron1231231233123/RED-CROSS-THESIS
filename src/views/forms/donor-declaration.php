@@ -14,27 +14,44 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_SESSION['donor_data'])) {
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_SESSION['donor_data'])) {
     $donorData = array_merge($_SESSION['donor_data'], $_POST);
     
-    // Handle file uploads
-    $signatureData = [];
-    if (!empty($_FILES['donor_signature']['tmp_name'])) {
-        $donorSignature = file_get_contents($_FILES['donor_signature']['tmp_name']);
-        $signatureData['donor_signature'] = base64_encode($donorSignature);
+    // File Upload Directory (Change this to your Supabase storage path)
+    $uploadDir = "uploads/";
+
+    // Ensure directory exists
+    if (!file_exists($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
     }
 
-    if (!empty($_FILES['guardian_signature']['tmp_name'])) {
-        $guardianSignature = file_get_contents($_FILES['guardian_signature']['tmp_name']);
-        $signatureData['guardian_signature'] = base64_encode($guardianSignature);
+    // Handle file uploads
+    $signatureData = [];
+
+    // Upload Donor Signature
+    if (!empty($_FILES['donor_signature']['tmp_name'])) {
+        $donorSigPath = $uploadDir . uniqid("donor_") . ".png";
+        if (move_uploaded_file($_FILES['donor_signature']['tmp_name'], $donorSigPath)) {
+            $signatureData['donor_signature'] = $donorSigPath; // Store file path
+        } else {
+            error_log("Error uploading donor signature");
+        }
     }
-    
-    // Define EXACTLY what Supabase expects for civil_status
+
+    // Upload Guardian Signature
+    if (!empty($_FILES['guardian_signature']['tmp_name'])) {
+        $guardianSigPath = $uploadDir . uniqid("guardian_") . ".png";
+        if (move_uploaded_file($_FILES['guardian_signature']['tmp_name'], $guardianSigPath)) {
+            $signatureData['guardian_signature'] = $guardianSigPath; // Store file path
+        } else {
+            error_log("Error uploading guardian signature");
+        }
+    }
+
+    // Validate Civil Status
     $allowedCivilStatuses = ['Single', 'Married', 'Widowed', 'Divorced'];
-    
-    // Get and validate civil status - this ensures it matches Supabase's constraint
     $civilStatus = in_array($donorData['civil_status'], $allowedCivilStatuses) 
         ? $donorData['civil_status']
-        : 'Single'; // Default to Single if invalid (shouldn't happen with select)
-    
-    // Prepare data for Supabase - all fields match your table exactly
+        : 'Single';
+
+    // Prepare Data for Supabase
     $supabaseData = [
         'prc_donor_number' => $donorData['prc_donor_number'] ?? null,
         'doh_nnbnets_barcode' => $donorData['doh_nnbnets_barcode'] ?? null,
@@ -44,7 +61,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_SESSION['donor_data'])) {
         'birthdate' => $donorData['birthdate'] ?? null,
         'age' => (int)($donorData['age'] ?? 0),
         'sex' => $donorData['sex'] ?? null,
-        'civil_status' => $civilStatus, // Using validated value
+        'civil_status' => $civilStatus,
         'permanent_address' => $donorData['permanent_address'] ?? null,
         'office_address' => $donorData['office_address'] ?? null,
         'nationality' => $donorData['nationality'] ?? null,
@@ -63,14 +80,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_SESSION['donor_data'])) {
         'relationship' => $donorData['relationship'] ?? null,
         'submitted_at' => date('Y-m-d H:i:s'),
     ];
-    
-    // Merge signature data if available
+
+    // Merge signature file paths
     $supabaseData = array_merge($supabaseData, $signatureData);
-    
-    // Debug output
+
+    // Debugging
     error_log('Supabase Submission Data: ' . print_r($supabaseData, true));
 
-    // Send to Supabase
+    // Send Data to Supabase
     $ch = curl_init();
     curl_setopt_array($ch, [
         CURLOPT_URL => SUPABASE_URL . '/rest/v1/donor_form',
@@ -91,7 +108,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_SESSION['donor_data'])) {
     $curlError = curl_error($ch);
     curl_close($ch);
 
-    // Handle response
+    // Handle Response
     if ($curlError) {
         echo '<script>alert("Network Error: ' . addslashes($curlError) . '");</script>';
     } elseif ($httpCode >= 400) {
@@ -108,6 +125,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_SESSION['donor_data'])) {
     exit();
 }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
@@ -406,7 +424,7 @@ input[type="file"].is-invalid {
     </style>
 </head>
 <body>
-<form action="donor-declaration.php" method="POST">
+<form action="donor-declaration.php"  id="donorForm" method="POST" enctype="multipart/form-data">
     <div class="donor-declaration-container">
         <div class="declaration-container">
             <div class="declaration-title"><h2>III. Donor's Declaration</h2>
@@ -482,140 +500,98 @@ input[type="file"].is-invalid {
     <div class="loading-spinner" id="loadingSpinner"></div>
 
     <script>
-document.getElementById("triggerModalButton").addEventListener("click", function(event) {
-    event.preventDefault(); // Prevent form submission
+document.addEventListener("DOMContentLoaded", function () { 
+    let confirmationDialog = document.getElementById("confirmationDialog");
+    let loadingSpinner = document.getElementById("loadingSpinner");
+    let triggerModalButton = document.getElementById("triggerModalButton");
+    let cancelButton = document.getElementById("cancelButton");
+    let confirmButton = document.getElementById("confirmButton");
+    let donorForm = document.getElementById("donorForm");
 
-    let guardianSignature = document.getElementById("guardian-signature").files.length;
-    let relationship = document.querySelector(".donor-declaration-input").value.trim();
-    let donorSignature = document.getElementById("donor-signature").files.length;
+    // Validation & Modal Trigger
+    triggerModalButton.addEventListener("click", function (event) {
+        event.preventDefault(); // Prevent form auto-submission
 
-    let relationshipError = document.getElementById("relationshipError");
-    let donorError = document.getElementById("donorError");
-    let guardianError = document.getElementById("guardianError");
+        let guardianSignature = document.getElementById("guardian-signature").files.length;
+        let relationship = document.querySelector(".donor-declaration-input").value.trim();
+        let donorSignature = document.getElementById("donor-signature").files.length;
 
-    // Reset errors
-    document.querySelectorAll(".error-message").forEach(el => el.style.display = "none");
-    document.querySelectorAll(".is-invalid").forEach(el => el.classList.remove("is-invalid"));
+        let relationshipError = document.getElementById("relationshipError");
+        let donorError = document.getElementById("donorError");
+        let guardianError = document.getElementById("guardianError");
 
-    let errors = [];
+        // Reset error messages
+        document.querySelectorAll(".error-message").forEach(el => el.style.display = "none");
+        document.querySelectorAll(".is-invalid").forEach(el => el.classList.remove("is-invalid"));
 
-    // Rule 1: If Guardian Signature & Relationship are blank → Donor Signature is required
-    if (guardianSignature === 0 && relationship === "" && donorSignature === 0) {
-        errors.push({ element: donorError, message: "Donor Signature is required." });
-        document.getElementById("donor-signature").classList.add("is-invalid");
-    }
+        let errors = [];
 
-    // Rule 2: If Guardian Signature exists, but Relationship is blank & Donor Signature is blank → Relationship is required
-    if (guardianSignature > 0 && relationship === "" && donorSignature === 0) {
-        errors.push({ element: relationshipError, message: "Relationship is required if a guardian signs." });
-        document.querySelector(".donor-declaration-input").classList.add("is-invalid");
-    }
+        // Validation Rules
+        if (guardianSignature === 0 && relationship === "" && donorSignature === 0) {
+            errors.push({ element: donorError, message: "Donor Signature is required." });
+            document.getElementById("donor-signature").classList.add("is-invalid");
+        }
+        if (guardianSignature > 0 && relationship === "" && donorSignature === 0) {
+            errors.push({ element: relationshipError, message: "Relationship is required if a guardian signs." });
+            document.querySelector(".donor-declaration-input").classList.add("is-invalid");
+        }
+        if (relationship !== "" && guardianSignature === 0) {
+            errors.push({ element: guardianError, message: "Guardian Signature is required if relationship is provided." });
+            document.getElementById("guardian-signature").classList.add("is-invalid");
+        }
+        if (guardianSignature > 0 && donorSignature > 0) {
+            errors.push({ element: guardianError, message: "Only one signature is needed. Remove either the Donor or Guardian signature." });
+            document.getElementById("guardian-signature").classList.add("is-invalid");
+            document.getElementById("donor-signature").classList.add("is-invalid");
+        }
 
-    // Rule 3: If Relationship is filled → Guardian Signature is required
-    if (relationship !== "" && guardianSignature === 0) {
-        errors.push({ element: guardianError, message: "Guardian Signature is required if relationship is provided." });
-        document.getElementById("guardian-signature").classList.add("is-invalid");
-    }
+        // Display Errors
+        errors.forEach(err => {
+            err.element.textContent = err.message;
+            err.element.style.display = "block";
+        });
 
-    // Rule 4: If both Donor & Guardian Signatures are uploaded → Error
-    if (guardianSignature > 0 && donorSignature > 0) {
-        errors.push({ element: guardianError, message: "Only one signature is needed. Remove either the Donor or Guardian signature." });
-        document.getElementById("guardian-signature").classList.add("is-invalid");
-        document.getElementById("donor-signature").classList.add("is-invalid");
-    }
-
-    // Display errors
-    errors.forEach(err => {
-        err.element.textContent = err.message;
-        err.element.style.display = "block";
+        if (errors.length === 0) {
+            openModal();
+        }
     });
 
-
-    if (errors.length === 0) {
-        let confirmationDialog = document.getElementById("confirmationDialog");
-        let triggerModalButton = document.getElementById("triggerModalButton");
-
-        confirmationDialog.classList.remove("hide");
-        confirmationDialog.classList.add("show");
+    // Open Modal Function (Fix)
+    function openModal() {
+        console.log("Modal should open now."); // Debugging
         confirmationDialog.style.display = "block";
-        triggerModalButton.disabled = true; // Disable button while modal is open
+        confirmationDialog.classList.add("show");
+        confirmationDialog.classList.remove("hide");
+        triggerModalButton.disabled = true;
     }
-});
 
-// Modal logic
-let confirmationDialog = document.getElementById("confirmationDialog");
-let loadingSpinner = document.getElementById("loadingSpinner");
-let cancelButton = document.getElementById("cancelButton");
-let confirmButton = document.getElementById("confirmButton");
-
-// Close Modal Function
-function closeModal() {
-    confirmationDialog.classList.remove("show");
-    confirmationDialog.classList.add("hide");
-    setTimeout(() => {
+    // Close Modal Function
+    function closeModal() {
         confirmationDialog.style.display = "none";
-        document.getElementById("triggerModalButton").disabled = false; // Re-enable button
-    }, 300);
-}
+        confirmationDialog.classList.add("hide");
+        confirmationDialog.classList.remove("show");
+        triggerModalButton.disabled = false;
+    }
 
-// Yes Button (Triggers Loading Spinner)
-confirmButton.addEventListener("click", function() {
+    // If "Yes" is clicked, show loader & submit form
+    confirmButton.addEventListener("click", function () {
     closeModal();
     loadingSpinner.style.display = "block"; // Show loader
-    setTimeout(() => {
-        loadingSpinner.style.display = "none"; 
-    }, 2000);
-});
-
-// No Button (Closes Modal)
-cancelButton.addEventListener("click", function() {
-    closeModal();
-});
-document.getElementById("triggerModalButton").addEventListener("click", function(event) {
-    event.preventDefault();
     
-    let guardianSignature = document.getElementById("guardian-signature").files.length;
-    let relationship = document.querySelector(".donor-declaration-input").value.trim();
-    let donorSignature = document.getElementById("donor-signature").files.length;
+    // Ensure the form actually submits
+    donorForm.submit();
+        setTimeout(() => {
+            loadingSpinner.style.display = "none"; // Hide loader
+            donorForm.submit(); 
+            window.location.href = "donor-form.php";
+        }, 1000); // Reduced time to 1 second for a faster transition
+    });
 
-    // [Keep your existing validation code]
-    
-    if (errors.length === 0) {
-        openModal();
-    }
+    // If "No" is clicked, just close the modal
+    cancelButton.addEventListener("click", closeModal);
 });
 
-// Modal logic
-let confirmationDialog = document.getElementById("confirmationDialog");
-let loadingSpinner = document.getElementById("loadingSpinner");
-let cancelButton = document.getElementById("cancelButton");
-let confirmButton = document.getElementById("confirmButton");
 
-// Close Modal Function
-function closeModal() {
-    confirmationDialog.classList.remove("show");
-    confirmationDialog.classList.add("hide");
-    setTimeout(() => {
-        confirmationDialog.style.display = "none";
-        document.getElementById("triggerModalButton").disabled = false;
-    }, 300);
-}
-
-// Yes Button (Submit form)
-confirmButton.addEventListener("click", function() {
-    closeModal();
-    loadingSpinner.style.display = "block";
-    
-    // Submit the form after showing spinner
-    setTimeout(() => {
-        document.querySelector("form").submit();
-    }, 1000);
-});
-
-// No Button (Closes Modal)
-cancelButton.addEventListener("click", function() {
-    closeModal();
-});
     </script>
 </body>
 </html>
