@@ -24,9 +24,10 @@
         .donor-declaration-row {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
-            align-items: center;
             margin-bottom: 15px;
             gap: 10%;
+            align-items: flex-start; /* Keeps elements aligned */
+            min-height: 10px; /* Prevents shifting */
         }
         .donor-declaration-header-row {
             grid-template-columns: 2fr 1fr;
@@ -36,19 +37,35 @@
 
         /* Button & Input Styling */
         .donor-declaration-button {
-            padding: 12px 18px;
-            border: 2px solid #c9302c;
-            background-color: #c9302c; /* Red Cross Red */
+            background-color: #d9534f; /* Red */
             color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
             font-weight: bold;
             cursor: pointer;
+            text-align: center;
+            display: inline-block;
+            transition: background 0.3s;
+            border: none;
+        }
+        .donor-declaration-button[type="file"] {
+            padding: 8px;
+            cursor: pointer;
+            border: none;
+            appearance: none;
+            position: relative;
+        }
+        .donor-declaration-button::file-selector-button {
+            background: #fff;
+            border: none;
+            padding: 5px 10px;
+            margin-right: 5px;
             border-radius: 5px;
-            transition: 0.3s;
-            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
         }
         .donor-declaration-button:hover {
-            background-color: white;
-            color: #c9302c;
+            background-color: #c9302c;
         }
         
         .donor-declaration-input {
@@ -252,6 +269,29 @@
         .confirm-action:hover {
             background: #691b19;
         }
+/* General error message styling */
+.error-message {
+    color: red;
+    font-size: 14px;
+    display: block;
+    min-height: 20px; /* Ensures space for error messages */
+    margin-top: 5px; /* Adds space below input */
+}
+
+
+/* Specific input error highlighting */
+input.is-invalid,
+input.is-invalid:focus,
+input.is-invalid + .error-message {
+    border-color: #d9534f; /* Light red background */
+}
+
+/* File input styling */
+input[type="file"].is-invalid {
+    border: 2px solid #d9534f;
+    background-color: #f8d7da;
+}
+
     </style>
 </head>
 <body>
@@ -279,22 +319,42 @@
             </p>
     </div>
     <hr class="styled-hr">
+
         <div class="donor-declaration-row donor-declaration-header-row">
             <div><strong>For those ages 16-17</strong></div>
             <div><strong>Donor's Signature</strong></div>
         </div>
+        
         <div class="donor-declaration-row">
             <div><strong>Signature of Parent/Guardian</strong></div>
             <div><strong>Relationship to Blood Donor</strong></div>
         </div>
+        
         <div class="donor-declaration-row">
-            <button class="donor-declaration-button" onclick="alert('Upload Parent/Guardian Signature')">Upload Signature</button>
-            <input class="donor-declaration-input" type="text" placeholder="Enter Relationship">
-            <button class="donor-declaration-button" onclick="alert('Upload Donor Signature')">Upload Signature</button>
+            <!-- Parent/Guardian Signature Upload -->
+            <div>
+                <input type="file" id="guardian-signature" accept="image/png, image/jpeg" class="donor-declaration-button">
+                <div id="guardianError" class="error-message"></div> <!-- Corrected placement -->
+            </div>
+        
+            <!-- Relationship Input -->
+            <div>
+                <input class="donor-declaration-input" type="text" id="relationship" placeholder="Enter Relationship">
+                <div id="relationshipError" class="error-message"></div> <!-- Corrected placement -->
+            </div>
+        
+            <!-- Donor Signature Upload -->
+            <div>
+                <input type="file" id="donor-signature" class="donor-declaration-button" accept="image/png, image/jpeg">
+                <div id="donorError" class="error-message"></div> <!-- Corrected placement -->
+            </div>
         </div>
+        
 
+        </div>
+        
         <div class="submit-section">
-            <button class="submit-button" id="triggerModalButton">Next</button>
+            <button class="submit-button" id="triggerModalButton">Submit</button>
         </div>
     </div>
     <!-- Confirmation Modal -->
@@ -310,43 +370,98 @@
     <div class="loading-spinner" id="loadingSpinner"></div>
 
     <script>
+document.getElementById("triggerModalButton").addEventListener("click", function(event) {
+    event.preventDefault(); // Prevent form submission
+
+    let guardianSignature = document.getElementById("guardian-signature").files.length;
+    let relationship = document.querySelector(".donor-declaration-input").value.trim();
+    let donorSignature = document.getElementById("donor-signature").files.length;
+
+    let relationshipError = document.getElementById("relationshipError");
+    let donorError = document.getElementById("donorError");
+    let guardianError = document.getElementById("guardianError");
+
+    // Reset errors
+    document.querySelectorAll(".error-message").forEach(el => el.style.display = "none");
+    document.querySelectorAll(".is-invalid").forEach(el => el.classList.remove("is-invalid"));
+
+    let errors = [];
+
+    // Rule 1: If Guardian Signature & Relationship are blank → Donor Signature is required
+    if (guardianSignature === 0 && relationship === "" && donorSignature === 0) {
+        errors.push({ element: donorError, message: "Donor Signature is required." });
+        document.getElementById("donor-signature").classList.add("is-invalid");
+    }
+
+    // Rule 2: If Guardian Signature exists, but Relationship is blank & Donor Signature is blank → Relationship is required
+    if (guardianSignature > 0 && relationship === "" && donorSignature === 0) {
+        errors.push({ element: relationshipError, message: "Relationship is required if a guardian signs." });
+        document.querySelector(".donor-declaration-input").classList.add("is-invalid");
+    }
+
+    // Rule 3: If Relationship is filled → Guardian Signature is required
+    if (relationship !== "" && guardianSignature === 0) {
+        errors.push({ element: guardianError, message: "Guardian Signature is required if relationship is provided." });
+        document.getElementById("guardian-signature").classList.add("is-invalid");
+    }
+
+    // Rule 4: If both Donor & Guardian Signatures are uploaded → Error
+    if (guardianSignature > 0 && donorSignature > 0) {
+        errors.push({ element: guardianError, message: "Only one signature is needed. Remove either the Donor or Guardian signature." });
+        document.getElementById("guardian-signature").classList.add("is-invalid");
+        document.getElementById("donor-signature").classList.add("is-invalid");
+    }
+
+    // Display errors
+    errors.forEach(err => {
+        err.element.textContent = err.message;
+        err.element.style.display = "block";
+    });
+
+
+    if (errors.length === 0) {
         let confirmationDialog = document.getElementById("confirmationDialog");
-        let loadingSpinner = document.getElementById("loadingSpinner");
         let triggerModalButton = document.getElementById("triggerModalButton");
-        let cancelButton = document.getElementById("cancelButton");
-        let confirmButton = document.getElementById("confirmButton");
 
-        // Open Modal
-        triggerModalButton.addEventListener("click", function() {
-            confirmationDialog.classList.remove("hide");
-            confirmationDialog.classList.add("show");
-            confirmationDialog.style.display = "block";
-            triggerModalButton.disabled = true; // Disable button while modal is open
-        });
+        confirmationDialog.classList.remove("hide");
+        confirmationDialog.classList.add("show");
+        confirmationDialog.style.display = "block";
+        triggerModalButton.disabled = true; // Disable button while modal is open
+    }
+});
 
-        // Close Modal Function
-        function closeModal() {
-            confirmationDialog.classList.remove("show");
-            confirmationDialog.classList.add("hide");
-            setTimeout(() => {
-                confirmationDialog.style.display = "none";
-                triggerModalButton.disabled = false; // Re-enable button
-            }, 300);
-        }
+// Modal logic
+let confirmationDialog = document.getElementById("confirmationDialog");
+let loadingSpinner = document.getElementById("loadingSpinner");
+let cancelButton = document.getElementById("cancelButton");
+let confirmButton = document.getElementById("confirmButton");
 
-        // Yes Button (Triggers Loading Spinner)
-        confirmButton.addEventListener("click", function() {
-            closeModal();
-            loadingSpinner.style.display = "block"; // Show loader
-            setTimeout(() => {
-                loadingSpinner.style.display = "none"; // Hide loader after 2 seconds
-            }, 2000);
-        });
+// Close Modal Function
+function closeModal() {
+    confirmationDialog.classList.remove("show");
+    confirmationDialog.classList.add("hide");
+    setTimeout(() => {
+        confirmationDialog.style.display = "none";
+        document.getElementById("triggerModalButton").disabled = false; // Re-enable button
+    }, 300);
+}
 
-        // No Button (Closes Modal)
-        cancelButton.addEventListener("click", function() {
-            closeModal();
-        });
+// Yes Button (Triggers Loading Spinner)
+confirmButton.addEventListener("click", function() {
+    closeModal();
+    loadingSpinner.style.display = "block"; // Show loader
+    setTimeout(() => {
+        loadingSpinner.style.display = "none"; 
+        // location of mobile application after submitting 
+        window.location.href = "../../../public/Dashboardsdonors-declaration.html";
+    }, 2000);
+});
+
+// No Button (Closes Modal)
+cancelButton.addEventListener("click", function() {
+    closeModal();
+});
+
     </script>
 </body>
 </html>
