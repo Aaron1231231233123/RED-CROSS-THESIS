@@ -103,8 +103,70 @@
         .submit-button:active {
             transform: translateY(0);
         }
-        /* Loader Animation -- Modal Design */
-        .loading-spinner {
+       
+
+        .blood-bag-option {
+    display: flex;
+    align-items: center;
+    font-weight: bold;
+    color: #721c24;
+    gap: 8px;
+    background: #fff;
+    padding: 10px 15px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+/* Hide the default radio */
+.blood-bag-option input {
+    opacity: 0;
+    position: absolute;
+}
+
+/* Custom checkbox look */
+.checkmark {
+    width: 18px;
+    height: 18px;
+    background-color: #fff;
+    border: 2px solid #000000;
+    border-radius: 4px;
+    display: inline-block;
+    position: relative;
+    transition: background-color 0.3s ease;
+}
+
+/* Change background when selected */
+.blood-bag-option input:checked ~ .checkmark {
+    background-color: #0559f5;
+}
+
+/* Checkmark tick */
+.checkmark::after {
+    content: "";
+    position: absolute;
+    display: none;
+    left: 5px;
+    top: 1px;
+    width: 5px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+/* Show tick when selected */
+.blood-bag-option input:checked ~ .checkmark::after {
+    display: block;
+}
+.medical-history-remarks {
+            width: 100%;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+         /* Loader Animation -- Modal Design */
+         .loading-spinner {
             position: fixed;
             top: 50%;
             left: 50%;
@@ -212,66 +274,6 @@
         .confirm-action:hover {
             background: #691b19;
         }
-
-        .blood-bag-option {
-    display: flex;
-    align-items: center;
-    font-weight: bold;
-    color: #721c24;
-    gap: 8px;
-    background: #fff;
-    padding: 10px 15px;
-    border-radius: 6px;
-    cursor: pointer;
-}
-
-/* Hide the default radio */
-.blood-bag-option input {
-    opacity: 0;
-    position: absolute;
-}
-
-/* Custom checkbox look */
-.checkmark {
-    width: 18px;
-    height: 18px;
-    background-color: #fff;
-    border: 2px solid #000000;
-    border-radius: 4px;
-    display: inline-block;
-    position: relative;
-    transition: background-color 0.3s ease;
-}
-
-/* Change background when selected */
-.blood-bag-option input:checked ~ .checkmark {
-    background-color: #0559f5;
-}
-
-/* Checkmark tick */
-.checkmark::after {
-    content: "";
-    position: absolute;
-    display: none;
-    left: 5px;
-    top: 1px;
-    width: 5px;
-    height: 10px;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
-}
-
-/* Show tick when selected */
-.blood-bag-option input:checked ~ .checkmark::after {
-    display: block;
-}
-.medical-history-remarks {
-            width: 100%;
-            padding: 5px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
     </style>
 </head>
 <body>
@@ -345,19 +347,19 @@
                     document.write(`<div class='cell number'>${count}</div>`);
                     document.write(`<div class='cell'>${q}</div>`);
                     document.write(`
-    <div class='cell checkbox'>
-        <label class="blood-bag-option">
-            <input type='radio' name='q${count}' value='Yes'>
-            <span class="checkmark"></span>
-        </label>
-    </div>
-    <div class='cell checkbox'>
-        <label class="blood-bag-option">
-            <input type='radio' name='q${count}' value='No'>
-            <span class="checkmark"></span>
-        </label>
-    </div>
-`);
+                        <div class='cell checkbox'>
+                            <label class="blood-bag-option">
+                                <input type='radio' name='q${count}' value='Yes'>
+                                <span class="checkmark"></span>
+                            </label>
+                        </div>
+                        <div class='cell checkbox'>
+                            <label class="blood-bag-option">
+                                <input type='radio' name='q${count}' value='No'>
+                                <span class="checkmark"></span>
+                            </label>
+                        </div>
+                    `);
             let selectHTML = `<select <option class="medical-history-remarks" name='q${count}_remarks'>`;
                 remarksOptions.forEach(option => {
                     selectHTML += `<option value="${option}">${option}</option>`;
@@ -419,6 +421,7 @@
             loadingSpinner.style.display = "block"; // Show loader
             setTimeout(() => {
                 loadingSpinner.style.display = "none"; // Hide loader after 2 seconds
+                window.location.href = "screening-form.html";
             }, 2000);
         });
 
@@ -427,7 +430,6 @@
             closeModal();
         });
 
-        
     </script>
 </body>
 </html>

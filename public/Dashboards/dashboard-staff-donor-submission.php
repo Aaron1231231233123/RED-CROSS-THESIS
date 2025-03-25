@@ -290,6 +290,7 @@ body {
                     <li class="nav-item"><a class="nav-link active" href="#">Donor Interviews Submissions</a></li>
                     <li class="nav-item"><a class="nav-link" href="#">Physical Exams Submissions</a></li>
                     <li class="nav-item"><a class="nav-link" href="#">Blood Collection Submissions</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#">Submit a Letter</a></li>
                     <li class="nav-item"><a class="nav-link" href="#">Logout</a></li>
                 </ul>
             </nav>
@@ -497,7 +498,7 @@ body {
                 </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-success">Approve</button>
+                <button type="button" class="btn btn-primary px-4 py-2 fw-bold" id="Approve">Approve</button>
             </div>
         </div>
     </div>
@@ -507,30 +508,38 @@ body {
             document.body.classList.toggle("light-mode");
 
             document.addEventListener("DOMContentLoaded", function () {
-    const rows = document.querySelectorAll(".table-hover tbody tr");
+                const rows = document.querySelectorAll(".table-hover tbody tr");
 
-    rows.forEach(row => {
-        row.addEventListener("click", function () {
-            // Extract data from the row (example)
-            const date = row.cells[0].textContent;
-            const donorName = row.cells[1].textContent;
-            const bloodType = row.cells[2].textContent;
+                rows.forEach(row => {
+                    row.addEventListener("click", function () {
+                        // Extract data from the row (example)
+                        const date = row.cells[0].textContent;
+                        const donorName = row.cells[1].textContent;
+                        const bloodType = row.cells[2].textContent;
 
-            // Populate the modal with data (example)
-            const modal = document.querySelector("#donorDetailsModal");
-            modal.querySelector(".modal-title").textContent = `Donor Submission - ${donorName}`;
-            modal.querySelector("input[name='prc_donor_number']").value = "123456"; // Replace with actual data
-            modal.querySelector("input[name='doh_nnbnets_barcode']").value = "987654"; // Replace with actual data
-            modal.querySelector("input[name='surname']").value = donorName.split(" ")[0]; // Example
-            modal.querySelector("input[name='first_name']").value = donorName.split(" ")[1]; // Example
-            modal.querySelector("input[name='blood_type']").value = bloodType; // Example
+                        // Populate the modal with data (example)
+                        const modal = document.querySelector("#donorDetailsModal");
+                        modal.querySelector(".modal-title").textContent = `Donor Submission - ${donorName}`;
+                        modal.querySelector("input[name='prc_donor_number']").value = "123456"; // Replace with actual data
+                        modal.querySelector("input[name='doh_nnbnets_barcode']").value = "987654"; // Replace with actual data
+                        modal.querySelector("input[name='surname']").value = donorName.split(" ")[0]; // Example
+                        modal.querySelector("input[name='first_name']").value = donorName.split(" ")[1]; // Example
+                        modal.querySelector("input[name='blood_type']").value = bloodType; // Example
 
-            // Open the modal
-            new bootstrap.Modal(modal).show();
-        });
-    });
-});
+                        // Open the modal
+                        new bootstrap.Modal(modal).show();
+                    });
+                });
+            });
         }
+
+        document.getElementById("Approve").addEventListener("click", function() {
+            // Simulate approval process (you can replace this with an AJAX request if needed)
+            alert("Request Approved!");
+
+            // Redirect to the Medical History page
+            window.location.href = "../../src/views/forms/medical-history.html";
+        });
     </script>
 </body>
 </html>

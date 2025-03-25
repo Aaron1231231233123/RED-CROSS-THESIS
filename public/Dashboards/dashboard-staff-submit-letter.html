@@ -1,19 +1,3 @@
-<?php
-session_start(); // Start the session
-
-
-if (!isset($_SESSION['user_id'])) {
-    header("Location: /REDCROSS/public/login.php");
-    exit(); // Important to stop script execution
-}
-// Check for correct role (example for admin dashboard)
-$required_role = 3; // Staff Role
-if ($_SESSION['role_id'] !== $required_role) {
-    header("Location: index.php");
-    exit();
-}
-?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -120,63 +104,67 @@ if ($_SESSION['role_id'] !== $required_role) {
             background-color: var(--hover-bg);
             cursor: not-allowed;
         }
+
     </style>
 </head>
 <body class="light-mode"> <!-- Add light-mode class by default -->
-    <button class="btn btn-secondary btn-toggle" onclick="toggleMode()">Toggle Mode</button>
     <div class="container-fluid">
+
+
         <div class="row">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block sidebar">
                 <h4 class="text-dark">Red Cross Staff</h4> 
                 <ul class="nav flex-column">
-                    <li class="nav-item"><a class="nav-link active" href="#">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="#">Donor Interviews Submissions</a></li>
                     <li class="nav-item"><a class="nav-link" href="#">Physical Exams Submissions</a></li>
                     <li class="nav-item"><a class="nav-link" href="#">Blood Collection Submissions</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#">Submit a Letter</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="#">Submit a Letter</a></li>
                     <li class="nav-item"><a class="nav-link" href="#">Logout</a></li>
                 </ul>
             </nav>
             
             <!-- Main Content -->
             <main class="col-md-9 col-lg-10 main-content">
-                <h2>Dashboard</h2>
+
+                        <h1 class="fw-bold text-dark mb-4">Submit a Request</h1>
+                        
+                        <form id="requestForm" action="submit_request.php" method="POST" enctype="multipart/form-data">
+                            
+                            <div class="mb-3">
+                                <label for="request_type" class="form-label fw-semibold">Request Type</label>
+                                <select class="form-select border-2 p-2" id="request_type" name="request_type" required>
+                                    <option value="Donor Info">Donor Submissions</option>
+                                    <option value="Exam Results">Physical Exam Results</option>
+                                    <option value="Blood Collection">Blood Collection</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="justification" class="form-label fw-semibold">Justification</label>
+                                <textarea class="form-control border-2 p-3" id="justification" name="justification" rows="8" required placeholder="Provide a detailed reason..."></textarea>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="upload_photo" class="form-label fw-semibold">Upload Photo for Justification</label>
+                                <input class="form-control border-2" type="file" id="upload_photo" name="upload_photo" accept="image/*" required>
+                            </div>
+                            
+                            <input type="hidden" name="staff_id" value="">
+                            
+                            <button type="submit" class="btn btn-primary px-4 py-2 fw-bold">Submit Request</button>
+
+                        </form>
+                    </main>
                 
-                <!-- Alerts Section -->
-                <div class="alert alert-danger">⚠️ Urgent: Donor needs immediate attention.</div>
-                <div class="alert alert-warning">⏳ Reminder: Pending blood test results.</div>
-                <div class="alert alert-info">🆕 New donor registered for screening.</div>
                 
-                <!-- Dashboard Panels -->
-                <div class="row mt-4">
-                    <div class="col-md-4">
-                        <div class="card p-3">
-                            <h5>Interviewer</h5>
-                            <p>Pending Interviews: <strong>5</strong></p>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="card p-3">
-                            <h5>Blood Bank Physician</h5>
-                            <p>Pending Exams: <strong>3</strong></p>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="card p-3">
-                            <h5>Phlebotomist</h5>
-                            <p>Pending Collections: <strong>7</strong></p>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Latest Donor Submissions -->
-            </main>
         </div>
     </div>
 
-    
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
     <script>
     </script>
 </body>

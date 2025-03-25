@@ -498,7 +498,7 @@
                 </div>
             </div>
             <div class="submit-section">
-                <button class="submit-button" id="triggerModalButton">Next</button>
+                <button class="submit-button" id="triggerModalButton">Submit</button>
             </div>
         </div>
         <!-- Confirmation Modal -->
@@ -546,6 +546,7 @@
             loadingSpinner.style.display = "block"; // Show loader
             setTimeout(() => {
                 loadingSpinner.style.display = "none"; // Hide loader after 2 seconds
+                window.location.href = "../../../public/Dashboards/dashboard-staff-physical-submission.html";
             }, 2000);
         });
 

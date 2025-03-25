@@ -560,7 +560,7 @@ body {
             <p>Date: <span id="current-date"></span></p>
         </div>
         <div class="submit-section">
-            <button class="submit-button" id="triggerModalButton">Next</button>
+            <button class="submit-button" id="triggerModalButton">Submit</button>
         </div>
     </div>
     <!-- Confirmation Modal -->
@@ -607,6 +607,7 @@ body {
             loadingSpinner.style.display = "block"; // Show loader
             setTimeout(() => {
                 loadingSpinner.style.display = "none"; // Hide loader after 2 seconds
+                window.location.href = "../../../public/Dashboards/dashboard-staff-donor-submission.php";
             }, 2000);
         });
 
@@ -614,7 +615,6 @@ body {
         cancelButton.addEventListener("click", function() {
             closeModal();
         });
-
 
     </script>
 </body>
