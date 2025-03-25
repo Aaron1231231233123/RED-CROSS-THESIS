@@ -262,11 +262,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">
                 <input type="text" class="form-control mb-3" placeholder="Search...">
-                <a href="#"><i class="fas fa-home me-2"></i>Home</a>
-                <a href="#"><i class="fas fa-tint me-2"></i>Blood Donations</a>
-                <a href="#"><i class="fas fa-tint me-2"></i>Blood Bank</a>
+                <a href="dashboard-Inventory-System.php"><i class="fas fa-home me-2"></i>Home</a>
+                <a href="dashboard-Inventory-System-list-of-donations.php"><i class="fas fa-tint me-2"></i>Blood Donations</a>
+                <a href="Dashboard-Inventory-System-Bloodbank.php"><i class="fas fa-tint me-2"></i>Blood Bank</a>
                 <a href="#" class="active"><i class="fas fa-list me-2"></i>Requests</a>
-                <a href="#"><i class="fas fa-check me-2"></i>Handover</a>
+                <a href="Dashboard-Inventory-System-Handed-Over.php"><i class="fas fa-check me-2"></i>Handover</a>
             </nav>
 
            <!-- Main Content -->

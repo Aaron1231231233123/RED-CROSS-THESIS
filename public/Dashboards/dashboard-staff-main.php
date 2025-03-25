@@ -131,7 +131,7 @@ if ($_SESSION['role_id'] !== $required_role) {
                 <h4 class="text-dark">Red Cross Staff</h4> 
                 <ul class="nav flex-column">
                     <li class="nav-item"><a class="nav-link active" href="#">Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#">Donor Interviews Submissions</a></li>
+                    <li class="nav-item"><a class="nav-link" href="dashboard-staff-donor-submission.php">Donor Interviews Submissions</a></li>
                     <li class="nav-item"><a class="nav-link" href="#">Physical Exams Submissions</a></li>
                     <li class="nav-item"><a class="nav-link" href="#">Blood Collection Submissions</a></li>
                     <li class="nav-item"><a class="nav-link" href="#">Logout</a></li>

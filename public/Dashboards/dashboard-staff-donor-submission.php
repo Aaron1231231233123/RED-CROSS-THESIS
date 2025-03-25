@@ -286,7 +286,7 @@ body {
             <nav class="col-md-3 col-lg-2 d-md-block sidebar">
                 <h4 >Red Cross Staff</h4>
                 <ul class="nav flex-column">
-                    <li class="nav-item"><a class="nav-link" href="#">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="dashboard-staff-main.php">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link active" href="#">Donor Interviews Submissions</a></li>
                     <li class="nav-item"><a class="nav-link" href="#">Physical Exams Submissions</a></li>
                     <li class="nav-item"><a class="nav-link" href="#">Blood Collection Submissions</a></li>

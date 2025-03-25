@@ -99,9 +99,9 @@
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">
                 <input type="text" class="form-control mb-3" placeholder="Search...">
-                <a href="#"><i class="fas fa-home me-2"></i>Home</a>
-                <a href="#"><i class="fas fa-tint me-2"></i>Your Requests</a>
-                <a href="#" class="active"><i class="fas fa-users me-2"></i>Blood History</a>
+                <a href="dashboard-hospital-bootstrap.php"><i class="fas fa-home me-2"></i>Home</a>
+                <a href="dashboard-hospital-requests.php"><i class="fas fa-tint me-2"></i>Your Requests</a>
+                <a href="dashboard-hospital-history.php" class="active"><i class="fas fa-users me-2"></i>Blood History</a>
             </nav>
 
             <!-- Main Content -->
