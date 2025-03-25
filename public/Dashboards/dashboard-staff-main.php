@@ -1,14 +1,13 @@
 <?php
-session_start();
+session_start(); // Start the session
 
-// Check if user is logged in
+
 if (!isset($_SESSION['user_id'])) {
-    header("Location: index.php");
-    exit();
+    header("Location: /REDCROSS/public/login.php");
+    exit(); // Important to stop script execution
 }
-
 // Check for correct role (example for admin dashboard)
-$required_role = 2; // Staff Role
+$required_role = 3; // Staff Role
 if ($_SESSION['role_id'] !== $required_role) {
     header("Location: index.php");
     exit();

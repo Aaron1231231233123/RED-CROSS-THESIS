@@ -1,6 +1,47 @@
 <?php
-require 'db_conn.php';
+session_start();
+require '../assets/conn/db_conn.php';
 
+
+/**
+ * Function to send requests to Supabase API.
+ */
+function supabaseRequest($endpoint, $method = 'GET', $data = null) {
+    $url = SUPABASE_URL . "/rest/v1/" . $endpoint;
+
+    $headers = [
+        "Content-Type: application/json",
+        "apikey: " . SUPABASE_API_KEY,
+        "Authorization: Bearer " . SUPABASE_API_KEY,
+        "Prefer: return=representation"
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+    if ($method === 'POST' || $method === 'PUT' || $method === 'DELETE') {
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        if ($data !== null) {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        }
+    }
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    if ($curlError) {
+        die("cURL Error: " . $curlError);
+    }
+
+    if ($httpCode >= 400) {
+        die("Supabase API Error: " . $response);
+    }
+
+    return json_decode($response, true);
+}
 /**
  * Function to generate a valid UUID v4.
  */
@@ -34,7 +75,7 @@ function registerUser($user_id, $surname, $first_name, $middle_name, $suffix, $e
         'password_hash' => $password_hash
     ];
 
-    return supabaseRequest("users_staff", "POST", $data); // Insert user data into Supabase
+    return supabaseRequest("users", "POST", $data); // Insert user data into Supabase
 }
 
 // Handle form submission
@@ -84,11 +125,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         echo "❌ Registration failed.";
     }
 }
+
 ?>
-
-
-
-
 
 
 
