@@ -1,3 +1,21 @@
+<?php
+session_start();
+// Supabase Configuration
+define("SUPABASE_URL", "https://nwakbxwglhxcpunrzstf.supabase.co");
+define("SUPABASE_API_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53YWtieHdnbGh4Y3B1bnJ6c3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIyODA1NzIsImV4cCI6MjA1Nzg1NjU3Mn0.y4CIbDT2UQf2ieJTQukuJRRzspSZPehSgNKivBwpvc4");
+
+// Check if form is submitted
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Store form data in session
+    $_SESSION['donor_data'] = $_POST;
+    // Redirect to the signature page
+    header("Location: donor-declaration.php");
+    exit();
+}
+?>
+
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -237,7 +255,7 @@
     </style>
 </head>
 <body>
-    <form class="donor_form_container">
+    <form class="donor_form_container" id="donorForm" action="donor-form.php" method="POST">
         <div class="donor_form_header">
             <div>
                 <label class="donor_form_label">PRC BLOOD DONOR NUMBER:</label>
@@ -278,17 +296,19 @@
                 <div>
                     <label class="donor_form_label">Sex</label>
                     <select class="donor_form_input" name="sex">
-                        <option value="male">Male</option>
-                        <option value="female">Female</option>
+                    <option value=""></option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Female</option>
                     </select>
                 </div>
                 <div>
                     <label class="donor_form_label">Civil Status</label>
                     <select class="donor_form_input" name="civil_status">
-                        <option value="single">Single</option>
-                        <option value="married">Married</option>
-                        <option value="widowed">Widowed</option>
-                        <option value="divorced">Divorced</option>
+                        <option value="Single">Single</option>
+                        <option value="Married">Married</option>
+                        <option value="Widowed">Widowed</option>
+                        <option value="Divorced">Divorced</option>
                     </select>
                 </div>
             </div>
@@ -383,44 +403,76 @@
     <!-- Loading Spinner -->
     <div class="loading-spinner" id="loadingSpinner"></div>
     <script>
-        let confirmationDialog = document.getElementById("confirmationDialog");
-        let loadingSpinner = document.getElementById("loadingSpinner");
-        let triggerModalButton = document.getElementById("triggerModalButton");
-        let cancelButton = document.getElementById("cancelButton");
-        let confirmButton = document.getElementById("confirmButton");
+document.addEventListener("DOMContentLoaded", function () {
+    let confirmationDialog = document.getElementById("confirmationDialog");
+    let loadingSpinner = document.getElementById("loadingSpinner");
+    let triggerModalButton = document.getElementById("triggerModalButton");
+    let cancelButton = document.getElementById("cancelButton");
+    let confirmButton = document.getElementById("confirmButton");
+    let donorForm = document.getElementById("donorForm");
 
-        // Open Modal
-        triggerModalButton.addEventListener("click", function() {
-            confirmationDialog.classList.remove("hide");
-            confirmationDialog.classList.add("show");
-            confirmationDialog.style.display = "block";
-            triggerModalButton.disabled = true; // Disable button while modal is open
+    // Open Modal Function
+    function openModal() {
+        confirmationDialog.classList.remove("hide");
+        confirmationDialog.classList.add("show");
+        confirmationDialog.style.display = "block";
+        triggerModalButton.disabled = true; // Disable button while modal is open
+    }
+
+    // Close Modal Function
+    function closeModal() {
+        confirmationDialog.classList.remove("show");
+        confirmationDialog.classList.add("hide");
+        setTimeout(() => {
+            confirmationDialog.style.display = "none";
+            triggerModalButton.disabled = false; // Re-enable button
+        }, 300);
+    }
+
+    // Show confirmation modal when form is about to be submitted
+    donorForm.addEventListener("submit", function (event) {
+        event.preventDefault(); // Stop immediate submission
+        openModal(); // Show modal
+    });
+
+    // If "Yes" is clicked, show loader & submit form
+    confirmButton.addEventListener("click", function () {
+        closeModal();
+        loadingSpinner.style.display = "block"; // Show loader
+        setTimeout(() => {
+            loadingSpinner.style.display = "none"; // Hide loader
+            donorForm.submit(); // Now submit the form
+        }, 2000);
+    });
+
+    // If "No" is clicked, just close the modal
+    cancelButton.addEventListener("click", closeModal);
+    // Add form validation before showing modal
+    document.getElementById("triggerModalButton").addEventListener("click", function(event) {
+            event.preventDefault();
+            
+            // Basic validation - check required fields
+            let requiredFields = ['surname', 'first_name', 'birthdate', 'age', 'sex'];
+            let isValid = true;
+            
+            requiredFields.forEach(field => {
+                let value = document.querySelector(`[name="${field}"]`).value.trim();
+                if (!value) {
+                    isValid = false;
+                    document.querySelector(`[name="${field}"]`).style.borderColor = "#d9534f";
+                } else {
+                    document.querySelector(`[name="${field}"]`).style.borderColor = "";
+                }
+            });
+            
+            if (isValid) {
+                openModal();
+            } else {
+                alert("Please fill in all required fields");
+            }
         });
+});
 
-        // Close Modal Function
-        function closeModal() {
-            confirmationDialog.classList.remove("show");
-            confirmationDialog.classList.add("hide");
-            setTimeout(() => {
-                confirmationDialog.style.display = "none";
-                triggerModalButton.disabled = false; // Re-enable button
-            }, 300);
-        }
-
-        // Yes Button (Triggers Loading Spinner)
-        confirmButton.addEventListener("click", function() {
-            closeModal();
-            loadingSpinner.style.display = "block"; // Show loader
-            setTimeout(() => {
-                loadingSpinner.style.display = "none"; // Hide loader after 2 seconds
-                window.location.href = "donors-declaration.html";
-            }, 2000);
-        });
-
-        // No Button (Closes Modal)
-        cancelButton.addEventListener("click", function() {
-            closeModal();
-        });
     </script>
 </body>
 </html>

@@ -1,3 +1,114 @@
+<?php
+session_start();
+define("SUPABASE_URL", "https://nwakbxwglhxcpunrzstf.supabase.co");
+define("SUPABASE_API_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53YWtieHdnbGh4Y3B1bnJ6c3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIyODA1NzIsImV4cCI6MjA1Nzg1NjU3Mn0.y4CIbDT2UQf2ieJTQukuJRRzspSZPehSgNKivBwpvc4");
+
+// Check if form is submitted from first page
+if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_SESSION['donor_data'])) {
+    $_SESSION['donor_data'] = $_POST;
+    header("Location: donor-declaration.php");
+    exit();
+}
+
+// Handle form submission to Supabase
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_SESSION['donor_data'])) {
+    $donorData = array_merge($_SESSION['donor_data'], $_POST);
+    
+    // Handle file uploads
+    $signatureData = [];
+    if (!empty($_FILES['donor_signature']['tmp_name'])) {
+        $donorSignature = file_get_contents($_FILES['donor_signature']['tmp_name']);
+        $signatureData['donor_signature'] = base64_encode($donorSignature);
+    }
+
+    if (!empty($_FILES['guardian_signature']['tmp_name'])) {
+        $guardianSignature = file_get_contents($_FILES['guardian_signature']['tmp_name']);
+        $signatureData['guardian_signature'] = base64_encode($guardianSignature);
+    }
+    
+    // Define EXACTLY what Supabase expects for civil_status
+    $allowedCivilStatuses = ['Single', 'Married', 'Widowed', 'Divorced'];
+    
+    // Get and validate civil status - this ensures it matches Supabase's constraint
+    $civilStatus = in_array($donorData['civil_status'], $allowedCivilStatuses) 
+        ? $donorData['civil_status']
+        : 'Single'; // Default to Single if invalid (shouldn't happen with select)
+    
+    // Prepare data for Supabase - all fields match your table exactly
+    $supabaseData = [
+        'prc_donor_number' => $donorData['prc_donor_number'] ?? null,
+        'doh_nnbnets_barcode' => $donorData['doh_nnbnets_barcode'] ?? null,
+        'surname' => $donorData['surname'] ?? null,
+        'first_name' => $donorData['first_name'] ?? null,
+        'middle_name' => $donorData['middle_name'] ?? null,
+        'birthdate' => $donorData['birthdate'] ?? null,
+        'age' => (int)($donorData['age'] ?? 0),
+        'sex' => $donorData['sex'] ?? null,
+        'civil_status' => $civilStatus, // Using validated value
+        'permanent_address' => $donorData['permanent_address'] ?? null,
+        'office_address' => $donorData['office_address'] ?? null,
+        'nationality' => $donorData['nationality'] ?? null,
+        'religion' => $donorData['religion'] ?? null,
+        'education' => $donorData['education'] ?? null,
+        'occupation' => $donorData['occupation'] ?? null,
+        'telephone' => $donorData['telephone'] ?? null,
+        'mobile' => $donorData['mobile'] ?? null,
+        'email' => $donorData['email'] ?? null,
+        'id_school' => $donorData['id_school'] ?? null,
+        'id_company' => $donorData['id_company'] ?? null,
+        'id_prc' => $donorData['id_prc'] ?? null,
+        'id_drivers' => $donorData['id_drivers'] ?? null,
+        'id_sss_gsis_bir' => $donorData['id_sss_gsis_bir'] ?? null,
+        'id_others' => $donorData['id_others'] ?? null,
+        'relationship' => $donorData['relationship'] ?? null,
+        'submitted_at' => date('Y-m-d H:i:s'),
+    ];
+    
+    // Merge signature data if available
+    $supabaseData = array_merge($supabaseData, $signatureData);
+    
+    // Debug output
+    error_log('Supabase Submission Data: ' . print_r($supabaseData, true));
+
+    // Send to Supabase
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => SUPABASE_URL . '/rest/v1/donor_form',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode($supabaseData),
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=minimal'
+        ],
+        CURLOPT_FAILONERROR => false
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    // Handle response
+    if ($curlError) {
+        echo '<script>alert("Network Error: ' . addslashes($curlError) . '");</script>';
+    } elseif ($httpCode >= 400) {
+        $errorDetails = json_decode($response, true) ?: $response;
+        error_log("Supabase Error ($httpCode): " . print_r($errorDetails, true));
+        echo '<script>alert("Validation Error: ' . addslashes($errorDetails['message'] ?? 'Check console') . '"); console.error(' . json_encode([
+            'error' => $errorDetails,
+            'submitted_data' => $supabaseData
+        ]) . ');</script>';
+    } else {
+        unset($_SESSION['donor_data']);
+        echo '<script>alert("Submission successful!"); window.location.href = "donor-form.php";</script>';
+    }
+    exit();
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -295,7 +406,7 @@ input[type="file"].is-invalid {
     </style>
 </head>
 <body>
-
+<form action="donor-declaration.php" method="POST">
     <div class="donor-declaration-container">
         <div class="declaration-container">
             <div class="declaration-title"><h2>III. Donor's Declaration</h2>
@@ -331,25 +442,26 @@ input[type="file"].is-invalid {
         </div>
         
         <div class="donor-declaration-row">
+       
             <!-- Parent/Guardian Signature Upload -->
             <div>
-                <input type="file" id="guardian-signature" accept="image/png, image/jpeg" class="donor-declaration-button">
+                <input type="file" id="guardian-signature" name="guardian_signature" accept="image/png, image/jpeg" class="donor-declaration-button">
                 <div id="guardianError" class="error-message"></div> <!-- Corrected placement -->
             </div>
         
             <!-- Relationship Input -->
             <div>
-                <input class="donor-declaration-input" type="text" id="relationship" placeholder="Enter Relationship">
+                <input class="donor-declaration-input" type="text" id="relationship" name="relationship" placeholder="Enter Relationship">
                 <div id="relationshipError" class="error-message"></div> <!-- Corrected placement -->
             </div>
         
             <!-- Donor Signature Upload -->
             <div>
-                <input type="file" id="donor-signature" class="donor-declaration-button" accept="image/png, image/jpeg">
+                <input type="file" id="donor-signature" name="donor_signature" class="donor-declaration-button" accept="image/png, image/jpeg">
                 <div id="donorError" class="error-message"></div> <!-- Corrected placement -->
             </div>
         </div>
-        
+</form>
 
         </div>
         
@@ -452,8 +564,6 @@ confirmButton.addEventListener("click", function() {
     loadingSpinner.style.display = "block"; // Show loader
     setTimeout(() => {
         loadingSpinner.style.display = "none"; 
-        // location of mobile application after submitting 
-        window.location.href = "../../../public/Dashboardsdonors-declaration.html";
     }, 2000);
 });
 
@@ -461,7 +571,51 @@ confirmButton.addEventListener("click", function() {
 cancelButton.addEventListener("click", function() {
     closeModal();
 });
+document.getElementById("triggerModalButton").addEventListener("click", function(event) {
+    event.preventDefault();
+    
+    let guardianSignature = document.getElementById("guardian-signature").files.length;
+    let relationship = document.querySelector(".donor-declaration-input").value.trim();
+    let donorSignature = document.getElementById("donor-signature").files.length;
 
+    // [Keep your existing validation code]
+    
+    if (errors.length === 0) {
+        openModal();
+    }
+});
+
+// Modal logic
+let confirmationDialog = document.getElementById("confirmationDialog");
+let loadingSpinner = document.getElementById("loadingSpinner");
+let cancelButton = document.getElementById("cancelButton");
+let confirmButton = document.getElementById("confirmButton");
+
+// Close Modal Function
+function closeModal() {
+    confirmationDialog.classList.remove("show");
+    confirmationDialog.classList.add("hide");
+    setTimeout(() => {
+        confirmationDialog.style.display = "none";
+        document.getElementById("triggerModalButton").disabled = false;
+    }, 300);
+}
+
+// Yes Button (Submit form)
+confirmButton.addEventListener("click", function() {
+    closeModal();
+    loadingSpinner.style.display = "block";
+    
+    // Submit the form after showing spinner
+    setTimeout(() => {
+        document.querySelector("form").submit();
+    }, 1000);
+});
+
+// No Button (Closes Modal)
+cancelButton.addEventListener("click", function() {
+    closeModal();
+});
     </script>
 </body>
 </html>
