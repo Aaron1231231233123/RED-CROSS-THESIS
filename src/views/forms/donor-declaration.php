@@ -794,18 +794,21 @@ input[type="file"].is-invalid {
     <!-- Loading Spinner -->
     <div class="loading-spinner" id="loadingSpinner"></div>
 
-    <!-- Replace SignWell CDN with local file -->
+    <!-- Signature Pad Library -->
+    <script src="/REDCROSS/assets/js/signature_pad.umd.min.js"></script>
     <script>
-        // Check if SignaturePad script is loaded, if not, load it
-        if (typeof SignaturePad === 'undefined') {
-            const script = document.createElement('script');
-            script.src = '../../assets/js/signature_pad.umd.min.js';
-            script.onerror = function() {
+        // Verify if SignaturePad loaded correctly
+        window.addEventListener('load', function() {
+            if (typeof SignaturePad === 'undefined') {
                 console.error('Failed to load signature pad library');
                 alert('Failed to load signature functionality. Please try refreshing the page.');
-            };
-            document.head.appendChild(script);
-        }
+            } else {
+                console.log('SignaturePad library loaded successfully');
+                // Initialize signature pads
+                const donorPad = new SignaturePad(document.getElementById('donorPad'));
+                const guardianPad = new SignaturePad(document.getElementById('guardianPad'));
+            }
+        });
     </script>
     <script>
 document.addEventListener("DOMContentLoaded", function () { 
