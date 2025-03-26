@@ -1,4 +1,5 @@
 <?php
+session_start();
 require_once '../../assets/conn/db_conn.php';
 
 // Initialize cURL session for Supabase
@@ -20,6 +21,12 @@ curl_close($ch);
 
 // Decode the JSON response
 $donors = json_decode($response, true);
+
+// Add this function to handle donor approval
+function storeDonorIdInSession($donorData) {
+    $_SESSION['donor_id'] = $donorData['id'];
+    $_SESSION['donor_name'] = $donorData['first_name'] . ' ' . $donorData['surname'];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -388,9 +395,15 @@ select.donor_form_input[disabled] {
                             <tbody id="donorTableBody">
                                 <?php if($donors && is_array($donors)): ?>
                                     <?php foreach($donors as $donor): ?>
+                                        <?php
+                                        // Ensure we have the donor ID in the expected format
+                                        $donorData = array_merge($donor, [
+                                            'donor_id' => $donor['donor_id'] ?? null
+                                        ]);
+                                        ?>
                                         <tr data-bs-toggle="modal" 
                                             data-bs-target="#donorDetailsModal" 
-                                            data-donor='<?php echo htmlspecialchars(json_encode($donor)); ?>'>
+                                            data-donor='<?php echo htmlspecialchars(json_encode($donorData, JSON_HEX_APOS | JSON_HEX_QUOT)); ?>'>
                                             <td><?php echo isset($donor['submitted_at']) ? htmlspecialchars($donor['submitted_at']) : ''; ?></td>
                                             <td><?php echo isset($donor['surname']) ? htmlspecialchars($donor['surname']) : ''; ?></td>
                                             <td><?php echo isset($donor['first_name']) ? htmlspecialchars($donor['first_name']) : ''; ?></td>
@@ -519,31 +532,31 @@ select.donor_form_input[disabled] {
                     <div class="donor_form_section">
                         <h6>IDENTIFICATION No.:</h6>
                         <div class="donor_form_grid grid-6">
-                            <div>
-                                <label class="donor_form_label">School</label>
+                        <div>
+                            <label class="donor_form_label">School</label>
                                 <input type="text" class="donor_form_input" name="id_school" value="<?php echo isset($donor['id_school']) ? htmlspecialchars($donor['id_school']) : ''; ?>" readonly>
-                            </div>
-                            <div>
-                                <label class="donor_form_label">Company</label>
+                        </div>
+                        <div>
+                            <label class="donor_form_label">Company</label>
                                 <input type="text" class="donor_form_input" name="id_company" value="<?php echo isset($donor['id_company']) ? htmlspecialchars($donor['id_company']) : ''; ?>" readonly>
-                            </div>
-                            <div>
-                                <label class="donor_form_label">PRC</label>
+                        </div>
+                        <div>
+                            <label class="donor_form_label">PRC</label>
                                 <input type="text" class="donor_form_input" name="id_prc" value="<?php echo isset($donor['id_prc']) ? htmlspecialchars($donor['id_prc']) : ''; ?>" readonly>
-                            </div>
-                            <div>
-                                <label class="donor_form_label">Driver's</label>
+                        </div>
+                        <div>
+                            <label class="donor_form_label">Driver's</label>
                                 <input type="text" class="donor_form_input" name="id_drivers" value="<?php echo isset($donor['id_drivers']) ? htmlspecialchars($donor['id_drivers']) : ''; ?>" readonly>
-                            </div>
-                            <div>
-                                <label class="donor_form_label">SSS/GSIS/BIR</label>
+                        </div>
+                        <div>
+                            <label class="donor_form_label">SSS/GSIS/BIR</label>
                                 <input type="text" class="donor_form_input" name="id_sss_gsis_bir" value="<?php echo isset($donor['id_sss_gsis_bir']) ? htmlspecialchars($donor['id_sss_gsis_bir']) : ''; ?>" readonly>
-                            </div>
-                            <div>
-                                <label class="donor_form_label">Others</label>
+                        </div>
+                        <div>
+                            <label class="donor_form_label">Others</label>
                                 <input type="text" class="donor_form_input" name="id_others" value="<?php echo isset($donor['id_others']) ? htmlspecialchars($donor['id_others']) : ''; ?>" readonly>
                             </div>
-                        </div>
+                    </div>
                     </div>
                 </form>
 
@@ -780,12 +793,75 @@ select.donor_form_input[disabled] {
             document.body.classList.toggle("light-mode");
         }
 
-        document.getElementById("Approve").addEventListener("click", function() {
-            // Simulate approval process (you can replace this with an AJAX request if needed)
-            alert("Request Approved!");
+        document.addEventListener('DOMContentLoaded', function() {
+            let currentDonorData = null;
 
-            // Redirect to the Medical History page
-            window.location.href = "../../src/views/forms/medical-history.html";
+            // Function to handle approve button click
+            function handleApprove(donorData) {
+                console.log('Approving donor:', donorData);
+
+                if (!donorData) {
+                    console.error('No donor data available');
+                    alert('Error: Could not process approval - missing donor data');
+                    return;
+                }
+
+                // Get the donor_id from the data
+                const donorId = donorData.donor_id;
+                if (!donorId) {
+                    console.error('No donor_id found in data:', donorData);
+                    alert('Error: Could not process approval - missing donor ID');
+                    return;
+                }
+
+                // First store the donor ID in session
+                fetch('store_donor_session.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        donor_id: donorId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.href = '../../src/views/forms/medical-history.php';
+                    } else {
+                        console.error('Server response:', data);
+                        alert('Error: Could not process approval');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error: Could not process approval');
+                });
+            }
+
+            // Table row click handler to store current donor data
+            document.querySelectorAll('.table-hover tbody tr').forEach(row => {
+                row.addEventListener('click', function() {
+                    try {
+                        const donorDataStr = this.getAttribute('data-donor');
+                        console.log('Raw donor data:', donorDataStr);
+                        currentDonorData = JSON.parse(donorDataStr);
+                        console.log('Parsed donor data:', currentDonorData);
+                    } catch (error) {
+                        console.error('Error parsing donor data:', error);
+                    }
+                });
+            });
+
+            // Add click event listener to the modal's approve button
+            document.getElementById('Approve').addEventListener('click', function() {
+                console.log('Current donor data on approve:', currentDonorData);
+                if (currentDonorData) {
+                    handleApprove(currentDonorData);
+                } else {
+                    alert('Error: No donor selected');
+                }
+            });
         });
     </script>
 
