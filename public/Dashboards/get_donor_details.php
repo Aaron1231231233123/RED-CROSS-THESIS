@@ -10,32 +10,18 @@ if (!isset($_GET['id'])) {
 
 $donorId = $_GET['id'];
 
-// Initialize cURL session
-$ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form?id=eq.' . urlencode($donorId));
-
-// Set headers
-$headers = [
-    'apikey: ' . SUPABASE_API_KEY,
-    'Authorization: Bearer ' . SUPABASE_API_KEY
-];
-
-// Set cURL options
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-
-// Execute the request
-$response = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-// Check if request was successful
-if ($httpCode === 200) {
-    $data = json_decode($response, true);
-    if (!empty($data)) {
-        echo json_encode($data[0]);
+try {
+    $query = "SELECT * FROM donor_form WHERE id = ?";
+    $stmt = mysqli_prepare($conn, $query);
+    mysqli_stmt_bind_param($stmt, "i", $donorId);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    
+    if ($donor = mysqli_fetch_assoc($result)) {
+        echo json_encode($donor);
     } else {
         echo json_encode(['error' => 'Donor not found']);
     }
-} else {
-    echo json_encode(['error' => 'Failed to fetch donor details']);
+} catch (Exception $e) {
+    echo json_encode(['error' => $e->getMessage()]);
 } 

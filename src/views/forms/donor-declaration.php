@@ -421,6 +421,249 @@ input[type="file"].is-invalid {
     background-color: #f8d7da;
 }
 
+        /* Add eSignature styles without affecting existing ones */
+        .signature-pad-container {
+            margin: 10px auto;
+            width: 100%;
+            max-width: 400px;
+            display: none;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            background: white;
+            padding: 10px 0px 10px 10px;  /* Removed right padding */
+            position: relative;
+        }
+        
+        .signature-pad-container.active {
+            display: block;
+        }
+        
+        .signature-pad-container.expanded {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: 800px;
+            width: 90%;
+            height: auto;
+            z-index: 1000;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+            padding: 20px;
+        }
+
+        .signature-pad-container.expanded canvas {
+            height: 400px;
+        }
+
+        .maximize-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: none;
+            border: none;
+            color: #d9534f;
+            cursor: pointer;
+            font-size: 20px;
+            padding: 5px;
+            z-index: 2;
+        }
+
+        .maximize-btn:hover {
+            color: #c9302c;
+        }
+
+        .signature-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+        }
+
+        .signature-overlay.active {
+            display: block;
+        }
+        
+        .signature-type-selector {
+            margin-bottom: 10px;
+            display: flex;
+            gap: 20px;
+        }
+        
+        .signature-type-selector label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+        }
+        
+        .signature-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .signature-btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #d9534f;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .signature-btn:hover {
+            background-color: #c9302c;
+        }
+        
+        #signaturePad {
+            width: 100%;
+            height: 150px;
+            border: none;
+        }
+        
+        .signature-method-selector {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin: 15px 0;
+            width: 100%;
+            position: relative;
+            min-height: 30px;
+        }
+
+        .signature-method-selector label {
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+            width: auto;
+            white-space: nowrap;
+        }
+
+        .signature-method-selector input[type="radio"] {
+            width: 20px;
+            height: 20px;
+            margin: 0;
+            position: relative;
+        }
+
+        /* Add tooltip/instruction styles */
+        .signature-instructions {
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: left;
+            font-size: 16px;
+            color: #333;
+        }
+
+        .signature-instructions h4 {
+            color: #b22222;
+            margin: 0 0 15px 0;
+            font-size: 20px;
+        }
+
+        .signature-instructions ul {
+            margin: 0;
+            padding-left: 25px;
+        }
+
+        .signature-instructions li {
+            margin-bottom: 8px;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        .signature-pad-instructions {
+            display: none;
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        .signature-pad-instructions.active {
+            display: block;
+        }
+
+        .signature-pad-container canvas {
+            width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .signature-controls {
+            margin-top: 15px;
+            text-align: center;
+        }
+
+        .signature-btn {
+            min-width: 100px;
+            margin: 0 5px;
+        }
+
+        /* Improve radio button visibility */
+        input[type="radio"] {
+            width: 18px;
+            height: 18px;
+            vertical-align: middle;
+        }
+
+        /* Make the canvas border more visible */
+        canvas {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        input[type="file"].donor-declaration-button {
+            display: block;
+            width: 275px;
+            margin: 10px auto;
+            text-align: center;
+            padding: 8px 15px;
+            position: relative;
+        }
+
+        .donor-declaration-file-input-wrapper {
+            position: relative;
+            width: fit-content;
+            margin: 10px auto;
+        }
+
+        .donor-declaration-clear-file {
+            position: absolute;
+            right: 5px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #fff;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            display: none;
+            padding: 0;
+            margin: 0;
+            line-height: 1;
+            z-index: 2;
+        }
+
+        .donor-declaration-clear-file:hover {
+            color: #ffd;
+        }
+
     </style>
 </head>
 <body>
@@ -449,6 +692,22 @@ input[type="file"].is-invalid {
     </div>
     <hr class="styled-hr">
 
+        <div class="signature-instructions">
+            <h4>How to Sign Your Form:</h4>
+            <ul>
+                <li><strong>Upload File:</strong> If you have a scanned copy of your signature, select "Upload File" and choose your signature image.</li>
+                <li><strong>Draw Signature:</strong> If you want to sign digitally:
+                    <ul>
+                        <li>Select "Draw Signature"</li>
+                        <li>Use your mouse or finger (on touch screen) to sign in the box that appears</li>
+                        <li>Click "Clear" if you want to try again</li>
+                        <li>Click "Save" when you're satisfied with your signature</li>
+                    </ul>
+                </li>
+                <li><strong>Note:</strong> For ages 16-17, a parent/guardian signature is required along with their relationship to the donor.</li>
+            </ul>
+        </div>
+
         <div class="donor-declaration-row donor-declaration-header-row">
             <div><strong>For those ages 16-17</strong></div>
             <div><strong>Donor's Signature</strong></div>
@@ -463,20 +722,56 @@ input[type="file"].is-invalid {
        
             <!-- Parent/Guardian Signature Upload -->
             <div>
+                <div class="signature-method-selector">
+                    <label>
+                        <input type="radio" name="guardian_method" value="upload" checked> Upload File
+                    </label>
+                    <label>
+                        <input type="radio" name="guardian_method" value="draw"> Draw Signature
+                    </label>
+                </div>
                 <input type="file" id="guardian-signature" name="guardian_signature" accept="image/png, image/jpeg" class="donor-declaration-button">
-                <div id="guardianError" class="error-message"></div> <!-- Corrected placement -->
+                <div class="signature-pad-instructions" id="guardianPadInstructions">
+                    Use your mouse or finger to sign below. Take your time to create a clear signature.
+                </div>
+                <div class="signature-pad-container" id="guardianSignaturePad">
+                    <canvas id="guardianPad"></canvas>
+                    <div class="signature-controls">
+                        <button type="button" class="signature-btn" id="clearGuardianSignature">Clear</button>
+                        <button type="button" class="signature-btn" id="saveGuardianSignature">Save</button>
+                    </div>
+                </div>
+                <div id="guardianError" class="error-message"></div>
             </div>
         
             <!-- Relationship Input -->
             <div>
                 <input class="donor-declaration-input" type="text" id="relationship" name="relationship" placeholder="Enter Relationship">
-                <div id="relationshipError" class="error-message"></div> <!-- Corrected placement -->
+                <div id="relationshipError" class="error-message"></div>
             </div>
         
             <!-- Donor Signature Upload -->
             <div>
+                <div class="signature-method-selector">
+                    <label>
+                        <input type="radio" name="donor_method" value="upload" checked> Upload File
+                    </label>
+                    <label>
+                        <input type="radio" name="donor_method" value="draw"> Draw Signature
+                    </label>
+                </div>
                 <input type="file" id="donor-signature" name="donor_signature" class="donor-declaration-button" accept="image/png, image/jpeg">
-                <div id="donorError" class="error-message"></div> <!-- Corrected placement -->
+                <div class="signature-pad-instructions" id="donorPadInstructions">
+                    Use your mouse or finger to sign below. Take your time to create a clear signature.
+                </div>
+                <div class="signature-pad-container" id="donorSignaturePad">
+                    <canvas id="donorPad"></canvas>
+                    <div class="signature-controls">
+                        <button type="button" class="signature-btn" id="clearDonorSignature">Clear</button>
+                        <button type="button" class="signature-btn" id="saveDonorSignature">Save</button>
+                    </div>
+                </div>
+                <div id="donorError" class="error-message"></div>
             </div>
         </div>
 </form>
@@ -499,6 +794,19 @@ input[type="file"].is-invalid {
     <!-- Loading Spinner -->
     <div class="loading-spinner" id="loadingSpinner"></div>
 
+    <!-- Replace SignWell CDN with local file -->
+    <script>
+        // Check if SignaturePad script is loaded, if not, load it
+        if (typeof SignaturePad === 'undefined') {
+            const script = document.createElement('script');
+            script.src = '../../assets/js/signature_pad.umd.min.js';
+            script.onerror = function() {
+                console.error('Failed to load signature pad library');
+                alert('Failed to load signature functionality. Please try refreshing the page.');
+            };
+            document.head.appendChild(script);
+        }
+    </script>
     <script>
 document.addEventListener("DOMContentLoaded", function () { 
     let confirmationDialog = document.getElementById("confirmationDialog");
@@ -583,7 +891,6 @@ document.addEventListener("DOMContentLoaded", function () {
         setTimeout(() => {
             loadingSpinner.style.display = "none"; // Hide loader
             donorForm.submit(); 
-            window.location.href = "donor-form.php";
         }, 1000); // Reduced time to 1 second for a faster transition
     });
 
@@ -591,6 +898,209 @@ document.addEventListener("DOMContentLoaded", function () {
     cancelButton.addEventListener("click", closeModal);
 });
 
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize signature pads
+    const donorPad = new SignaturePad(document.getElementById('donorPad'));
+    const guardianPad = new SignaturePad(document.getElementById('guardianPad'));
+    
+    // Setup file clear functionality first
+    function setupFileClearButton(inputId) {
+        const fileInput = document.getElementById(inputId);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'donor-declaration-file-input-wrapper';
+        fileInput.parentNode.insertBefore(wrapper, fileInput);
+        wrapper.appendChild(fileInput);
+        
+        const clearButton = document.createElement('button');
+        clearButton.className = 'donor-declaration-clear-file';
+        clearButton.innerHTML = '×';
+        clearButton.type = 'button';
+        wrapper.appendChild(clearButton);
+
+        fileInput.addEventListener('change', function() {
+            clearButton.style.display = this.files.length ? 'block' : 'none';
+        });
+
+        clearButton.addEventListener('click', function(e) {
+            e.stopPropagation();
+            fileInput.value = '';
+            clearButton.style.display = 'none';
+        });
+
+        return { wrapper, clearButton };
+    }
+
+    // Setup clear buttons for both file inputs
+    const donorElements = setupFileClearButton('donor-signature');
+    const guardianElements = setupFileClearButton('guardian-signature');
+
+    function saveSignature(pad, type) {
+        if (pad.isEmpty()) {
+            alert('Please provide a signature first.');
+            return;
+        }
+        
+        try {
+            // Get the canvas element and its data
+            const canvas = pad.canvas;
+            const ctx = canvas.getContext('2d');
+            
+            // Create a temporary canvas with white background
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // Fill with white background
+            tempCtx.fillStyle = '#fff';
+            tempCtx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw the signature on top
+            tempCtx.drawImage(canvas, 0, 0);
+            
+            // Convert to PNG
+            const imageData = tempCanvas.toDataURL('image/png');
+            
+            // Create a file from the image data
+            const byteString = atob(imageData.split(',')[1]);
+            const mimeString = imageData.split(',')[0].split(':')[1].split(';')[0];
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+            }
+            const blob = new Blob([ab], { type: mimeString });
+            const file = new File([blob], `${type}_signature.png`, { type: 'image/png' });
+            
+            // Create a new FileList containing the signature file
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            
+            // Update the file input
+            const fileInput = document.getElementById(`${type}-signature`);
+            fileInput.files = dataTransfer.files;
+            
+            // Show the file input and trigger change event
+            fileInput.style.display = 'block';
+            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+            
+            // Hide the signature pad
+            document.getElementById(`${type}SignaturePad`).classList.remove('active');
+            document.getElementById(`${type}PadInstructions`).classList.remove('active');
+            document.querySelector(`input[name="${type}_method"][value="upload"]`).checked = true;
+            
+        } catch (error) {
+            console.error('Error saving signature:', error);
+            alert('Failed to save signature. Please try again.');
+        }
+    }
+
+    // Handle donor signature method selection
+    document.querySelectorAll('input[name="donor_method"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const padContainer = document.getElementById('donorSignaturePad');
+            const fileInput = document.getElementById('donor-signature');
+            const instructions = document.getElementById('donorPadInstructions');
+            
+            if (this.value === 'draw') {
+                padContainer.classList.add('active');
+                instructions.classList.add('active');
+                fileInput.style.display = 'none';
+                const canvas = document.getElementById('donorPad');
+                canvas.width = padContainer.offsetWidth;
+                canvas.height = 150;
+            } else {
+                padContainer.classList.remove('active');
+                instructions.classList.remove('active');
+                fileInput.style.display = 'block';
+            }
+        });
+    });
+    
+    // Handle guardian signature method selection
+    document.querySelectorAll('input[name="guardian_method"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const padContainer = document.getElementById('guardianSignaturePad');
+            const fileInput = document.getElementById('guardian-signature');
+            const instructions = document.getElementById('guardianPadInstructions');
+            
+            if (this.value === 'draw') {
+                padContainer.classList.add('active');
+                instructions.classList.add('active');
+                fileInput.style.display = 'none';
+                const canvas = document.getElementById('guardianPad');
+                canvas.width = padContainer.offsetWidth;
+                canvas.height = 150;
+            } else {
+                padContainer.classList.remove('active');
+                instructions.classList.remove('active');
+                fileInput.style.display = 'block';
+            }
+        });
+    });
+    
+    // Clear signatures
+    document.getElementById('clearDonorSignature').addEventListener('click', () => {
+        donorPad.clear();
+    });
+    document.getElementById('clearGuardianSignature').addEventListener('click', () => {
+        guardianPad.clear();
+    });
+    
+    // Add save button event listeners
+    document.getElementById('saveDonorSignature').addEventListener('click', () => saveSignature(donorPad, 'donor'));
+    document.getElementById('saveGuardianSignature').addEventListener('click', () => saveSignature(guardianPad, 'guardian'));
+
+    // Add maximize button to signature pads
+    function addMaximizeButton(padContainer, pad) {
+        const maximizeBtn = document.createElement('button');
+        maximizeBtn.className = 'maximize-btn';
+        maximizeBtn.innerHTML = '⤢';
+        maximizeBtn.title = 'Maximize';
+        padContainer.appendChild(maximizeBtn);
+
+        const overlay = document.getElementById('signatureOverlay');
+
+        maximizeBtn.addEventListener('click', function() {
+            const isExpanded = padContainer.classList.contains('expanded');
+            if (isExpanded) {
+                padContainer.classList.remove('expanded');
+                overlay.classList.remove('active');
+                maximizeBtn.innerHTML = '⤢';
+                maximizeBtn.title = 'Maximize';
+                // Resize canvas back to normal
+                const canvas = pad.canvas;
+                canvas.width = padContainer.offsetWidth - 20;
+                canvas.height = 150;
+                pad.fromData(pad.toData()); // Redraw signature
+            } else {
+                padContainer.classList.add('expanded');
+                overlay.classList.add('active');
+                maximizeBtn.innerHTML = '⤡';
+                maximizeBtn.title = 'Minimize';
+                // Resize canvas to larger size
+                const canvas = pad.canvas;
+                canvas.width = padContainer.offsetWidth - 40;
+                canvas.height = 400;
+                pad.fromData(pad.toData()); // Redraw signature
+            }
+        });
+
+        // Close expanded view when clicking overlay
+        overlay.addEventListener('click', function() {
+            if (padContainer.classList.contains('expanded')) {
+                maximizeBtn.click();
+            }
+        });
+    }
+
+    // Add maximize buttons to both signature pads
+    const donorPadContainer = document.getElementById('donorSignaturePad');
+    const guardianPadContainer = document.getElementById('guardianSignaturePad');
+    
+    addMaximizeButton(donorPadContainer, donorPad);
+    addMaximizeButton(guardianPadContainer, guardianPad);
+});
 
     </script>
 </body>
