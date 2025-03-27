@@ -345,7 +345,7 @@ select.donor_form_input[disabled] {
                     <li class="nav-item"><a class="nav-link" href="#">Physical Exams Submissions</a></li>
                     <li class="nav-item"><a class="nav-link" href="#">Blood Collection Submissions</a></li>
                     <li class="nav-item"><a class="nav-link" href="#">Submit a Letter</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#">Logout</a></li>
+                    <li class="nav-item"><a class="nav-link" href="../../assets/php_func/logout.php">Logout</a></li>
                 </ul>
             </nav>
             

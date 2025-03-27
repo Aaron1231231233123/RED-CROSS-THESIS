@@ -1,72 +1,97 @@
 <?php
 session_start();
+require_once '../../../assets/conn/db_conn.php';
 
-// Check if both donor_id and medical_history_id exist in session
-if (!isset($_SESSION['donor_id']) || !isset($_SESSION['medical_history_id'])) {
+// Check if user is logged in and has necessary session variables
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['medical_history_id'])) {
+    error_log("Missing session variables in screening form: user_id=" . (isset($_SESSION['user_id']) ? 'set' : 'not set') . 
+              ", medical_history_id=" . (isset($_SESSION['medical_history_id']) ? 'set' : 'not set'));
     header('Location: ../../../public/Dashboards/dashboard-staff-donor-submission.php');
     exit();
 }
 
+// Get interviewer information from users table
+$ch = curl_init(SUPABASE_URL . '/rest/v1/users?select=surname,first_name,middle_name&user_id=eq.' . $_SESSION['user_id']);
+
+$headers = array(
+    'apikey: ' . SUPABASE_API_KEY,
+    'Authorization: Bearer ' . SUPABASE_API_KEY
+);
+
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+$response = curl_exec($ch);
+$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$interviewer_data = json_decode($response, true);
+curl_close($ch);
+
+// Log the response for debugging
+error_log("Supabase response code: " . $http_code);
+error_log("Supabase response: " . $response);
+error_log("Interviewer data: " . print_r($interviewer_data, true));
+
+// Set default interviewer name
+$interviewer_name = 'Unknown Interviewer';
+
+// Check if we have valid data
+if ($http_code === 200 && is_array($interviewer_data) && !empty($interviewer_data)) {
+    $interviewer = $interviewer_data[0];
+    if (isset($interviewer['surname']) && isset($interviewer['first_name'])) {
+        $interviewer_name = $interviewer['surname'] . ', ' . 
+                          $interviewer['first_name'] . ' ' . 
+                          ($interviewer['middle_name'] ?? '');
+        error_log("Set interviewer name to: " . $interviewer_name);
+    } else {
+        error_log("Missing required fields in interviewer data");
+    }
+} else {
+    error_log("Failed to get interviewer data. HTTP Code: " . $http_code);
+}
+
+// Log session state for debugging
+error_log("Session state in screening-form.php: " . print_r($_SESSION, true));
+
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    require_once '../../../assets/conn/db_conn.php';
-    
     try {
-        // Check if this is a disapproval submission
-        if (isset($_POST['action']) && $_POST['action'] === 'disapprove') {
-            if (empty($_POST['disapproval_reason'])) {
-                throw new Exception("Please provide a reason for disapproval");
-            }
+        // Debug log the raw POST data
+        error_log("Raw POST data: " . print_r($_POST, true));
 
-            // Prepare the data for screening form with disapproval
-            $screening_data = [
-                'donor_form_id' => $_SESSION['donor_id'],
-                'medical_history_id' => $_SESSION['medical_history_id'],
-                'disapproval_reason' => $_POST['disapproval_reason'],
-                'body_weight' => 0,
-                'specific_gravity' => '',
-                'hemoglobin' => '',
-                'hematocrit' => '',
-                'rbc_count' => '',
-                'wbc_count' => '',
-                'platelet_count' => 0,
-                'blood_type' => '',
-                'donation_type' => '',
-                'interviewer_name' => $_POST['interviewer'],
-                'interview_date' => date('Y-m-d')
-            ];
-        } else {
-            // Regular submission (existing code)
-            $screening_data = [
-                'donor_form_id' => $_SESSION['donor_id'],
-                'medical_history_id' => $_SESSION['medical_history_id'],
-                'body_weight' => $_POST['body-wt'],
-                'specific_gravity' => $_POST['sp-gr'],
-                'hemoglobin' => $_POST['hgb'],
-                'hematocrit' => $_POST['hct'],
-                'rbc_count' => $_POST['rbc'],
-                'wbc_count' => $_POST['wbc'],
-                'platelet_count' => intval($_POST['plt-count']),
-                'blood_type' => $_POST['blood-type'],
-                'donation_type' => $_POST['donation-type'],
-                'mobile_location' => $_POST['mobile-place'],
-                'mobile_organizer' => $_POST['mobile-organizer'],
-                'patient_name' => $_POST['patient-name'],
-                'hospital' => $_POST['hospital'],
-                'patient_blood_type' => $_POST['blood-type-patient'],
-                'component_type' => $_POST['wb-component'],
-                'units_needed' => intval($_POST['no-units']),
-                'has_previous_donation' => isset($_POST['history']) && $_POST['history'] === 'yes',
-                'red_cross_donations' => intval($_POST['red-cross']),
-                'hospital_donations' => intval($_POST['hospital-history']),
-                'last_rc_donation_date' => $_POST['last-rc-donation-date'],
-                'last_hosp_donation_date' => $_POST['last-hosp-donation-date'],
-                'last_rc_donation_place' => $_POST['last-rc-donation-place'],
-                'last_hosp_donation_place' => $_POST['last-hosp-donation-place'],
-                'interviewer_name' => $_POST['interviewer'],
-                'interview_date' => date('Y-m-d')
-            ];
-        }
+        // Prepare the data for insertion
+        $screening_data = [
+            'donor_form_id' => $_SESSION['donor_id'],
+            'medical_history_id' => $_SESSION['medical_history_id'],
+            'interviewer_id' => $_SESSION['user_id'],
+            'body_weight' => floatval($_POST['body-wt']),
+            'specific_gravity' => $_POST['sp-gr'] ?: "",
+            'hemoglobin' => $_POST['hgb'] ?: "",
+            'hematocrit' => $_POST['hct'] ?: "",
+            'rbc_count' => $_POST['rbc'] ?: "",
+            'wbc_count' => $_POST['wbc'] ?: "",
+            'platelet_count' => intval($_POST['plt-count']),
+            'blood_type' => $_POST['blood-type'],
+            'donation_type' => $_POST['donation-type'],
+            'has_previous_donation' => isset($_POST['history']) && $_POST['history'] === 'yes',
+            'interview_date' => date('Y-m-d'),
+            'red_cross_donations' => isset($_POST['history']) && $_POST['history'] === 'yes' ? intval($_POST['red-cross']) : 0,
+            'hospital_donations' => isset($_POST['history']) && $_POST['history'] === 'yes' ? intval($_POST['hospital-history']) : 0,
+            'last_rc_donation_place' => isset($_POST['history']) && $_POST['history'] === 'yes' ? ($_POST['last-rc-donation-place'] ?: "") : "",
+            'last_hosp_donation_place' => isset($_POST['history']) && $_POST['history'] === 'yes' ? ($_POST['last-hosp-donation-place'] ?: "") : "",
+            'last_rc_donation_date' => isset($_POST['history']) && $_POST['history'] === 'yes' && !empty($_POST['last-rc-donation-date']) ? $_POST['last-rc-donation-date'] : '0001-01-01',
+            'last_hosp_donation_date' => isset($_POST['history']) && $_POST['history'] === 'yes' && !empty($_POST['last-hosp-donation-date']) ? $_POST['last-hosp-donation-date'] : '0001-01-01',
+            'disapproval_reason' => isset($_POST['disapproval_reason']) ? $_POST['disapproval_reason'] : "",
+            'mobile_location' => $_POST['donation-type'] === 'mobile' ? ($_POST['mobile-place'] ?: "") : "",
+            'mobile_organizer' => $_POST['donation-type'] === 'mobile' ? ($_POST['mobile-organizer'] ?: "") : "",
+            'patient_name' => $_POST['donation-type'] === 'mobile' ? ($_POST['patient-name'] ?: "") : "",
+            'hospital' => $_POST['donation-type'] === 'mobile' ? ($_POST['hospital'] ?: "") : "",
+            'patient_blood_type' => $_POST['donation-type'] === 'mobile' ? ($_POST['blood-type-patient'] ?: "") : "",
+            'component_type' => $_POST['donation-type'] === 'mobile' ? ($_POST['wb-component'] ?: "") : "",
+            'units_needed' => $_POST['donation-type'] === 'mobile' && !empty($_POST['no-units']) ? intval($_POST['no-units']) : 0
+        ];
+
+        // Debug log the prepared data
+        error_log("Prepared screening data: " . print_r($screening_data, true));
 
         // Initialize cURL session for Supabase
         $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form');
@@ -76,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'apikey: ' . SUPABASE_API_KEY,
             'Authorization: Bearer ' . SUPABASE_API_KEY,
             'Content-Type: application/json',
-            'Prefer: return=minimal'
+            'Prefer: return=representation'
         );
 
         // Set cURL options
@@ -88,56 +113,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Execute the request
         $response = curl_exec($ch);
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        
+        // Debug log
+        error_log("Supabase response code: " . $http_code);
+        error_log("Supabase response: " . $response);
+        
         curl_close($ch);
 
         if ($http_code === 201) {
-            // Store the response data
+            // Parse the response
             $response_data = json_decode($response, true);
             
-            // Store screening form ID in session for future use
-            $_SESSION['screening_form_id'] = $response_data['id'];
-
-            // Update the donor status to indicate they're ready for physical examination
-            $update_donor_ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form?id=eq.' . $_SESSION['donor_id']);
-            
-            $update_headers = array(
-                'apikey: ' . SUPABASE_API_KEY,
-                'Authorization: Bearer ' . SUPABASE_API_KEY,
-                'Content-Type: application/json',
-                'Prefer: return=minimal'
-            );
-
-            $update_data = [
-                'status' => 'pending_physical',
-                'screening_completed_at' => date('Y-m-d H:i:s')
-            ];
-
-            curl_setopt($update_donor_ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($update_donor_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
-            curl_setopt($update_donor_ch, CURLOPT_HTTPHEADER, $update_headers);
-            curl_setopt($update_donor_ch, CURLOPT_POSTFIELDS, json_encode($update_data));
-
-            $update_response = curl_exec($update_donor_ch);
-            $update_http_code = curl_getinfo($update_donor_ch, CURLINFO_HTTP_CODE);
-            curl_close($update_donor_ch);
-
-            if ($update_http_code === 204) {
-                // Clear the session since we're done with this process
-                session_destroy();
-                header('Location: ../../../public/Dashboards/dashboard-staff-donor-submission.php');
+            if (is_array($response_data) && isset($response_data[0]['screening_id'])) {
+                $_SESSION['screening_id'] = $response_data[0]['screening_id'];
+                
+                // Return JSON response
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'success' => true,
+                    'screening_id' => $response_data[0]['screening_id']
+                ]);
                 exit();
             } else {
-                error_log("Error updating donor status: " . $update_response);
-                echo "<script>alert('Error: Failed to update donor status');</script>";
+                throw new Exception("Invalid response format");
             }
         } else {
-            // Handle error
-            error_log("Error submitting screening form: " . $response);
-            echo "<script>alert('Error: Failed to submit screening form');</script>";
+            throw new Exception("Failed to submit screening form. HTTP Code: " . $http_code . ", Response: " . $response);
         }
     } catch (Exception $e) {
-        error_log("Error: " . $e->getMessage());
-        echo "<script>alert('Error: " . htmlspecialchars($e->getMessage()) . "');</script>";
+        error_log("Error in screening form submission: " . $e->getMessage());
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => false,
+            'error' => $e->getMessage()
+        ]);
+        exit();
     }
 }
 ?>
@@ -615,6 +625,45 @@ body {
     resize: vertical;
 }
 
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.history-table th, .history-table td {
+    padding: 10px;
+    border: 1px solid #ddd;
+}
+
+.history-table th {
+    background-color: #d9534f;
+    color: white;
+    text-align: left;
+}
+
+.history-table td input {
+    width: 100%;
+    padding: 5px;
+    border: 1px solid #ccc;
+}
+
+.history-table tr:first-child th {
+    text-align: center;
+}
+
+select {
+    width: 95%;
+    padding: 5px 2px 5px 2px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    background-color: white;
+}
+
+select:focus {
+    outline: none;
+    border-color: #721c24;
+}
+
     </style>
 </head>
 <body>
@@ -634,14 +683,25 @@ body {
                     <th>BLOOD TYPE</th>
                 </tr>
                 <tr>
-                    <td><input type="number" step="0.01" name="body-wt" required></td>
-                    <td><input type="text" name="sp-gr" required></td>
-                    <td><input type="text" name="hgb" required></td>
-                    <td><input type="text" name="hct" required></td>
-                    <td><input type="text" name="rbc" required></td>
-                    <td><input type="text" name="wbc" required></td>
-                    <td><input type="number" name="plt-count" required></td>
-                    <td><input type="text" name="blood-type" required></td>
+                    <td><input type="number" step="0.01" name="body-wt" value="<?php echo isset($_POST['body-wt']) ? htmlspecialchars($_POST['body-wt']) : ''; ?>" required></td>
+                    <td><input type="text" name="sp-gr" value="<?php echo isset($_POST['sp-gr']) ? htmlspecialchars($_POST['sp-gr']) : ''; ?>" required></td>
+                    <td><input type="text" name="hgb" value="<?php echo isset($_POST['hgb']) ? htmlspecialchars($_POST['hgb']) : ''; ?>" required></td>
+                    <td><input type="text" name="hct" value="<?php echo isset($_POST['hct']) ? htmlspecialchars($_POST['hct']) : ''; ?>" required></td>
+                    <td><input type="text" name="rbc" value="<?php echo isset($_POST['rbc']) ? htmlspecialchars($_POST['rbc']) : ''; ?>" required></td>
+                    <td><input type="text" name="wbc" value="<?php echo isset($_POST['wbc']) ? htmlspecialchars($_POST['wbc']) : ''; ?>" required></td>
+                    <td><input type="number" name="plt-count" value="<?php echo isset($_POST['plt-count']) ? htmlspecialchars($_POST['plt-count']) : ''; ?>" required></td>
+                    <td>
+                        <select name="blood-type" required>
+                            <option value="" disabled <?php echo !isset($_POST['blood-type']) ? 'selected' : ''; ?>>Select Blood Type</option>
+                            <?php
+                            $bloodTypes = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+                            foreach ($bloodTypes as $type) {
+                                $selected = (isset($_POST['blood-type']) && $_POST['blood-type'] === $type) ? 'selected' : '';
+                                echo "<option value=\"$type\" $selected>$type</option>";
+                            }
+                            ?>
+                        </select>
+                    </td>
                 </tr>
             </table>
 
@@ -649,48 +709,48 @@ body {
                 <p>TYPE OF DONATION (Donor's Choice):</p>
                 <div class="donation-options">
                     <label class="donation-option">
-                        <input type="radio" name="donation-type" value="in-house" required> 
+                        <input type="radio" name="donation-type" value="in-house" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'in-house') ? 'checked' : ''; ?> required> 
                         <span class="checkmark"></span>
                         IN-HOUSE
                     </label>
                     <label class="donation-option">
-                        <input type="radio" name="donation-type" value="walk-in" required> 
+                        <input type="radio" name="donation-type" value="walk-in" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'walk-in') ? 'checked' : ''; ?> required> 
                         <span class="checkmark"></span>
                         WALK-IN/VOLUNTARY
                     </label>
                     <label class="donation-option">
-                        <input type="radio" name="donation-type" value="replacement" required> 
+                        <input type="radio" name="donation-type" value="replacement" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'replacement') ? 'checked' : ''; ?> required> 
                         <span class="checkmark"></span>
                         REPLACEMENT
                     </label>
                     <label class="donation-option">
-                        <input type="radio" name="donation-type" value="patient-directed" required> 
+                        <input type="radio" name="donation-type" value="patient-directed" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'patient-directed') ? 'checked' : ''; ?> required> 
                         <span class="checkmark"></span>
                         PATIENT-DIRECTED
                     </label>
                     <label class="donation-option">
-                        <input type="radio" name="donation-type" value="mobile" required> 
+                        <input type="radio" name="donation-type" value="mobile" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'mobile') ? 'checked' : ''; ?> required> 
                         <span class="checkmark"></span>
                         Mobile Blood Donation
                     </label>
                 </div>
                 
-                <div class="mobile-donation-section">
+                <div class="mobile-donation-section" id="mobileDonationSection" style="display: none;">
                     <div class="mobile-donation-fields">
                         <label>
                             PLACE: 
-                            <input type="text" name="mobile-place">
+                            <input type="text" name="mobile-place" value="<?php echo isset($_POST['mobile-place']) ? htmlspecialchars($_POST['mobile-place']) : ''; ?>">
                         </label>
                         <label>
                             ORGANIZER: 
-                            <input type="text" name="mobile-organizer">
+                            <input type="text" name="mobile-organizer" value="<?php echo isset($_POST['mobile-organizer']) ? htmlspecialchars($_POST['mobile-organizer']) : ''; ?>">
                         </label>
                     </div>
                 </div>
             </div>
             
 
-            <table class="screening-form-patient">
+            <table class="screening-form-patient" id="patientDetailsTable" style="display: none;">
                 <tr>
                     <th>Patient Name</th>
                     <th>Hospital</th>
@@ -699,11 +759,21 @@ body {
                     <th>No. of units</th>
                 </tr>
                 <tr>
-                    <td><input type="text" name="patient-name"></td>
-                    <td><input type="text" name="hospital"></td>
-                    <td><input type="text" name="blood-type-patient"></td>
-                    <td><input type="text" name="wb-component"></td>
-                    <td><input type="number" name="no-units"></td>
+                    <td><input type="text" name="patient-name" value="<?php echo isset($_POST['patient-name']) ? htmlspecialchars($_POST['patient-name']) : ''; ?>"></td>
+                    <td><input type="text" name="hospital" value="<?php echo isset($_POST['hospital']) ? htmlspecialchars($_POST['hospital']) : ''; ?>"></td>
+                    <td>
+                        <select name="blood-type-patient">
+                            <option value="" disabled <?php echo !isset($_POST['blood-type-patient']) ? 'selected' : ''; ?>>Select Blood Type</option>
+                            <?php
+                            foreach ($bloodTypes as $type) {
+                                $selected = (isset($_POST['blood-type-patient']) && $_POST['blood-type-patient'] === $type) ? 'selected' : '';
+                                echo "<option value=\"$type\" $selected>$type</option>";
+                            }
+                            ?>
+                        </select>
+                    </td>
+                    <td><input type="text" name="wb-component" value="<?php echo isset($_POST['wb-component']) ? htmlspecialchars($_POST['wb-component']) : ''; ?>"></td>
+                    <td><input type="number" name="no-units" value="<?php echo isset($_POST['no-units']) ? htmlspecialchars($_POST['no-units']) : ''; ?>"></td>
                 </tr>
             </table>
 
@@ -721,30 +791,29 @@ body {
                 </tr>
                 <tr>
                     <th>No. of times</th>
-                    <td><input type="number" name="red-cross" value="0"></td>
-                    <td><input type="number" name="hospital-history" value="0"></td>
+                    <td><input type="number" name="red-cross" min="0" value="<?php echo isset($_POST['red-cross']) ? htmlspecialchars($_POST['red-cross']) : '0'; ?>"></td>
+                    <td><input type="number" name="hospital-history" min="0" value="<?php echo isset($_POST['hospital-history']) ? htmlspecialchars($_POST['hospital-history']) : '0'; ?>"></td>
                 </tr>
                 <tr>
                     <th>Date of last donation</th>
-                    <td><input type="date" name="last-rc-donation-date"></td>
-                    <td><input type="date" name="last-hosp-donation-date"></td>
+                    <td><input type="date" name="last-rc-donation-date" value="<?php echo isset($_POST['last-rc-donation-date']) ? htmlspecialchars($_POST['last-rc-donation-date']) : ''; ?>"></td>
+                    <td><input type="date" name="last-hosp-donation-date" value="<?php echo isset($_POST['last-hosp-donation-date']) ? htmlspecialchars($_POST['last-hosp-donation-date']) : ''; ?>"></td>
                 </tr>
                 <tr>
                     <th>Place of last donation</th>
-                    <td><input type="text" name="last-rc-donation-place"></td>
-                    <td><input type="text" name="last-hosp-donation-place"></td>
+                    <td><input type="text" name="last-rc-donation-place" value="<?php echo isset($_POST['last-rc-donation-place']) ? htmlspecialchars($_POST['last-rc-donation-place']) : ''; ?>"></td>
+                    <td><input type="text" name="last-hosp-donation-place" value="<?php echo isset($_POST['last-hosp-donation-place']) ? htmlspecialchars($_POST['last-hosp-donation-place']) : ''; ?>"></td>
                 </tr>
-
             </table>
 
             <div class="screening-form-footer">
-                <label>INTERVIEWER (print name & sign): <input type="text" name="interviewer" required></label>
+                <label>INTERVIEWER (print name & sign): <input type="text" name="interviewer" value="<?php echo htmlspecialchars($interviewer_name); ?>" readonly></label>
                 <label>PRC Office</label>
-                <p>Date: <span id="current-date"></span></p>
+                <p>Date: <?php echo date('m/d/Y'); ?></p>
             </div>
             <div class="submit-section">
-                <button type="button" class="submit-button" id="triggerModalButton">Submit</button>
                 <button type="button" class="disapprove-button" id="triggerDisapproveModalButton">Disapprove</button>
+                                <button type="button" class="submit-button" id="triggerModalButton">Submit</button>
             </div>
         </div>
     </form>
@@ -772,132 +841,213 @@ body {
     <!-- Loading Spinner -->
     <div class="loading-spinner" id="loadingSpinner"></div>
     <script>
-        document.getElementById("current-date").textContent = new Date().toLocaleDateString();
+        document.addEventListener('DOMContentLoaded', function() {
+            let confirmationDialog = document.getElementById("confirmationDialog");
+            let loadingSpinner = document.getElementById("loadingSpinner");
+            let triggerModalButton = document.getElementById("triggerModalButton");
+            let cancelButton = document.getElementById("cancelButton");
+            let confirmButton = document.getElementById("confirmButton");
+            let disapprovalDialog = document.getElementById("disapprovalDialog");
+            let triggerDisapproveModalButton = document.getElementById("triggerDisapproveModalButton");
+            let cancelDisapproveButton = document.getElementById("cancelDisapproveButton");
+            let confirmDisapproveButton = document.getElementById("confirmDisapproveButton");
+            let disapprovalReason = document.getElementById("disapprovalReason");
+            let form = document.getElementById("screeningForm");
 
-        let confirmationDialog = document.getElementById("confirmationDialog");
-        let loadingSpinner = document.getElementById("loadingSpinner");
-        let triggerModalButton = document.getElementById("triggerModalButton");
-        let cancelButton = document.getElementById("cancelButton");
-        let confirmButton = document.getElementById("confirmButton");
-        let disapprovalDialog = document.getElementById("disapprovalDialog");
-        let triggerDisapproveModalButton = document.getElementById("triggerDisapproveModalButton");
-        let cancelDisapproveButton = document.getElementById("cancelDisapproveButton");
-        let confirmDisapproveButton = document.getElementById("confirmDisapproveButton");
-        let disapprovalReason = document.getElementById("disapprovalReason");
-        let form = document.getElementById("screeningForm");
+            // Open Submit Modal
+            triggerModalButton.addEventListener("click", function() {
+                if (!form.checkValidity()) {
+                    alert("Please fill in all required fields before proceeding.");
+                    return;
+                }
 
-        // Open Modal
-        triggerModalButton.addEventListener("click", function() {
-            // Check if required fields are filled
-            if (!form.checkValidity()) {
-                alert("Please fill in all required fields before proceeding.");
-                return;
+                confirmationDialog.classList.remove("hide");
+                confirmationDialog.classList.add("show");
+                confirmationDialog.style.display = "block";
+                triggerModalButton.disabled = true;
+            });
+
+            // Close Submit Modal
+            function closeModal() {
+                confirmationDialog.classList.remove("show");
+                confirmationDialog.classList.add("hide");
+                setTimeout(() => {
+                    confirmationDialog.style.display = "none";
+                    triggerModalButton.disabled = false;
+                }, 300);
             }
 
-            confirmationDialog.classList.remove("hide");
-            confirmationDialog.classList.add("show");
-            confirmationDialog.style.display = "block";
-            triggerModalButton.disabled = true;
-        });
+            // Handle Submit Confirmation
+            confirmButton.addEventListener("click", function() {
+                // Validate numeric fields
+                const numericFields = {
+                    'body-wt': 'Body Weight',
+                    'plt-count': 'Platelet Count',
+                    'no-units': 'Number of Units'
+                };
 
-        // Close Modal Function
-        function closeModal() {
-            confirmationDialog.classList.remove("show");
-            confirmationDialog.classList.add("hide");
-            setTimeout(() => {
-                confirmationDialog.style.display = "none";
-                triggerModalButton.disabled = false;
-            }, 300);
-        }
-
-        // Yes Button (Triggers form submission)
-        confirmButton.addEventListener("click", function() {
-            closeModal();
-            loadingSpinner.style.display = "block";
-            
-            // Get all form data
-            const formData = new FormData(form);
-            
-            // Submit the form
-            fetch(window.location.href, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => {
-                if(response.ok) {
-                    window.location.href = "../../../public/Dashboards/dashboard-staff-donor-submission.php";
-                } else {
-                    throw new Error('Form submission failed');
+                for (const [fieldName, label] of Object.entries(numericFields)) {
+                    const field = document.querySelector(`input[name="${fieldName}"]`);
+                    if (field && field.value && isNaN(field.value)) {
+                        alert(`${label} must be a valid number`);
+                        return;
+                    }
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert("Error submitting form. Please try again.");
-                loadingSpinner.style.display = "none";
+
+                closeModal();
+                loadingSpinner.style.display = "block";
+                
+                // Get all form data
+                const formData = new FormData(form);
+                
+                // Submit the form
+                fetch(window.location.href, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    loadingSpinner.style.display = "none";
+                    if (data.success) {
+                        window.location.href = "../../../public/Dashboards/dashboard-staff-donor-submission.php";
+                    } else {
+                        throw new Error(data.error || 'Unknown error occurred');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    loadingSpinner.style.display = "none";
+                    alert(error.message || "Error submitting form. Please try again.");
+                });
             });
-        });
 
-        // No Button (Closes Modal)
-        cancelButton.addEventListener("click", function() {
-            closeModal();
-        });
+            // Cancel Submit
+            cancelButton.addEventListener("click", closeModal);
 
-        // Open Disapproval Modal
-        triggerDisapproveModalButton.addEventListener("click", function() {
-            disapprovalDialog.classList.remove("hide");
-            disapprovalDialog.classList.add("show");
-            disapprovalDialog.style.display = "block";
-            triggerDisapproveModalButton.disabled = true;
-        });
+            // Open Disapproval Modal
+            triggerDisapproveModalButton.addEventListener("click", function() {
+                disapprovalDialog.classList.remove("hide");
+                disapprovalDialog.classList.add("show");
+                disapprovalDialog.style.display = "block";
+                triggerDisapproveModalButton.disabled = true;
+            });
 
-        // Close Disapproval Modal Function
-        function closeDisapprovalModal() {
-            disapprovalDialog.classList.remove("show");
-            disapprovalDialog.classList.add("hide");
-            setTimeout(() => {
-                disapprovalDialog.style.display = "none";
-                triggerDisapproveModalButton.disabled = false;
-            }, 300);
-        }
-
-        // Confirm Disapproval
-        confirmDisapproveButton.addEventListener("click", function() {
-            if (!disapprovalReason.value.trim()) {
-                alert("Please provide a reason for disapproval");
-                return;
+            // Close Disapproval Modal
+            function closeDisapprovalModal() {
+                disapprovalDialog.classList.remove("show");
+                disapprovalDialog.classList.add("hide");
+                setTimeout(() => {
+                    disapprovalDialog.style.display = "none";
+                    triggerDisapproveModalButton.disabled = false;
+                }, 300);
             }
 
-            closeDisapprovalModal();
-            loadingSpinner.style.display = "block";
-
-            // Create form data with disapproval action
-            const formData = new FormData();
-            formData.append('action', 'disapprove');
-            formData.append('disapproval_reason', disapprovalReason.value.trim());
-            formData.append('interviewer', document.querySelector('input[name="interviewer"]').value);
-
-            // Submit the form
-            fetch(window.location.href, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => {
-                if(response.ok) {
-                    window.location.href = "../../../public/Dashboards/dashboard-staff-donor-submission.php";
-                } else {
-                    throw new Error('Form submission failed');
+            // Handle Disapproval Confirmation
+            confirmDisapproveButton.addEventListener("click", function() {
+                if (!disapprovalReason.value.trim()) {
+                    alert("Please provide a reason for disapproval");
+                    return;
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert("Error submitting form. Please try again.");
-                loadingSpinner.style.display = "none";
+
+                closeDisapprovalModal();
+                loadingSpinner.style.display = "block";
+
+                // Get all form data
+                const formData = new FormData(form);
+                formData.append('disapproval_reason', disapprovalReason.value.trim());
+
+                // Submit the form
+                fetch(window.location.href, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    loadingSpinner.style.display = "none";
+                    if (data.success) {
+                        window.location.href = "../../../public/Dashboards/dashboard-staff-donor-submission.php";
+                    } else {
+                        throw new Error(data.error || 'Unknown error occurred');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    loadingSpinner.style.display = "none";
+                    alert(error.message || "Error submitting form. Please try again.");
+                });
             });
+
+            // Cancel Disapproval
+            cancelDisapproveButton.addEventListener("click", closeDisapprovalModal);
+
+            // Add radio button change handler for mobile donation section and patient details
+            const donationTypeRadios = document.querySelectorAll('input[name="donation-type"]');
+            const mobileDonationSection = document.getElementById('mobileDonationSection');
+            const patientDetailsTable = document.getElementById('patientDetailsTable');
+
+            donationTypeRadios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    if (this.value === 'mobile') {
+                        mobileDonationSection.style.display = 'block';
+                        patientDetailsTable.style.display = 'table';
+                    } else {
+                        mobileDonationSection.style.display = 'none';
+                        patientDetailsTable.style.display = 'none';
+                    }
+                });
+            });
+
+            // Check initial state for mobile donation
+            const selectedDonationType = document.querySelector('input[name="donation-type"]:checked');
+            if (selectedDonationType && selectedDonationType.value === 'mobile') {
+                mobileDonationSection.style.display = 'block';
+                patientDetailsTable.style.display = 'table';
+            }
+
+            // Add handler for donation history radio buttons
+            const historyRadios = document.querySelectorAll('input[name="history"]');
+            const historyTable = document.querySelector('.screening-form-history-table');
+
+            historyRadios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    const historyInputs = historyTable.querySelectorAll('input');
+                    
+                    if (this.value === 'yes') {
+                        historyInputs.forEach(input => {
+                            input.removeAttribute('disabled');
+                            if (input.type === 'number' && !input.value) {
+                                input.value = '0';
+                            }
+                        });
+                    } else {
+                        historyInputs.forEach(input => {
+                            input.setAttribute('disabled', 'disabled');
+                            if (input.type === 'number') {
+                                input.value = '0';
+                            } else {
+                                input.value = '';
+                            }
+                        });
+                    }
+                });
+            });
+
+            // Check initial state of history radio
+            const selectedHistory = document.querySelector('input[name="history"]:checked');
+            if (selectedHistory) {
+                selectedHistory.dispatchEvent(new Event('change'));
+            }
         });
-
-        // Cancel Disapproval
-        cancelDisapproveButton.addEventListener("click", closeDisapprovalModal);
-
     </script>
 </body>
 </html>

@@ -1,15 +1,20 @@
 <?php
 session_start();
+require_once '../../../assets/conn/db_conn.php';
 
-// Check if donor_id exists in session
-if (!isset($_SESSION['donor_id'])) {
+// Check if user is logged in and has necessary session variables
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['donor_id'])) {
+    error_log("Missing session variables: user_id=" . (isset($_SESSION['user_id']) ? 'set' : 'not set') . 
+              ", donor_id=" . (isset($_SESSION['donor_id']) ? 'set' : 'not set'));
     header('Location: ../../../public/Dashboards/dashboard-staff-donor-submission.php');
     exit();
 }
 
+// Log session state for debugging
+error_log("Session state in medical-history.php: " . print_r($_SESSION, true));
+
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    require_once '../../../assets/conn/db_conn.php';
     
     try {
         // Check if this is a disapproval submission
@@ -299,6 +304,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo "<script>alert('Error: " . addslashes($e->getMessage()) . "');</script>";
     }
 }
+
+
+
+// Debug log to check all session variables
+error_log("All session variables in medical-history.php: " . print_r($_SESSION, true));
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -938,5 +949,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             cancelDisapproveButton.addEventListener("click", closeDisapprovalModal);
         });
     </script>
+
 </body>
 </html>
