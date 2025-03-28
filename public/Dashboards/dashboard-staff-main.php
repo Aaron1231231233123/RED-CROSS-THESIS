@@ -24,73 +24,37 @@ if ($_SESSION['role_id'] !== $required_role) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <style>
         :root {
-            --bg-color: #f8f9fa;
-            --text-color: #000;
-            --sidebar-bg: #ffffff;
-            --hover-bg: #dee2e6;
+            --bg-color: #f8f9fa; /* Light background */
+            --text-color: #000; /* Dark text */
+            --sidebar-bg: #ffffff; /* White sidebar */
+            --card-bg: #e9ecef; /* Light gray cards */
+            --hover-bg: #dee2e6; /* Light gray hover */
         }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f8f9fa;
-            color: #333;
-            margin: 0;
-            padding: 0;
+        body.light-mode {
+            background-color: var(--bg-color);
+            color: var(--text-color);
         }
 
-        /* Sidebar Styles */
         .sidebar {
             background: var(--sidebar-bg);
             height: 100vh;
             padding: 1rem;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 16.66666667%;
-            overflow-y: auto;
-            z-index: 1000;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-        }
-
-        .sidebar h4 {
-            padding: 1rem 0;
-            margin-bottom: 1.5rem;
-            border-bottom: 2px solid #dee2e6;
-            color: #000;
         }
 
         .sidebar .nav-link {
-            padding: 0.8rem 1rem;
-            margin-bottom: 0.5rem;
-            border-radius: 5px;
+            color: #666; /* Darker text for links */
             transition: all 0.3s ease;
-            color: #000;
-            text-decoration: none;
         }
 
-        .sidebar .nav-link:hover,
-        .sidebar .nav-link.active {
+        .sidebar .nav-link:hover, .sidebar .nav-link.active {
+            color: var(--text-color);
             background: var(--hover-bg);
-            transform: translateX(5px);
-            color: #000;
+            border-radius: 5px;
         }
 
-        /* Main Content */
         .main-content {
             padding: 1.5rem;
-            margin-left: 16.66666667%;
-        }
-
-        /* Responsive Design */
-        @media (max-width: 991.98px) {
-            .sidebar {
-                position: static;
-                width: 100%;
-                height: auto;
-            }
-            .main-content {
-                margin-left: 0;
-            }
         }
 
         .card {

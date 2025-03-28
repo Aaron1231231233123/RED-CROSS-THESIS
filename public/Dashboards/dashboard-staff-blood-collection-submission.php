@@ -229,7 +229,7 @@ curl_close($ch);
             height: 50px;
             border-radius: 50%;
             border: 8px solid #ddd;
-            border-top: 8px solid #000;
+            border-top: 8px solid #d9534f;
             animation: rotateSpinner 1s linear infinite;
             display: none;
             z-index: 10000;
@@ -281,7 +281,7 @@ curl_close($ch);
         .modal-headers {
             font-size: 18px;
             font-weight: bold;
-            color: #000;
+            color: #d9534f;
             margin-bottom: 15px;
         }
 
@@ -311,12 +311,12 @@ curl_close($ch);
         }
 
         .confirm-action {
-            background: #000;
+            background: #d9534f;
             color: white;
         }
 
         .confirm-action:hover {
-            background: #333;
+            background: #c9302c;
         }
 
         /* Clickable Table Row */

@@ -811,7 +811,6 @@ input[type="file"].is-invalid {
                 </div>
                 <div class="signature-pad-container" id="donorSignaturePad">
                     <canvas id="donorPad"></canvas>
-                    <button type="button" class="maximize-btn" onclick="toggleFullscreen(this.parentElement, 'donor', event)">⤢</button>
                     <div class="signature-controls">
                         <button type="button" class="signature-btn" id="clearDonorSignature">Clear</button>
                         <button type="button" class="signature-btn" id="saveDonorSignature">Save</button>

@@ -74,8 +74,6 @@ function storeDonorIdInSession($donorData) {
             padding: 1rem 0;
             margin-bottom: 1.5rem;
             border-bottom: 2px solid #dee2e6;
-            color: #000;
-            font-weight: bold;
         }
 
         .sidebar .nav-link {
@@ -83,15 +81,12 @@ function storeDonorIdInSession($donorData) {
             margin-bottom: 0.5rem;
             border-radius: 5px;
             transition: all 0.3s ease;
-            color: #000 !important;
-            text-decoration: none;
         }
 
         .sidebar .nav-link:hover,
         .sidebar .nav-link.active {
             background: var(--hover-bg);
             transform: translateX(5px);
-            color: #000 !important;
         }
 
         .main-content {
