@@ -430,7 +430,7 @@ input[type="file"].is-invalid {
             border: 2px solid #ddd;
             border-radius: 5px;
             background: white;
-            padding: 10px 0px 10px 10px;  /* Removed right padding */
+            padding: 10px 10px 10px 10px;  /* Removed right padding */
             position: relative;
         }
         
@@ -457,15 +457,22 @@ input[type="file"].is-invalid {
 
         .maximize-btn {
             position: absolute;
-            top: 5px;
-            right: 5px;
-            background: none;
+            top: 10px;
+            right: 10px;
+            background: rgba(255,255,255,0.9);
             border: none;
-            color: #d9534f;
-            cursor: pointer;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
             font-size: 20px;
-            padding: 5px;
-            z-index: 2;
+            cursor: pointer !important;
+            z-index: 1061 !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+            pointer-events: auto !important;
         }
 
         .maximize-btn:hover {
@@ -473,14 +480,15 @@ input[type="file"].is-invalid {
         }
 
         .signature-overlay {
-            display: none;
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 999;
+            background: rgba(0,0,0,0.7);
+            z-index: 1059;
+            display: none;
+            pointer-events: auto;
         }
 
         .signature-overlay.active {
@@ -664,6 +672,43 @@ input[type="file"].is-invalid {
             color: #ffd;
         }
 
+        /* Update styles to prevent unwanted interactions */
+        .signature-container, .signature-wrapper {
+            position: relative;
+            z-index: 1060;
+            pointer-events: auto;
+        }
+
+        .signature-wrapper.fullscreen {
+            position: fixed !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            z-index: 1060 !important;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+            width: 90%;
+            max-width: 1200px;
+            pointer-events: auto !important;
+        }
+
+        .signature-wrapper.fullscreen .maximize-btn {
+            top: 20px;
+            right: 20px;
+        }
+
+        /* Prevent any pointer events on signature images */
+        .donor-declaration-img {
+            pointer-events: none;
+        }
+
+        /* Ensure form elements stay below fullscreen elements */
+        form {
+            z-index: 1058;
+        }
+
     </style>
 </head>
 <body>
@@ -719,7 +764,6 @@ input[type="file"].is-invalid {
         </div>
         
         <div class="donor-declaration-row">
-       
             <!-- Parent/Guardian Signature Upload -->
             <div>
                 <div class="signature-method-selector">
@@ -736,6 +780,7 @@ input[type="file"].is-invalid {
                 </div>
                 <div class="signature-pad-container" id="guardianSignaturePad">
                     <canvas id="guardianPad"></canvas>
+                    <button type="button" class="maximize-btn" onclick="toggleFullscreen(this.parentElement, 'guardian', event)">⤢</button>
                     <div class="signature-controls">
                         <button type="button" class="signature-btn" id="clearGuardianSignature">Clear</button>
                         <button type="button" class="signature-btn" id="saveGuardianSignature">Save</button>
@@ -766,6 +811,7 @@ input[type="file"].is-invalid {
                 </div>
                 <div class="signature-pad-container" id="donorSignaturePad">
                     <canvas id="donorPad"></canvas>
+                    <button type="button" class="maximize-btn" onclick="toggleFullscreen(this.parentElement, 'donor', event)">⤢</button>
                     <div class="signature-controls">
                         <button type="button" class="signature-btn" id="clearDonorSignature">Clear</button>
                         <button type="button" class="signature-btn" id="saveDonorSignature">Save</button>
@@ -1000,7 +1046,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Handle donor signature method selection
     document.querySelectorAll('input[name="donor_method"]').forEach(radio => {
-        radio.addEventListener('change', function() {
+        radio.addEventListener('change', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
             const padContainer = document.getElementById('donorSignaturePad');
             const fileInput = document.getElementById('donor-signature');
             const instructions = document.getElementById('donorPadInstructions');
@@ -1022,7 +1071,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Handle guardian signature method selection
     document.querySelectorAll('input[name="guardian_method"]').forEach(radio => {
-        radio.addEventListener('change', function() {
+        radio.addEventListener('change', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
             const padContainer = document.getElementById('guardianSignaturePad');
             const fileInput = document.getElementById('guardian-signature');
             const instructions = document.getElementById('guardianPadInstructions');
@@ -1043,66 +1095,83 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Clear signatures
-    document.getElementById('clearDonorSignature').addEventListener('click', () => {
+    document.getElementById('clearDonorSignature').addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         donorPad.clear();
     });
-    document.getElementById('clearGuardianSignature').addEventListener('click', () => {
+    
+    document.getElementById('clearGuardianSignature').addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         guardianPad.clear();
     });
     
     // Add save button event listeners
-    document.getElementById('saveDonorSignature').addEventListener('click', () => saveSignature(donorPad, 'donor'));
-    document.getElementById('saveGuardianSignature').addEventListener('click', () => saveSignature(guardianPad, 'guardian'));
+    document.getElementById('saveDonorSignature').addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        saveSignature(donorPad, 'donor');
+    });
+    
+    document.getElementById('saveGuardianSignature').addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        saveSignature(guardianPad, 'guardian');
+    });
 
-    // Add maximize button to signature pads
-    function addMaximizeButton(padContainer, pad) {
-        const maximizeBtn = document.createElement('button');
-        maximizeBtn.className = 'maximize-btn';
-        maximizeBtn.innerHTML = '⤢';
-        maximizeBtn.title = 'Maximize';
-        padContainer.appendChild(maximizeBtn);
-
+    // Add fullscreen toggle function
+    function toggleFullscreen(container, type, event) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        
+        const isExpanded = container.classList.contains('expanded');
         const overlay = document.getElementById('signatureOverlay');
+        const maximizeBtn = container.querySelector('.maximize-btn');
+        const pad = type === 'donor' ? donorPad : guardianPad;
+        
+        if (isExpanded) {
+            container.classList.remove('expanded');
+            overlay.classList.remove('active');
+            maximizeBtn.innerHTML = '⤢';
+            // Resize canvas back to normal
+            const canvas = pad.canvas;
+            canvas.width = container.offsetWidth - 20;
+            canvas.height = 150;
+        } else {
+            container.classList.add('expanded');
+            overlay.classList.add('active');
+            maximizeBtn.innerHTML = '⤡';
+            // Resize canvas to larger size
+            const canvas = pad.canvas;
+            canvas.width = container.offsetWidth - 40;
+            canvas.height = 400;
+        }
+        
+        // Redraw signature
+        pad.fromData(pad.toData());
+    }
 
-        maximizeBtn.addEventListener('click', function() {
-            const isExpanded = padContainer.classList.contains('expanded');
-            if (isExpanded) {
-                padContainer.classList.remove('expanded');
-                overlay.classList.remove('active');
-                maximizeBtn.innerHTML = '⤢';
-                maximizeBtn.title = 'Maximize';
-                // Resize canvas back to normal
-                const canvas = pad.canvas;
-                canvas.width = padContainer.offsetWidth - 20;
-                canvas.height = 150;
-                pad.fromData(pad.toData()); // Redraw signature
-            } else {
-                padContainer.classList.add('expanded');
-                overlay.classList.add('active');
-                maximizeBtn.innerHTML = '⤡';
-                maximizeBtn.title = 'Minimize';
-                // Resize canvas to larger size
-                const canvas = pad.canvas;
-                canvas.width = padContainer.offsetWidth - 40;
-                canvas.height = 400;
-                pad.fromData(pad.toData()); // Redraw signature
-            }
-        });
+    // Make toggleFullscreen available globally
+    window.toggleFullscreen = toggleFullscreen;
 
+    // Add overlay if it doesn't exist
+    if (!document.getElementById('signatureOverlay')) {
+        const overlay = document.createElement('div');
+        overlay.id = 'signatureOverlay';
+        overlay.className = 'signature-overlay';
+        document.body.appendChild(overlay);
+        
         // Close expanded view when clicking overlay
-        overlay.addEventListener('click', function() {
-            if (padContainer.classList.contains('expanded')) {
-                maximizeBtn.click();
+        overlay.addEventListener('click', function(e) {
+            const expandedContainer = document.querySelector('.signature-pad-container.expanded');
+            if (expandedContainer) {
+                const type = expandedContainer.id === 'donorSignaturePad' ? 'donor' : 'guardian';
+                toggleFullscreen(expandedContainer, type, e);
             }
         });
     }
-
-    // Add maximize buttons to both signature pads
-    const donorPadContainer = document.getElementById('donorSignaturePad');
-    const guardianPadContainer = document.getElementById('guardianSignaturePad');
-    
-    addMaximizeButton(donorPadContainer, donorPad);
-    addMaximizeButton(guardianPadContainer, guardianPad);
 });
 
     </script>

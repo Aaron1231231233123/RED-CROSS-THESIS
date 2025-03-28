@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Red Cross Screening Form</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f9f9f9;
+            margin: 0;
+            padding: 20px;
+        }
+        /* Blood Collection Section */
+        .blood-collection {
+            background: #fff;
+            padding: 2%;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 900px;
+            margin: auto;
+        }
+
+        .blood-collection h3 {
+            font-size: 18px;
+            font-weight: bold;
+            color: #721c24;
+            margin-bottom: 15px;
+        }
+
+        /* Blood Bag Used Table */
+        .blood-bag-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .blood-bag-table th,
+        .blood-bag-table td {
+            border: 1px solid #ccc;
+            padding: 12px;
+            text-align: center;
+            font-size: 14px;
+            position: relative; 
+        }
+
+        .blood-bag-table th {
+            background-color: #d9534f; 
+            color: white;
+            font-weight: bold;
+        }
+
+        .blood-bag-table td {
+            background-color: #fff; 
+            color: #333; 
+            cursor: pointer;
+        }
+
+        /* Hids Radio Design */
+        .blood-bag-table input[type="radio"] {
+            opacity: 0; 
+            position: absolute; 
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer; 
+        }
+
+        /* Border Color Change on Selection */
+        .blood-bag-table td:has(input[type="radio"]:checked) {
+            background-color: #0c5460;
+            color: white; 
+        }
+
+        /* Hover Effect for Cells */
+        .blood-bag-table td:hover {
+            background-color: #f1f1f1; 
+        }
+        /* Amount Section */
+        .amount-section {
+            margin-bottom: 15px;
+        }
+
+        .amount-section label {
+            font-weight: bold;
+            color: #721c24;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .amount-section input[type="text"] {
+            width: 100%;
+            max-width: 200px;
+            padding: 8px;
+            border: 1px solid #bbb;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        .amount-section input[type="text"]:focus {
+            border-color: #721c24;
+            outline: none;
+        }
+
+        /* Successful Section */
+        .successful-section {
+            margin-bottom: 15px;
+        }
+
+        .successful-section h4 {
+            font-size: 16px;
+            font-weight: bold;
+            color: #721c24;
+            margin-bottom: 10px;
+        }
+
+        .successful-options {
+            display: flex;
+            gap: 15px;
+        }
+
+        .successful-option {
+            display: flex;
+            align-items: center;
+            font-weight: bold;
+            color: #721c24;
+            gap: 8px;
+            background: #fff;
+            padding: 10px 15px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            cursor: pointer;
+        }
+
+        /* Custom Radio Button Styling */
+        .successful-option input {
+            opacity: 0;
+            position: absolute;
+        }
+
+        .checkmark {
+            width: 18px;
+            height: 18px;
+            background-color: #fff;
+            border: 2px solid #721c24;
+            border-radius: 50%;
+            display: inline-block;
+            position: relative;
+            transition: background-color 0.3s ease;
+        }
+
+        .successful-option input:checked ~ .checkmark {
+            background-color: #721c24;
+        }
+
+        .checkmark::after {
+            content: "";
+            position: absolute;
+            display: none;
+            left: 50%;
+            top: 50%;
+            width: 8px;
+            height: 8px;
+            background-color: white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .successful-option input:checked ~ .checkmark::after {
+            display: block;
+        }
+
+        /* Reaction and Management Sections */
+        .reaction-section,
+        .management-section {
+            margin-bottom: 15px;
+        }
+
+        .reaction-section label,
+        .management-section label {
+            font-weight: bold;
+            color: #721c24;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .reaction-section input[type="text"],
+        .management-section input[type="text"] {
+            width: 100%;
+            max-width: 400px;
+            padding: 8px;
+            border: 1px solid #bbb;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        .reaction-section input[type="text"]:focus,
+        .management-section input[type="text"]:focus {
+            border-color: #721c24;
+            outline: none;
+        }
+
+        /* Physician Section */
+        .physician-section {
+            margin-bottom: 20px;
+        }
+
+        .physician-section h4 {
+            font-size: 16px;
+            font-weight: bold;
+            color: #721c24;
+            margin-bottom: 10px;
+        }
+
+        .physician-section label {
+            font-weight: bold;
+            color: #721c24;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .physician-section input[type="text"] {
+            width: 100%;
+            max-width: 400px;
+            padding: 8px;
+            border: 1px solid #bbb;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        .physician-section input[type="text"]:focus {
+            border-color: #721c24;
+            outline: none;
+        }
+
+        /* Submit Button Section */
+        .submit-section {
+            text-align: right;
+            margin-top: 20px;
+        }
+
+        .submit-button {
+            background-color: #d9534f;
+            color: white;
+            font-weight: bold;
+            padding: 12px 22px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            font-size: 15px;
+        }
+
+        .submit-button:hover {
+            background-color: #c9302c;
+            transform: translateY(-2px);
+        }
+
+        .submit-button:active {
+            transform: translateY(0);
+        }
+
+        /* Loader Animation -- Modal Design */
+        .loading-spinner {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 8px solid #ddd;
+            border-top: 8px solid #a82020;
+            animation: rotateSpinner 1s linear infinite;
+            display: none;
+            z-index: 10000;
+            transform: translate(-50%, -50%);
+        }
+
+        @keyframes rotateSpinner {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        /* Confirmation Modal */
+        .confirmation-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 25px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            z-index: 9999;
+            border-radius: 10px;
+            width: 300px;
+            display: none;
+            opacity: 0;
+        }
+
+        /* Fade-in and Fade-out Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -55%);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%);
+            }
+        }
+
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+                transform: translate(-50%, -50%);
+            }
+            to {
+                opacity: 0;
+                transform: translate(-50%, -55%);
+            }
+        }
+
+        .confirmation-modal.show {
+            display: block;
+            animation: fadeIn 0.3s ease-in-out forwards;
+        }
+
+        .confirmation-modal.hide {
+            animation: fadeOut 0.3s ease-in-out forwards;
+        }
+
+        .modal-header {
+            font-size: 18px;
+            font-weight: bold;
+            color: #d50000;
+            margin-bottom: 15px;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+
+        .modal-button {
+            width: 45%;
+            padding: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .cancel-action {
+            background: #aaa;
+            color: white;
+        }
+
+        .cancel-action:hover {
+            background: #888;
+        }
+
+        .confirm-action {
+            background: #c9302c;
+            color: white;
+        }
+
+        .confirm-action:hover {
+            background: #691b19;
+        }
+        /* Responsive Adjustments */
+        @media (max-width: 600px) {
+            .reaction-section input[type="text"],
+            .management-section input[type="text"],
+            .physician-section input[type="text"] {
+                max-width: 100%;
+            }
+
+            .submit-button {
+                width: 100%;
+                padding: 12px;
+            }
+        }
+
+        /* Responsive Adjustments */
+        @media (max-width: 600px) {
+            .blood-bag-table th,
+            .blood-bag-table td {
+                padding: 8px;
+                font-size: 14px;
+            }
+
+            .successful-options {
+                flex-direction: column;
+            }
+
+            .amount-section input[type="text"],
+            .reaction-section input[type="text"],
+            .management-section input[type="text"],
+            .physician-section input[type="text"] {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+    <body>
+        <div class="blood-collection">
+            <h3>VI. BLOOD COLLECTION (To be accomplished by the phlebotomist)</h3>
+        <div class="blood-bag-used">
+            <h4>Blood Bag Used:</h4>
+            <table class="blood-bag-table">
+                <thead>
+                    <tr>
+                        <th colspan="4">KARMI</th>
+                        <th colspan="4">TERUMO</th>
+                        <th colspan="2">SPECIAL BAG</th>
+                        <th colspan="4">APHERESIS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td data-header="KARMI"><input type="radio" name="blood-bag" value="S">S</td>
+                        <td data-header="KARMI"><input type="radio" name="blood-bag" value="D">D</td>
+                        <td data-header="KARMI"><input type="radio" name="blood-bag" value="T">T</td>
+                        <td data-header="KARMI"><input type="radio" name="blood-bag" value="Q">Q</td>
+                        <td data-header="TERUMO"><input type="radio" name="blood-bag" value="S">S</td>
+                        <td data-header="TERUMO"><input type="radio" name="blood-bag" value="D">D</td>
+                        <td data-header="TERUMO"><input type="radio" name="blood-bag" value="T">T</td>
+                        <td data-header="TERUMO"><input type="radio" name="blood-bag" value="Q">Q</td>
+                        <td data-header="SPECIAL BAG"><input type="radio" name="blood-bag" value="FK T&B">FK T&B</td>
+                        <td data-header="SPECIAL BAG"><input type="radio" name="blood-bag" value="TRM T&B">TRM T&B</td>
+                        <td data-header="APHERESIS"><input type="radio" name="blood-bag" value="FRES">FRES</td>
+                        <td data-header="APHERESIS"><input type="radio" name="blood-bag" value="AMI">AMI</td>
+                        <td data-header="APHERESIS"><input type="radio" name="blood-bag" value="HAE">HAE</td>
+                        <td data-header="APHERESIS"><input type="radio" name="blood-bag" value="TRI">TRI</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+            <div class="amount-section">
+                <label>Amount of Blood Taken: <input type="text" placeholder="Enter amount"></label>
+            </div>
+
+            <div class="successful-section">
+                <h4>Successful:</h4>
+                <div class="successful-options">
+                    <label class="successful-option">
+                        <input type="radio" name="successful"> 
+                        <span class="checkmark"></span>
+                        YES
+                    </label>
+                    <label class="successful-option">
+                        <input type="radio" name="successful"> 
+                        <span class="checkmark"></span>
+                        NO
+                    </label>
+                </div>
+            </div>
+
+            <div class="reaction-section">
+                <label>Donor Reaction: <input type="text" placeholder="Enter reaction"></label>
+            </div>
+        
+            <div class="management-section">
+                <label>Management Done: <input type="text" placeholder="Enter management"></label>
+            </div>
+        
+            <div class="physician-section">
+                <label>UNIT SERIAL NUMBER: <input type="text" placeholder="Enter serial number"></label>
+                <label>Start Time: <input type="text" placeholder="Enter start time"></label>
+                <label>End Time: <input type="text" placeholder="Enter end time"></label>
+            </div>
+        
+            <div class="submit-section">
+                <button class="submit-button" id="triggerModalButton">Submit</button>
+            </div>
+        </div>
+            <!-- Confirmation Modal -->
+        <div class="confirmation-modal" id="confirmationDialog">
+            <div class="modal-header">Do you want to continue?</div>
+            <div class="modal-actions">
+                <button class="modal-button cancel-action" id="cancelButton">No</button>
+                <button class="modal-button confirm-action" id="confirmButton">Yes</button>
+            </div>
+        </div>    
+
+        <!-- Loading Spinner -->
+        <div class="loading-spinner" id="loadingSpinner"></div>
+        <script>
+            document.querySelectorAll('.blood-bag-table input[type="radio"]').forEach((radio) => {
+                    radio.addEventListener('change', (event) => {
+                    const selectedCell = event.target.closest('td'); 
+                    const selectedValue = event.target.value; 
+                    const selectedHeader = selectedCell.getAttribute('data-header'); 
+
+                    console.log('Selected Header:', selectedHeader);
+                    console.log('Selected Value:', selectedValue);
+
+                    // You can use selectedHeader and selectedValue as needed (e.g., store them in hidden inputs or send to a server).
+                });
+            });
+            let confirmationDialog = document.getElementById("confirmationDialog");
+            let loadingSpinner = document.getElementById("loadingSpinner");
+            let triggerModalButton = document.getElementById("triggerModalButton");
+            let cancelButton = document.getElementById("cancelButton");
+            let confirmButton = document.getElementById("confirmButton");
+
+            // Open Modal
+            triggerModalButton.addEventListener("click", function() {
+                confirmationDialog.classList.remove("hide");
+                confirmationDialog.classList.add("show");
+                confirmationDialog.style.display = "block";
+                triggerModalButton.disabled = true; // Disable button while modal is open
+            });
+
+            // Close Modal Function
+            function closeModal() {
+                confirmationDialog.classList.remove("show");
+                confirmationDialog.classList.add("hide");
+                setTimeout(() => {
+                    confirmationDialog.style.display = "none";
+                    triggerModalButton.disabled = false; // Re-enable button
+                }, 300);
+            }
+
+            // Yes Button (Triggers Loading Spinner)
+            confirmButton.addEventListener("click", function() {
+                closeModal();
+                loadingSpinner.style.display = "block"; // Show loader
+                setTimeout(() => {
+                    loadingSpinner.style.display = "none"; // Hide loader after 2 seconds
+                    window.location.href = "../../../public/Dashboards/dashboard-staff-blood-collection-submission.html";
+                }, 2000);
+            });
+
+            // No Button (Closes Modal)
+            cancelButton.addEventListener("click", function() {
+                closeModal();
+            });
+        </script>
+    </body>
+</html>

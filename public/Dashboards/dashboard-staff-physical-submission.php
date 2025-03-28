@@ -2,8 +2,35 @@
 session_start();
 require_once '../../assets/conn/db_conn.php';
 
+// Add pagination settings
+$records_per_page = 15;
+$current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$offset = ($current_page - 1) * $records_per_page;
+
+// Modify your Supabase query to include pagination and order by creation time
+$ch = curl_init();
+curl_setopt_array($ch, [
+    CURLOPT_URL => SUPABASE_URL . '/rest/v1/physical_exam?select=*&order=created_at.desc',
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ]
+]);
+
+$response = curl_exec($ch);
+$physicals = json_decode($response, true) ?: [];
+$total_records = count($physicals);
+$total_pages = ceil($total_records / $records_per_page);
+
+// Slice the array to get only the records for the current page
+$physicals = array_slice($physicals, $offset, $records_per_page);
+
+// Close cURL session
+curl_close($ch);
+
 // Get screening records with donor information and check disapproval status
-$ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=screening_id,interview_date,blood_type,donation_type,donor_form_id,disapproval_reason,donor_form:donor_form_id(surname,first_name)&order=interview_date.desc');
+$ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=screening_id,created_at,blood_type,donation_type,donor_form_id,disapproval_reason,donor_form:donor_form_id(surname,first_name)&order=created_at.desc');
 
 $headers = array(
     'apikey: ' . SUPABASE_API_KEY,
@@ -51,51 +78,76 @@ if (!$screenings || !is_array($screenings)) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <style>
-               :root {
-            --bg-color: #f8f9fa; /* Light background */
-            --text-color: #000; /* Dark text */
-            --sidebar-bg: #ffffff; /* White sidebar */
-            --card-bg: #e9ecef; /* Light gray cards */
-            --hover-bg: #dee2e6; /* Light gray hover */
-        }
+:root {
+    --bg-color: #f8f9fa;
+    --text-color: #000;
+    --sidebar-bg: #ffffff;
+    --hover-bg: #dee2e6;
+}
 
-        body.light-mode {
-            background-color: var(--bg-color);
-            color: var(--text-color);
-        }
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f8f9fa;
+    color: #333;
+    margin: 0;
+    padding: 0;
+}
 
-        .sidebar {
-            background: var(--sidebar-bg);
-            height: 100vh;
-            padding: 1rem;
-        }
+/* Sidebar Styles */
+.sidebar {
+    background: var(--sidebar-bg);
+    height: 100vh;
+    padding: 1rem;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 16.66666667%;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+}
 
-        .sidebar .nav-link {
-            color: #666; /* Darker text for links */
-            transition: all 0.3s ease;
-        }
+.sidebar h4 {
+    padding: 1rem 0;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid #dee2e6;
+    color: #000;
+    font-weight: bold;
+}
 
-        .sidebar .nav-link:hover, .sidebar .nav-link.active {
-            color: var(--text-color);
-            background: var(--hover-bg);
-            border-radius: 5px;
-        }
+.sidebar .nav-link {
+    padding: 0.8rem 1rem;
+    margin-bottom: 0.5rem;
+    border-radius: 5px;
+    transition: all 0.3s ease;
+    color: #000 !important;
+    text-decoration: none;
+}
 
-        .main-content {
-            padding: 1.5rem;
-        }
+.sidebar .nav-link:hover,
+.sidebar .nav-link.active {
+    background: var(--hover-bg);
+    transform: translateX(5px);
+    color: #000 !important;
+}
 
-        .card {
-            background: var(--card-bg);
-            color: var(--text-color);
-            transition: transform 0.2s ease-in-out;
-        }
+/* Main Content */
+.main-content {
+    padding: 1.5rem;
+    margin-left: 16.66666667%;
+}
 
-        .card:hover {
-            transform: scale(1.03);
-        }
-
-
+/* Responsive Design */
+@media (max-width: 991.98px) {
+    .sidebar {
+        position: static;
+        width: 100%;
+        height: auto;
+    }
+    .main-content {
+        margin-left: 0;
+    }
+}
 
 /* Table Styling */
 .dashboard-staff-tables {
@@ -153,6 +205,7 @@ if (!$screenings || !is_array($screenings)) {
             box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
             width: 100%;
 }
+
 /* General Styling */
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -340,6 +393,37 @@ body {
     flex: 1;
 }
 
+/* Pagination Styles */
+.pagination-container {
+    margin-top: 1.5rem;
+}
+
+.pagination {
+    justify-content: center;
+}
+
+.page-link {
+    color: #000;
+    border-color: #000;
+    padding: 0.5rem 1rem;
+}
+
+.page-link:hover {
+    background-color: #000;
+    color: #fff;
+    border-color: #000;
+}
+
+.page-item.active .page-link {
+    background-color: #000;
+    border-color: #000;
+}
+
+.page-item.disabled .page-link {
+    color: #6c757d;
+    border-color: #dee2e6;
+}
+
     </style>
 </head>
 <body>
@@ -417,7 +501,7 @@ body {
                                             'donor_form_id' => $screening['donor_form_id'] ?? ''
                                         ]), JSON_HEX_APOS | JSON_HEX_QUOT); ?>'>
                                             <td><?php echo $counter++; ?></td>
-                                            <td><?php echo isset($screening['interview_date']) ? htmlspecialchars(date('Y-m-d', strtotime($screening['interview_date']))) : 'N/A'; ?></td>
+                                            <td><?php echo isset($screening['created_at']) ? htmlspecialchars(date('Y-m-d', strtotime($screening['created_at']))) : 'N/A'; ?></td>
                                             <td><?php echo isset($screening['donor_form']['surname']) ? htmlspecialchars($screening['donor_form']['surname']) : 'N/A'; ?></td>
                                             <td><?php echo isset($screening['donor_form']['first_name']) ? htmlspecialchars($screening['donor_form']['first_name']) : 'N/A'; ?></td>
                                             <td><?php echo isset($screening['blood_type']) ? htmlspecialchars($screening['blood_type']) : 'N/A'; ?></td>
@@ -431,6 +515,30 @@ body {
                                 ?>
                             </tbody>
                         </table>
+                    </div>
+
+                    <!-- Add Pagination Controls -->
+                    <div class="pagination-container">
+                        <nav aria-label="Physical exam submissions navigation">
+                            <ul class="pagination justify-content-center">
+                                <!-- Previous button -->
+                                <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
+                                    <a class="page-link" href="?page=<?php echo $current_page - 1; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Previous</a>
+                                </li>
+                                
+                                <!-- Page numbers -->
+                                <?php for($i = 1; $i <= $total_pages; $i++): ?>
+                                    <li class="page-item <?php echo $current_page == $i ? 'active' : ''; ?>">
+                                        <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                    </li>
+                                <?php endfor; ?>
+                                
+                                <!-- Next button -->
+                                <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
+                                    <a class="page-link" href="?page=<?php echo $current_page + 1; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Next</a>
+                                </li>
+                            </ul>
+                        </nav>
                     </div>
                 </div>
                 

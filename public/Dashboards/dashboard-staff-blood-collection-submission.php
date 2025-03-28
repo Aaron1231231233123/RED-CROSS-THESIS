@@ -2,6 +2,33 @@
 session_start();
 require_once '../../assets/conn/db_conn.php';
 
+// Add pagination settings
+$records_per_page = 15;
+$current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$offset = ($current_page - 1) * $records_per_page;
+
+// Modify your Supabase query to include pagination
+$ch = curl_init();
+curl_setopt_array($ch, [
+    CURLOPT_URL => SUPABASE_URL . '/rest/v1/blood_collection?select=*&order=submitted_at.desc',
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ]
+]);
+
+$response = curl_exec($ch);
+$collections = json_decode($response, true) ?: [];
+$total_records = count($collections);
+$total_pages = ceil($total_records / $records_per_page);
+
+// Slice the array to get only the records for the current page
+$collections = array_slice($collections, $offset, $records_per_page);
+
+// Close cURL session
+curl_close($ch);
+
 // Get physical examination records with donor information
 $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=physical_exam_id,donor_id,remarks,blood_bag_type,disapproval_reason,donor_form(surname,first_name)&order=created_at.desc');
 
@@ -34,38 +61,75 @@ curl_close($ch);
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <style>
-               :root {
-            --bg-color: #f8f9fa; /* Light background */
-            --text-color: #000; /* Dark text */
-            --sidebar-bg: #ffffff; /* White sidebar */
-            --card-bg: #e9ecef; /* Light gray cards */
-            --hover-bg: #dee2e6; /* Light gray hover */
+        :root {
+            --bg-color: #f8f9fa;
+            --text-color: #000;
+            --sidebar-bg: #ffffff;
+            --hover-bg: #dee2e6;
         }
 
-        body.light-mode {
-            background-color: var(--bg-color);
-            color: var(--text-color);
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            margin: 0;
+            padding: 0;
         }
 
+        /* Sidebar Styles */
         .sidebar {
             background: var(--sidebar-bg);
             height: 100vh;
             padding: 1rem;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 16.66666667%;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+
+        .sidebar h4 {
+            padding: 1rem 0;
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid #dee2e6;
+            color: #000;
+            font-weight: bold;
         }
 
         .sidebar .nav-link {
-            color: #666; /* Darker text for links */
-            transition: all 0.3s ease;
-        }
-
-        .sidebar .nav-link:hover, .sidebar .nav-link.active {
-            color: var(--text-color);
-            background: var(--hover-bg);
+            padding: 0.8rem 1rem;
+            margin-bottom: 0.5rem;
             border-radius: 5px;
+            transition: all 0.3s ease;
+            color: #000 !important;
+            text-decoration: none;
         }
 
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            background: var(--hover-bg);
+            transform: translateX(5px);
+            color: #000 !important;
+        }
+
+        /* Main Content */
         .main-content {
             padding: 1.5rem;
+            margin-left: 16.66666667%;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 991.98px) {
+            .sidebar {
+                position: static;
+                width: 100%;
+                height: auto;
+            }
+            .main-content {
+                margin-left: 0;
+            }
         }
 
         .card {
@@ -77,8 +141,6 @@ curl_close($ch);
         .card:hover {
             transform: scale(1.03);
         }
-
-
 
         /* Table Styling */
         .dashboard-staff-tables {
@@ -126,15 +188,6 @@ curl_close($ch);
                     box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
                     width: 100%;
         }
-        /* General Styling */
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f8f9fa; /* Light background for better contrast */
-            color: #333; /* Dark text for readability */
-            margin: 0;
-            padding: 0;
-        }
-
 
         /* Donor Form Header */
         .donor_form_header {
@@ -151,7 +204,6 @@ curl_close($ch);
             font-size: 24px;
             font-weight: bold;
         }
-
 
         .grid-3 {
             grid-template-columns: repeat(3, 1fr);
@@ -177,7 +229,7 @@ curl_close($ch);
             height: 50px;
             border-radius: 50%;
             border: 8px solid #ddd;
-            border-top: 8px solid #a82020;
+            border-top: 8px solid #000;
             animation: rotateSpinner 1s linear infinite;
             display: none;
             z-index: 10000;
@@ -229,7 +281,7 @@ curl_close($ch);
         .modal-headers {
             font-size: 18px;
             font-weight: bold;
-            color: #d50000;
+            color: #000;
             margin-bottom: 15px;
         }
 
@@ -259,12 +311,12 @@ curl_close($ch);
         }
 
         .confirm-action {
-            background: #c9302c;
+            background: #000;
             color: white;
         }
 
         .confirm-action:hover {
-            background: #691b19;
+            background: #333;
         }
 
         /* Clickable Table Row */
@@ -311,6 +363,37 @@ curl_close($ch);
             padding: 1.5rem;
             font-size: 1.2rem;
             flex: 1;
+        }
+
+        /* Pagination Styles */
+        .pagination-container {
+            margin-top: 1.5rem;
+        }
+
+        .pagination {
+            justify-content: center;
+        }
+
+        .page-link {
+            color: #000;
+            border-color: #000;
+            padding: 0.5rem 1rem;
+        }
+
+        .page-link:hover {
+            background-color: #000;
+            color: #fff;
+            border-color: #000;
+        }
+
+        .page-item.active .page-link {
+            background-color: #000;
+            border-color: #000;
+        }
+
+        .page-item.disabled .page-link {
+            color: #6c757d;
+            border-color: #dee2e6;
         }
     </style>
 </head>
@@ -406,23 +489,48 @@ curl_close($ch);
                                 ?>
                             </tbody>
                         </table>
+
+                        <!-- Add Pagination Controls -->
+                        <div class="pagination-container">
+                            <nav aria-label="Blood collection submissions navigation">
+                                <ul class="pagination justify-content-center">
+                                    <!-- Previous button -->
+                                    <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
+                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Previous</a>
+                                    </li>
+                                    
+                                    <!-- Page numbers -->
+                                    <?php for($i = 1; $i <= $total_pages; $i++): ?>
+                                        <li class="page-item <?php echo $current_page == $i ? 'active' : ''; ?>">
+                                            <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                        </li>
+                                    <?php endfor; ?>
+                                    
+                                    <!-- Next button -->
+                                    <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
+                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Next</a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
                     </div>
                 </div>
+
+                <!-- Confirmation Modal -->
+                <div class="confirmation-modal" id="confirmationDialog">
+                    <div class="modal-headers">Do you want to continue?</div>
+                    <div class="modal-actions">
+                        <button class="modal-button cancel-action" id="cancelButton">No</button>
+                        <button class="modal-button confirm-action" id="confirmButton">Yes</button>
+                    </div>
+                </div>    
+                
+                <!-- Loading Spinner -->
+                <div class="loading-spinner" id="loadingSpinner"></div>
+
             </main>
         </div>
     </div>
-
-    <!-- Confirmation Modal -->
-    <div class="confirmation-modal" id="confirmationDialog">
-        <div class="modal-header">Do you want to continue?</div>
-        <div class="modal-actions">
-            <button class="modal-button cancel-action" id="cancelButton">No</button>
-            <button class="modal-button confirm-action" id="confirmButton">Yes</button>
-        </div>
-    </div>    
-
-    <!-- Loading Spinner -->
-    <div class="loading-spinner" id="loadingSpinner"></div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {

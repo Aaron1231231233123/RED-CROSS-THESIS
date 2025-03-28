@@ -1,40 +1,3 @@
-<?php
-session_start();
-require_once '../../assets/conn/db_conn.php';
-
-// Add pagination settings
-$records_per_page = 15;
-$current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$offset = ($current_page - 1) * $records_per_page;
-
-// Modify your Supabase query to include pagination
-$ch = curl_init();
-curl_setopt_array($ch, [
-    CURLOPT_URL => SUPABASE_URL . '/rest/v1/donor_form?select=*&order=submitted_at.desc',
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY
-    ]
-]);
-
-$response = curl_exec($ch);
-$donors = json_decode($response, true) ?: [];
-$total_records = count($donors);
-$total_pages = ceil($total_records / $records_per_page);
-
-// Slice the array to get only the records for the current page
-$donors = array_slice($donors, $offset, $records_per_page);
-
-// Close cURL session
-curl_close($ch);
-
-// Add this function to handle donor approval
-function storeDonorIdInSession($donorData) {
-    $_SESSION['donor_id'] = $donorData['id'];
-    $_SESSION['donor_name'] = $donorData['first_name'] . ' ' . $donorData['surname'];
-}
-?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -61,42 +24,21 @@ function storeDonorIdInSession($donorData) {
             background: var(--sidebar-bg);
             height: 100vh;
             padding: 1rem;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 16.66666667%;
-            overflow-y: auto;
-            z-index: 1000;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-        }
-
-        .sidebar h4 {
-            padding: 1rem 0;
-            margin-bottom: 1.5rem;
-            border-bottom: 2px solid #dee2e6;
-            color: #000;
-            font-weight: bold;
         }
 
         .sidebar .nav-link {
-            padding: 0.8rem 1rem;
-            margin-bottom: 0.5rem;
-            border-radius: 5px;
+            color: #666; /* Darker text for links */
             transition: all 0.3s ease;
-            color: #000 !important;
-            text-decoration: none;
         }
 
-        .sidebar .nav-link:hover,
-        .sidebar .nav-link.active {
+        .sidebar .nav-link:hover, .sidebar .nav-link.active {
+            color: var(--text-color);
             background: var(--hover-bg);
-            transform: translateX(5px);
-            color: #000 !important;
+            border-radius: 5px;
         }
 
         .main-content {
             padding: 1.5rem;
-            margin-left: 16.66666667%;
         }
 
         .card {
@@ -359,75 +301,6 @@ select.donor_form_input[disabled] {
     -moz-appearance: none;
     appearance: none;
 }
-
-.donor-declaration-img {
-    max-width: 100%;
-    width: 70%;
-    height: auto;
-    border: 3px solid #ddd;
-    border-radius: 12px;
-    padding: 50px;
-    background-color: #fff;
-    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-    margin: 15px auto;
-    display: block;
-}
-
-.donor-declaration-row {
-    margin-bottom: 40px;
-    padding: 30px;
-    background-color: #f8f9fa;
-    border-radius: 15px;
-    border: 2px solid #e9ecef;
-    text-align: left;
-}
-
-.donor-declaration-row strong {
-    display: block;
-    margin-bottom: 20px;
-    color: #333;
-    font-size: 1.3em;
-    font-weight: 600;
-    text-align: left;
-}
-
-.relationship-container {
-    margin: 20px 0;
-    padding: 20px;
-    background-color: #fff;
-    border-radius: 8px;
-    border: 2px solid #ddd;
-    text-align: left;
-}
-
-.donor-declaration-input {
-    width: 100%;
-    max-width: 400px;
-    padding: 12px;
-    border: 2px solid #ddd;
-    border-radius: 6px;
-    margin-top: 10px;
-    background-color: #f8f9fa;
-    font-size: 1.1em;
-    text-align: left;
-}
-
-.donor-declaration {
-    width: 100%;
-    padding: 20px;
-}
-
-/* Responsive adjustments */
-@media (max-width: 991.98px) {
-    .sidebar {
-        position: static;
-        width: 100%;
-        height: auto;
-    }
-    .main-content {
-        margin-left: 0;
-    }
-}
     </style>
 </head>
 <body>
@@ -511,29 +384,6 @@ select.donor_form_input[disabled] {
                                 <?php endif; ?>
                             </tbody>
                         </table>
-                        <!-- Add Pagination Controls -->
-                        <div class="pagination-container">
-                            <nav aria-label="Donor submissions navigation">
-                                <ul class="pagination justify-content-center">
-                                    <!-- Previous button -->
-                                    <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Previous</a>
-                                    </li>
-                                    
-                                    <!-- Page numbers -->
-                                    <?php for($i = 1; $i <= $total_pages; $i++): ?>
-                                        <li class="page-item <?php echo $current_page == $i ? 'active' : ''; ?>">
-                                            <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
-                                        </li>
-                                    <?php endfor; ?>
-                                    
-                                    <!-- Next button -->
-                                    <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Next</a>
-                                    </li>
-                                </ul>
-                            </nav>
-                        </div>
                     </div>
                 </div>
             </main>
@@ -687,7 +537,7 @@ select.donor_form_input[disabled] {
                         <div><strong>Donor's Signature:</strong></div>
                         <?php if(isset($donor['donor_signature']) && !empty($donor['donor_signature'])): ?>
                             <img src="../../src/views/forms/uploads/<?php echo htmlspecialchars($donor['donor_signature']); ?>" 
-                                alt="Donor's Signature" class="donor-declaration-img">
+                                alt="Donor's Signature" class="donor-declaration-img" style="max-width: 200px; height: auto;">
                         <?php else: ?>
                             <p>No donor signature available</p>
                         <?php endif; ?>
@@ -698,7 +548,7 @@ select.donor_form_input[disabled] {
                     <div class="donor-declaration-row">
                         <div><strong>Signature of Parent/Guardian:</strong></div>
                         <img src="../../src/views/forms/uploads/<?php echo htmlspecialchars($donor['guardian_signature']); ?>" 
-                            alt="Parent/Guardian Signature" class="donor-declaration-img">
+                            alt="Parent/Guardian Signature" class="donor-declaration-img" style="max-width: 200px; height: auto;">
                         <?php if(isset($donor['relationship']) && !empty($donor['relationship'])): ?>
                         <div class="relationship-container">
                             <strong>Relationship to Blood Donor: </strong>
@@ -853,7 +703,7 @@ select.donor_form_input[disabled] {
                             <div><strong>Donor's Signature:</strong></div>
                             ${donorData.donor_signature ? 
                                 `<img src="../../src/views/forms/uploads/${donorData.donor_signature.replace('uploads/', '')}" 
-                                    alt="Donor's Signature" class="donor-declaration-img">` :
+                                    alt="Donor's Signature" class="donor-declaration-img" style="max-width: 200px; height: auto;">` :
                                 `<p>No donor signature available</p>`
                             }
                         </div>
@@ -866,7 +716,7 @@ select.donor_form_input[disabled] {
                             <div class="donor-declaration-row">
                                 <div><strong>Signature of Parent/Guardian:</strong></div>
                                 <img src="../../src/views/forms/uploads/${guardianSignaturePath}" 
-                                    alt="Parent/Guardian Signature" class="donor-declaration-img">
+                                    alt="Parent/Guardian Signature" class="donor-declaration-img" style="max-width: 200px; height: auto;">
                                 ${donorData.relationship ? 
                                     `<div class="relationship-container">
                                         <strong>Relationship to Blood Donor: </strong>
@@ -1057,41 +907,6 @@ select.donor_form_input[disabled] {
             background-color: #f8f9fa;
             border-radius: 8px;
             width: 100%;
-        }
-
-        /* Add these styles after your existing styles */
-        .pagination-container {
-            margin-top: 20px;
-            margin-bottom: 40px;
-        }
-
-        .pagination {
-            gap: 5px;
-        }
-
-        .page-link {
-            color: #242b31;
-            border: 2px solid #dee2e6;
-            padding: 8px 16px;
-            border-radius: 6px;
-            transition: all 0.3s ease;
-        }
-
-        .page-link:hover {
-            background-color: #e9ecef;
-            border-color: #dee2e6;
-            color: #242b31;
-        }
-
-        .page-item.active .page-link {
-            background-color: #242b31;
-            border-color: #242b31;
-            color: white;
-        }
-
-        .page-item:first-child .page-link,
-        .page-item:last-child .page-link {
-            border-radius: 6px;
         }
     </style>
 </body>
