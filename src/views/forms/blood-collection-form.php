@@ -99,6 +99,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($amount_taken === null || $amount_taken <= 0) {
             throw new Exception("Please enter a valid amount");
         }
+        
+        // Make sure the amount is within a valid range to prevent numeric overflow
+        // Assuming the database field is numeric(5,2) or similar
+        if ($amount_taken > 999.99) {
+            throw new Exception("Amount is too large. Maximum allowed is 999.99");
+        }
+        
+        // Format amount to ensure it has exactly 2 decimal places to match database expectations
+        $amount_taken = number_format($amount_taken, 2, '.', '');
 
         $is_successful = isset($_POST['successful']) ? $_POST['successful'] === 'YES' : null;
         if ($is_successful === null) {
@@ -197,14 +206,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $response = curl_exec($ch);
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        
+        // Get curl error information if request failed
+        if($response === false) {
+            $curl_error = curl_error($ch);
+            error_log('cURL Error: ' . $curl_error);
+            throw new Exception('Connection error: ' . $curl_error);
+        }
+        
         curl_close($ch);
 
+        // Debug information
+        error_log('Supabase Response Code: ' . $http_code);
+        error_log('Supabase Response: ' . $response);
+        error_log('Data sent to Supabase: ' . json_encode($data));
+
         if ($http_code === 201) {
+            // Success, redirect to dashboard
             header('Location: ../../../public/Dashboards/dashboard-staff-blood-collection-submission.php');
             exit;
         } else {
+            // Handle error response from Supabase
             $error_response = json_decode($response, true);
-            $error_message = isset($error_response['message']) ? $error_response['message'] : 'Failed to save data';
+            $error_message = 'Failed to save data';
+            
+            if (isset($error_response['message'])) {
+                $error_message = $error_response['message'];
+            } elseif (isset($error_response['error'])) {
+                $error_message = $error_response['error'];
+            } elseif (isset($error_response['details'])) {
+                $error_message = $error_response['details'];
+            }
+            
+            error_log('Supabase Error: ' . $error_message);
+            error_log('Full Error Response: ' . json_encode($error_response));
+            
             throw new Exception($error_message);
         }
     } catch (Exception $e) {
@@ -234,6 +270,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
             max-width: 900px;
             margin: auto;
+        }
+        
+        /* Error message styling */
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            font-weight: bold;
         }
 
         .blood-collection h3 {
@@ -737,6 +784,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body>
     <form method="POST" action="" id="bloodCollectionForm">
         <div class="blood-collection">
+            <?php if (isset($_SESSION['error']) && !empty($_SESSION['error'])): ?>
+            <div class="error-message">
+                <?php echo htmlspecialchars($_SESSION['error']); ?>
+                <?php unset($_SESSION['error']); ?>
+            </div>
+            <?php endif; ?>
             <h3>VI. BLOOD COLLECTION (To be accomplished by the phlebotomist)</h3>
             <div class="blood-bag-used">
                 <h4>Blood Bag Used:</h4>

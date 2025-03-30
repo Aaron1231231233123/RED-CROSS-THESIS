@@ -1,3 +1,106 @@
+<?php
+// Include database connection
+include_once '../../assets/conn/db_conn.php';
+
+// Function to fetch eligibility data from Supabase
+function fetchEligibilityData() {
+    $curl = curl_init();
+    
+    curl_setopt_array($curl, [
+        CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility?select=eligibility_id,donor_id,blood_type,donation_type,collection_successful,donor_reaction,start_date,end_date,status,blood_collection_id&order=created_at.desc",
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            "apikey: " . SUPABASE_API_KEY,
+            "Authorization: Bearer " . SUPABASE_API_KEY,
+            "Content-Type: application/json",
+            "Prefer: count=exact"
+        ],
+    ]);
+    
+    $response = curl_exec($curl);
+    $err = curl_error($curl);
+    
+    curl_close($curl);
+    
+    if ($err) {
+        return ["error" => "cURL Error #:" . $err];
+    } else {
+        return json_decode($response, true);
+    }
+}
+
+// Function to fetch donor information by donor_id
+function fetchDonorInfo($donorId) {
+    $curl = curl_init();
+    
+    curl_setopt_array($curl, [
+        CURLOPT_URL => SUPABASE_URL . "/rest/v1/donor_form?donor_id=eq." . $donorId . "&select=donor_id,surname,first_name,middle_name,birthdate,age,sex",
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            "apikey: " . SUPABASE_API_KEY,
+            "Authorization: Bearer " . SUPABASE_API_KEY,
+            "Content-Type: application/json"
+        ],
+    ]);
+    
+    $response = curl_exec($curl);
+    $err = curl_error($curl);
+    
+    curl_close($curl);
+    
+    if ($err) {
+        return ["error" => "cURL Error #:" . $err];
+    } else {
+        $data = json_decode($response, true);
+        return !empty($data) ? $data[0] : null;
+    }
+}
+
+// Function to get donor eligibility status
+function getDonorEligibilityStatus($donorId) {
+    $curl = curl_init();
+    
+    curl_setopt_array($curl, [
+        CURLOPT_URL => SUPABASE_URL . "/rest/v1/rpc/get_eligibility_status",
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            "apikey: " . SUPABASE_API_KEY,
+            "Authorization: Bearer " . SUPABASE_API_KEY,
+            "Content-Type: application/json"
+        ],
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode(["p_donor_id" => $donorId])
+    ]);
+    
+    $response = curl_exec($curl);
+    $err = curl_error($curl);
+    
+    curl_close($curl);
+    
+    if ($err) {
+        return ["error" => "cURL Error #:" . $err];
+    } else {
+        return json_decode($response, true);
+    }
+}
+
+// Fetch eligibility data
+$eligibilityData = fetchEligibilityData();
+
+// Check if there's an error in fetching data
+$error = null;
+if (isset($eligibilityData['error'])) {
+    $error = $eligibilityData['error'];
+}
+
+// Calculate age from birthdate
+function calculateAge($birthdate) {
+    $birth = new DateTime($birthdate);
+    $today = new DateTime();
+    $age = $birth->diff($today)->y;
+    return $age;
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -188,6 +291,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         .grid-4 {
             grid-template-columns: repeat(4, 1fr);
         }
+        
+        .grid-2 {
+            grid-template-columns: repeat(2, 1fr);
+        }
 
         .grid-1 {
             grid-template-columns: 1fr;
@@ -233,10 +340,18 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <label for="sortSelect" class="me-2 fw-bold text-muted">Sort By:</label>
                             <select id="sortSelect" class="form-select" style="width: 200px; min-width: 180px;">
                                 <option value="default">Select an Option</option>
-                                <option value="priority">Priority (Urgent First)</option>
-                                <option value="hospital">Hospital (A-Z)</option>
+                                <option value="date_desc">Latest First</option>
+                                <option value="date_asc">Oldest First</option>
+                                <option value="eligibility">Eligibility Status</option>
                             </select>
                         </div>
+                        
+                        <?php if ($error): ?>
+                        <div class="alert alert-danger">
+                            Error loading data: <?php echo $error; ?>
+                        </div>
+                        <?php endif; ?>
+
                         <!-- Divider Line -->
                 <hr class="mt-0 mb-3 border-2 border-secondary opacity-50 mb-2">
                         <!-- Responsive Table -->
@@ -244,57 +359,76 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <table class="table table-striped table-hover">
                                 <thead class="table-dark">
                                     <tr>
+                                        <th>Donor ID</th>
                                         <th>Surname</th>
                                         <th>First Name</th>
                                         <th>Middle Name</th>
                                         <th>Birthdate</th>
                                         <th>Age</th>
                                         <th>Sex</th>
-                                        <th>Eligibility</th>
+                                        <th>Blood Type</th>
+                                        <th>Donation Type</th>
+                                        <th>Status</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td>Doe</td>
-                                        <td>John</td>
-                                        <td>Michael</td>
-                                        <td>1990-05-15</td>
-                                        <td>34</td>
-                                        <td>Male</td>
-                                        <td><span class="badge bg-success">Eligible</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#donorModal">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editDonorForm">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-danger" onclick="deleteDonor()">
-                                                <i class="fas fa-trash-alt"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Smith</td>
-                                        <td>Jane</td>
-                                        <td>Anne</td>
-                                        <td>1995-08-20</td>
-                                        <td>29</td>
-                                        <td>Female</td>
-                                        <td><span class="badge bg-warning text-dark">Not Eligible (3 Months)</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#donorModal">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editDonorForm">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-danger" onclick="deleteDonor()">
-                                                <i class="fas fa-trash-alt"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
+                                    <?php if (!$error && is_array($eligibilityData) && count($eligibilityData) > 0): ?>
+                                        <?php foreach ($eligibilityData as $eligibility): ?>
+                                            <?php 
+                                            // Fetch donor information for each eligibility record
+                                            $donorInfo = fetchDonorInfo($eligibility['donor_id']);
+                                            $statusInfo = getDonorEligibilityStatus($eligibility['donor_id']);
+                                            
+                                            if (!$donorInfo) continue; // Skip if no donor info found
+                                            ?>
+                                            <tr>
+                                                <td><?php echo htmlspecialchars($eligibility['donor_id']); ?></td>
+                                                <td><?php echo htmlspecialchars($donorInfo['surname']); ?></td>
+                                                <td><?php echo htmlspecialchars($donorInfo['first_name']); ?></td>
+                                                <td><?php echo htmlspecialchars($donorInfo['middle_name'] ?? ''); ?></td>
+                                                <td><?php echo htmlspecialchars($donorInfo['birthdate']); ?></td>
+                                                <td><?php echo htmlspecialchars($donorInfo['age'] ?? calculateAge($donorInfo['birthdate'])); ?></td>
+                                                <td><?php echo htmlspecialchars($donorInfo['sex']); ?></td>
+                                                <td><?php echo htmlspecialchars($eligibility['blood_type']); ?></td>
+                                                <td><?php echo htmlspecialchars($eligibility['donation_type']); ?></td>
+                                                <td>
+                                                    <?php if ($statusInfo && isset($statusInfo['is_eligible'])): ?>
+                                                        <?php if ($statusInfo['is_eligible']): ?>
+                                                            <span class="badge bg-success">Eligible</span>
+                                                        <?php else: ?>
+                                                            <span class="badge bg-warning text-dark">Not Eligible</span>
+                                                        <?php endif; ?>
+                                                    <?php else: ?>
+                                                        <?php if ($eligibility['status'] === 'eligible'): ?>
+                                                            <span class="badge bg-success">Eligible</span>
+                                                        <?php elseif ($eligibility['status'] === 'disapproved'): ?>
+                                                            <span class="badge bg-danger">Disapproved</span>
+                                                        <?php elseif ($eligibility['status'] === 'failed_collection'): ?>
+                                                            <span class="badge bg-warning text-dark">Failed Collection</span>
+                                                        <?php else: ?>
+                                                            <span class="badge bg-warning text-dark">Ineligible</span>
+                                                        <?php endif; ?>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-info view-donor" data-donor-id="<?php echo htmlspecialchars($eligibility['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($eligibility['eligibility_id']); ?>" data-bs-toggle="modal" data-bs-target="#donorModal">
+                                                        <i class="fas fa-eye"></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-warning edit-donor" data-donor-id="<?php echo htmlspecialchars($eligibility['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($eligibility['eligibility_id']); ?>" data-bs-toggle="modal" data-bs-target="#editDonorForm">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-danger delete-donor" data-donor-id="<?php echo htmlspecialchars($eligibility['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($eligibility['eligibility_id']); ?>" onclick="deleteDonor(<?php echo htmlspecialchars($eligibility['eligibility_id']); ?>)">
+                                                        <i class="fas fa-trash-alt"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php else: ?>
+                                        <tr>
+                                            <td colspan="11" class="text-center">No donation records found</td>
+                                        </tr>
+                                    <?php endif; ?>
                                 </tbody>
                             </table>
                         </div>
@@ -325,37 +459,19 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
             <!-- Modal Body -->
             <div class="modal-body">
-                <div class="row">
-                    <!-- Left Column -->
-                    <div class="col-md-6">
-                        <p class="fs-5"><strong>Surname:</strong> Doe</p>
-                        <p class="fs-5"><strong>First Name:</strong> John</p>
-                        <p class="fs-5"><strong>Middle Name:</strong> Michael</p>
-                        <p class="fs-5"><strong>Birthdate:</strong> 1990-05-15</p>
-                        <p class="fs-5"><strong>Age:</strong> 34</p>
-                        <p class="fs-5"><strong>Sex:</strong> Male</p>
-                        <p class="fs-5"><strong>Civil Status:</strong> Single</p>
-                        <p class="fs-5"><strong>Permanent Address:</strong> 123 Main St, Iloilo</p>
-                        <p class="fs-5"><strong>Office Address:</strong> XYZ Corp, Iloilo</p>
-                    </div>
-
-                    <!-- Right Column -->
-                    <div class="col-md-6">
-                        <p class="fs-5"><strong>Telephone No.:</strong> 033-1234567</p>
-                        <p class="fs-5"><strong>Mobile No.:</strong> 09123456789</p>
-                        <p class="fs-5"><strong>Email Address:</strong> johndoe@example.com</p>
-                        <p class="fs-5"><strong>School:</strong> University of Iloilo</p>
-                        <p class="fs-5"><strong>Company:</strong> XYZ Corporation</p>
-                        <p class="fs-5"><strong>PRC:</strong> 123456</p>
-                        <p class="fs-5"><strong>Driver's License:</strong> 987654</p>
-                        <p class="fs-5"><strong>SSS/GSIS/BIR:</strong> 456789</p>
-                        <p class="fs-5"><strong>Others:</strong> None</p>
+                <div id="donorDetails">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p>Loading donor information...</p>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
 <!-- Edit Donor Modal -->
 <div class="modal fade" id="editDonorForm" tabindex="-1" aria-labelledby="editDonorFormLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -368,122 +484,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
             <!-- Modal Body -->
             <div class="modal-body">
-                <div class="donor_form_container">
-
-                    <div class="donor_form_grid grid-3">
-                        <div>
-                            <label class="donor_form_label">Surname</label>
-                            <input type="text" class="donor_form_input" name="surname" value="Doe">
+                <div id="editDonorFormContent">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
                         </div>
-                        <div>
-                            <label class="donor_form_label">First Name</label>
-                            <input type="text" class="donor_form_input" name="first_name" value="John">
-                        </div>
-                        <div>
-                            <label class="donor_form_label">Middle Name</label>
-                            <input type="text" class="donor_form_input" name="middle_name" value="Michael">
-                        </div>
-                    </div>
-
-                    <div class="donor_form_grid grid-4">
-                        <div>
-                            <label class="donor_form_label">Birthdate</label>
-                            <input type="date" class="donor_form_input" name="birthdate" value="1990-05-15">
-                        </div>
-                        <div>
-                            <label class="donor_form_label">Age</label>
-                            <input type="number" class="donor_form_input" name="age" value="34">
-                        </div>
-                        <div>
-                            <label class="donor_form_label">Sex</label>
-                            <select class="donor_form_input" name="sex">
-                                <option value="male" selected>Male</option>
-                                <option value="female">Female</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="donor_form_label">Civil Status</label>
-                            <select class="donor_form_input" name="civil_status">
-                                <option value="single" selected>Single</option>
-                                <option value="married">Married</option>
-                                <option value="widowed">Widowed</option>
-                                <option value="divorced">Divorced</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <h3>PERMANENT ADDRESS</h3>
-                    <input type="text" class="donor_form_input" name="permanent_address" value="123 Main St, Iloilo">
-
-                    <h3>OFFICE ADDRESS</h3>
-                    <input type="text" class="donor_form_input" name="office_address" value="XYZ Corp, Iloilo">
-
-                    <div class="donor_form_grid grid-4">
-                        <div>
-                            <label class="donor_form_label">Nationality</label>
-                            <input type="text" class="donor_form_input" name="nationality" value="Filipino">
-                        </div>
-                        <div>
-                            <label class="donor_form_label">Religion</label>
-                            <input type="text" class="donor_form_input" name="religion" value="Christian">
-                        </div>
-                        <div>
-                            <label class="donor_form_label">Education</label>
-                            <input type="text" class="donor_form_input" name="education" value="College Graduate">
-                        </div>
-                        <div>
-                            <label class="donor_form_label">Occupation</label>
-                            <input type="text" class="donor_form_input" name="occupation" value="Software Engineer">
-                        </div>
-                    </div>
-
-                    <h3>CONTACT No.:</h3>
-                    <div class="donor_form_grid grid-3">
-                        <div>
-                            <label class="donor_form_label">Telephone No.</label>
-                            <input type="text" class="donor_form_input" name="telephone" value="033-1234567">
-                        </div>
-                        <div>
-                            <label class="donor_form_label">Mobile No.</label>
-                            <input type="text" class="donor_form_input" name="mobile" value="09123456789">
-                        </div>
-                        <div>
-                            <label class="donor_form_label">Email Address</label>
-                            <input type="email" class="donor_form_input" name="email" value="johndoe@example.com">
-                        </div>
-                    </div>
-
-                    <h3>IDENTIFICATION No.:</h3>
-                    <div class="donor_form_grid grid-6">
-                        <div>
-                            <label class="donor_form_label">School</label>
-                            <input type="text" class="donor_form_input" name="id_school" value="University of Iloilo">
-                        </div>
-                        <div>
-                            <label class="donor_form_label">Company</label>
-                            <input type="text" class="donor_form_input" name="id_company" value="XYZ Corporation">
-                        </div>
-                        <div>
-                            <label class="donor_form_label">PRC</label>
-                            <input type="text" class="donor_form_input" name="id_prc" value="123456">
-                        </div>
-                        <div>
-                            <label class="donor_form_label">Driver's License</label>
-                            <input type="text" class="donor_form_input" name="id_drivers" value="987654">
-                        </div>
-                        <div>
-                            <label class="donor_form_label">SSS/GSIS/BIR</label>
-                            <input type="text" class="donor_form_input" name="id_sss_gsis_bir" value="456789">
-                        </div>
-                        <div>
-                            <label class="donor_form_label">Others</label>
-                            <input type="text" class="donor_form_input" name="id_others" value="None">
-                        </div>
-                    </div>
-
-                    <div class="text-end mt-3">
-                        <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-success">Save Changes</button>
+                        <p>Loading donor information...</p>
                     </div>
                 </div>
             </div>
@@ -499,17 +505,247 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function deleteDonor() {
-    if (confirm("Are you sure you want to delete this donor?")) {
-        // Add delete functionality here
-        alert("Donor deleted successfully!");
-    }
-}
+        // Function to fetch donor details
+        function fetchDonorDetails(donorId, eligibilityId) {
+            fetch(`donor_details_api.php?donor_id=${donorId}&eligibility_id=${eligibilityId}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Populate modal with donor details
+                    const donorDetailsContainer = document.getElementById('donorDetails');
+                    
+                    if (data.error) {
+                        donorDetailsContainer.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                        return;
+                    }
+                    
+                    const donor = data.donor;
+                    const eligibility = data.eligibility;
+                    
+                    let html = `
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p class="fs-5"><strong>Surname:</strong> ${donor.surname}</p>
+                            <p class="fs-5"><strong>First Name:</strong> ${donor.first_name}</p>
+                            <p class="fs-5"><strong>Middle Name:</strong> ${donor.middle_name || ''}</p>
+                            <p class="fs-5"><strong>Birthdate:</strong> ${donor.birthdate}</p>
+                            <p class="fs-5"><strong>Age:</strong> ${donor.age}</p>
+                            <p class="fs-5"><strong>Sex:</strong> ${donor.sex}</p>
+                            <p class="fs-5"><strong>Civil Status:</strong> ${donor.civil_status || 'Not specified'}</p>
+                            <p class="fs-5"><strong>Permanent Address:</strong> ${donor.permanent_address || 'Not specified'}</p>
+                            <p class="fs-5"><strong>Office Address:</strong> ${donor.office_address || 'Not specified'}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="fs-5"><strong>Blood Type:</strong> ${eligibility.blood_type}</p>
+                            <p class="fs-5"><strong>Donation Type:</strong> ${eligibility.donation_type}</p>
+                            <p class="fs-5"><strong>Status:</strong> ${eligibility.status}</p>
+                            <p class="fs-5"><strong>Donation Date:</strong> ${new Date(eligibility.start_date).toLocaleDateString()}</p>
+                            <p class="fs-5"><strong>Eligibility End Date:</strong> ${eligibility.end_date ? new Date(eligibility.end_date).toLocaleDateString() : 'N/A'}</p>
+                            <p class="fs-5"><strong>Blood Bag Type:</strong> ${eligibility.blood_bag_type || 'Not specified'}</p>
+                            <p class="fs-5"><strong>Amount Collected:</strong> ${eligibility.amount_collected || 'Not specified'}</p>
+                            <p class="fs-5"><strong>Donor Reaction:</strong> ${eligibility.donor_reaction || 'None'}</p>
+                            <p class="fs-5"><strong>Management Done:</strong> ${eligibility.management_done || 'None'}</p>
+                        </div>
+                    </div>`;
+                    
+                    donorDetailsContainer.innerHTML = html;
+                })
+                .catch(error => {
+                    console.error('Error fetching donor details:', error);
+                    document.getElementById('donorDetails').innerHTML = '<div class="alert alert-danger">Error loading donor details. Please try again.</div>';
+                });
+        }
 
-function editDonor() {
-    alert("Edit function triggered! Implement your edit logic here.");
-}
+        // Function to load edit form
+        function loadEditForm(donorId, eligibilityId) {
+            fetch(`donor_edit_api.php?donor_id=${donorId}&eligibility_id=${eligibilityId}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Populate edit form with donor details
+                    const editFormContainer = document.getElementById('editDonorFormContent');
+                    
+                    if (data.error) {
+                        editFormContainer.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                        return;
+                    }
+                    
+                    const donor = data.donor;
+                    const eligibility = data.eligibility;
+                    
+                    // Create the edit form
+                    let html = `<form id="updateEligibilityForm" method="post" action="update_eligibility.php">
+                        <input type="hidden" name="eligibility_id" value="${eligibility.eligibility_id}">
+                        <input type="hidden" name="donor_id" value="${donor.donor_id}">
+                        
+                        <div class="donor_form_container">
+                            <div class="donor_form_grid grid-3">
+                                <div>
+                                    <label class="donor_form_label">Surname</label>
+                                    <input type="text" class="donor_form_input" name="surname" value="${donor.surname || ''}" readonly>
+                                </div>
+                                <div>
+                                    <label class="donor_form_label">First Name</label>
+                                    <input type="text" class="donor_form_input" name="first_name" value="${donor.first_name || ''}" readonly>
+                                </div>
+                                <div>
+                                    <label class="donor_form_label">Middle Name</label>
+                                    <input type="text" class="donor_form_input" name="middle_name" value="${donor.middle_name || ''}" readonly>
+                                </div>
+                            </div>
 
+                            <div class="donor_form_grid grid-3">
+                                <div>
+                                    <label class="donor_form_label">Blood Type</label>
+                                    <input type="text" class="donor_form_input" name="blood_type" value="${eligibility.blood_type || ''}">
+                                </div>
+                                <div>
+                                    <label class="donor_form_label">Donation Type</label>
+                                    <select class="donor_form_input" name="donation_type">
+                                        <option value="whole_blood" ${eligibility.donation_type === 'whole_blood' ? 'selected' : ''}>Whole Blood</option>
+                                        <option value="plasma" ${eligibility.donation_type === 'plasma' ? 'selected' : ''}>Plasma</option>
+                                        <option value="platelets" ${eligibility.donation_type === 'platelets' ? 'selected' : ''}>Platelets</option>
+                                        <option value="double_red_cells" ${eligibility.donation_type === 'double_red_cells' ? 'selected' : ''}>Double Red Cells</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="donor_form_label">Status</label>
+                                    <select class="donor_form_input" name="status">
+                                        <option value="eligible" ${eligibility.status === 'eligible' ? 'selected' : ''}>Eligible</option>
+                                        <option value="ineligible" ${eligibility.status === 'ineligible' ? 'selected' : ''}>Ineligible</option>
+                                        <option value="failed_collection" ${eligibility.status === 'failed_collection' ? 'selected' : ''}>Failed Collection</option>
+                                        <option value="disapproved" ${eligibility.status === 'disapproved' ? 'selected' : ''}>Disapproved</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="donor_form_grid grid-2">
+                                <div>
+                                    <label class="donor_form_label">Blood Bag Type</label>
+                                    <input type="text" class="donor_form_input" name="blood_bag_type" value="${eligibility.blood_bag_type || ''}">
+                                </div>
+                                <div>
+                                    <label class="donor_form_label">Blood Bag Brand</label>
+                                    <input type="text" class="donor_form_input" name="blood_bag_brand" value="${eligibility.blood_bag_brand || ''}">
+                                </div>
+                            </div>
+
+                            <div class="donor_form_grid grid-2">
+                                <div>
+                                    <label class="donor_form_label">Amount Collected</label>
+                                    <input type="number" step="0.01" class="donor_form_input" name="amount_collected" value="${eligibility.amount_collected || ''}">
+                                </div>
+                                <div>
+                                    <label class="donor_form_label">Collection Successful</label>
+                                    <select class="donor_form_input" name="collection_successful">
+                                        <option value="true" ${eligibility.collection_successful ? 'selected' : ''}>Yes</option>
+                                        <option value="false" ${!eligibility.collection_successful ? 'selected' : ''}>No</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="donor_form_grid grid-1">
+                                <div>
+                                    <label class="donor_form_label">Donor Reaction</label>
+                                    <textarea class="donor_form_input" name="donor_reaction" rows="2">${eligibility.donor_reaction || ''}</textarea>
+                                </div>
+                            </div>
+
+                            <div class="donor_form_grid grid-1">
+                                <div>
+                                    <label class="donor_form_label">Management Done</label>
+                                    <textarea class="donor_form_input" name="management_done" rows="2">${eligibility.management_done || ''}</textarea>
+                                </div>
+                            </div>
+
+                            <div class="donor_form_grid grid-2">
+                                <div>
+                                    <label class="donor_form_label">Collection Start Time</label>
+                                    <input type="datetime-local" class="donor_form_input" name="collection_start_time" value="${eligibility.collection_start_time ? new Date(eligibility.collection_start_time).toISOString().slice(0, 16) : ''}">
+                                </div>
+                                <div>
+                                    <label class="donor_form_label">Collection End Time</label>
+                                    <input type="datetime-local" class="donor_form_input" name="collection_end_time" value="${eligibility.collection_end_time ? new Date(eligibility.collection_end_time).toISOString().slice(0, 16) : ''}">
+                                </div>
+                            </div>
+
+                            <div class="donor_form_grid grid-1">
+                                <div>
+                                    <label class="donor_form_label">Unit Serial Number</label>
+                                    <input type="text" class="donor_form_input" name="unit_serial_number" value="${eligibility.unit_serial_number || ''}">
+                                </div>
+                            </div>
+
+                            <div class="donor_form_grid grid-1">
+                                <div>
+                                    <label class="donor_form_label">Disapproval Reason</label>
+                                    <textarea class="donor_form_input" name="disapproval_reason" rows="2">${eligibility.disapproval_reason || ''}</textarea>
+                                </div>
+                            </div>
+
+                            <div class="text-end mt-3">
+                                <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-success">Save Changes</button>
+                            </div>
+                        </div>
+                    </form>`;
+                    
+                    editFormContainer.innerHTML = html;
+                })
+                .catch(error => {
+                    console.error('Error loading edit form:', error);
+                    document.getElementById('editDonorFormContent').innerHTML = '<div class="alert alert-danger">Error loading edit form. Please try again.</div>';
+                });
+        }
+
+        // Function to delete donor record
+        function deleteDonor(eligibilityId) {
+            if (confirm("Are you sure you want to delete this donation record? This action cannot be undone.")) {
+                fetch(`delete_donation.php?eligibility_id=${eligibilityId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert("Donation record deleted successfully!");
+                        location.reload(); // Refresh the page to see the changes
+                    } else {
+                        alert("Error deleting record: " + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert("An error occurred while deleting the record.");
+                });
+            }
+        }
+
+        // Event listeners for view and edit buttons
+        document.addEventListener('DOMContentLoaded', function() {
+            // View donor details
+            document.querySelectorAll('.view-donor').forEach(button => {
+                button.addEventListener('click', function() {
+                    const donorId = this.getAttribute('data-donor-id');
+                    const eligibilityId = this.getAttribute('data-eligibility-id');
+                    fetchDonorDetails(donorId, eligibilityId);
+                });
+            });
+
+            // Edit donor details
+            document.querySelectorAll('.edit-donor').forEach(button => {
+                button.addEventListener('click', function() {
+                    const donorId = this.getAttribute('data-donor-id');
+                    const eligibilityId = this.getAttribute('data-eligibility-id');
+                    loadEditForm(donorId, eligibilityId);
+                });
+            });
+
+            // Sorting functionality
+            document.getElementById('sortSelect').addEventListener('change', function() {
+                const sortValue = this.value;
+                if (sortValue !== 'default') {
+                    window.location.href = `?sort=${sortValue}`;
+                }
+            });
+        });
     </script>
 </body>
 </html>

@@ -1,9 +1,229 @@
+<?php
+// Include database connection
+include_once '../../assets/conn/db_conn.php';
+
+// Function to execute a query
+function executeQuery($query, $params = []) {
+    $ch = curl_init();
+    
+    $headers = [
+        'Content-Type: application/json',
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY,
+        'Prefer: return=representation'
+    ];
+    
+    $url = SUPABASE_URL . '/rest/v1/rpc/' . $query;
+    
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    
+    if (!empty($params)) {
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($params));
+    }
+    
+    $response = curl_exec($ch);
+    $error = curl_error($ch);
+    
+    curl_close($ch);
+    
+    if ($error) {
+        return ['error' => $error];
+    }
+    
+    return json_decode($response, true);
+}
+
+// Function to query direct SQL (for non-RPC queries)
+function querySQL($table, $select = "*", $filters = null) {
+    $ch = curl_init();
+    
+    $headers = [
+        'Content-Type: application/json',
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY,
+        'Prefer: return=representation'
+    ];
+    
+    $url = SUPABASE_URL . '/rest/v1/' . $table . '?select=' . urlencode($select);
+    
+    if ($filters) {
+        foreach ($filters as $key => $value) {
+            $url .= '&' . $key . '=' . urlencode($value);
+        }
+    }
+    
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    
+    $response = curl_exec($ch);
+    $error = curl_error($ch);
+    
+    curl_close($ch);
+    
+    if ($error) {
+        return ['error' => $error];
+    }
+    
+    return json_decode($response, true);
+}
+
+// Fetch blood inventory data from eligibility table
+$bloodInventory = [];
+
+// Query eligibility table for valid blood units
+$eligibilityData = querySQL(
+    'eligibility', 
+    'eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status',
+    ['collection_successful' => 'eq.true']
+);
+
+if (is_array($eligibilityData) && !empty($eligibilityData)) {
+    foreach ($eligibilityData as $item) {
+        // Skip if no serial number
+        if (empty($item['unit_serial_number'])) {
+            continue;
+        }
+        
+        // Get donor information based on donor_id
+        $donorData = querySQL('donor_form', '*', ['donor_id' => 'eq.' . $item['donor_id']]);
+        $donor = isset($donorData[0]) ? $donorData[0] : null;
+        
+        // Calculate expiration date (42 days from collection)
+        $collectionDate = new DateTime($item['collection_start_time']);
+        $expirationDate = clone $collectionDate;
+        $expirationDate->modify('+42 days');
+        
+        // Create blood bag entry
+        $bloodBag = [
+            'eligibility_id' => $item['eligibility_id'],
+            'donor_id' => $item['donor_id'],
+            'serial_number' => $item['unit_serial_number'],
+            'blood_type' => $item['blood_type'],
+            'bags' => '1 Bag',
+            'bag_type' => $item['blood_bag_type'] ?: 'Standard',
+            'collection_date' => $collectionDate->format('Y-m-d'),
+            'expiration_date' => $expirationDate->format('Y-m-d'),
+            'status' => (new DateTime() > $expirationDate) ? 'Expired' : 'Valid',
+            'eligibility_status' => $item['status'],
+            'eligibility_end_date' => $item['end_date'],
+        ];
+        
+        // Add donor information if available
+        if ($donor) {
+            // Calculate age based on birthdate
+            $age = '';
+            if (!empty($donor['birthdate'])) {
+                $birthdate = new DateTime($donor['birthdate']);
+                $today = new DateTime();
+                $age = $birthdate->diff($today)->y;
+            }
+            
+            $bloodBag['donor'] = [
+                'surname' => $donor['surname'] ?? '',
+                'first_name' => $donor['first_name'] ?? '',
+                'middle_name' => $donor['middle_name'] ?? '',
+                'birthdate' => !empty($donor['birthdate']) ? date('d/m/Y', strtotime($donor['birthdate'])) : '',
+                'age' => $age,
+                'sex' => $donor['sex'] ?? '',
+                'civil_status' => $donor['civil_status'] ?? ''
+            ];
+        } else {
+            // Default empty donor info if not found
+            $bloodBag['donor'] = [
+                'surname' => 'Not Found',
+                'first_name' => '',
+                'middle_name' => '',
+                'birthdate' => '',
+                'age' => '',
+                'sex' => '',
+                'civil_status' => ''
+            ];
+        }
+        
+        $bloodInventory[] = $bloodBag;
+    }
+}
+
+// If no records found, use sample data for testing
+if (empty($bloodInventory)) {
+    $bloodInventory = [
+        [
+            'serial_number' => 'BC-20250330-0001',
+            'blood_type' => 'AB+',
+            'bags' => '1 Bag',
+            'bag_type' => 'AMI',
+            'collection_date' => '2025-03-30',
+            'expiration_date' => '2025-05-04',
+            'status' => 'Valid',
+            'donor' => [
+                'surname' => 'Seeker',
+                'first_name' => 'Light',
+                'middle_name' => 'Devoid',
+                'birthdate' => '25/03/2000',
+                'age' => '25',
+                'sex' => 'Male',
+                'civil_status' => 'Single'
+            ]
+        ],
+        [
+            'serial_number' => 'BC-20250330-0002',
+            'blood_type' => 'O+',
+            'bags' => '1 Bag',
+            'bag_type' => 'S',
+            'collection_date' => '2025-03-30',
+            'expiration_date' => '2025-05-04',
+            'status' => 'Valid',
+            'donor' => [
+                'surname' => 'Seeker',
+                'first_name' => 'Light',
+                'middle_name' => 'Devoid',
+                'birthdate' => '25/03/2000',
+                'age' => '25',
+                'sex' => 'Male',
+                'civil_status' => 'Single'
+            ]
+        ]
+    ];
+}
+
+// Calculate inventory statistics
+$totalBags = count($bloodInventory);
+$availableTypes = [];
+$expiringBags = 0;
+$expiredBags = 0;
+
+$today = new DateTime();
+$expiryLimit = (new DateTime())->modify('+7 days');
+
+foreach ($bloodInventory as $bag) {
+    // Track unique blood types
+    if (!in_array($bag['blood_type'], $availableTypes)) {
+        $availableTypes[] = $bag['blood_type'];
+    }
+    
+    // Calculate expiration status
+    $expirationDate = new DateTime($bag['expiration_date']);
+    if ($today > $expirationDate) {
+        $expiredBags++;
+    } elseif ($expirationDate <= $expiryLimit) {
+        $expiringBags++;
+    }
+}
+
+// Get default sorting
+$sortBy = "Default (Latest)";
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard</title>
+    <title>Blood Bank Inventory</title>
     <!-- Bootstrap 5.3 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- FontAwesome for Icons -->
@@ -127,8 +347,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     
 }
 
-
-
 /* Medium Screens (Tablets) */
 @media (max-width: 991px) {
     main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
@@ -144,293 +362,466 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 }
 
 .custom-margin {
-    margin-top: 80px;
-}
-
-        .donor_form_container {
-            background-color: #ffffff;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            max-width: 1400px;
-            width: 100%;
-            font-size: 14px;
-        }
-
-        .donor_form_label {
-            font-weight: bold;
-            display: block;
-            margin-bottom: 2px;
-        }
-
-        .donor_form_input {
-            width: 100%;
-            padding: 6px;
-            margin-bottom: 10px;
-            border: 1px solid #000;
-            border-radius: 3px;
-            font-size: 14px;
-            box-sizing: border-box;
-            color: #757272;
-        }
-
-        .donor_form_grid {
-            display: grid;
-            gap: 5px;
-        }
-
-        .grid-3 {
-            grid-template-columns: repeat(3, 1fr);
-        }
-
-        .grid-4 {
-            grid-template-columns: repeat(4, 1fr);
-        }
-
-        .grid-1 {
-            grid-template-columns: 1fr;
-        }
-        .grid-6 {
-    grid-template-columns: repeat(6, 1fr); 
-}
-.custom-margin {
     margin: 30px auto;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-            width: 100%;
-            margin-top: 100px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    margin-top: 100px;
 }
-.Bloodbank-info-hover{
+
+/* Inventory Dashboard Cards */
+.inventory-card {
+    border-radius: 8px;
+    color: white;
+    padding: 20px;
+    margin-bottom: 20px;
+    text-align: center;
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.inventory-card h2 {
+    font-size: 64px;
+    font-weight: bold;
+    margin: 10px 0;
+}
+
+.inventory-card-blue {
+    background-color: #0d6efd;
+}
+
+.inventory-card-green {
+    background-color: #198754;
+}
+
+.inventory-card-yellow {
+    background-color: #ffc107;
+}
+
+.inventory-card-red {
+    background-color: #dc3545;
+}
+
+.inventory-card-subtitle {
+    font-size: 14px;
+    margin-top: 5px;
+}
+
+.inventory-card-title {
+    font-size: 18px;
+    margin-bottom: 10px;
+}
+
+/* Action buttons */
+.action-btn {
+    font-size: 1.2rem;
+    color: white;
+    background-color: #0d6efd;
+    border: none;
+    border-radius: 4px;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.action-btn:hover {
+    background-color: #0b5ed7;
+}
+
+/* Modal styling */
+.donor-details-modal .modal-header {
+    background-color: #212529;
+    color: white;
+}
+
+.donor-details-modal .close-btn {
+    color: white;
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+}
+
+.donor-details-section {
+    margin-bottom: 20px;
+}
+
+.donor-details-section h3 {
+    font-size: 1.2rem;
+    font-weight: bold;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: 5px;
+}
+
+.donor-details-form-group {
+    margin-bottom: 15px;
+}
+
+.donor-details-form-label {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 5px;
+}
+
+.donor-details-form-control {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    background-color: #f8f9fa;
+}
+
+.eligibility-status {
+    display: inline-block;
+    color: white;
+    background-color: #dc3545;
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-weight: bold;
+    margin-right: 10px;
 }
 
     </style>
 </head>
 <body>
-            <div class="container-fluid">
-                <!-- Header -->
-                <div class="dashboard-home-header bg-light p-3 border-bottom">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h4 class="mb-0">Blood Donor Management System</h4>
-                    </div>
-                </div>
+    <div class="container-fluid">
+        <!-- Header -->
+        <div class="dashboard-home-header bg-light p-3 border-bottom">
+            <div class="d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">Blood Donor Management System</h4>
+            </div>
+        </div>
 
-                <div class="row">
-                    <!-- Sidebar -->
-                    <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">
-                        <input type="text" class="form-control mb-3" placeholder="Search...">
-                        <a href="dashboard-Inventory-System.php"><i class="fas fa-home me-2"></i>Home</a>
-                        <a href="dashboard-Inventory-System-list-of-donations.php"><i class="fas fa-tint me-2"></i>Blood Donations</a>
-                        <a href="#" class="active"><i class="fas fa-tint me-2"></i>Blood Bank</a>
-                        <a href="Dashboard-Inventory-System-Hospital-Request.php"><i class="fas fa-list me-2"></i>Requests</a>
-                        <a href="Dashboard-Inventory-System-Handed-Over.php"><i class="fas fa-check me-2"></i>Handover</a>
-                    </nav>
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">
+                <input type="text" class="form-control mb-3" placeholder="Search...">
+                <a href="dashboard-Inventory-System.php"><i class="fas fa-home me-2"></i>Home</a>
+                <a href="dashboard-Inventory-System-list-of-donations.php"><i class="fas fa-tint me-2"></i>Blood Donations</a>
+                <a href="#" class="active"><i class="fas fa-tint me-2"></i>Blood Bank</a>
+                <a href="Dashboard-Inventory-System-Hospital-Request.php"><i class="fas fa-list me-2"></i>Requests</a>
+                <a href="Dashboard-Inventory-System-Handed-Over.php"><i class="fas fa-check me-2"></i>Handover</a>
+            </nav>
 
-                <!-- Main Content -->
-                <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
-                    <div class="container-fluid p-4 custom-margin">
-                        <h2 class="card-title">Bloodbanks</h2>
-                    <div class="d-flex align-items-center mb-3 mt-1">
-                        <label for="sortSelect" class="me-2 fw-bold text-muted">Sort By:</label>
-                        <select id="sortSelect" class="form-select" style="width: 200px; min-width: 180px;">
-                            <option value="default">Select an Option</option>
-                            <option value="priority">Priority (Urgent First)</option>
-                            <option value="hospital">Hospital (A-Z)</option>
-                        </select>
-                    </div>
-                    <!-- Divider Line -->
-                        <hr class="mt-0 mb-3 border-2 border-secondary opacity-50 mb-2">
-                        <div class="table-responsive">
-                            <table class="table table-striped table-hover">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Blood Type</th>
-                                        <th>Quantity</th>
-                                        <th>Expiration Date</th>
-                                        <th>Screening Status</th>
-                                        <th>Collection Date</th>
-                                        <th>Remarks</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <!-- Example Row (Click to Open Modal) -->
-                                    <tr data-bs-toggle="modal" data-bs-target="#viewDonorForm" data-bs-target="#viewDonorForm" class="Bloodbank-info-hover">
-                                        <td>O+</td>
-                                        <td>5 Bags</td>
-                                        <td>2025-04-10</td>
-                                        <td>Passed</td>
-                                        <td>2025-03-05</td>
-                                        <td>Urgent Use</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </main>
-                
-            <!-- View Donor Details Modal -->
-             <div class="modal fade" id="viewDonorForm" tabindex="-1" aria-labelledby="viewDonorFormLabel" aria-hidden="true">
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <!-- Modal Header -->
-                        <div class="modal-header bg-dark text-white">
-                            <h4 class="modal-title w-100"><i class="fas fa-eye me-2"></i> View Donor Details</h4>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-
-                        <!-- Modal Body -->
-                        <div class="modal-body">
-                            <div class="donor_form_container">
-
-                                <div class="donor_form_grid grid-3">
-                                    <div>
-                                        <label class="donor_form_label">Surname</label>
-                                        <input type="text" class="donor_form_input" name="surname" value="Doe" readonly>
-                                    </div>
-                                    <div>
-                                        <label class="donor_form_label">First Name</label>
-                                        <input type="text" class="donor_form_input" name="first_name" value="John" readonly>
-                                    </div>
-                                    <div>
-                                        <label class="donor_form_label">Middle Name</label>
-                                        <input type="text" class="donor_form_input" name="middle_name" value="Michael" readonly>
-                                    </div>
-                                </div>
-
-                                <div class="donor_form_grid grid-4">
-                                    <div>
-                                        <label class="donor_form_label">Birthdate</label>
-                                        <input type="date" class="donor_form_input" name="birthdate" value="1990-05-15" readonly>
-                                    </div>
-                                    <div>
-                                        <label class="donor_form_label">Age</label>
-                                        <input type="number" class="donor_form_input" name="age" value="34" readonly>
-                                    </div>
-                                    <div>
-                                        <label class="donor_form_label">Sex</label>
-                                        <select class="donor_form_input" name="sex" disabled>
-                                            <option value="male" selected>Male</option>
-                                            <option value="female">Female</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="donor_form_label">Civil Status</label>
-                                            <select class="donor_form_input" name="civil_status" disabled>
-                                            <option value="single" selected>Single</option>
-                                            <option value="married">Married</option>
-                                            <option value="widowed">Widowed</option>
-                                            <option value="divorced">Divorced</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <h3>PERMANENT ADDRESS</h3>
-                                <input type="text" class="donor_form_input" name="permanent_address" value="123 Main St, Iloilo" readonly>
-
-                                <h3>OFFICE ADDRESS</h3>
-                                <input type="text" class="donor_form_input" name="office_address" value="XYZ Corp, Iloilo" readonly>
-
-                                <div class="donor_form_grid grid-4">
-                                    <div>
-                                        <label class="donor_form_label">Nationality</label>
-                                        <input type="text" class="donor_form_input" name="nationality" value="Filipino" readonly>
-                                    </div>
-                                    <div>
-                                        <label class="donor_form_label">Religion</label>
-                                        <input type="text" class="donor_form_input" name="religion" value="Christian" readonly>
-                                    </div>
-                                    <div>
-                                        <label class="donor_form_label">Education</label>
-                                        <input type="text" class="donor_form_input" name="education" value="College Graduate" readonly>
-                                    </div>
-                                    <div>
-                                        <label class="donor_form_label">Occupation</label>
-                                        <input type="text" class="donor_form_input" name="occupation" value="Software Engineer" readonly>
-                                    </div>
-                                </div>
-
-                                <h3>CONTACT No.:</h3>
-                                <div class="donor_form_grid grid-3">
-                                    <div>
-                                        <label class="donor_form_label">Telephone No.</label>
-                                        <input type="text" class="donor_form_input" name="telephone" value="033-1234567" readonly>
-                                    </div>
-                                    <div>
-                                        <label class="donor_form_label">Mobile No.</label>
-                                        <input type="text" class="donor_form_input" name="mobile" value="09123456789" readonly>
-                                    </div>
-                                    <div>
-                                        <label class="donor_form_label">Email Address</label>
-                                        <input type="email" class="donor_form_input" name="email" value="johndoe@example.com" readonly>
-                                    </div>
-                                </div>
-
-                                    <h3>IDENTIFICATION No.:</h3>
-                                <div class="donor_form_grid grid-6">
-                                    <div>
-                                        <label class="donor_form_label">School</label>
-                                        <input type="text" class="donor_form_input" name="id_school" value="University of Iloilo" readonly>
-                                    </div>
-                                    <div>
-                                        <label class="donor_form_label">Company</label>
-                                        <input type="text" class="donor_form_input" name="id_company" value="XYZ Corporation" readonly>
-                                    </div>
-                                    <div>
-                                        <label class="donor_form_label">PRC</label>
-                                        <input type="text" class="donor_form_input" name="id_prc" value="123456" readonly>
-                                    </div>
-                                    <div>
-                                        <label class="donor_form_label">Driver's License</label>
-                                        <input type="text" class="donor_form_input" name="id_drivers" value="987654" readonly>
-                                    </div>
-                                    <div>
-                                        <label class="donor_form_label">SSS/GSIS/BIR</label>
-                                        <input type="text" class="donor_form_input" name="id_sss_gsis_bir" value="456789" readonly>
-                                    </div>
-                                    <div>
-                                        <label class="donor_form_label">Others</label>
-                                        <input type="text" class="donor_form_input" name="id_others" value="None" readonly>
-                                    </div>
-                                </div>
-
-                                <div class="text-end mt-3">
-                                     <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Close</button>
-                                </div>
-
+            <!-- Main Content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                <div class="container-fluid p-4 custom-margin">
+                    <h2 class="mb-4">Blood Bank Inventory</h2>
+                    
+                    <!-- Stats Cards -->
+                    <div class="row mb-4">
+                        <!-- Total Blood Bags -->
+                        <div class="col-md-3">
+                            <div class="inventory-card inventory-card-blue">
+                                <div class="inventory-card-title">Total Blood Bags</div>
+                                <h2><?php echo $totalBags; ?></h2>
                             </div>
                         </div>
+                        
+                        <!-- Available Types -->
+                        <div class="col-md-3">
+                            <div class="inventory-card inventory-card-green">
+                                <div class="inventory-card-title">Available Types</div>
+                                <h2><?php echo count($availableTypes); ?></h2>
+                                <div class="inventory-card-subtitle">
+                                    <?php echo implode(', ', $availableTypes); ?>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Bags Expiring Soon -->
+                        <div class="col-md-3">
+                            <div class="inventory-card inventory-card-yellow">
+                                <div class="inventory-card-title">Bags Expiring Soon</div>
+                                <h2><?php echo $expiringBags; ?></h2>
+                                <div class="inventory-card-subtitle">Within 7 days</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Expired Bags -->
+                        <div class="col-md-3">
+                            <div class="inventory-card inventory-card-red">
+                                <div class="inventory-card-title">Expired Bags</div>
+                                <h2><?php echo $expiredBags; ?></h2>
+                                <div class="inventory-card-subtitle">Needs disposal</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Sort Options -->
+                    <div class="d-flex align-items-center mb-3">
+                        <span class="me-2">Sort By:</span>
+                        <div class="dropdown">
+                            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="sortDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                Default (Latest)
+                            </button>
+                            <ul class="dropdown-menu" aria-labelledby="sortDropdown">
+                                <li><a class="dropdown-item" href="#">Default (Latest)</a></li>
+                                <li><a class="dropdown-item" href="#">Blood Type (A-Z)</a></li>
+                                <li><a class="dropdown-item" href="#">Expiry Date (Soonest First)</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <!-- Blood Bank Table -->
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Serial Number</th>
+                                    <th>Blood Type</th>
+                                    <th>Bags</th>
+                                    <th>Bag Type</th>
+                                    <th>Collection Date</th>
+                                    <th>Expiration Date</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($bloodInventory as $index => $bag): ?>
+                                <tr>
+                                    <td><?php echo $bag['serial_number']; ?></td>
+                                    <td><?php echo $bag['blood_type']; ?></td>
+                                    <td><?php echo $bag['bags']; ?></td>
+                                    <td><?php echo $bag['bag_type']; ?></td>
+                                    <td><?php echo $bag['collection_date']; ?></td>
+                                    <td><?php echo $bag['expiration_date']; ?></td>
+                                    <td><?php echo $bag['status']; ?></td>
+                                    <td>
+                                        <button class="action-btn" onclick="showDonorDetails(<?php echo $index; ?>)">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Donor Details Modal -->
+    <div class="modal fade donor-details-modal" id="donorDetailsModal" tabindex="-1" aria-labelledby="donorDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="donorDetailsModalLabel">
+                        <i class="fas fa-eye me-2"></i> View Blood Unit & Donor Details
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Blood Unit Information -->
+                    <div class="donor-details-section">
+                        <h3>Blood Unit Information</h3>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="donor-details-form-group">
+                                    <label class="donor-details-form-label">Serial Number</label>
+                                    <input type="text" class="donor-details-form-control" id="modal-serial-number" readonly>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="donor-details-form-group">
+                                    <label class="donor-details-form-label">Blood Type</label>
+                                    <input type="text" class="donor-details-form-control" id="modal-blood-type" readonly>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="donor-details-form-group">
+                                    <label class="donor-details-form-label">Bags</label>
+                                    <input type="text" class="donor-details-form-control" id="modal-bags" readonly>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="donor-details-form-group">
+                                    <label class="donor-details-form-label">Collection Date</label>
+                                    <input type="text" class="donor-details-form-control" id="modal-collection-date" readonly>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="donor-details-form-group">
+                                    <label class="donor-details-form-label">Expiration Date</label>
+                                    <input type="text" class="donor-details-form-control" id="modal-expiration-date" readonly>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="donor-details-form-group">
+                                    <label class="donor-details-form-label">Status</label>
+                                    <input type="text" class="donor-details-form-control" id="modal-status" readonly>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Donor Information -->
+                    <div class="donor-details-section">
+                        <h3>Donor Information</h3>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="donor-details-form-group">
+                                    <label class="donor-details-form-label">Surname</label>
+                                    <input type="text" class="donor-details-form-control" id="modal-surname" readonly>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="donor-details-form-group">
+                                    <label class="donor-details-form-label">First Name</label>
+                                    <input type="text" class="donor-details-form-control" id="modal-first-name" readonly>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="donor-details-form-group">
+                                    <label class="donor-details-form-label">Middle Name</label>
+                                    <input type="text" class="donor-details-form-control" id="modal-middle-name" readonly>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="donor-details-form-group">
+                                    <label class="donor-details-form-label">Birthdate</label>
+                                    <input type="text" class="donor-details-form-control" id="modal-birthdate" readonly>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="donor-details-form-group">
+                                    <label class="donor-details-form-label">Age</label>
+                                    <input type="text" class="donor-details-form-control" id="modal-age" readonly>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="donor-details-form-group">
+                                    <label class="donor-details-form-label">Sex</label>
+                                    <input type="text" class="donor-details-form-control" id="modal-sex" readonly>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="donor-details-form-group">
+                                    <label class="donor-details-form-label">Civil Status</label>
+                                    <input type="text" class="donor-details-form-control" id="modal-civil-status" readonly>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Donor Eligibility Status -->
+                    <div class="donor-details-section">
+                        <h3>Donor Eligibility Status</h3>
+                        <div>
+                            <span class="eligibility-status" id="modal-eligibility-status">INELIGIBLE</span>
+                            <span id="modal-eligibility-message">Unknown status</span>
+                        </div>
+                        <div class="mt-2 text-muted" id="modal-eligibility-note">
+                            Donor can donate blood now
+                        </div>
+                    </div>
+
+                    <div class="text-end mt-4">
+                        <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Close</button>
                     </div>
                 </div>
             </div>
         </div>
-
     </div>
-</div>
-
 
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function loadDonorInfo(name, id) {
-        document.getElementById("donorName").innerText = name;
-        document.getElementById("donorID").innerText = id;
-
-        // Example static data (Replace this with an AJAX call to fetch actual data)
-        let donationHistory = [
-            "2025-03-05 - O+ (Passed Screening)",
-            "2024-12-10 - O+ (Passed Screening)",
-            "2024-08-20 - O+ (Passed Screening)"
-        ];
+        // Sample data for demonstration
+        const bloodInventory = <?php echo json_encode($bloodInventory); ?>;
         
-        let historyList = document.getElementById("donationHistory");
-        historyList.innerHTML = ""; // Clear previous data
-        donationHistory.forEach(item => {
-            let li = document.createElement("li");
-            li.innerText = item;
-            historyList.appendChild(li);
-        });
-    }
+        // Function to display donor details in modal
+        function showDonorDetails(index) {
+            const bag = bloodInventory[index];
+            const donor = bag.donor;
+            
+            // Blood Unit Information
+            document.getElementById('modal-serial-number').value = bag.serial_number;
+            document.getElementById('modal-blood-type').value = bag.blood_type;
+            document.getElementById('modal-bags').value = bag.bags;
+            document.getElementById('modal-collection-date').value = bag.collection_date;
+            document.getElementById('modal-expiration-date').value = bag.expiration_date;
+            document.getElementById('modal-status').value = bag.status;
+            
+            // Donor Information
+            document.getElementById('modal-surname').value = donor.surname;
+            document.getElementById('modal-first-name').value = donor.first_name;
+            document.getElementById('modal-middle-name').value = donor.middle_name;
+            document.getElementById('modal-birthdate').value = donor.birthdate;
+            document.getElementById('modal-age').value = donor.age;
+            document.getElementById('modal-sex').value = donor.sex;
+            document.getElementById('modal-civil-status').value = donor.civil_status;
+            
+            // Check eligibility status via AJAX
+            fetchEligibilityStatus(bag.donor_id);
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('donorDetailsModal'));
+            modal.show();
+        }
+        
+        // Function to fetch eligibility status for a donor
+        function fetchEligibilityStatus(donorId) {
+            if (!donorId) {
+                updateEligibilityStatus({
+                    is_eligible: false,
+                    status_message: 'Unknown status',
+                    remaining_days: 0
+                });
+                return;
+            }
+            
+            // AJAX call to get eligibility status
+            fetch(`get_donor_eligibility.php?donor_id=${donorId}`)
+                .then(response => response.json())
+                .then(data => {
+                    updateEligibilityStatus(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching eligibility:', error);
+                    updateEligibilityStatus({
+                        is_eligible: false,
+                        status_message: 'Error retrieving status',
+                        remaining_days: 0
+                    });
+                });
+        }
+        
+        // Update the eligibility status in the modal
+        function updateEligibilityStatus(data) {
+            const statusElem = document.getElementById('modal-eligibility-status');
+            const messageElem = document.getElementById('modal-eligibility-message');
+            const noteElem = document.getElementById('modal-eligibility-note');
+            
+            if (data.is_eligible) {
+                statusElem.textContent = 'ELIGIBLE';
+                statusElem.style.backgroundColor = '#198754'; // green
+            } else {
+                statusElem.textContent = 'INELIGIBLE';
+                statusElem.style.backgroundColor = '#dc3545'; // red
+            }
+            
+            messageElem.textContent = data.status_message;
+            
+            if (data.remaining_days > 0) {
+                noteElem.textContent = `Donor can donate after ${data.remaining_days} days`;
+            } else {
+                noteElem.textContent = 'Donor can donate blood now';
+            }
+        }
     </script>
 </body>
 </html>
