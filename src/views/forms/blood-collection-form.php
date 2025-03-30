@@ -2,6 +2,14 @@
 session_start();
 require_once '../../../assets/conn/db_conn.php';
 
+// Display error if exists
+if (isset($_SESSION['error'])) {
+    echo '<div style="background-color: #f8d7da; color: #721c24; padding: 10px; margin-bottom: 15px; border-radius: 4px;">';
+    echo htmlspecialchars($_SESSION['error']);
+    echo '</div>';
+    unset($_SESSION['error']);
+}
+
 // Function to generate next sequence number
 function getNextSequenceNumber($existing_numbers) {
     if (empty($existing_numbers)) {
@@ -48,6 +56,102 @@ $generated_serial = $prefix . $sequence;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
+        // Add debug logging
+        error_log('Blood Collection Form POST received');
+        error_log('POST data: ' . print_r($_POST, true));
+
+        // Check if this is a disapproval
+        $is_disapproved = isset($_POST['is_disapproved']) && $_POST['is_disapproved'] === '1';
+        $disapproval_reason = trim($_POST['disapproval_reason'] ?? '');
+
+        if ($is_disapproved) {
+            if (empty($disapproval_reason)) {
+                throw new Exception("Disapproval reason is required");
+            }
+
+            // Get the latest screening_id
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => SUPABASE_URL . '/rest/v1/screening_form?select=screening_id,medical_history_id&order=created_at.desc&limit=1',
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY
+                ]
+            ]);
+            $response = curl_exec($ch);
+            curl_close($ch);
+
+            $screening_data = json_decode($response, true);
+            if (empty($screening_data)) {
+                throw new Exception("No screening form found");
+            }
+
+            $screening_id = $screening_data[0]['screening_id'];
+            $medical_history_id = $screening_data[0]['medical_history_id'];
+
+            // Update screening form with disapproval
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => SUPABASE_URL . '/rest/v1/screening_form?id=eq.' . $screening_id,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CUSTOMREQUEST => 'PATCH',
+                CURLOPT_POSTFIELDS => json_encode([
+                    'disapproval_reason' => $disapproval_reason,
+                    'status' => 'disapproved'
+                ]),
+                CURLOPT_HTTPHEADER => [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Content-Type: application/json',
+                    'Prefer: return=minimal'
+                ]
+            ]);
+            curl_exec($ch);
+            curl_close($ch);
+
+            // Update medical history status
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => SUPABASE_URL . '/rest/v1/medical_history?id=eq.' . $medical_history_id,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CUSTOMREQUEST => 'PATCH',
+                CURLOPT_POSTFIELDS => json_encode([
+                    'status' => 'disapproved'
+                ]),
+                CURLOPT_HTTPHEADER => [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Content-Type: application/json',
+                    'Prefer: return=minimal'
+                ]
+            ]);
+            curl_exec($ch);
+            curl_close($ch);
+
+            // Update physical examination status if it exists
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => SUPABASE_URL . '/rest/v1/physical_examination?screening_id=eq.' . $screening_id,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CUSTOMREQUEST => 'PATCH',
+                CURLOPT_POSTFIELDS => json_encode([
+                    'status' => 'disapproved'
+                ]),
+                CURLOPT_HTTPHEADER => [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Content-Type: application/json',
+                    'Prefer: return=minimal'
+                ]
+            ]);
+            curl_exec($ch);
+            curl_close($ch);
+
+            header('Location: ../../../public/Dashboards/dashboard-staff-blood-collection-submission.php');
+            exit;
+        }
+
         // Get and validate unit serial number first
         $unit_serial_number = $_POST['serial_number'] ?? '';
         if (empty($unit_serial_number)) {
@@ -200,16 +304,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         curl_close($ch);
 
         if ($http_code === 201) {
+            $_SESSION['success'] = 'Blood collection data saved successfully';
             header('Location: ../../../public/Dashboards/dashboard-staff-blood-collection-submission.php');
             exit;
         } else {
             $error_response = json_decode($response, true);
+            error_log('Supabase Error Response: ' . print_r($error_response, true));
             $error_message = isset($error_response['message']) ? $error_response['message'] : 'Failed to save data';
             throw new Exception($error_message);
         }
     } catch (Exception $e) {
         $_SESSION['error'] = $e->getMessage();
         error_log('Blood Collection Error: ' . $e->getMessage());
+        // Stay on the same page to show the error
+        header('Location: ' . $_SERVER['PHP_SELF']);
+        exit;
     }
 }
 ?>
@@ -283,7 +392,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             height: 100%;
             cursor: pointer; 
         }
-       
+
         /* Border Color Change on Selection */
         .blood-bag-table td:has(input[type="radio"]:checked) {
             background-color: #0c5460;
@@ -732,25 +841,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             margin-bottom: 8px;
             display: block;
         }
+
+        /* Add styles for disapproval section */
+        .disapproval-section {
+            margin-bottom: 25px;
+            padding: 28px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #dc3545;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        .disapproval-section h4 {
+            font-size: 16px;
+            font-weight: bold;
+            color: #721c24;
+            margin-bottom: 15px;
+        }
+
+        .disapproval-reason {
+            margin-top: 10px;
+        }
+
+        .disapproval-reason label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #721c24;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .disapproval-reason textarea {
+            width: 100%;
+            height: 80px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            resize: none;
+        }
+
+        .disapproval-reason textarea:focus {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.1);
+            outline: none;
+        }
+
+        .disapprove-button {
+            background-color: #dc3545;
+            color: white;
+            font-weight: bold;
+            padding: 12px 22px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin-right: 10px;
+        }
+
+        .disapprove-button:hover {
+            background-color: #c82333;
+        }
+
+        .submit-section {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
     </style>
 </head>
-<body>
+    <body>
     <form method="POST" action="" id="bloodCollectionForm">
         <div class="blood-collection">
             <h3>VI. BLOOD COLLECTION (To be accomplished by the phlebotomist)</h3>
-            <div class="blood-bag-used">
-                <h4>Blood Bag Used:</h4>
-                <table class="blood-bag-table">
-                    <thead>
-                        <tr>
-                            <th colspan="4">KARMI</th>
-                            <th colspan="4">TERUMO</th>
-                            <th colspan="2">SPECIAL BAG</th>
-                            <th colspan="4">APHERESIS</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
+        <div class="blood-bag-used">
+            <h4>Blood Bag Used:</h4>
+            <table class="blood-bag-table">
+                <thead>
+                    <tr>
+                        <th colspan="4">KARMI</th>
+                        <th colspan="4">TERUMO</th>
+                        <th colspan="2">SPECIAL BAG</th>
+                        <th colspan="4">APHERESIS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
                             <!-- KARMI options -->
                             <td>
                                 <label>
@@ -842,10 +1019,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     TRI
                                 </label>
                             </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
 
             <div class="amount-section">
                 <label>Amount of Blood Taken: <input type="text" name="amount" placeholder="Enter amount"></label>
@@ -898,37 +1075,124 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 </div>
             </div>
+
+            <!-- Add Disapproval Section -->
+            <div class="disapproval-section">
+                <h4>Disapproval</h4>
+                <div class="disapproval-reason">
+                    <label>Reason for Disapproval:</label>
+                    <textarea name="disapproval_reason" placeholder="Enter reason for disapproval (if applicable)"><?php echo isset($_POST['disapproval_reason']) ? htmlspecialchars($_POST['disapproval_reason']) : ''; ?></textarea>
+                </div>
+            </div>
         
             <div class="submit-section">
+                <button type="button" class="disapprove-button" id="disapproveButton">Disapprove</button>
                 <button type="submit" class="submit-button" id="triggerModalButton">Submit</button>
             </div>
         </div>
     </form>
 
-    <!-- Confirmation Modal -->
-    <div class="confirmation-modal" id="confirmationDialog">
-        <div class="modal-header">Do you want to continue?</div>
-        <div class="modal-actions">
-            <button class="modal-button cancel-action" id="cancelButton">No</button>
-            <button class="modal-button confirm-action" id="confirmButton">Yes</button>
-        </div>
-    </div>    
+            <!-- Confirmation Modal -->
+        <div class="confirmation-modal" id="confirmationDialog">
+            <div class="modal-header">Do you want to continue?</div>
+            <div class="modal-actions">
+                <button class="modal-button cancel-action" id="cancelButton">No</button>
+                <button class="modal-button confirm-action" id="confirmButton">Yes</button>
+            </div>
+        </div>    
 
-    <!-- Loading Spinner -->
-    <div class="loading-spinner" id="loadingSpinner"></div>
-    <script>
+        <!-- Loading Spinner -->
+        <div class="loading-spinner" id="loadingSpinner"></div>
+        <script>
         // Add form submission validation
         document.getElementById('bloodCollectionForm').addEventListener('submit', function(e) {
-            const bagType = document.querySelector('input[name="blood-bag"]:checked');
+            e.preventDefault(); // Always prevent default first
             
+            // Validate blood bag
+            const bagType = document.querySelector('input[name="blood-bag"]:checked');
             if (!bagType) {
-                e.preventDefault();
                 alert('Please select a blood bag type');
                 return false;
             }
 
+            // Validate amount
+            const amount = document.querySelector('input[name="amount"]').value;
+            if (!amount || parseFloat(amount) <= 0) {
+                alert('Please enter a valid amount');
+                return false;
+            }
+
+            // Validate successful/unsuccessful
+            const successful = document.querySelector('input[name="successful"]:checked');
+            if (!successful) {
+                alert('Please select whether the collection was successful');
+                return false;
+            }
+
+            // Validate times
+            const startTime = document.querySelector('input[name="start_time"]').value;
+            const endTime = document.querySelector('input[name="end_time"]').value;
+            if (!startTime || !endTime) {
+                alert('Please enter both start and end times');
+                return false;
+            }
+
+            // If disapproval, check reason
+            const isDisapproved = document.querySelector('input[name="is_disapproved"]')?.value === '1';
+            if (isDisapproved) {
+                const reason = document.querySelector('textarea[name="disapproval_reason"]').value.trim();
+                if (!reason) {
+                    alert('Please provide a reason for disapproval');
+                    return false;
+                }
+            }
+
             // Show confirmation modal
-            e.preventDefault();
+            document.getElementById('confirmationDialog').classList.add('show');
+        });
+
+        // Modal handling
+        const confirmationDialog = document.getElementById('confirmationDialog');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const form = document.getElementById('bloodCollectionForm');
+
+        // Yes Button (Submits Form)
+        document.getElementById('confirmButton').addEventListener('click', function() {
+            confirmationDialog.classList.remove('show');
+            loadingSpinner.style.display = 'block';
+            
+            // Disable submit button to prevent double submission
+            document.querySelector('.submit-button').disabled = true;
+            document.querySelector('.disapprove-button').disabled = true;
+            
+            // Actually submit the form
+            form.submit();
+        });
+
+        // No Button (Closes Modal)
+        document.getElementById('cancelButton').addEventListener('click', function() {
+            confirmationDialog.classList.remove('show');
+        });
+
+        // Add disapproval handling
+        document.getElementById('disapproveButton').addEventListener('click', function() {
+            const reason = document.querySelector('textarea[name="disapproval_reason"]').value.trim();
+            if (!reason) {
+                alert('Please provide a reason for disapproval');
+                return;
+            }
+
+            // Add hidden input for disapproval if not exists
+            let disapprovalInput = document.querySelector('input[name="is_disapproved"]');
+            if (!disapprovalInput) {
+                disapprovalInput = document.createElement('input');
+                disapprovalInput.type = 'hidden';
+                disapprovalInput.name = 'is_disapproved';
+                disapprovalInput.value = '1';
+                form.appendChild(disapprovalInput);
+            }
+
+            // Show confirmation modal
             document.getElementById('confirmationDialog').classList.add('show');
         });
 
@@ -946,23 +1210,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     this.classList.add('selected');
                 }
             });
-        });
-
-        // Modal handling
-        const confirmationDialog = document.getElementById('confirmationDialog');
-        const loadingSpinner = document.getElementById('loadingSpinner');
-        const form = document.getElementById('bloodCollectionForm');
-
-        // Yes Button (Submits Form)
-        document.getElementById('confirmButton').addEventListener('click', function() {
-            confirmationDialog.classList.remove('show');
-            loadingSpinner.style.display = 'block';
-            form.submit();
-        });
-
-        // No Button (Closes Modal)
-        document.getElementById('cancelButton').addEventListener('click', function() {
-            confirmationDialog.classList.remove('show');
         });
 
         function formatTimeInput(input) {
@@ -1037,7 +1284,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Initialize time inputs
         document.querySelectorAll('.time-input-wrapper input[type="text"]').forEach(input => {
             formatTimeInput(input);
-        });
-    </script>
-</body>
+            });
+        </script>
+    </body>
 </html>
