@@ -33,8 +33,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = trim($_POST['email']);
     $password = trim($_POST['password']);
 
-    // Fetch user from Supabase (only necessary fields)
-    $query = "users?email=eq.$email&select=user_id,email,password_hash";
+    // Fetch user from Supabase including role_id
+    $query = "users?email=eq.$email&select=user_id,email,password_hash,role_id";
     $users = supabaseRequest($query, "GET");
 
     if (!empty($users)) {
@@ -44,30 +44,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if (password_verify($password, $user['password_hash'])) {
             $_SESSION['user_id'] = $user['user_id'];
             $_SESSION['email'] = $user['email'];
+            $_SESSION['role_id'] = $user['role_id'];
 
-            // Fetch role_id separately (if needed)
-            $role_query = "user_roles?user_id=eq.{$user['user_id']}&select=role_id";
-            $roles = supabaseRequest($role_query, "GET");
+            error_log("User logged in - Role ID: " . $_SESSION['role_id']); // Debug log
 
-            if (!empty($roles)) {
-                $_SESSION['role_id'] = $roles[0]['role_id'];
-
-                // Redirect based on role
-                switch ($roles[0]['role_id']) {
-                    case 1:
-                        header("Location: Dashboards/dashboard-Inventory-System.php");
-                        break;
-                    case 2:
-                        header("Location: Dashboards/dashboard-hospital-bootstrap.php");
-                        break;
-                    case 3:
-                        header("Location: Dashboards/dashboard-staff-main.php");
-                        break;
-                    default:
-                        header("Location: ../error.php");
-                }
-                exit();
+            // Redirect based on role
+            switch ($_SESSION['role_id']) {
+                case 1:
+                    header("Location: Dashboards/dashboard-Inventory-System.php");
+                    break;
+                case 2:
+                    header("Location: Dashboards/dashboard-hospital-main.php");
+                    break;
+                case 3:
+                    header("Location: Dashboards/dashboard-staff-main.php");
+                    break;
+                default:
+                    error_log("Invalid role ID: " . $_SESSION['role_id']); // Debug log
+                    header("Location: index.php");
             }
+            exit();
         } else {
             $error_message = "Invalid email or password.";
         }
