@@ -1,7 +1,62 @@
 <?php
 session_start();
 require_once '../../assets/conn/db_conn.php';
-require_once '../../assets/php_func/check_account_hospital.php';
+require_once '../../assets/php_func/check_account_hospital_modal.php';
+
+// Function to fetch all blood requests from Supabase, ordered by status (approved first) and date
+function fetchBloodRequests($user_id) {
+    $ch = curl_init();
+    
+    $headers = [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ];
+    
+    // Order by status (approved first) and then by requested_on in descending order
+    $url = SUPABASE_URL . '/rest/v1/blood_requests?user_id=eq.' . $user_id . '&order=status.desc,requested_on.desc';
+    
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    
+    $response = curl_exec($ch);
+    $error = curl_error($ch);
+    
+    curl_close($ch);
+    
+    if ($error) {
+        return ['error' => $error];
+    }
+    
+    return json_decode($response, true);
+}
+
+// Fetch blood requests for the current user
+$blood_requests = fetchBloodRequests($_SESSION['user_id']);
+
+// Calculate summary statistics
+$total_units = 0;
+$blood_type_counts = [];
+$completed_requests = [];
+
+if (!empty($blood_requests)) {
+    foreach ($blood_requests as $request) {
+        $total_units += $request['units_requested'];
+        
+        // Count blood types
+        $blood_type = $request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-');
+        $blood_type_counts[$blood_type] = ($blood_type_counts[$blood_type] ?? 0) + 1;
+        
+        // Track completed requests
+        if ($request['status'] === 'Completed') {
+            $completed_requests[] = $request;
+        }
+    }
+}
+
+// Find most requested blood type
+$most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type_counts), $blood_type_counts) : 'N/A';
+
 ?>
 
 <!DOCTYPE html>
@@ -38,6 +93,7 @@ require_once '../../assets/php_func/check_account_hospital.php';
             border-radius: 10px;
             box-shadow: 0 0 15px rgba(0,0,0,0.1);
             transition: transform 0.2s;
+            height: 100%;
         }
 
         .card:hover {
@@ -47,11 +103,27 @@ require_once '../../assets/php_func/check_account_hospital.php';
         .card-title {
             color: var(--redcross-red);
             font-weight: bold;
+            margin-bottom: 1rem;
         }
 
         .card-text {
             color: var(--redcross-dark);
         }
+
+        .card-body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 1.5rem;
+        }
+
+        .card .fs-3 {
+            font-weight: bold;
+            margin: 0.5rem 0;
+        }
+
 
         /* Button Styling */
         .btn-danger {
@@ -75,22 +147,34 @@ require_once '../../assets/php_func/check_account_hospital.php';
             background-color: var(--redcross-red);
             color: white;
             border-bottom: none;
+            font-size: inherit;
+        }
+
+        .table td {
+            font-size: inherit;
         }
 
         /* Status Colors */
+        .text-approved {
+            color: #006400 !important;
+            font-weight: bold;
+        }
+
         .text-danger {
             color: var(--redcross-red) !important;
+            font-weight: bold;
         }
 
         .text-success {
             color: #198754 !important;
+            font-weight: bold;
         }
 
         /* Sidebar Active State */
         .dashboard-home-sidebar a.active, 
         .dashboard-home-sidebar a:hover {
-            background-color: var(--redcross-red);
-            color: white;
+            background-color: #e9ecef;
+            color: #333;
             font-weight: bold;
         }
 
@@ -112,12 +196,12 @@ require_once '../../assets/php_func/check_account_hospital.php';
         main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             margin-left: 280px !important;
         }
-        /* Header */
-        .dashboard-home-header {
+       /* Header */
+       .dashboard-home-header {
             position: fixed;
             top: 0;
-            left: 240px;
-            width: calc(100% - 240px);
+            left: 280px;
+            width: calc(100% - 280px);
             background-color: #f8f9fa;
             padding: 15px;
             border-bottom: 1px solid #ddd;
@@ -129,27 +213,77 @@ require_once '../../assets/php_func/check_account_hospital.php';
             height: 100vh;
             overflow-y: auto;
             position: fixed;
-            width: 240px;
+            width: 280px;
             background-color: #ffffff;
             border-right: 1px solid #ddd;
             padding: 20px;
             transition: width 0.3s ease;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
         }
-        .dashboard-home-sidebar a {
-            text-decoration: none;
+        .dashboard-home-sidebar .nav-link {
             color: #333;
-            display: block;
-            padding: 10px;
-            border-radius: 5px;
+            padding: 12px 15px;
+            margin: 4px 0;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            font-size: 0.95rem;
         }
-        .dashboard-home-sidebar a.active, 
-        .dashboard-home-sidebar a:hover {
+        .dashboard-home-sidebar .nav-link:hover {
             background-color: #e9ecef;
-            font-weight: bold;
+            color: #333;
+            transform: translateX(5px);
+        }
+        .dashboard-home-sidebar .nav-link.active {
+            background-color: #941022;
+            color: white;
+        }
+        .dashboard-home-sidebar .nav-link i {
+            width: 20px;
+            text-align: center;
+        }
+        /* Search Box Styling */
+        .search-box .input-group {
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .search-box .input-group-text {
+            border-right: none;
+        }
+        .search-box .form-control {
+            border-left: none;
+        }
+        .search-box .form-control:focus {
+            box-shadow: none;
+            border-color: #dee2e6;
+        }
+        /* Logo and Title Styling */
+        .dashboard-home-sidebar img {
+            transition: transform 0.3s ease;
+        }
+        .dashboard-home-sidebar img:hover {
+            transform: scale(1.05);
+        }
+        .dashboard-home-sidebar h5 {
+            font-weight: 600;
+        }
+        /* Scrollbar Styling */
+        .dashboard-home-sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .dashboard-home-sidebar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .dashboard-home-sidebar::-webkit-scrollbar-thumb {
+            background: #941022;
+            border-radius: 3px;
+        }
+        .dashboard-home-sidebar::-webkit-scrollbar-thumb:hover {
+            background: #7a0c1c;
         }
         /* Main Content Styling */
         .dashboard-home-main {
-            margin-left: 240px;
+            margin-left: 280px;
             margin-top: 70px;
             min-height: 100vh;
             overflow-x: hidden;
@@ -176,10 +310,30 @@ require_once '../../assets/php_func/check_account_hospital.php';
     cursor: pointer;
 }
 
+        /* Loading Spinner - Minimal Addition */
+        .btn-loading {
+            position: relative;
+            pointer-events: none;
+        }
+        
+        .btn-loading .spinner-border {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 1rem;
+            height: 1rem;
+            display: inline-block;
+        }
+        
+        .btn-loading .btn-text {
+            opacity: 0;
+        }
+
     </style>
 </head>
 <body>
-    <div class="container-fluid">
+<div class="container-fluid">
         <!-- Header -->
         <div class="dashboard-home-header bg-light p-3 border-bottom d-flex justify-content-between align-items-center">
             <h4 >Hospital Request Dashboard</h4>
@@ -190,100 +344,137 @@ require_once '../../assets/php_func/check_account_hospital.php';
         <div class="row">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">
-                <input type="text" class="form-control mb-3" placeholder="Search...">
-                <a href="dashboard-hospital-bootstrap.php"><i class="fas fa-home me-2"></i>Home</a>
-                <a href="dashboard-hospital-requests.php"><i class="fas fa-tint me-2"></i>Your Requests</a>
-                <a href="dashboard-hospital-history.php" class="active"><i class="fas fa-users me-2"></i>Blood History</a>
+                <div class="position-sticky">
+                    <div class="text-center mb-4">
+                        <h3 class="text-danger mb-0"><?php echo $_SESSION['user_first_name']; ?></h3>
+                        <small class="text-muted">Hospital Request Dashboard</small>
+                    </div>
+                    
+                    <div class="search-box mb-4">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0">
+                                <i class="fas fa-search text-muted"></i>
+                            </span>
+                            <input type="text" class="form-control border-start-0 ps-0" placeholder="Search...">
+                        </div>
+                    </div>
+
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="dashboard-hospital-main.php">
+                                <i class="fas fa-home me-2"></i>Home
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="dashboard-hospital-requests.php">
+                                <i class="fas fa-tint me-2"></i>Your Requests
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link active" href="dashboard-hospital-history.php">
+                                <i class="fas fa-history me-2"></i>Request History
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="../../assets/php_func/logout.php">
+                                <i class="fas fa-sign-out-alt me-2"></i>Logout
+                            </a>
+                        </li>
+                    </ul>
+                </div>
             </nav>
+
 
             <!-- Main Content -->
                 <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                     <div class="container-fluid p-4 custom-margin">
                         <h2 class="card-title mb-3">Request History</h2>
                             
-                            <!-- Summary Card -->
-                            <div class="row mb-4">
-                                <div class="col-md-4">
+                            <!-- Summary Cards -->
+                            <div class="row mb-4 g-3">
+                                <div class="col-md-3">
                                     <div class="card">
                                         <div class="card-body">
                                             <h5 class="card-title">Total Units Requested</h5>
-                                            <p class="card-text fs-3">14 Units</p>
+                                            <p class="card-text fs-3"><?php echo $total_units; ?> Units</p>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <div class="card">
                                         <div class="card-body">
                                             <h5 class="card-title">Most Requested Blood Type</h5>
-                                            <p class="card-text fs-3">A+</p>
+                                            <p class="card-text fs-3"><?php echo $most_requested_type; ?></p>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <h5 class="card-title">Total Requests</h5>
+                                            <p class="card-text fs-3"><?php echo count($blood_requests); ?></p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
                                     <div class="card">
                                         <div class="card-body">
                                             <h5 class="card-title">Average Delivery Time</h5>
-                                            <p class="card-text fs-3">1.5 Days</p>
+                                            <p class="card-text fs-3">0 mins</p>
+                                            <small class="text-muted">Estimated from tracking data</small>
                                         </div>
                                     </div>
-                                    </div>
-                        </div>
+                                </div>
+                            </div>
                                 <!-- Table for Request History -->
-                                <table class="table table-striped">
-                                    <thead>
+                                <table class="table table-bordered table-hover">
+                                    <thead class="table-dark">
                                         <tr>
                                             <th>Request ID</th>
+                                            <th>Patient Name</th>
+                                            <th>Age</th>
+                                            <th>Gender</th>
                                             <th>Blood Type</th>
                                             <th>Quantity</th>
-                                            <th>Urgency</th>
                                             <th>Status</th>
+                                            <th>Physician</th>
                                             <th>Requested On</th>
-                                            <th>Completed On</th>
-                                            <th>Processed By</th>
+                                            <th>Last Updated</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
-                                        <!-- Static Data Rows for Completed Requests -->
+                                    <tbody id="requestTable">
+                                        <?php if (empty($blood_requests)): ?>
                                         <tr>
-                                            <td>REQ-001</td>
-                                            <td>A+</td>
-                                            <td>5 Units</td>
-                                            <td class="text-danger fw-bold">High</td>
-                                            <td class="text-success">Completed</td>
-                                            <td>2025-03-15</td>
-                                            <td>2025-03-16</td>
-                                            <td>Dr. John Doe</td>
+                                            <td colspan="10" class="text-center">No blood requests found.</td>
                                         </tr>
-                                        <tr>
-                                            <td>REQ-002</td>
-                                            <td>O+</td>
-                                            <td>3 Units</td>
-                                            <td class="text-warning fw-bold">Medium</td>
-                                            <td class="text-success">Completed</td>
-                                            <td>2025-03-14</td>
-                                            <td>2025-03-14</td>
-                                            <td>Dr. Jane Smith</td>
-                                        </tr>
-                                        <tr>
-                                            <td>REQ-003</td>
-                                            <td>B-</td>
-                                            <td>2 Units</td>
-                                            <td class="text-success fw-bold">Low</td>
-                                            <td class="text-success">Completed</td>
-                                            <td>2025-03-13</td>
-                                            <td>2025-03-14</td>
-                                            <td>Dr. John Doe</td>
-                                        </tr>
-                                        <tr>
-                                            <td>REQ-004</td>
-                                            <td>AB+</td>
-                                            <td>4 Units</td>
-                                            <td class="text-danger fw-bold">High</td>
-                                            <td class="text-success">Completed</td>
-                                            <td>2025-03-12</td>
-                                            <td>2025-03-13</td>
-                                            <td>Dr. Jane Smith</td>
-                                        </tr>
+                                        <?php else: ?>
+                                            <?php foreach ($blood_requests as $request): ?>
+                                                <tr>
+                                                    <td><?php echo htmlspecialchars($request['request_id']); ?></td>
+                                                    <td><?php echo htmlspecialchars($request['patient_name']); ?></td>
+                                                    <td><?php echo htmlspecialchars($request['patient_age']); ?></td>
+                                                    <td><?php echo htmlspecialchars($request['patient_gender']); ?></td>
+                                                    <td><?php echo htmlspecialchars($request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-')); ?></td>
+                                                    <td><?php echo htmlspecialchars($request['units_requested'] . ' Units'); ?></td>
+                                                    <td class="<?php 
+                                                        if ($request['status'] === 'Approved') {
+                                                            echo 'text-approved';
+                                                        } elseif ($request['status'] === 'Completed') {
+                                                            echo 'text-success';
+                                                        } elseif ($request['status'] === 'Pending') {
+                                                            echo 'text-danger';
+                                                        } else {
+                                                            echo 'text-warning';
+                                                        }
+                                                    ?>">
+                                                        <?php echo htmlspecialchars($request['status']); ?>
+                                                    </td>
+                                                    <td><?php echo htmlspecialchars($request['physician_name']); ?></td>
+                                                    <td><?php echo date('Y-m-d', strtotime($request['requested_on'])); ?></td>
+                                                    <td><?php echo $request['last_updated'] ? date('Y-m-d', strtotime($request['last_updated'])) : '-'; ?></td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
                                     </tbody>
                                 </table>
                             </div>
@@ -556,6 +747,25 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         });
 
+    // Add loading state to sidebar links
+    document.querySelectorAll('.dashboard-home-sidebar .nav-link').forEach(link => {
+        link.addEventListener('click', function(e) {
+            if (!this.classList.contains('active') && !this.getAttribute('href').includes('#')) {
+                const icon = this.querySelector('i');
+                const text = this.textContent.trim();
+                
+                // Save original content
+                this.setAttribute('data-original-content', this.innerHTML);
+                
+                // Add loading state
+                this.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        ${text}
+                    </div>`;
+            }
+        });
+    });
      </script>
 </body>
 </html>

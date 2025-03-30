@@ -40,21 +40,42 @@ if ($_SESSION['role_id'] !== $required_role) {
             background: var(--sidebar-bg);
             height: 100vh;
             padding: 1rem;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 16.66666667%;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+
+        .sidebar h4 {
+            padding: 1rem 0;
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid #dee2e6;
+            color: #000;
+            font-weight: bold;
         }
 
         .sidebar .nav-link {
-            color: #666; /* Darker text for links */
+            padding: 0.8rem 1rem;
+            margin-bottom: 0.5rem;
+            border-radius: 5px;
             transition: all 0.3s ease;
+            color: #000 !important;
+            text-decoration: none;
         }
 
-        .sidebar .nav-link:hover, .sidebar .nav-link.active {
-            color: var(--text-color);
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
             background: var(--hover-bg);
-            border-radius: 5px;
+            transform: translateX(5px);
+            color: #000 !important;
         }
 
         .main-content {
             padding: 1.5rem;
+            margin-left: 16.66666667%;
         }
 
         .card {
@@ -120,6 +141,18 @@ if ($_SESSION['role_id'] !== $required_role) {
             background-color: var(--hover-bg);
             cursor: not-allowed;
         }
+
+        /* Responsive Design */
+        @media (max-width: 991.98px) {
+            .sidebar {
+                position: static;
+                width: 100%;
+                height: auto;
+            }
+            .main-content {
+                margin-left: 0;
+            }
+        }
     </style>
 </head>
 <body class="light-mode"> <!-- Add light-mode class by default -->
@@ -130,12 +163,12 @@ if ($_SESSION['role_id'] !== $required_role) {
             <nav class="col-md-3 col-lg-2 d-md-block sidebar">
                 <h4 class="text-dark">Red Cross Staff</h4> 
                 <ul class="nav flex-column">
-                    <li class="nav-item"><a class="nav-link active" href="#">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="dashboard-staff-main.php">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="dashboard-staff-donor-submission.php">Donor Interviews Submissions</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#">Physical Exams Submissions</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#">Blood Collection Submissions</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#">Submit a Letter</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#">Logout</a></li>
+                    <li class="nav-item"><a class="nav-link" href="dashboard-staff-physical-submission.php">Physical Exams Submissions</a></li>
+                    <li class="nav-item"><a class="nav-link" href="dashboard-staff-blood-collection-submission.php">Blood Collection Submissions</a></li>
+                    <li class="nav-item"><a class="nav-link" href="dashboard-staff-submit-letter.php">Submit a Letter</a></li>
+                    <li class="nav-item"><a class="nav-link" href="../../assets/php_func/logout.php">Logout</a></li>
                 </ul>
             </nav>
             

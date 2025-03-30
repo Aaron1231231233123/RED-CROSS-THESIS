@@ -120,7 +120,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     );
 
     if ($result) {
-        echo "✅ Registration successful!";
+        header("Location: login.php");
     } else {
         echo "❌ Registration failed.";
     }
@@ -420,7 +420,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <h2>Sign up</h2>
     <hr>
     <br>
-    <form action="registration_form.php" method="POST">
+    <form action="register.php" method="POST">
         <div class="form-group reg-input-type">
             <div class="input-box">
                 <label>Surname</label>

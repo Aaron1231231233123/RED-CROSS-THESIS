@@ -219,8 +219,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <div class="error-message"><?php echo $error_message; ?></div>
         <?php endif; ?>
         
-        <?php if (!empty($success_message)): ?>
-            <div class="success-message"><?php echo $success_message; ?></div>
+        <?php if (!empty($_SESSION['success_message'])): ?>
+            <div class="success-message"><?php echo $_SESSION['success_message']; ?></div>
+            <?php unset($_SESSION['success_message']); ?>
         <?php endif; ?>
         
         <form method="POST" action="login.php">
@@ -234,6 +235,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             <!-- Optional: Forgot Password Link -->
             <a href="#">Forgot Password?</a>
+            
+            <!-- Sign Up Link -->
+            <div style="margin-top: 10px;">
+                <a href="register.php">Don't have an account? Sign up</a>
+            </div>
         </form>
     </div>
 

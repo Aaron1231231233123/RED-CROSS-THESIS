@@ -2,6 +2,12 @@
 session_start();
 require_once '../../assets/conn/db_conn.php';
 
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: /REDCROSS/public/login.php");
+    exit();
+}
+
 // Add pagination settings
 $records_per_page = 15;
 $current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
@@ -74,6 +80,8 @@ function storeDonorIdInSession($donorData) {
             padding: 1rem 0;
             margin-bottom: 1.5rem;
             border-bottom: 2px solid #dee2e6;
+            color: #000;
+            font-weight: bold;
         }
 
         .sidebar .nav-link {
@@ -81,12 +89,15 @@ function storeDonorIdInSession($donorData) {
             margin-bottom: 0.5rem;
             border-radius: 5px;
             transition: all 0.3s ease;
+            color: #000 !important;
+            text-decoration: none;
         }
 
         .sidebar .nav-link:hover,
         .sidebar .nav-link.active {
             background: var(--hover-bg);
             transform: translateX(5px);
+            color: #000 !important;
         }
 
         .main-content {
@@ -430,13 +441,13 @@ select.donor_form_input[disabled] {
         <div class="row">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block sidebar">
-                <h4 >Red Cross Staff</h4>
+                <h4>Red Cross Staff</h4>
                 <ul class="nav flex-column">
                     <li class="nav-item"><a class="nav-link" href="dashboard-staff-main.php">Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="#">Donor Interviews Submissions</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#">Physical Exams Submissions</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#">Blood Collection Submissions</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#">Submit a Letter</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="dashboard-staff-donor-submission.php">Donor Interviews Submissions</a></li>
+                    <li class="nav-item"><a class="nav-link" href="dashboard-staff-physical-submission.php">Physical Exams Submissions</a></li>
+                    <li class="nav-item"><a class="nav-link" href="dashboard-staff-blood-collection-submission.php">Blood Collection Submissions</a></li>
+                    <li class="nav-item"><a class="nav-link" href="dashboard-staff-submit-letter.php">Submit a Letter</a></li>
                     <li class="nav-item"><a class="nav-link" href="../../assets/php_func/logout.php">Logout</a></li>
                 </ul>
             </nav>

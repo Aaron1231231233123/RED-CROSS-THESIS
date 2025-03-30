@@ -1,115 +1,7 @@
 <?php
 session_start();
 require_once '../../assets/conn/db_conn.php';
-// Check if user is logged in
-if (!isset($_SESSION['user_id'])) {
-    header("Location: index.php");
-    exit();
-}
-
-// Check for correct role (example for admin dashboard)
-$required_role = 2; // Hospital Role
-if ($_SESSION['role_id'] !== $required_role) {
-    header("Location: index.php");
-    exit();
-}
-
-// Fetch user details from the users table
-$user_id = $_SESSION['user_id'];
-
-// Function to make Supabase request
-function supabaseRequest($endpoint, $method = 'GET', $data = null) {
-    $url = SUPABASE_URL . '/rest/v1/' . $endpoint;
-    $ch = curl_init($url);
-    
-    $headers = array(
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY,
-        'Content-Type: application/json',
-        'Prefer: return=minimal'
-    );
-
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    
-    $response = curl_exec($ch);
-    curl_close($ch);
-    
-    return json_decode($response, true);
-}
-
-// Fetch user data from Supabase
-$users_response = supabaseRequest("users?user_id=eq.$user_id&select=surname,first_name");
-
-if ($users_response && is_array($users_response) && count($users_response) > 0) {
-    $user_data = $users_response[0];
-    $_SESSION['user_surname'] = $user_data['surname'];
-    $_SESSION['user_first_name'] = $user_data['first_name'];
-}
-
-// Remove PDO connection code and replace with Supabase REST API handling
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_blood_request'])) {
-    try {
-        // Set when_needed based on is_asap
-        $whenNeeded = isset($_POST['is_asap']) && $_POST['is_asap'] === 'true' 
-            ? date('Y-m-d H:i:s') 
-            : $_POST['when_needed'];
-
-        // Prepare the request data
-        $requestData = array(
-            'user_id' => $_SESSION['user_id'],
-            'patient_name' => $_POST['patient_name'],
-            'patient_age' => intval($_POST['patient_age']),
-            'patient_gender' => $_POST['patient_gender'],
-            'patient_diagnosis' => $_POST['patient_diagnosis'],
-            'patient_blood_type' => $_POST['blood_type'],
-            'rh_factor' => $_POST['rh_factor'],
-            'component' => $_POST['component'],
-            'units_requested' => intval($_POST['units_requested']),
-            'is_asap' => isset($_POST['is_asap']) && $_POST['is_asap'] === 'true',
-            'when_needed' => $whenNeeded,
-            'physician_name' => $_SESSION['user_surname'],
-            'physician_signature' => $_POST['physician_signature'],
-            'hospital_admitted' => $_SESSION['user_first_name'],
-            'status' => 'Pending'
-        );
-
-        // Make POST request to Supabase
-        $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_requests');
-        
-        // Set headers
-        $headers = array(
-            'apikey: ' . SUPABASE_API_KEY,
-            'Authorization: Bearer ' . SUPABASE_API_KEY,
-            'Content-Type: application/json',
-            'Prefer: return=minimal'
-        );
-
-        // Set cURL options
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($requestData));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-
-        // Execute the request
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        // Check if request was successful
-        if ($httpCode >= 200 && $httpCode < 300) {
-            $_SESSION['success_message'] = "Blood request submitted successfully!";
-        } else {
-            throw new Exception("Error submitting request. HTTP Code: " . $httpCode);
-        }
-    } catch (Exception $e) {
-        $_SESSION['error_message'] = "Error submitting request: " . $e->getMessage();
-    }
-
-    // Redirect to prevent form resubmission
-    header("Location: " . $_SERVER['PHP_SELF']);
-    exit();
-}
+require_once '../../assets/php_func/check_account_hospital_modal.php';
 ?>
 
 <!DOCTYPE html>
@@ -256,8 +148,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_blood_request'
         .dashboard-home-header {
             position: fixed;
             top: 0;
-            left: 240px;
-            width: calc(100% - 240px);
+            left: 280px;
+            width: calc(100% - 280px);
             background-color: #f8f9fa;
             padding: 15px;
             border-bottom: 1px solid #ddd;
@@ -269,27 +161,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_blood_request'
             height: 100vh;
             overflow-y: auto;
             position: fixed;
-            width: 240px;
+            width: 280px;
             background-color: #ffffff;
             border-right: 1px solid #ddd;
             padding: 20px;
             transition: width 0.3s ease;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
         }
-        .dashboard-home-sidebar a {
-            text-decoration: none;
+        .dashboard-home-sidebar .nav-link {
             color: #333;
-            display: block;
-            padding: 10px;
-            border-radius: 5px;
+            padding: 12px 15px;
+            margin: 4px 0;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            font-size: 0.95rem;
         }
-        .dashboard-home-sidebar a.active, 
-        .dashboard-home-sidebar a:hover {
+        .dashboard-home-sidebar .nav-link:hover {
             background-color: #e9ecef;
+            color: #333;
+            transform: translateX(5px);
+        }
+        .dashboard-home-sidebar .nav-link.active {
+            background-color: #941022;
+            color: white;
+        }
+        .dashboard-home-sidebar .nav-link i {
+            width: 20px;
+            text-align: center;
+        }
+        /* Search Box Styling */
+        .search-box .input-group {
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .search-box .input-group-text {
+            border-right: none;
+        }
+        .search-box .form-control {
+            border-left: none;
+        }
+        .search-box .form-control:focus {
+            box-shadow: none;
+            border-color: #dee2e6;
+        }
+        .text-danger {
+            color: var(--redcross-red) !important;
             font-weight: bold;
+        }
+        /* Logo and Title Styling */
+        .dashboard-home-sidebar img {
+            transition: transform 0.3s ease;
+        }
+        .dashboard-home-sidebar img:hover {
+            transform: scale(1.05);
+        }
+        .dashboard-home-sidebar h5 {
+            font-weight: 600;
+        }
+        /* Scrollbar Styling */
+        .dashboard-home-sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .dashboard-home-sidebar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .dashboard-home-sidebar::-webkit-scrollbar-thumb {
+            background: #941022;
+            border-radius: 3px;
+        }
+        .dashboard-home-sidebar::-webkit-scrollbar-thumb:hover {
+            background: #7a0c1c;
         }
         /* Main Content Styling */
         .dashboard-home-main {
-            margin-left: 240px;
+            margin-left: 280px;
             margin-top: 70px;
             min-height: 100vh;
             overflow-x: hidden;
@@ -312,8 +258,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_blood_request'
     opacity: 0;
     transition: opacity 0.5s ease-in-out;
 }
-
+.card-title{
+    color: var(--redcross-red) !important;
+            font-weight: bold;
+}
+        .sticky-alerts {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 1000;
+            width: 350px;
+        }
+        .blood-alert {
+            margin-bottom: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            animation: slideIn 0.5s ease-out;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        /* Loading Spinner - Minimal Addition */
+        .btn-loading {
+            position: relative;
+            pointer-events: none;
+        }
+        
+        .btn-loading .spinner-border {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 1rem;
+            height: 1rem;
+            display: inline-block;
+        }
+        
+        .btn-loading .btn-text {
+            opacity: 0;
+        }
     </style>
+    <!-- Add this before the closing </head> tag -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
 </head>
 <body>
     <div class="container-fluid">
@@ -327,99 +319,426 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_blood_request'
         <div class="row">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">
-                <input type="text" class="form-control mb-3" placeholder="Search...">
-                <a href="#" class="active"><i class="fas fa-home me-2"></i>Home</a>
-                <a href="dashboard-hospital-requests.php"><i class="fas fa-tint me-2"></i>Your Requests</a>
-                <a href="dashboard-hospital-history.php"><i class="fas fa-users me-2"></i>Blood History</a>
+                <div class="position-sticky">
+                    <div class="text-center mb-4">
+                        <h3 class="text-danger mb-0"><?php echo $_SESSION['user_first_name']; ?></h3>
+                        <small class="text-muted">Hospital Request Dashboard</small>
+                    </div>
+                    
+                    <div class="search-box mb-4">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0">
+                                <i class="fas fa-search text-muted"></i>
+                            </span>
+                            <input type="text" class="form-control border-start-0 ps-0" placeholder="Search...">
+                        </div>
+                    </div>
+
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="#">
+                                <i class="fas fa-home me-2"></i>Home
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="dashboard-hospital-requests.php">
+                                <i class="fas fa-tint me-2"></i>Your Requests
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="dashboard-hospital-history.php">
+                                <i class="fas fa-history me-2"></i>Request History
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="../../assets/php_func/logout.php">
+                                <i class="fas fa-sign-out-alt me-2"></i>Logout
+                            </a>
+                        </li>
+                    </ul>
+                </div>
             </nav>
 
             <!-- Main Content -->
                 <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                    
                     <div class="container-fluid p-4 custom-margin">
-                        <h2 class="card-title mb-3">Bloodbanks</h2>
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-body">
-                                <canvas id="bloodChart"></canvas>
+                    <h3 class="card-title mb-3">Progress Tracker</h3>
+                    <div class="modal-body mt-4">
+
+                    <!-- Countdown Timer -->
+                    <div class="countdown-container text-center mb-4">
+                        <h3 class="text-danger mb-2">Estimated Time Remaining</h3>
+                        <div class="countdown-timer d-flex justify-content-center gap-3">
+                            <div class="time-block">
+                                <div id="staticHours" class="time-value display-4 fw-bold text-danger">00</div>
+                                <div class="time-label text-muted">HOURS</div>
+                            </div>
+                            <div class="time-block">
+                                <div class="display-4 fw-bold text-danger">:</div>
+                            </div>
+                            <div class="time-block">
+                                <div id="staticMinutes" class="time-value display-4 fw-bold text-danger">20</div>
+                                <div class="time-label text-muted">MINUTES</div>
+                            </div>
+                            <div class="time-block">
+                                <div class="display-4 fw-bold text-danger">:</div>
+                            </div>
+                            <div class="time-block">
+                                <div id="staticSeconds" class="time-value display-4 fw-bold text-danger">00</div>
+                                <div class="time-label text-muted">SECONDS</div>
                             </div>
                         </div>
                     </div>
-                </div>
-                 <!-- Urgent Alerts -->
+                
+                    <!-- Progress Tracker -->
+                    <div class="progress-tracker">
+                        <div class="progress-steps">
+                            <div class="progress-line">
+                                <div class="progress-line-fill" style="width: 75%;"></div>
+                            </div>
+                            
+                            <div class="step completed">
+                                <div class="step-icon">
+                                    <i class="fas fa-file-medical"></i>
+                                </div>
+                                <div class="step-label">Request Submitted</div>
+                                <div class="step-time">10:30 AM</div>
+                            </div>
+
+                            <div class="step completed">
+                                <div class="step-icon">
+                                    <i class="fas fa-vial"></i>
+                                </div>
+                                <div class="step-label">Processing</div>
+                                <div class="step-time">10:45 AM</div>
+                            </div>
+
+                            <div class="step completed">
+                                <div class="step-icon">
+                                    <i class="fas fa-clipboard-check"></i>
+                                </div>
+                                <div class="step-label">Request Approved</div>
+                                <div class="step-time">11:00 AM</div>
+                            </div>
+
+                            <div class="step active">
+                                <div class="step-icon">
+                                    <i class="fas fa-truck"></i>
+                                </div>
+                                <div class="step-label">In Transit</div>
+                                <div class="step-time">In Progress</div>
+                            </div>
+
+                            <div class="step">
+                                <div class="step-icon">
+                                    <i class="fas fa-check-circle"></i>
+                                </div>
+                                <div class="step-label">Delivered</div>
+                                <div class="step-time">--:--</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <script>
+                        // Add countdown timer for main dashboard
+                        let mainDashboardCountdown;
+
+                        function startMainDashboardCountdown() {
+                            if (mainDashboardCountdown) {
+                                clearInterval(mainDashboardCountdown);
+                            }
+
+                            let totalSeconds = 20 * 60; // 20 minutes in seconds
+
+                            mainDashboardCountdown = setInterval(() => {
+                                if (totalSeconds <= 0) {
+                                    clearInterval(mainDashboardCountdown);
+                                    return;
+                                }
+
+                                totalSeconds--;
+                                const hours = Math.floor(totalSeconds / 3600);
+                                const minutes = Math.floor((totalSeconds % 3600) / 60);
+                                const seconds = totalSeconds % 60;
+
+                                document.getElementById('staticHours').textContent = String(hours).padStart(2, '0');
+                                document.getElementById('staticMinutes').textContent = String(minutes).padStart(2, '0');
+                                document.getElementById('staticSeconds').textContent = String(seconds).padStart(2, '0');
+
+                                // Update progress line (75% to 100% during delivery)
+                                const progress = 75 + (25 * (1 - totalSeconds / (20 * 60)));
+                                document.querySelector('.progress-line-fill').style.width = `${progress}%`;
+                            }, 1000);
+                        }
+
+                        // Start the countdown when the page loads
+                        document.addEventListener('DOMContentLoaded', () => {
+                            startMainDashboardCountdown();
+                        });
+                    </script>
+
+                        <?php
+                        // Function to fetch pending requests
+                        function fetchPendingRequests($user_id) {
+                            $ch = curl_init();
+                            
+                            $headers = [
+                                'apikey: ' . SUPABASE_API_KEY,
+                                'Authorization: Bearer ' . SUPABASE_API_KEY
+                            ];
+                            
+                            $url = SUPABASE_URL . '/rest/v1/blood_requests?user_id=eq.' . $user_id . '&status=eq.Pending&select=request_id,patient_blood_type,rh_factor,patient_name';
+                            
+                            curl_setopt($ch, CURLOPT_URL, $url);
+                            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+                            
+                            $response = curl_exec($ch);
+                            curl_close($ch);
+                            
+                            return json_decode($response, true);
+                        }
+
+                        // Get pending requests
+                        $pending_requests = fetchPendingRequests($_SESSION['user_id']);
+
+                        // Function to mask sensitive information
+                        function maskPatientInfo($name) {
+                            if (!$name) return '****';
+                            $parts = explode(' ', $name);
+                            $maskedParts = array_map(function($part) {
+                                if (strlen($part) <= 2) return $part;
+                                return substr($part, 0, 1) . str_repeat('*', strlen($part) - 2) . substr($part, -1);
+                            }, $parts);
+                            return implode(' ', $maskedParts);
+                        }
+                        ?>
+
+                        <div class="sticky-alerts">
+                            <!-- Blood shortage alert -->
+                            <div class="blood-alert alert alert-danger" role="alert">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                Blood shortage for O- type! Immediate donations needed.
+                            </div>
+
+                            <!-- Consolidated pending requests alert -->
+                            <?php if (!empty($pending_requests)): ?>
+                                <div class="blood-alert alert alert-warning" role="alert">
+                                    <i class="fas fa-clock me-2"></i>
+                                    <strong>Pending Requests (<?php echo count($pending_requests); ?>)</strong>
+                                </div>
+                            <?php endif; ?>
+
+                            <!-- Donation drive alert -->
+                            <div class="blood-alert alert alert-info" role="alert">
+                                <i class="fas fa-calendar me-2"></i>
+                                New donation drive scheduled for March 20.
+                            </div>
+                        </div>
+
+                        <h2 class="card-title mb-3 mt-3">Bloodbanks</h2>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Approved Blood Units</h5>
+                                        <div class="chart-container">
+                                            <canvas id="bloodChart"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Most Requested Blood Types</h5>
+                                        <div class="chart-container">
+                                            <canvas id="requestChart"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <?php
+                        // Function to fetch blood requests from Supabase
+                        function fetchBloodRequests() {
+                            $ch = curl_init();
+                            
+                            $headers = [
+                                'apikey: ' . SUPABASE_API_KEY,
+                                'Authorization: Bearer ' . SUPABASE_API_KEY
+                            ];
+                            
+                            $url = SUPABASE_URL . '/rest/v1/blood_requests?select=patient_blood_type,rh_factor,units_requested,status';
+                            
+                            curl_setopt($ch, CURLOPT_URL, $url);
+                            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+                            
+                            $response = curl_exec($ch);
+                            curl_close($ch);
+                            
+                            return json_decode($response, true);
+                        }
+
+                        // Get blood requests
+                        $blood_requests = fetchBloodRequests();
+
+                        // Initialize arrays for blood type counts
+                        $available_units = [
+                            'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
+                            'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
+                        ];
+                        $requested_units = [
+                            'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
+                            'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
+                        ];
+
+                        // Process blood requests
+                        foreach ($blood_requests as $request) {
+                            $blood_type = $request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-');
+                            
+                            if ($request['status'] === 'Approved') {
+                                $available_units[$blood_type] += $request['units_requested'];
+                            }
+                            $requested_units[$blood_type] += $request['units_requested'];
+                        }
+                        ?>
+
+                        <script>
+                            document.addEventListener("DOMContentLoaded", function () {
+                                // Blood type specific colors
+                                const bloodTypeColors = {
+                                    'A+': '#FF4136',  // Bright Red
+                                    'A-': '#FF851B',  // Orange
+                                    'B+': '#39CCCC',  // Teal
+                                    'B-': '#7FDBFF',  // Light Blue
+                                    'O+': '#2ECC40',  // Green
+                                    'O-': '#01FF70',  // Lime
+                                    'AB+': '#B10DC9', // Purple
+                                    'AB-': '#F012BE'  // Pink
+                                };
+
+                                // Bar Chart for Available Blood Units
+                                const ctxBar = document.getElementById('bloodChart').getContext('2d');
+                                new Chart(ctxBar, {
+                                    type: 'bar',
+                                    data: {
+                                        labels: <?php echo json_encode(array_keys($available_units)); ?>,
+                                        datasets: [{
+                                            label: 'Approved Blood Units',
+                                            data: <?php echo json_encode(array_values($available_units)); ?>,
+                                            backgroundColor: Object.values(bloodTypeColors),
+                                            hoverBackgroundColor: Object.values(bloodTypeColors).map(color => color + 'CC')
+                                        }]
+                                    },
+                                    options: {
+                                        responsive: true,
+                                        maintainAspectRatio: false,
+                                        plugins: {
+                                            legend: {
+                                                display: false
+                                            },
+                                            title: {
+                                                display: true,
+                                                text: 'Approved Blood Units by Type',
+                                                font: {
+                                                    size: 16
+                                                }
+                                            }
+                                        },
+                                        scales: {
+                                            y: {
+                                                beginAtZero: true,
+                                                grid: {
+                                                    color: '#e9ecef'
+                                                }
+                                            },
+                                            x: {
+                                                grid: {
+                                                    display: false
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
+
+                                // Pie Chart for Most Requested Blood Types
+                                const ctxPie = document.getElementById('requestChart').getContext('2d');
+                                new Chart(ctxPie, {
+                                    type: 'pie',
+                                    data: {
+                                        labels: <?php echo json_encode(array_keys($requested_units)); ?>,
+                                        datasets: [{
+                                            data: <?php echo json_encode(array_values($requested_units)); ?>,
+                                            backgroundColor: Object.values(bloodTypeColors)
+                                        }]
+                                    },
+                                    options: {
+                                        responsive: true,
+                                        maintainAspectRatio: false,
+                                        plugins: {
+                                            legend: {
+                                                position: 'right',
+                                                labels: {
+                                                    font: {
+                                                        size: 12
+                                                    }
+                                                }
+                                            },
+                                            title: {
+                                                display: true,
+                                                text: 'Distribution of Requested Blood Types',
+                                                font: {
+                                                    size: 16
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
+                            });
+                        </script>
+
+                <!-- Urgent Alerts -->
                 <div class="alert alert-danger mt-4 p-4 fw-bold fs-5 d-flex align-items-center" role="alert">
                     <i class="bi bi-exclamation-triangle-fill me-2"></i> 🚨 Blood shortage for O- type! Immediate donations needed.
                 </div>
                 <div class="alert alert-warning p-4 fw-bold fs-5 d-flex align-items-center" role="alert">
-                    <i class="bi bi-exclamation-circle-fill me-2"></i> ⏳ Request REQ-003 is still pending approval.
+                    <i class="bi bi-exclamation-circle-fill me-2"></i> ⏳ <?php echo count($pending_requests); ?> pending request(s).
                 </div>
                 <div class="alert alert-info p-4 fw-bold fs-5 d-flex align-items-center" role="alert">
                     <i class="bi bi-info-circle-fill me-2"></i> 📢 New donation drive scheduled for March 20.
                 </div>
-                <h3 class="mt-4">Your Requests</h3>
+                <h3 class="mt-4">Your Requests <a href="dashboard-hospital-requests.php" class="btn btn-sm btn-outline-danger ms-2">View All</a></h3>
                 <table class="table table-bordered table-hover">
                     <thead class="table-dark">
                         <tr>
-                            <th>Request ID</th>
+                            <th>Patient Name</th>
                             <th>Blood Type</th>
                             <th>Quantity</th>
                             <th>Urgency</th>
                             <th>Status</th>
-                            <th>Requested On</th>
-                            <th>Expected Delivery</th>
-                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr>
-                            <td>REQ-001</td>
-                            <td>A+</td>
-                            <td>5 Units</td>
-                            <td class="text-danger fw-bold">High</td>
-                            <td class="text-danger">Pending</td>
-                            <td>2025-03-15</td>
-                            <td>2025-03-16</td>
-                            <td>
-                                <button class="btn btn-sm btn-primary">Track</button>
-                                <button class="btn btn-sm btn-secondary">Reorder</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>REQ-002</td>
-                            <td>O+</td>
-                            <td>3 Units</td>
-                            <td class="text-warning fw-bold">Medium</td>
-                            <td class="text-success">Completed</td>
-                            <td>2025-03-14</td>
-                            <td>2025-03-14</td>
-                            <td>
-                                <button class="btn btn-sm btn-secondary">Reorder</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>REQ-003</td>
-                            <td>B-</td>
-                            <td>2 Units</td>
-                            <td class="text-danger fw-bold">High</td>
-                            <td class="text-warning">Processing</td>
-                            <td>2025-03-13</td>
-                            <td>2025-03-15</td>
-                            <td>
-                                <button class="btn btn-sm btn-primary">Track</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>REQ-004</td>
-                            <td>AB-</td>
-                            <td>1 Unit</td>
-                            <td class="text-success fw-bold">Low</td>
-                            <td class="text-dark">Canceled</td>
-                            <td>2025-03-12</td>
-                            <td>-</td>
-                            <td>
-                                <button class="btn btn-sm btn-secondary">Reorder</button>
-                            </td>
-                        </tr>
+                        <?php 
+                        $displayed_requests = array_slice($pending_requests, 0, 5); // Only show first 5
+                        foreach ($displayed_requests as $request): 
+                        ?>
+                            <tr>
+                                <td>
+                                    <a href="dashboard-hospital-requests.php" class="text-danger text-decoration-none">
+                                        <?php echo maskPatientInfo($request['patient_name']); ?>
+                                    </a>
+                                </td>
+                                <td><?php echo htmlspecialchars($request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-')); ?></td>
+                                <td><?php echo htmlspecialchars($request['units_requested'] ?? ''); ?> Units</td>
+                                <td class="text-danger fw-bold">High</td>
+                                <td class="text-danger">Pending</td>
+                            </tr>
+                        <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>
@@ -597,6 +916,361 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_blood_request'
     </div>
 </div>
 
+<!-- Add Tracking Modal -->
+<div class="modal fade" id="trackingModal" tabindex="-1" aria-labelledby="trackingModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="trackingModalLabel">Blood Request Tracking</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Countdown Timer -->
+                <div class="countdown-container text-center mb-4">
+                    <h3 class="text-danger mb-2">Estimated Time Remaining</h3>
+                    <div class="countdown-timer d-flex justify-content-center gap-3">
+                        <div class="time-block">
+                            <div id="hours" class="time-value display-4 fw-bold text-danger">00</div>
+                            <div class="time-label text-muted">Hours</div>
+                        </div>
+                        <div class="time-block">
+                            <div class="display-4 fw-bold text-danger">:</div>
+                        </div>
+                        <div class="time-block">
+                            <div id="minutes" class="time-value display-4 fw-bold text-danger">00</div>
+                            <div class="time-label text-muted">Minutes</div>
+                        </div>
+                        <div class="time-block">
+                            <div class="display-4 fw-bold text-danger">:</div>
+                        </div>
+                        <div class="time-block">
+                            <div id="seconds" class="time-value display-4 fw-bold text-danger">00</div>
+                            <div class="time-label text-muted">Seconds</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Progress Tracker -->
+                <div class="progress-tracker">
+                    <div class="progress-steps">
+                        <div class="progress-line">
+                            <div class="progress-line-fill"></div>
+                        </div>
+                        
+                        <div class="step">
+                            <div class="step-icon">
+                                <i class="fas fa-file-medical"></i>
+                            </div>
+                            <div class="step-label">Request Submitted</div>
+                            <div class="step-time"></div>
+                        </div>
+                        
+                                                <div class="step">
+                            <div class="step-icon">
+                                <i class="fas fa-vial"></i>
+                            </div>
+                            <div class="step-label">Processing</div>
+                            <div class="step-time"></div>
+                        </div>
+
+                        <div class="step">
+                            <div class="step-icon">
+                                <i class="fas fa-clipboard-check"></i>
+                            </div>
+                            <div class="step-label">Request Approved</div>
+                            <div class="step-time"></div>
+                        </div>
+
+
+
+                        <div class="step">
+                            <div class="step-icon">
+                                <i class="fas fa-truck"></i>
+                            </div>
+                            <div class="step-label">In Transit</div>
+                            <div class="step-time"></div>
+                        </div>
+
+                        <div class="step">
+                            <div class="step-icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div class="step-label">Delivered</div>
+                            <div class="step-time"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Countdown Timer Styles */
+    .countdown-container {
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 30px;
+    }
+
+    .countdown-timer {
+        font-family: 'Arial', sans-serif;
+    }
+
+    .time-block {
+        text-align: center;
+        min-width: 80px;
+    }
+
+    .time-value {
+        font-size: 48px;
+        font-weight: bold;
+        line-height: 1;
+    }
+
+    .time-label {
+        font-size: 14px;
+        text-transform: uppercase;
+        margin-top: 5px;
+    }
+
+    /* Progress Tracker Styles */
+    .progress-tracker {
+        margin-top: 30px;
+        padding: 20px;
+    }
+
+    .progress-steps {
+        position: relative;
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 30px;
+    }
+
+    .progress-line {
+        position: absolute;
+        top: 25px;
+        left: 0;
+        width: 100%;
+        height: 3px;
+        background-color: #e9ecef;
+        z-index: 1;
+    }
+
+    .progress-line-fill {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        background-color: #941022;
+        transition: width 0.5s ease;
+        width: 0;
+    }
+
+    .step {
+        position: relative;
+        z-index: 2;
+        text-align: center;
+        width: 50px;
+    }
+
+    .step-icon {
+        width: 50px;
+        height: 50px;
+        background-color: #fff;
+        border: 3px solid #e9ecef;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        transition: all 0.3s ease;
+    }
+
+    .step-icon i {
+        color: #6c757d;
+        font-size: 20px;
+    }
+
+    .step-label {
+        margin-top: 10px;
+        font-size: 12px;
+        color: #6c757d;
+    }
+
+    .step.active .step-icon {
+        border-color: #941022;
+        background-color: #941022;
+    }
+
+    .step.active .step-icon i {
+        color: #fff;
+    }
+
+    .step.completed .step-icon {
+        border-color: #198754;
+        background-color: #198754;
+    }
+
+    .step.completed .step-icon i {
+        color: #fff;
+    }
+
+    .step-time {
+        font-size: 11px;
+        color: #6c757d;
+        margin-top: 5px;
+    }
+</style>
+
+<script>
+    let countdownInterval;
+    let totalSeconds = 0;
+
+    function showTrackingModal(requestId, originLat, originLon, destLat, destLon) {
+        const trackingModal = new bootstrap.Modal(document.getElementById('trackingModal'));
+        trackingModal.show();
+
+        // First mark the first three steps as completed immediately
+        const steps = document.querySelectorAll('.step');
+        for(let i = 0; i < 3; i++) { // First 3 steps: Submitted, Approved, Processing
+            steps[i].classList.add('completed');
+            steps[i].classList.remove('active');
+            steps[i].querySelector('.step-time').textContent = new Date().toLocaleTimeString();
+        }
+        
+        // Set In Transit step as active
+        steps[3].classList.add('active');
+        steps[3].classList.remove('completed');
+        steps[3].querySelector('.step-time').textContent = new Date().toLocaleTimeString();
+
+        // Calculate ETA using OpenRoute API
+        fetch('track_delivery_progress.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'calculate_eta',
+                origin_lat: originLat,
+                origin_lon: originLon,
+                dest_lat: destLat,
+                dest_lon: destLon
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (!data.error) {
+                // Set countdown based on API's ETA
+                totalSeconds = data.duration * 60; // Convert API minutes to seconds
+                document.querySelector('.countdown-container h3').textContent = 
+                    `Estimated Time of Arrival: ${Math.round(data.duration)} minutes (${data.distance} km)`;
+                
+                // Start the countdown
+                startCountdown();
+
+                // Set initial progress (75% as first 3 steps are complete)
+                document.querySelector('.progress-line-fill').style.width = '75%';
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    }
+
+    function startCountdown() {
+        // Clear any existing interval
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+        }
+
+        // Update immediately then start interval
+        updateCountdown();
+        countdownInterval = setInterval(updateCountdown, 1000);
+    }
+
+    function updateCountdown() {
+        if (totalSeconds <= 0) {
+            clearInterval(countdownInterval);
+            completeDelivery();
+            return;
+        }
+
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        document.getElementById('hours').textContent = String(hours).padStart(2, '0');
+        document.getElementById('minutes').textContent = String(minutes).padStart(2, '0');
+        document.getElementById('seconds').textContent = String(seconds).padStart(2, '0');
+
+        // Calculate progress for just the delivery phase (75% to 100%)
+        const initialSeconds = document.querySelector('.countdown-container h3').textContent
+            .match(/(\d+) minutes/)[1] * 60;
+        const progressPercentage = ((initialSeconds - totalSeconds) / initialSeconds) * 25;
+        const totalProgress = 75 + progressPercentage; // Start at 75% (3 steps complete) and progress to 100%
+        
+        document.querySelector('.progress-line-fill').style.width = `${totalProgress}%`;
+
+        totalSeconds--;
+    }
+
+    function completeDelivery() {
+        // Mark all steps as completed
+        const steps = document.querySelectorAll('.step');
+        steps.forEach(step => {
+            step.classList.add('completed');
+            step.classList.remove('active');
+            step.querySelector('.step-time').textContent = new Date().toLocaleTimeString();
+        });
+
+        // Set progress to 100%
+        document.querySelector('.progress-line-fill').style.width = '100%';
+
+        // Update countdown display to show 00:00:00
+        document.getElementById('hours').textContent = '00';
+        document.getElementById('minutes').textContent = '00';
+        document.getElementById('seconds').textContent = '00';
+
+        // Update status text
+        document.querySelector('.countdown-container h3').textContent = 'Blood Delivery Completed';
+
+        // Trigger confetti animation
+        triggerConfetti();
+    }
+
+    function triggerConfetti() {
+        // First burst
+        confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 }
+        });
+
+        // Second burst after a small delay
+        setTimeout(() => {
+            confetti({
+                particleCount: 50,
+                angle: 60,
+                spread: 55,
+                origin: { x: 0 }
+            });
+            confetti({
+                particleCount: 50,
+                angle: 120,
+                spread: 55,
+                origin: { x: 1 }
+            });
+        }, 250);
+
+        // Final burst
+        setTimeout(() => {
+            confetti({
+                particleCount: 150,
+                spread: 100,
+                origin: { y: 0.7 }
+            });
+        }, 500);
+    }
+</script>
 
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -764,6 +1438,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_blood_request'
             // Submit the form
             form.submit();
         }
+
+        // Add loading state to sidebar links
+        document.querySelectorAll('.dashboard-home-sidebar .nav-link').forEach(link => {
+            link.addEventListener('click', function(e) {
+                if (!this.classList.contains('active') && !this.getAttribute('href').includes('#')) {
+                    const icon = this.querySelector('i');
+                    const text = this.textContent.trim();
+                    
+                    // Save original content
+                    this.setAttribute('data-original-content', this.innerHTML);
+                    
+                    // Add loading state
+                    this.innerHTML = `
+                        <div class="d-flex align-items-center">
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            ${text}
+                        </div>`;
+                }
+            });
+        });
     </script>
 </body>
 </html>

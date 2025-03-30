@@ -33,15 +33,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             'email' => $email,
             'password_hash' => $hashed_password,
             'role_id' => intval($role_type),
-            'surname' => "",
-            'first_name' => "",
+            'surname' => $role_type === '2' ? 
+                        (isset($_POST['physician_name']) ? "Dr. " . $_POST['physician_name'] : "") : 
+                        (isset($_POST['branch_name']) ? $_POST['branch_name'] : ""),
+            'first_name' => $role_type === '2' ? 
+                          (isset($_POST['hospital_name']) ? $_POST['hospital_name'] : "") : 
+                          "",
             'middle_name' => "",
             'suffix' => "",
             'phone_number' => "",
             'telephone_number' => "",
             'date_of_birth' => date('Y-m-d'),
             'gender' => "",
-            'permanent_address' => "",
+            'permanent_address' => isset($_POST['location']) ? $_POST['location'] : "",
             'office_address' => ""
         ];
 
@@ -131,8 +135,72 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                                 </select>
                             </div>
 
+                            <!-- Hospital Account Fields -->
+                            <div id="hospitalFields" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="physician_name" class="form-label">Physician Name (Surname):</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">Dr.</span>
+                                        <input type="text" id="physician_name" name="physician_name" class="form-control">
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="hospital_name" class="form-label">Hospital Name:</label>
+                                    <input type="text" id="hospital_name" name="hospital_name" class="form-control">
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="location" class="form-label">Location:</label>
+                                    <textarea id="location" name="location" class="form-control" rows="2"></textarea>
+                                </div>
+                            </div>
+
+                            <!-- Inventory Manager Fields -->
+                            <div id="inventoryFields" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="branch_name" class="form-label">Red Cross Branch Name:</label>
+                                    <input type="text" id="branch_name" name="branch_name" class="form-control">
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="branch_location" class="form-label">Branch Location:</label>
+                                    <textarea id="branch_location" name="location" class="form-control" rows="2"></textarea>
+                                </div>
+                            </div>
+
                             <button type="submit" class="btn btn-primary">Create Account</button>
                         </form>
+
+                        <script>
+                            document.getElementById('role_type').addEventListener('change', function() {
+                                const hospitalFields = document.getElementById('hospitalFields');
+                                const inventoryFields = document.getElementById('inventoryFields');
+                                
+                                // Hide both sections first
+                                hospitalFields.style.display = 'none';
+                                inventoryFields.style.display = 'none';
+                                
+                                // Reset required fields
+                                document.getElementById('physician_name').required = false;
+                                document.getElementById('hospital_name').required = false;
+                                document.getElementById('branch_name').required = false;
+                                document.querySelectorAll('[name="location"]').forEach(el => el.required = false);
+
+                                if (this.value === '2') {
+                                    // Show hospital fields
+                                    hospitalFields.style.display = 'block';
+                                    document.getElementById('physician_name').required = true;
+                                    document.getElementById('hospital_name').required = true;
+                                    document.getElementById('location').required = true;
+                                } else if (this.value === '1') {
+                                    // Show inventory fields
+                                    inventoryFields.style.display = 'block';
+                                    document.getElementById('branch_name').required = true;
+                                    document.getElementById('branch_location').required = true;
+                                }
+                            });
+                        </script>
                     </div>
                 </div>
             </div>
