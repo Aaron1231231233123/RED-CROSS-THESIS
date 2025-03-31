@@ -7,7 +7,11 @@ if (!isset($_SESSION['user_id'])) {
     header("Location: /REDCROSS/public/login.php");
     exit();
 }
-
+// Check for correct role (admin with role_id 3)
+if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] != 3) {
+    header("Location: ../../public/unauthorized.php");
+    exit();
+}
 // Add pagination settings
 $records_per_page = 15;
 $current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;

@@ -3,6 +3,17 @@ session_start();
 define("SUPABASE_URL", "https://nwakbxwglhxcpunrzstf.supabase.co");
 define("SUPABASE_API_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53YWtieHdnbGh4Y3B1bnJ6c3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIyODA1NzIsImV4cCI6MjA1Nzg1NjU3Mn0.y4CIbDT2UQf2ieJTQukuJRRzspSZPehSgNKivBwpvc4");
 
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../../public/login.php");
+    exit();
+}
+
+// Check for correct role (admin with role_id 3)
+if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] != 1) {
+    header("Location: ../../public/unauthorized.php");
+    exit();
+}
 // Check if form is submitted from first page
 if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_SESSION['donor_data'])) {
     $_SESSION['donor_data'] = $_POST;
@@ -120,7 +131,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_SESSION['donor_data'])) {
         ]) . ');</script>';
     } else {
         unset($_SESSION['donor_data']);
-        echo '<script>alert("Submission successful!"); window.location.href = "donor-form.php";</script>';
+        echo '<script>alert("Submission successful!"); window.location.href = "../../../public/Dashboards/dashboard-Inventory-System.php";</script>';
     }
     exit();
 }

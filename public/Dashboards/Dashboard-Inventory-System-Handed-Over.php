@@ -38,25 +38,93 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     height: 100vh;
     overflow-y: auto;
     position: fixed;
-    width: 240px; /* Adjusted for better balance */
+    width: 240px;
     background-color: #ffffff;
     border-right: 1px solid #ddd;
-    padding: 20px;
+    padding: 15px;
     transition: width 0.3s ease;
 }
 
-.dashboard-home-sidebar a {
-    text-decoration: none;
+.dashboard-home-sidebar .nav-link {
     color: #333;
-    display: block;
-    padding: 10px;
-    border-radius: 5px;
+    padding: 10px 15px;
+    margin: 2px 0;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    text-decoration: none;
 }
 
-.dashboard-home-sidebar a.active, 
-.dashboard-home-sidebar a:hover {
-    background-color: #e9ecef;
-    font-weight: bold;
+.dashboard-home-sidebar .nav-link i {
+    margin-right: 10px;
+    font-size: 0.9rem;
+    width: 16px;
+    text-align: center;
+}
+
+.dashboard-home-sidebar .nav-link:hover {
+    background-color: #f8f9fa;
+    color: #dc3545;
+}
+
+.dashboard-home-sidebar .nav-link.active {
+    background-color: #dc3545;
+    color: white;
+}
+
+.dashboard-home-sidebar .collapse-menu {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+.dashboard-home-sidebar .collapse-menu .nav-link {
+    padding: 8px 15px 8px 40px;
+    font-size: 0.85rem;
+    margin: 0;
+    border-radius: 0;
+}
+
+.dashboard-home-sidebar .nav-link[aria-expanded="true"] {
+    background-color: #f8f9fa;
+    color: #dc3545;
+}
+
+.dashboard-home-sidebar .nav-link[aria-expanded="true"] i.fa-chevron-down {
+    transform: rotate(180deg);
+}
+
+.dashboard-home-sidebar i.fa-chevron-down {
+    font-size: 0.8rem;
+    transition: transform 0.2s ease;
+}
+
+.dashboard-home-sidebar .form-control {
+    font-size: 0.9rem;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+/* Blood Donations Section */
+#bloodDonationsCollapse {
+    margin-top: 2px;
+    border: none;
+}
+
+#bloodDonationsCollapse .nav-link {
+    color: #666;
+    padding: 8px 15px 8px 40px;
+}
+
+#bloodDonationsCollapse .nav-link:hover {
+    color: #dc3545;
+    background-color: transparent;
 }
 
 /* Main Content Styling */
@@ -236,40 +304,195 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             font-weight: bold;
         }
 
+/* Search Bar Styling */
+.search-container {
+    width: 100%;
+    margin: 0 auto;
+}
+
+.input-group {
+    width: 100%;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
+
+.input-group-text {
+    background-color: #fff;
+    border: 1px solid #ced4da;
+    border-right: none;
+    padding: 0.5rem 1rem;
+}
+
+.category-select {
+    border: 1px solid #ced4da;
+    border-right: none;
+    border-left: none;
+    background-color: #f8f9fa;
+    cursor: pointer;
+    min-width: 120px;
+    height: 45px;
+    font-size: 0.95rem;
+}
+
+.category-select:focus {
+    box-shadow: none;
+    border-color: #ced4da;
+}
+
+#searchInput {
+    border: 1px solid #ced4da;
+    border-left: none;
+    padding: 0.5rem 1rem;
+    font-size: 0.95rem;
+    height: 45px;
+    flex: 1;
+}
+
+#searchInput::placeholder {
+    color: #adb5bd;
+    font-size: 0.95rem;
+}
+
+#searchInput:focus {
+    box-shadow: none;
+    border-color: #ced4da;
+}
+
+.input-group:focus-within {
+    box-shadow: 0 0 0 0.15rem rgba(0,123,255,.25);
+}
+
+.input-group-text i {
+    font-size: 1.1rem;
+    color: #6c757d;
+}
+
+/* Add these modal styles in your CSS */
+.modal-backdrop {
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1040;
+}
+
+.modal {
+    z-index: 1050;
+}
+
+.modal-dialog {
+    margin: 1.75rem auto;
+}
+
+.modal-content {
+    border: none;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
     </style>
 </head>
 <body>
+    <!-- Confirmation Modal -->
+    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title" id="confirmationModalLabel">Confirm Action</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to proceed to the donor form?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="proceedToDonorForm()">Proceed</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Modal -->
+    <div class="modal" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="false" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="background: transparent; border: none; box-shadow: none;">
+                <div class="modal-body text-center">
+                    <div class="spinner-border text-danger" style="width: 3rem; height: 3rem;" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="container-fluid">
         <!-- Header -->
         <div class="dashboard-home-header bg-light p-3 border-bottom">
             <div class="d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Blood Donor Management System</h4>
+                <button class="btn btn-danger" onclick="showConfirmationModal()">
+                    <i class="fas fa-plus me-2"></i>Add Walk-in Donor
+                </button>
             </div>
         </div>
 
         <div class="row">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">
-                <input type="text" class="form-control mb-3" placeholder="Search...">
-                <a href="dashboard-Inventory-System.php"><i class="fas fa-home me-2"></i>Home</a>
-                <a href="dashboard-Inventory-System-list-of-donations.php"><i class="fas fa-tint me-2"></i>Blood Donations</a>
-                <a href="Dashboard-Inventory-System-Bloodbank.php"><i class="fas fa-tint me-2"></i>Blood Bank</a>
-                <a href="Dashboard-Inventory-System-Hospital-Request.php"><i class="fas fa-list me-2"></i>Requests</a>
-                <a href="#" class="active"><i class="fas fa-check me-2"></i>Handover</a>
+                <input type="text" class="form-control" placeholder="Search...">
+                <a href="dashboard-Inventory-System.php" class="nav-link">
+                    <span><i class="fas fa-home"></i>Home</span>
+                </a>
+                
+                <a class="nav-link" data-bs-toggle="collapse" href="#bloodDonationsCollapse" role="button" aria-expanded="false" aria-controls="bloodDonationsCollapse">
+                    <span><i class="fas fa-tint"></i>Blood Donations</span>
+                    <i class="fas fa-chevron-down"></i>
+                </a>
+                <div class="collapse" id="bloodDonationsCollapse">
+                    <div class="collapse-menu">
+                        <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" class="nav-link">Pending</a>
+                        <a href="dashboard-Inventory-System-list-of-donations.php?status=approved" class="nav-link">Approved</a>
+                        <a href="dashboard-Inventory-System-list-of-donations.php?status=walk-in" class="nav-link">Walk-in</a>
+                        <a href="dashboard-Inventory-System-list-of-donations.php?status=donated" class="nav-link">Donated</a>
+                        <a href="dashboard-Inventory-System-list-of-donations.php?status=declined" class="nav-link">Declined</a>
+                    </div>
+                </div>
+
+                <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
+                    <span><i class="fas fa-tint"></i>Blood Bank</span>
+                </a>
+                <a href="Dashboard-Inventory-System-Hospital-Request.php" class="nav-link">
+                    <span><i class="fas fa-list"></i>Requests</span>
+                </a>
+                <a href="Dashboard-Inventory-System-Handed-Over.php" class="nav-link active">
+                    <span><i class="fas fa-check"></i>Handover</span>
+                </a>
+                <a href="../../assets/php_func/logout.php" class="nav-link">
+                        <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
+                </a>
             </nav>
 
            <!-- Main Content -->
            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
             <div class="container-fluid p-3 email-container">
                     <h2 class="text-left">List of Handed Over Requests</h2>
-                    <div class="d-flex align-items-center mb-2 mt-1 ">
-                        <label for="sortSelect" class="me-2 fw-bold text-muted">Sort By:</label>
-                        <select id="sortSelect" class="form-select" style="width: 200px; min-width: 180px;">
-                            <option value="default">Select an Option</option>
-                            <option value="priority">Priority (Eligible)</option>
-                            <option value="priority">Priority (Uneligible)</option>
-                            <option value="hospital">Donors Name (A-Z)</option>
-                        </select>
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <div class="search-container">
+                                <div class="input-group">
+                                    <span class="input-group-text">
+                                        <i class="fas fa-search"></i>
+                                    </span>
+                                    <select class="form-select category-select" id="searchCategory" style="max-width: 150px;">
+                                        <option value="all">All Fields</option>
+                                        <option value="hospital">Hospital</option>
+                                        <option value="blood_type">Blood Type</option>
+                                        <option value="date">Date</option>
+                                    </select>
+                                    <input type="text" 
+                                        class="form-control" 
+                                        id="searchInput" 
+                                        placeholder="Search handovers...">
+                                </div>
+                            </div>
+                        </div>
                     </div>
                      <!-- Divider Line -->
                 <hr class="mt-0 mb-3 border-2 border-secondary opacity-50 mb-2">
@@ -340,6 +563,56 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+    function searchTable() {
+        const searchInput = document.getElementById('searchInput').value.toLowerCase();
+        const table = document.querySelector('table');
+        const rows = table.getElementsByTagName('tr');
+
+        for (let i = 1; i < rows.length; i++) { // Start from 1 to skip header
+            const row = rows[i];
+            const cells = row.getElementsByTagName('td');
+            let found = false;
+
+            for (let j = 0; j < cells.length; j++) {
+                const cellText = cells[j].textContent.toLowerCase();
+                if (cellText.includes(searchInput)) {
+                    found = true;
+                    break;
+                }
+            }
+
+            row.style.display = found ? '' : 'none';
+        }
+    }
+
+    // Add event listener for real-time search
+    document.getElementById('searchInput').addEventListener('keyup', searchTable);
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize modals
+        const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+        const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
+            backdrop: false,
+            keyboard: false
+        });
+
+        // Function to show confirmation modal
+        window.showConfirmationModal = function() {
+            confirmationModal.show();
+        };
+
+        // Function to handle form submission
+        window.proceedToDonorForm = function() {
+            confirmationModal.hide();
+            loadingModal.show();
+            
+            setTimeout(() => {
+                window.location.href = '../../src/views/forms/donor-form.php';
+            }, 1500);
+        };
+
+        // ... rest of your existing JavaScript ...
+    });
     </script>
 </body>
 </html>
