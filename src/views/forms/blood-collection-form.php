@@ -2,6 +2,31 @@
 session_start();
 require_once '../../../assets/conn/db_conn.php';
 
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../../../public/login.php");
+    exit();
+}
+
+// Check for correct roles (admin role_id 1 or staff role_id 3)
+if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['role_id'] != 3)) {
+    header("Location: ../../../public/unauthorized.php");
+    exit();
+}
+
+// Set donor_id to 46 for admin role (role_id 1)
+if ($_SESSION['role_id'] === 1) {
+    $_SESSION['donor_id'] = 46;
+    error_log("Set donor_id to 46 for admin role");
+}
+
+// Check if donor_id exists in session
+if (!isset($_SESSION['donor_id'])) {
+    error_log("Missing donor_id in session");
+    header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
+    exit();
+}
+
 // Function to generate next sequence number
 function getNextSequenceNumber($existing_numbers) {
     if (empty($existing_numbers)) {
@@ -222,30 +247,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         error_log('Data sent to Supabase: ' . json_encode($data));
 
         if ($http_code === 201) {
-            // Success, redirect to dashboard
-            header('Location: ../../../public/Dashboards/dashboard-staff-blood-collection-submission.php');
+            // Success - redirect to list of donations with walk-in status
+            if ($_SESSION['role_id'] === 1) {
+                header('Location: ../../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php?status=pending.php');
+            } else {
+                header('Location: ../../../public/Dashboards/dashboard-staff-blood-collection-submission.php');
+            }
             exit;
         } else {
-            // Handle error response from Supabase
-            $error_response = json_decode($response, true);
-            $error_message = 'Failed to save data';
-            
-            if (isset($error_response['message'])) {
-                $error_message = $error_response['message'];
-            } elseif (isset($error_response['error'])) {
-                $error_message = $error_response['error'];
-            } elseif (isset($error_response['details'])) {
-                $error_message = $error_response['details'];
-            }
-            
-            error_log('Supabase Error: ' . $error_message);
-            error_log('Full Error Response: ' . json_encode($error_response));
-            
-            throw new Exception($error_message);
+            // Log the error
+            error_log("Error inserting blood collection data. HTTP Code: " . $http_code . " Response: " . $response);
+            throw new Exception("Failed to save blood collection data. Please try again.");
         }
     } catch (Exception $e) {
-        $_SESSION['error'] = $e->getMessage();
-        error_log('Blood Collection Error: ' . $e->getMessage());
+        // Log the error and set error message
+        error_log("Error in blood collection form: " . $e->getMessage());
+        $_SESSION['error_message'] = $e->getMessage();
+        header('Location: blood-collection-form.php?error=1');
+        exit();
     }
 }
 ?>
@@ -782,14 +801,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </style>
 </head>
 <body>
-    <form method="POST" action="" id="bloodCollectionForm">
-        <div class="blood-collection">
-            <?php if (isset($_SESSION['error']) && !empty($_SESSION['error'])): ?>
-            <div class="error-message">
-                <?php echo htmlspecialchars($_SESSION['error']); ?>
-                <?php unset($_SESSION['error']); ?>
+    <div class="blood-collection">
+        <?php if (isset($_GET['error']) && isset($_SESSION['error_message'])): ?>
+            <div class="alert alert-danger" style="background-color: #f8d7da; color: #721c24; padding: 10px; margin-bottom: 20px; border: 1px solid #f5c6cb; border-radius: 4px;">
+                <?php 
+                echo htmlspecialchars($_SESSION['error_message']); 
+                unset($_SESSION['error_message']);
+                ?>
             </div>
-            <?php endif; ?>
+        <?php endif; ?>
+        <form id="bloodCollectionForm" method="POST">
             <h3>VI. BLOOD COLLECTION (To be accomplished by the phlebotomist)</h3>
             <div class="blood-bag-used">
                 <h4>Blood Bag Used:</h4>
@@ -955,8 +976,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="submit-section">
                 <button type="submit" class="submit-button" id="triggerModalButton">Submit</button>
             </div>
-        </div>
-    </form>
+        </form>
+    </div>
 
     <!-- Confirmation Modal -->
     <div class="confirmation-modal" id="confirmationDialog">

@@ -1,9 +1,53 @@
+<?php
+session_start();
+require_once '../../../assets/conn/db_conn.php';
+
+// Debug session data
+error_log("Session data in physical-examination-form.php: " . print_r($_SESSION, true));
+error_log("Role ID type: " . gettype($_SESSION['role_id']) . ", Value: " . $_SESSION['role_id']);
+
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../../../public/login.php");
+    exit();
+}
+
+// Check for correct roles (admin role_id 1 or staff role_id 3)
+if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['role_id'] != 3)) {
+    error_log("Invalid role_id: " . $_SESSION['role_id']);
+    header("Location: ../../../public/unauthorized.php");
+    exit();
+}
+
+// For staff role (role_id 3), check for required session variables
+if ($_SESSION['role_id'] === 3) {
+    if (!isset($_SESSION['donor_id'])) {
+        error_log("Missing donor_id in session for staff");
+        header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
+        exit();
+    }
+    if (!isset($_SESSION['screening_id'])) {
+        error_log("Missing screening_id in session for staff");
+        header('Location: screening-form.php');
+        exit();
+    }
+} else {
+    // For admin role (role_id 1), set donor_id to 46 if not set
+    if (!isset($_SESSION['donor_id'])) {
+        $_SESSION['donor_id'] = 46;
+        error_log("Set donor_id to 46 for admin role");
+    }
+}
+
+// Debug log to check all session variables
+error_log("All session variables in physical-examination-form.php: " . print_r($_SESSION, true));
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Red Cross Screening Form</title>
+    <title>Physical Examination Form</title>
     <style>
        /* General Styling */
     body {
@@ -454,10 +498,18 @@
 </head>
 <body>
         <div class="physical-examination">
+            <?php if (isset($_GET['error']) && isset($_SESSION['error_message'])): ?>
+                <div class="alert alert-danger" style="background-color: #f8d7da; color: #721c24; padding: 10px; margin-bottom: 20px; border: 1px solid #f5c6cb; border-radius: 4px;">
+                    <?php 
+                    echo htmlspecialchars($_SESSION['error_message']); 
+                    unset($_SESSION['error_message']);
+                    ?>
+                </div>
+            <?php endif; ?>
             <form id="physicalExamForm" method="POST" action="../../handlers/physical-examination-handler.php">
                 <h3>V. PHYSICAL EXAMINATION (To be accomplished by the Blood Bank Physician)</h3>
                 <!-- Add hidden field for donor_id -->
-                <input type="hidden" name="donor_id" value="<?php echo isset($_POST['donor_id']) ? htmlspecialchars($_POST['donor_id']) : ''; ?>">
+                <input type="hidden" name="donor_id" value="<?php echo isset($_SESSION['donor_id']) ? htmlspecialchars($_SESSION['donor_id']) : ''; ?>">
                 
                 <table class="physical-examination-table">
                     <thead>
@@ -473,13 +525,13 @@
                     </thead>
                     <tbody>
                         <tr>
-                            <td><input type="text" name="blood_pressure" placeholder="e.g., 120/80" pattern="[0-9]{2,3}/[0-9]{2,3}" title="Format: systolic/diastolic e.g. 120/80"></td>
-                            <td><input type="number" name="pulse_rate" placeholder="BPM" min="0" max="300"></td>
-                            <td><input type="number" name="body_temp" placeholder="°C" step="0.1" min="35" max="42"></td>
-                            <td><input type="text" name="gen_appearance" placeholder="Enter observation"></td>
-                            <td><input type="text" name="skin" placeholder="Enter observation"></td>
-                            <td><input type="text" name="heent" placeholder="Enter observation"></td>
-                            <td><input type="text" name="heart_and_lungs" placeholder="Enter observation"></td>
+                            <td><input type="text" name="blood_pressure" placeholder="e.g., 120/80" pattern="[0-9]{2,3}/[0-9]{2,3}" title="Format: systolic/diastolic e.g. 120/80" required></td>
+                            <td><input type="number" name="pulse_rate" placeholder="BPM" min="0" max="300" required></td>
+                            <td><input type="number" name="body_temp" placeholder="°C" step="0.1" min="35" max="42" required></td>
+                            <td><input type="text" name="gen_appearance" placeholder="Enter observation" required></td>
+                            <td><input type="text" name="skin" placeholder="Enter observation" required></td>
+                            <td><input type="text" name="heent" placeholder="Enter observation" required></td>
+                            <td><input type="text" name="heart_and_lungs" placeholder="Enter observation" required></td>
                         </tr>
                     </tbody>
                 </table>

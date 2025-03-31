@@ -446,11 +446,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 /* Add these modal styles in your CSS */
 .modal-backdrop {
     background-color: rgba(0, 0, 0, 0.5);
-    z-index: 1040;
+    z-index: 9998;
 }
 
 .modal {
-    z-index: 1050;
+    z-index: 9999;
 }
 
 .modal-dialog {
@@ -464,12 +464,43 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     </style>
 </head>
 <body>
+    <!-- Place modals at the root level -->
+    <div class="modal fade" id="confirmationModal" tabindex="-1" role="dialog" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">Confirm Action</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to proceed to the donor form?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="proceedBtn">Proceed</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="loadingModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-transparent border-0">
+                <div class="modal-body text-center">
+                    <div class="spinner-border text-danger" style="width: 3rem; height: 3rem;" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="container-fluid">
         <!-- Header -->
         <div class="dashboard-home-header bg-light p-3 border-bottom">
             <div class="d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Blood Donor Management System</h4>
-                <button class="btn btn-danger" onclick="showConfirmationModal()">
+                <button type="button" class="btn btn-danger" id="addWalkInBtn">
                     <i class="fas fa-plus me-2"></i>Add Walk-in Donor
                 </button>
             </div>
@@ -696,6 +727,62 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Wait for the DOM to be fully loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing modals and buttons...');
+            
+            // Initialize modals
+            let confirmationModal = null;
+            let loadingModal = null;
+            
+            // Get modal elements
+            const confirmationModalEl = document.getElementById('confirmationModal');
+            const loadingModalEl = document.getElementById('loadingModal');
+            
+            if (confirmationModalEl && loadingModalEl) {
+                console.log('Modal elements found, initializing Bootstrap modals...');
+                confirmationModal = new bootstrap.Modal(confirmationModalEl);
+                loadingModal = new bootstrap.Modal(loadingModalEl);
+            } else {
+                console.error('Modal elements not found');
+            }
+            
+            // Get button elements
+            const addWalkInBtn = document.getElementById('addWalkInBtn');
+            const proceedBtn = document.getElementById('proceedBtn');
+            
+            // Add Walk-in button click handler
+            if (addWalkInBtn) {
+                console.log('Add Walk-in button found, adding click handler...');
+                addWalkInBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    if (confirmationModal) {
+                        confirmationModal.show();
+                    }
+                });
+            } else {
+                console.error('Add Walk-in button not found');
+            }
+            
+            // Proceed button click handler
+            if (proceedBtn) {
+                console.log('Proceed button found, adding click handler...');
+                proceedBtn.addEventListener('click', function() {
+                    if (confirmationModal && loadingModal) {
+                        confirmationModal.hide();
+                        loadingModal.show();
+                        setTimeout(() => {
+                            window.location.href = '../../src/views/forms/donor-form.php';
+                        }, 1500);
+                    }
+                });
+            } else {
+                console.error('Proceed button not found');
+            }
+            
+            // Rest of your existing event listeners...
+        });
+
         // Function to fetch donor details
         function fetchDonorDetails(donorId, eligibilityId) {
             fetch(`donor_details_api.php?donor_id=${donorId}&eligibility_id=${eligibilityId}`)
@@ -937,85 +1024,32 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 }
             });
 
-            // Initialize modals
-            const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
-            const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
-                backdrop: false,
-                keyboard: false
-            });
+            // Search functionality
+            function searchTable() {
+                const searchInput = document.getElementById('searchInput').value.toLowerCase();
+                const table = document.querySelector('table');
+                const rows = table.getElementsByTagName('tr');
 
-            // Function to show confirmation modal
-            window.showConfirmationModal = function() {
-                confirmationModal.show();
-            };
+                for (let i = 1; i < rows.length; i++) { // Start from 1 to skip header
+                    const row = rows[i];
+                    const cells = row.getElementsByTagName('td');
+                    let found = false;
 
-            // Function to handle form submission
-            window.proceedToDonorForm = function() {
-                confirmationModal.hide();
-                loadingModal.show();
-                
-                setTimeout(() => {
-                    window.location.href = '../../src/views/forms/donor-form.php';
-                }, 1500);
-            };
-        });
-
-        function searchTable() {
-            const searchInput = document.getElementById('searchInput').value.toLowerCase();
-            const table = document.querySelector('table');
-            const rows = table.getElementsByTagName('tr');
-
-            for (let i = 1; i < rows.length; i++) { // Start from 1 to skip header
-                const row = rows[i];
-                const cells = row.getElementsByTagName('td');
-                let found = false;
-
-                for (let j = 0; j < cells.length; j++) {
-                    const cellText = cells[j].textContent.toLowerCase();
-                    if (cellText.includes(searchInput)) {
-                        found = true;
-                        break;
+                    for (let j = 0; j < cells.length; j++) {
+                        const cellText = cells[j].textContent.toLowerCase();
+                        if (cellText.includes(searchInput)) {
+                            found = true;
+                            break;
+                        }
                     }
+
+                    row.style.display = found ? '' : 'none';
                 }
-
-                row.style.display = found ? '' : 'none';
             }
-        }
 
-        // Add event listener for real-time search
-        document.getElementById('searchInput').addEventListener('keyup', searchTable);
+            // Add event listener for real-time search
+            document.getElementById('searchInput').addEventListener('keyup', searchTable);
+        });
     </script>
-
-    <!-- Confirmation Modal -->
-    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header bg-dark text-white">
-                    <h5 class="modal-title" id="confirmationModalLabel">Confirm Action</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to proceed to the donor form?</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" onclick="proceedToDonorForm()">Proceed</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Loading Modal -->
-    <div class="modal" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="false" data-bs-keyboard="false">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content" style="background: transparent; border: none; box-shadow: none;">
-                <div class="modal-body text-center">
-                    <div class="spinner-border text-danger" style="width: 3rem; height: 3rem;" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 </body>
 </html>

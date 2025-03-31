@@ -2,13 +2,45 @@
 session_start();
 require_once '../../../assets/conn/db_conn.php';
 
-// Check if user is logged in and has necessary session variables
-if (!isset($_SESSION['user_id']) || !isset($_SESSION['medical_history_id'])) {
-    error_log("Missing session variables in screening form: user_id=" . (isset($_SESSION['user_id']) ? 'set' : 'not set') . 
-              ", medical_history_id=" . (isset($_SESSION['medical_history_id']) ? 'set' : 'not set'));
-    header('Location: ../../../public/Dashboards/dashboard-staff-donor-submission.php');
+// Debug session data
+error_log("Session data in screening-form.php: " . print_r($_SESSION, true));
+error_log("Role ID type: " . gettype($_SESSION['role_id']) . ", Value: " . $_SESSION['role_id']);
+
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../../../public/login.php");
     exit();
 }
+
+// Check for correct roles (admin role_id 1 or staff role_id 3)
+if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['role_id'] != 3)) {
+    error_log("Invalid role_id: " . $_SESSION['role_id']);
+    header("Location: ../../../public/unauthorized.php");
+    exit();
+}
+
+// For staff role (role_id 3), check for required session variables
+if ($_SESSION['role_id'] === 3) {
+    if (!isset($_SESSION['donor_id'])) {
+        error_log("Missing donor_id in session for staff");
+        header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
+        exit();
+    }
+    if (!isset($_SESSION['medical_history_id'])) {
+        error_log("Missing medical_history_id in session for staff");
+        header('Location: medical-history.php');
+        exit();
+    }
+} else {
+    // For admin role (role_id 1), set donor_id to 46 if not set
+    if (!isset($_SESSION['donor_id'])) {
+        $_SESSION['donor_id'] = 46;
+        error_log("Set donor_id to 46 for admin role");
+    }
+}
+
+// Debug log to check all session variables
+error_log("All session variables in screening-form.php: " . print_r($_SESSION, true));
 
 // Get interviewer information from users table
 $ch = curl_init(SUPABASE_URL . '/rest/v1/users?select=surname,first_name,middle_name&user_id=eq.' . $_SESSION['user_id']);
@@ -127,13 +159,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (is_array($response_data) && isset($response_data[0]['screening_id'])) {
                 $_SESSION['screening_id'] = $response_data[0]['screening_id'];
                 
-                // Return JSON response
-                header('Content-Type: application/json');
-                echo json_encode([
-                    'success' => true,
-                    'screening_id' => $response_data[0]['screening_id']
-                ]);
-                exit();
+                // Different redirections based on role
+                if ($_SESSION['role_id'] === 1) {
+                    // Admin (role_id 1) - Direct to physical examination
+                    error_log("Admin role: Redirecting to physical examination form");
+                    header('Location: physical-examination-form.php');
+                    exit();
+                } else {
+                    // Staff (role_id 3) - Return JSON response for AJAX handling
+                    header('Content-Type: application/json');
+                    echo json_encode([
+                        'success' => true,
+                        'screening_id' => $response_data[0]['screening_id']
+                    ]);
+                    exit();
+                }
             } else {
                 throw new Exception("Invalid response format");
             }
@@ -714,7 +754,7 @@ select:focus {
                         IN-HOUSE
                     </label>
                     <label class="donation-option">
-                        <input type="radio" name="donation-type" value="walk-in" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'walk-in') ? 'checked' : ''; ?> required> 
+                        <input type="radio" name="donation-type" value="walk-in" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'walk-in') ? 'checked' : (isset($_SESSION['role_id']) && $_SESSION['role_id'] === 1 ? 'checked' : ''); ?> required> 
                         <span class="checkmark"></span>
                         WALK-IN/VOLUNTARY
                     </label>
@@ -909,10 +949,22 @@ select:focus {
                     if (!response.ok) {
                         throw new Error('Network response was not ok');
                     }
-                    return response.json();
+                    // Check if the response is JSON
+                    const contentType = response.headers.get("content-type");
+                    if (contentType && contentType.indexOf("application/json") !== -1) {
+                        return response.json();
+                    } else {
+                        // For admin role, response will be a redirect
+                        window.location.href = 'physical-examination-form.php';
+                        return null;
+                    }
                 })
                 .then(data => {
                     loadingSpinner.style.display = "none";
+                    if (data === null) {
+                        // Admin redirect already handled
+                        return;
+                    }
                     if (data.success) {
                         window.location.href = "../../../public/Dashboards/dashboard-staff-donor-submission.php";
                     } else {
@@ -970,10 +1022,22 @@ select:focus {
                     if (!response.ok) {
                         throw new Error('Network response was not ok');
                     }
-                    return response.json();
+                    // Check if the response is JSON
+                    const contentType = response.headers.get("content-type");
+                    if (contentType && contentType.indexOf("application/json") !== -1) {
+                        return response.json();
+                    } else {
+                        // For admin role, response will be a redirect
+                        window.location.href = 'physical-examination-form.php';
+                        return null;
+                    }
                 })
                 .then(data => {
                     loadingSpinner.style.display = "none";
+                    if (data === null) {
+                        // Admin redirect already handled
+                        return;
+                    }
                     if (data.success) {
                         window.location.href = "../../../public/Dashboards/dashboard-staff-donor-submission.php";
                     } else {
