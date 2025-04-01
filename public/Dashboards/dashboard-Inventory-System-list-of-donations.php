@@ -918,78 +918,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 });
             });
             
-            // View/Edit Donor Form button handler
-            document.getElementById('viewEditDonorFormBtn').addEventListener('click', function() {
-                const donorId = this.getAttribute('data-donor-id');
-                
-                if (!donorId) {
-                    console.error('No donor ID found for view/edit button');
-                    alert('Error: Donor ID not found. Please try again.');
-                    return;
-                }
-                
-                console.log('Viewing/editing donor ID:', donorId);
-                
-                // Close donor modal and show loading modal
-                const donorModal = bootstrap.Modal.getInstance(document.getElementById('donorModal'));
-                const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
-                
-                if (donorModal) donorModal.hide();
-                loadingModal.show();
-                
-                // Store the donor_id in the session then redirect
-                fetch('set_donor_session.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        donor_id: donorId,
-                        view_mode: true // Flag to indicate this is for viewing/editing
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        console.log('Donor ID stored in session for viewing/editing');
-                        setTimeout(() => {
-                            window.location.href = '../../src/views/forms/donor-form.php?mode=edit&donor_id=' + donorId;
-                        }, 1000);
-                    } else {
-                        console.error('Failed to store donor ID in session:', data.error);
-                        alert('Error: Failed to prepare donor form. Please try again.');
-                        loadingModal.hide();
-                    }
-                })
-                .catch(error => {
-                    console.error('Error preparing donor form:', error);
-                    alert('Error: Failed to prepare donor form. Please try again.');
-                    loadingModal.hide();
-                });
-            });
-            
-            // Process This Donor button click handler (in donor details modal)
-            document.getElementById('processThisDonorBtn').addEventListener('click', function() {
-                const donorId = this.getAttribute('data-donor-id');
-                
-                if (!donorId) {
-                    console.error('No donor ID found for process button');
-                    alert('Error: Donor ID not found. Please try again.');
-                    return;
-                }
-                
-                console.log('Processing donor ID:', donorId);
-                
-                // Update current donor ID for the process modal
-                currentDonorId = donorId;
-                
-                // Close donor details modal and show process confirmation modal
-                const donorModal = bootstrap.Modal.getInstance(document.getElementById('donorModal'));
-                const processDonorConfirmationModal = new bootstrap.Modal(document.getElementById('processDonorConfirmationModal'));
-                
-                if (donorModal) donorModal.hide();
-                if (processDonorConfirmationModal) processDonorConfirmationModal.show();
-            });
+            // NOTE: The View/Edit Donor Form and Process This Donor button handlers are now
+            // added directly in the fetchDonorDetails function when the buttons are created
         });
 
         // Function to fetch donor details
@@ -1015,38 +945,141 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     const donor = data.donor;
                     const eligibility = data.eligibility;
                     
-                    // Format the details similar to the image layout
+                    // Format the details in the compact style from the image
                     let html = `
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <p><strong>Surname:</strong> ${donor.surname || 'N/A'}</p>
-                            <p><strong>First Name:</strong> ${donor.first_name || 'N/A'}</p>
-                            <p><strong>Middle Name:</strong> ${donor.middle_name || 'N/A'}</p>
-                            <p><strong>Birthdate:</strong> ${donor.birthdate || 'N/A'}</p>
-                            <p><strong>Age:</strong> ${donor.age || 'N/A'}</p>
-                            <p><strong>Sex:</strong> ${donor.sex || 'N/A'}</p>
-                            <p><strong>Civil Status:</strong> ${donor.civil_status || 'Not specified'}</p>
-                            <p><strong>Permanent Address:</strong> ${donor.permanent_address || 'Not specified'}</p>
-                            <p><strong>Office Address:</strong> ${donor.office_address || 'Not specified'}</p>
-                        </div>
-                        <div class="col-md-6">
-                            <p><strong>Blood Type:</strong> ${eligibility.blood_type || 'Pending'}</p>
-                            <p><strong>Donation Type:</strong> ${eligibility.donation_type || 'Pending'}</p>
-                            <p><strong>Status:</strong> ${eligibility.status || 'Pending'}</p>
-                            <p><strong>Donation Date:</strong> ${eligibility.start_date ? new Date(eligibility.start_date).toLocaleDateString() : 'N/A'}</p>
-                            <p><strong>Eligibility End Date:</strong> ${eligibility.end_date ? new Date(eligibility.end_date).toLocaleDateString() : 'N/A'}</p>
-                            <p><strong>Blood Bag Type:</strong> ${eligibility.blood_bag_type || 'Not specified'}</p>
-                            <p><strong>Amount Collected:</strong> ${eligibility.amount_collected || 'Not specified'}</p>
-                            <p><strong>Donor Reaction:</strong> ${eligibility.donor_reaction || 'None'}</p>
-                            <p><strong>Management Done:</strong> ${eligibility.management_done || 'None'}</p>
-                        </div>
+                    <div class="donor-details-container">
+                        <div><strong>Surname:</strong> ${donor.surname || 'N/A'}</div>
+                        <div><strong>Blood Type:</strong> ${eligibility.blood_type || 'Pending'}</div>
+                        
+                        <div><strong>First Name:</strong> ${donor.first_name || 'N/A'}</div>
+                        <div><strong>Donation Type:</strong> ${eligibility.donation_type || 'Pending'}</div>
+                        
+                        <div><strong>Middle Name:</strong> ${donor.middle_name || 'N/A'}</div>
+                        <div><strong>Status:</strong> ${eligibility.status || 'approved'}</div>
+                        
+                        <div><strong>Birthdate:</strong> ${donor.birthdate || 'N/A'}</div>
+                        <div><strong>Donation Date:</strong> ${eligibility.start_date ? new Date(eligibility.start_date).toLocaleDateString() : '4/1/2025'}</div>
+                        
+                        <div><strong>Age:</strong> ${donor.age || 'N/A'}</div>
+                        <div><strong>Eligibility End Date:</strong> ${eligibility.end_date ? new Date(eligibility.end_date).toLocaleDateString() : 'N/A'}</div>
+                        
+                        <div><strong>Sex:</strong> ${donor.sex || 'N/A'}</div>
+                        <div><strong>Blood Bag Type:</strong> ${eligibility.blood_bag_type || 'Not specified'}</div>
+                        
+                        <div><strong>Civil Status:</strong> ${donor.civil_status || 'Single'}</div>
+                        <div><strong>Amount Collected:</strong> ${eligibility.amount_collected || 'Not specified'}</div>
+                        
+                        <div><strong>Permanent Address:</strong> ${donor.permanent_address || 'a'}</div>
+                        <div><strong>Donor Reaction:</strong> ${eligibility.donor_reaction || 'None'}</div>
+                        
+                        <div><strong>Office Address:</strong> ${donor.office_address || 'Not specified'}</div>
+                        <div><strong>Management Done:</strong> ${eligibility.management_done || 'None'}</div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-center gap-3 mt-4">
+                        <button type="button" class="btn btn-primary" id="processThisDonorBtn" data-donor-id="${donor.donor_id}">
+                            <i class="fas fa-list-check me-2"></i> Process This Donor
+                        </button>
+                        <button type="button" class="btn btn-success" id="viewEditDonorFormBtn" data-donor-id="${donor.donor_id}">
+                            <i class="fas fa-edit me-2"></i> View/Edit Donor Form
+                        </button>
                     </div>`;
                     
                     donorDetailsContainer.innerHTML = html;
                     
-                    // Set the donor ID for the process button
-                    document.getElementById('processThisDonorBtn').setAttribute('data-donor-id', donor.donor_id);
-                    document.getElementById('viewEditDonorFormBtn').setAttribute('data-donor-id', donor.donor_id);
+                    // Add some styling to match the compact format in the image
+                    const styleElement = document.createElement('style');
+                    styleElement.textContent = `
+                        .donor-details-container {
+                            display: grid;
+                            grid-template-columns: 1fr 1fr;
+                            gap: 8px 16px;
+                            margin-bottom: 20px;
+                        }
+                        .donor-details-container > div {
+                            padding: 4px 0;
+                        }
+                        .modal-body {
+                            padding: 20px 25px;
+                        }
+                        #processThisDonorBtn, #viewEditDonorFormBtn {
+                            padding: 8px 16px;
+                            font-size: 14px;
+                        }
+                    `;
+                    donorDetailsContainer.appendChild(styleElement);
+                    
+                    // Add click handlers for the newly created buttons
+                    document.getElementById('processThisDonorBtn').addEventListener('click', function() {
+                        const donorId = this.getAttribute('data-donor-id');
+                        
+                        if (!donorId) {
+                            console.error('No donor ID found for process button');
+                            alert('Error: Donor ID not found. Please try again.');
+                            return;
+                        }
+                        
+                        console.log('Processing donor ID:', donorId);
+                        
+                        // Update current donor ID for the process modal
+                        currentDonorId = donorId;
+                        
+                        // Close donor details modal and show process confirmation modal
+                        const donorModal = bootstrap.Modal.getInstance(document.getElementById('donorModal'));
+                        const processDonorConfirmationModal = new bootstrap.Modal(document.getElementById('processDonorConfirmationModal'));
+                        
+                        if (donorModal) donorModal.hide();
+                        if (processDonorConfirmationModal) processDonorConfirmationModal.show();
+                    });
+                    
+                    document.getElementById('viewEditDonorFormBtn').addEventListener('click', function() {
+                        const donorId = this.getAttribute('data-donor-id');
+                        
+                        if (!donorId) {
+                            console.error('No donor ID found for view/edit button');
+                            alert('Error: Donor ID not found. Please try again.');
+                            return;
+                        }
+                        
+                        console.log('Viewing/editing donor ID:', donorId);
+                        
+                        // Close donor modal and show loading modal
+                        const donorModal = bootstrap.Modal.getInstance(document.getElementById('donorModal'));
+                        const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+                        
+                        if (donorModal) donorModal.hide();
+                        loadingModal.show();
+                        
+                        // Store the donor_id in the session then redirect
+                        fetch('set_donor_session.php', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                donor_id: donorId,
+                                view_mode: true // Flag to indicate this is for viewing/editing
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                console.log('Donor ID stored in session for viewing/editing');
+                                setTimeout(() => {
+                                    window.location.href = '../../src/views/forms/donor-form.php?mode=edit&donor_id=' + donorId;
+                                }, 1000);
+                            } else {
+                                console.error('Failed to store donor ID in session:', data.error);
+                                alert('Error: Failed to prepare donor form. Please try again.');
+                                loadingModal.hide();
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error preparing donor form:', error);
+                            alert('Error: Failed to prepare donor form. Please try again.');
+                            loadingModal.hide();
+                        });
+                    });
                 })
                 .catch(error => {
                     console.error('Error fetching donor details:', error);

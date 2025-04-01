@@ -462,7 +462,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 /* Inventory Dashboard Cards */
 .inventory-card {
     border-radius: 8px;
-    color: white;
     padding: 20px;
     margin-bottom: 20px;
     text-align: center;
@@ -470,38 +469,45 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    background-color: #ffe6e6; /* Light pink background */
 }
 
 .inventory-card h2 {
     font-size: 64px;
     font-weight: bold;
     margin: 10px 0;
+    color: #dc3545; /* Red color for numbers */
 }
 
-.inventory-card-blue {
-    background-color: #0d6efd;
+.inventory-stat-card {
+    background-color: #ffe6e6;
+    border-radius: 8px;
+    border: none;
 }
 
-.inventory-card-green {
-    background-color: #198754;
+.inventory-stat-number {
+    font-size: 64px;
+    font-weight: bold;
+    color: #dc3545;
 }
 
-.inventory-card-yellow {
-    background-color: #ffc107;
+.blood-type-card {
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
-.inventory-card-red {
-    background-color: #dc3545;
+.blood-inventory-heading {
+    font-size: 1.75rem;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 20px;
 }
 
-.inventory-card-subtitle {
-    font-size: 14px;
-    margin-top: 5px;
-}
-
-.inventory-card-title {
-    font-size: 18px;
-    margin-bottom: 10px;
+.date-display {
+    font-size: 0.9rem;
+    font-weight: normal;
+    color: #666;
+    float: right;
 }
 
 /* Action buttons */
@@ -731,7 +737,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     border: none;
     box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
 }
-
     </style>
 </head>
 <body>
@@ -790,7 +795,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             <!-- Main Content -->
             <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                 <div class="container-fluid p-4 custom-margin">
-                    <h2 class="card-title">Blood Bank Inventory</h2>
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h2 class="blood-inventory-heading mb-0">Blood Bank Inventory</h2>
+                        <p class="text-dark mb-0">
+                            <strong><?php echo date('d F Y'); ?></strong> <i class="fas fa-calendar-alt ms-2"></i>
+                        </p>
+                    </div>
+                    
                     <div class="row mb-3">
                         <div class="col-12">
                             <div class="search-container">
@@ -815,49 +826,145 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     
                     <!-- Stats Cards -->
                     <div class="row mb-4">
-                        <!-- Total Blood Bags -->
+                        <!-- Total Blood Units -->
                         <div class="col-md-3">
-                            <div class="inventory-card inventory-card-blue">
-                                <div class="inventory-card-title">Total Blood Bags</div>
-                                <h2><?php echo $totalBags; ?></h2>
+                            <div class="card text-center p-3 h-100 inventory-stat-card">
+                                <div class="card-body">
+                                    <h5 class="card-title text-dark fw-bold">Total Blood Units</h5>
+                                    <h1 class="inventory-stat-number my-3"><?php echo $totalBags; ?></h1>
+                                </div>
                             </div>
                         </div>
                         
                         <!-- Available Types -->
                         <div class="col-md-3">
-                            <div class="inventory-card inventory-card-green">
-                                <div class="inventory-card-title">Available Types</div>
-                                <h2><?php echo count($availableTypes); ?></h2>
-                                <div class="inventory-card-subtitle">
-                                    <?php echo implode(', ', $availableTypes); ?>
+                            <div class="card text-center p-3 h-100 inventory-stat-card">
+                                <div class="card-body">
+                                    <h5 class="card-title text-dark fw-bold">Available Types</h5>
+                                    <h1 class="inventory-stat-number my-3"><?php echo count($availableTypes); ?></h1>
                                 </div>
                             </div>
                         </div>
                         
-                        <!-- Bags Expiring Soon -->
+                        <!-- Units Expiring Soon -->
                         <div class="col-md-3">
-                            <div class="inventory-card inventory-card-yellow">
-                                <div class="inventory-card-title">Bags Expiring Soon</div>
-                                <h2><?php echo $expiringBags; ?></h2>
-                                <div class="inventory-card-subtitle">Within 7 days</div>
+                            <div class="card text-center p-3 h-100 inventory-stat-card">
+                                <div class="card-body">
+                                    <h5 class="card-title text-dark fw-bold">Units Expiring Soon</h5>
+                                    <h1 class="inventory-stat-number my-3"><?php echo $expiringBags; ?></h1>
+                                </div>
                             </div>
                         </div>
                         
-                        <!-- Expired Bags -->
+                        <!-- Expired Units -->
                         <div class="col-md-3">
-                            <div class="inventory-card inventory-card-red">
-                                <div class="inventory-card-title">Expired Bags</div>
-                                <h2><?php echo $expiredBags; ?></h2>
-                                <div class="inventory-card-subtitle">Needs disposal</div>
+                            <div class="card text-center p-3 h-100 inventory-stat-card">
+                                <div class="card-body">
+                                    <h5 class="card-title text-dark fw-bold">Expired Units</h5>
+                                    <h1 class="inventory-stat-number my-3"><?php echo $expiredBags; ?></h1>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <h5 class="mt-4 mb-3">Available Blood per Unit</h5>
+                    
+                    <div class="row mb-4">
+                        <!-- Blood Type Cards -->
+                        <div class="col-md-3 mb-3">
+                            <div class="card p-3 h-100 blood-type-card">
+                                <div class="card-body">
+                                    <h5 class="card-title fw-bold">Blood Type: A+</h5>
+                                    <p class="card-text">Availability: 
+                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['A+'] ?? 0; ?></span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3 mb-3">
+                            <div class="card p-3 h-100 blood-type-card">
+                                <div class="card-body">
+                                    <h5 class="card-title fw-bold">Blood Type: A-</h5>
+                                    <p class="card-text">Availability: 
+                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['A-'] ?? 0; ?></span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3 mb-3">
+                            <div class="card p-3 h-100 blood-type-card">
+                                <div class="card-body">
+                                    <h5 class="card-title fw-bold">Blood Type: B+</h5>
+                                    <p class="card-text">Availability: 
+                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['B+'] ?? 0; ?></span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3 mb-3">
+                            <div class="card p-3 h-100 blood-type-card">
+                                <div class="card-body">
+                                    <h5 class="card-title fw-bold">Blood Type: B-</h5>
+                                    <p class="card-text">Availability: 
+                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['B-'] ?? 0; ?></span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3 mb-3">
+                            <div class="card p-3 h-100 blood-type-card">
+                                <div class="card-body">
+                                    <h5 class="card-title fw-bold">Blood Type: O+</h5>
+                                    <p class="card-text">Availability: 
+                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['O+'] ?? 0; ?></span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3 mb-3">
+                            <div class="card p-3 h-100 blood-type-card">
+                                <div class="card-body">
+                                    <h5 class="card-title fw-bold">Blood Type: O-</h5>
+                                    <p class="card-text">Availability: 
+                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['O-'] ?? 0; ?></span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3 mb-3">
+                            <div class="card p-3 h-100 blood-type-card">
+                                <div class="card-body">
+                                    <h5 class="card-title fw-bold">Blood Type: AB+</h5>
+                                    <p class="card-text">Availability: 
+                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['AB+'] ?? 0; ?></span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3 mb-3">
+                            <div class="card p-3 h-100 blood-type-card">
+                                <div class="card-body">
+                                    <h5 class="card-title fw-bold">Blood Type: AB-</h5>
+                                    <p class="card-text">Availability: 
+                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['AB-'] ?? 0; ?></span>
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>
                     
                     <!-- Blood Bank Table -->
-                    <div class="table-responsive">
-                        <table class="table table-striped table-hover">
-                            <thead class="table-dark">
-                                <tr>
+                    <div class="table-responsive mt-4">
+                        <table class="table table-bordered table-hover">
+                            <thead>
+                                <tr class="bg-danger text-white">
                                     <th>Serial Number</th>
                                     <th>Blood Type</th>
                                     <th>Bags</th>
@@ -877,9 +984,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     <td><?php echo $bag['bag_type']; ?></td>
                                     <td><?php echo $bag['collection_date']; ?></td>
                                     <td><?php echo $bag['expiration_date']; ?></td>
-                                    <td><?php echo $bag['status']; ?></td>
                                     <td>
-                                        <button class="action-btn" onclick="showDonorDetails(<?php echo $index; ?>)">
+                                        <span class="badge <?php echo ($bag['status'] == 'Valid') ? 'bg-success' : 'bg-danger'; ?>">
+                                            <?php echo $bag['status']; ?>
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <button class="btn btn-primary btn-sm" onclick="showDonorDetails(<?php echo $index; ?>)">
                                             <i class="fas fa-eye"></i>
                                         </button>
                                     </td>

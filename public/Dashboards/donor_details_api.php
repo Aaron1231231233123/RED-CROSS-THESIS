@@ -96,6 +96,57 @@ function fetchEligibilityRecord($eligibilityId) {
                 'is_pending' => true
             ];
         }
+        
+        $eligibilityRecord = $data[0];
+        
+        // If there's a screening_id, fetch blood_type and donation_type from screening_form
+        if (!empty($eligibilityRecord['screening_id'])) {
+            $screeningData = fetchScreeningData($eligibilityRecord['screening_id']);
+            
+            if ($screeningData && !isset($screeningData['error'])) {
+                // Override blood_type and donation_type with data from screening form if available
+                if (!empty($screeningData['blood_type'])) {
+                    $eligibilityRecord['blood_type'] = $screeningData['blood_type'];
+                }
+                
+                if (!empty($screeningData['donation_type'])) {
+                    $eligibilityRecord['donation_type'] = $screeningData['donation_type'];
+                }
+            }
+        }
+        
+        return $eligibilityRecord;
+    }
+}
+
+// Function to fetch screening form data
+function fetchScreeningData($screeningId) {
+    $curl = curl_init();
+    
+    curl_setopt_array($curl, [
+        CURLOPT_URL => SUPABASE_URL . "/rest/v1/screening_form?screening_id=eq." . $screeningId,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            "apikey: " . SUPABASE_API_KEY,
+            "Authorization: Bearer " . SUPABASE_API_KEY,
+            "Content-Type: application/json"
+        ],
+    ]);
+    
+    $response = curl_exec($curl);
+    $err = curl_error($curl);
+    
+    curl_close($curl);
+    
+    if ($err) {
+        error_log("cURL Error fetching screening data: " . $err);
+        return ["error" => "cURL Error #:" . $err];
+    } else {
+        $data = json_decode($response, true);
+        if (empty($data)) {
+            error_log("No screening data found for ID: $screeningId");
+            return null;
+        }
         return $data[0];
     }
 }
