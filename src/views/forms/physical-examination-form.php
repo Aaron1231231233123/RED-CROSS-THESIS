@@ -31,14 +31,7 @@ if ($_SESSION['role_id'] === 3) {
         header('Location: screening-form.php');
         exit();
     }
-} else {
-    // For admin role (role_id 1), set donor_id to 46 if not set
-    if (!isset($_SESSION['donor_id'])) {
-        $_SESSION['donor_id'] = 46;
-        error_log("Set donor_id to 46 for admin role");
-    }
-}
-
+} 
 // Debug log to check all session variables
 error_log("All session variables in physical-examination-form.php: " . print_r($_SESSION, true));
 ?>

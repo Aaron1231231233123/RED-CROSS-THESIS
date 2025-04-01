@@ -140,16 +140,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 }
 
 .dashboard-home-sidebar .nav-link.active {
-    background-color: #dc3545;
-    color: white;
+    color: #dc3545;
+    background-color: transparent;
 }
 
 .dashboard-home-sidebar .collapse-menu {
     list-style: none;
     padding: 0;
     margin: 0;
-    background-color: #f8f9fa;
     border-radius: 4px;
+    background-color: #f8f8f8;
 }
 
 .dashboard-home-sidebar .collapse-menu .nav-link {
@@ -157,11 +157,23 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     font-size: 0.85rem;
     margin: 0;
     border-radius: 0;
+    color: #666;
+}
+
+.dashboard-home-sidebar .collapse-menu .nav-link:hover {
+    background-color: #f0f0f0;
+    color: #dc3545;
+}
+
+.dashboard-home-sidebar .collapse-menu .nav-link.active {
+    color: #dc3545;
+    font-weight: 600;
+    background-color: #f0f0f0;
 }
 
 .dashboard-home-sidebar .nav-link[aria-expanded="true"] {
-    background-color: #f8f9fa;
     color: #dc3545;
+    background-color: transparent;
 }
 
 .dashboard-home-sidebar .nav-link[aria-expanded="true"] i.fa-chevron-down {
@@ -192,6 +204,24 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 }
 
 #bloodDonationsCollapse .nav-link:hover {
+    color: #dc3545;
+    font-weight: 600;
+    background-color: transparent;
+}
+
+#bloodDonationsCollapse .nav-link.active {
+    color: #dc3545 !important;
+    font-weight: 600;
+    background-color: transparent;
+}
+
+.dashboard-home-sidebar .collapse-menu .nav-link.active {
+    color: #dc3545 !important;
+    font-weight: 600;
+    background-color: transparent;
+}
+
+.dashboard-home-sidebar .nav-link[aria-expanded="true"] {
     color: #dc3545;
     background-color: transparent;
 }
@@ -514,6 +544,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         <div class="row">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">
+            <div class="position-sticky">
+                    <div class="d-flex align-items-center ps-1 mb-3 mt-2">
+                        <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" style="width: 65px; height: 65px; object-fit: contain;">
+                        <span class="text-primary ms-1" style="font-size: 1.5rem; font-weight: 600;">Dashboard</span>
+                    </div>
                 <input type="text" class="form-control" placeholder="Search...">
                 <a href="dashboard-Inventory-System.php" class="nav-link">
                     <span><i class="fas fa-home"></i>Home</span>
@@ -525,7 +560,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 </a>
                 <div class="collapse show" id="bloodDonationsCollapse">
                     <div class="collapse-menu">
-                        <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" class="nav-link <?php echo $status === 'pending' ? 'active' : ''; ?>">Pending</a>
+                        <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" class="nav-link <?php echo ($status === 'pending' || !$status) ? 'active' : ''; ?>">Pending</a>
                         <a href="dashboard-Inventory-System-list-of-donations.php?status=approved" class="nav-link <?php echo $status === 'approved' ? 'active' : ''; ?>">Approved</a>
                         <a href="dashboard-Inventory-System-list-of-donations.php?status=declined" class="nav-link <?php echo $status === 'declined' ? 'active' : ''; ?>">Declined</a>
                     </div>
@@ -544,7 +579,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
                 </a>
             </nav>
-
+        </div>
            <!-- Main Content -->
            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
             <div class="container-fluid p-4 custom-margin">

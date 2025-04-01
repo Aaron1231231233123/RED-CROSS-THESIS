@@ -14,11 +14,7 @@ if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['rol
     exit();
 }
 
-// Set donor_id to 46 for admin role (role_id 1)
-if ($_SESSION['role_id'] === 1) {
-    $_SESSION['donor_id'] = 46;
-    error_log("Set donor_id to 46 for admin role");
-}
+
 
 // Check if donor_id exists in session
 if (!isset($_SESSION['donor_id'])) {

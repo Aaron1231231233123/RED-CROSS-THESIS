@@ -36,6 +36,7 @@ body {
 /* Reduce Left Margin for Main Content */
 main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     margin-left: 280px !important; 
+    margin-top: 30px !important;
 }
 /* Header */
 .dashboard-home-header {
@@ -141,6 +142,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
 #bloodDonationsCollapse .nav-link:hover {
     color: #dc3545;
+    font-weight: 600;
     background-color: transparent;
 }
 
@@ -179,7 +181,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
 .card:hover {
     transform: translateY(-5px);
-    box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 8px 12px rgba(194, 194, 194, 0.7);
 }
 /* Last card to have a */
 /* Add margin to the last column in the row */
@@ -294,6 +296,143 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     }
 }
 
+/* Add these styles to your existing CSS */
+.card {
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.bg-danger.bg-opacity-10 {
+    background-color: rgba(220, 53, 69, 0.1) !important;
+}
+
+.text-danger {
+    color: #dc3545 !important;
+}
+
+h6 {
+    color: #333;
+    font-weight: 600;
+}
+
+.card-subtitle {
+    font-size: 0.9rem;
+}
+
+.text-muted {
+    color: #6c757d !important;
+}
+
+#map {
+    border: 1px solid #dee2e6;
+}
+
+.content-wrapper {
+    background: #fff;
+    box-shadow: 0 0 15px rgba(0,0,0,0.05);
+    margin-top: 80px;
+    border-radius: 12px;
+}
+
+.bg-danger.bg-opacity-10 {
+    background-color: #FFE9E9 !important;
+}
+
+.text-danger {
+    color: #941022 !important;
+}
+
+.card {
+    border-radius: 8px;
+}
+
+.shadow-sm {
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05) !important;
+}
+
+/* Add new styles for statistics cards */
+.statistics-card {
+    transition: transform 0.2s;
+}
+
+.statistics-card:hover {
+    transform: translateY(-2px);
+}
+
+/* Statistics Cards Styling */
+.inventory-system-stats-container {
+    display: flex;
+    flex-direction: column;
+}
+
+.inventory-system-stats-card {
+    background-color: #FFE9E9;
+    border-radius: 12px;
+    border: none;
+}
+
+.inventory-system-stats-body {
+    padding: 1.5rem;
+}
+
+.inventory-system-stats-label {
+    color: #941022;
+    font-size: 1.875rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.inventory-system-stats-value {
+    color: #941022;
+    font-size: 5rem;
+    font-weight: 600;
+    line-height: 1;
+    margin-top: 10px;
+    text-align: right;
+    margin-right: 18px;
+}
+
+/* Add these styles in the style section */
+.inventory-system-blood-card {
+    background-color: #f8f8f8;  /* slightly darker white */
+    border-radius: 15px;
+    border: none;
+    transition: all 0.3s ease;
+    box-shadow: rgba(0, 0, 0, 0.15) 0px 8px 16px, 
+                rgba(0, 0, 0, 0.1) 0px 4px 8px,
+                rgba(0, 0, 0, 0.05) 0px 1px 3px;
+}
+
+.inventory-system-blood-card:hover {
+    transform: translateY(-5px);
+    box-shadow: rgba(0, 0, 0, 0.25) 0px 14px 28px, 
+                rgba(0, 0, 0, 0.22) 0px 10px 10px,
+                rgba(0, 0, 0, 0.18) 0px 4px 6px;
+}
+
+.inventory-system-blood-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 0.5rem;
+}
+
+.inventory-system-blood-availability {
+    font-size: 0.875rem;
+    color: #666;
+    margin-bottom: 0;
+}
+
+/* Blood type specific colors */
+.blood-type-a-pos { border-left: 4px solid #8B0000; }  /* dark red */
+.blood-type-a-neg { border-left: 4px solid #8B0000; }  /* dark red */
+.blood-type-b-pos { border-left: 4px solid #FF8C00; }  /* orange */
+.blood-type-b-neg { border-left: 4px solid #FF8C00; }  /* orange */
+.blood-type-o-pos { border-left: 4px solid #00008B; }  /* dark blue */
+.blood-type-o-neg { border-left: 4px solid #00008B; }  /* dark blue */
+.blood-type-ab-pos { border-left: 4px solid #9D94FF; }
+.blood-type-ab-neg { border-left: 4px solid #8A82E8; }
+
     </style>
 </head>
 <body>
@@ -311,64 +450,170 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         <div class="row">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">
-                <input type="text" class="form-control" placeholder="Search...">
-                <a href="dashboard-Inventory-System.php" class="nav-link active">
-                    <span><i class="fas fa-home"></i>Home</span>
-                </a>
-                
-                <a class="nav-link" data-bs-toggle="collapse" href="#bloodDonationsCollapse" role="button" aria-expanded="false" aria-controls="bloodDonationsCollapse">
-                    <span><i class="fas fa-tint"></i>Blood Donations</span>
-                    <i class="fas fa-chevron-down"></i>
-                </a>
-                <div class="collapse" id="bloodDonationsCollapse">
-                    <div class="collapse-menu">
-                        <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" class="nav-link">Pending</a>
-                        <a href="dashboard-Inventory-System-list-of-donations.php?status=approved" class="nav-link">Approved</a>
-                        <a href="dashboard-Inventory-System-list-of-donations.php?status=declined" class="nav-link">Declined</a>
+                <div class="position-sticky">
+                    <div class="d-flex align-items-center ps-1 mb-4 mt-2">
+                        <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" style="width: 65px; height: 65px; object-fit: contain;">
+                        <span class="text-primary ms-1" style="font-size: 1.5rem; font-weight: 600;">Dashboard</span>
                     </div>
-                </div>
+                    
+                    <ul class="nav flex-column">
+                        <input type="text" class="form-control" placeholder="Search...">
+                        <a href="dashboard-Inventory-System.php" class="nav-link active">
+                            <span><i class="fas fa-home"></i>Home</span>
+                        </a>
+                        
+                        <a class="nav-link" data-bs-toggle="collapse" href="#bloodDonationsCollapse" role="button" aria-expanded="false" aria-controls="bloodDonationsCollapse">
+                            <span><i class="fas fa-tint"></i>Blood Donations</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </a>
+                        <div class="collapse" id="bloodDonationsCollapse">
+                            <div class="collapse-menu">
+                                <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" class="nav-link">Pending</a>
+                                <a href="dashboard-Inventory-System-list-of-donations.php?status=approved" class="nav-link">Approved</a>
+                                <a href="dashboard-Inventory-System-list-of-donations.php?status=declined" class="nav-link">Declined</a>
+                            </div>
+                        </div>
 
-                <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
-                    <span><i class="fas fa-tint"></i>Blood Bank</span>
-                </a>
-                <a href="Dashboard-Inventory-System-Hospital-Request.php" class="nav-link">
-                    <span><i class="fas fa-list"></i>Requests</span>
-                </a>
-                <a href="Dashboard-Inventory-System-Handed-Over.php" class="nav-link">
-                    <span><i class="fas fa-check"></i>Handover</span>
-                </a>
-                <a href="../../assets/php_func/logout.php" class="nav-link">
-                        <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
-                </a>
+                        <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
+                            <span><i class="fas fa-tint"></i>Blood Bank</span>
+                        </a>
+                        <a href="Dashboard-Inventory-System-Hospital-Request.php" class="nav-link">
+                            <span><i class="fas fa-list"></i>Requests</span>
+                        </a>
+                        <a href="Dashboard-Inventory-System-Handed-Over.php" class="nav-link">
+                            <span><i class="fas fa-check"></i>Handover</span>
+                        </a>
+                        <a href="../../assets/php_func/logout.php" class="nav-link">
+                                <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
+                        </a>
+                    </ul>
+                </div>
             </nav>
 
             <!-- Main Content -->
             <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
-                <h2 class="fs-1 dashboard-welcome-text">Welcome back!</h2>
-                <br>
+                <div class="content-wrapper p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h2 class="mb-0" style="font-weight: 700; font-size: 2rem;">Welcome back!</h2>
+                        <span class="text-muted"><?php echo date('d F Y'); ?> ■</span>
+                    </div>
 
-                <!-- Blood Availability Cards -->
-                <div class="row row-cols-1 row-cols-md-4 g-3" id="blood-availability">
-                    <!-- JS will generate these -->
+                    <!-- Statistics Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card inventory-system-stats-card">
+                <div class="card-body inventory-system-stats-body">
+                    <div class="inventory-system-stats-container">
+                        <span class="inventory-system-stats-label">Hospital Requests</span>
+                        <span class="inventory-system-stats-value">15</span>
+                    </div>
                 </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card inventory-system-stats-card">
+                <div class="card-body inventory-system-stats-body">
+                    <div class="inventory-system-stats-container">
+                        <span class="inventory-system-stats-label">Blood Received</span>
+                        <span class="inventory-system-stats-value">12</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card inventory-system-stats-card">
+                <div class="card-body inventory-system-stats-body">
+                    <div class="inventory-system-stats-container">
+                        <span class="inventory-system-stats-label">In Stock</span>
+                        <span class="inventory-system-stats-value">20</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-                <div class="card mt-4">
-                    <div class="card-body">
-                        <h5 class="card-title"><i class="fas fa-map-marked-alt me-2"></i>GIS Mapping</h5>
-                        <div id="map">
-                            <!-- Placeholder for GIS Map -->
-                            <p class="text-center text-muted mt-5">GIS Map Integration Placeholder</p>
+                    <!-- Available Blood per Unit Section -->
+                    <div class="mb-4">
+                        <h6 class="mb-3" style="font-weight: 500;">Available Blood per Unit</h6>
+                        <div class="row g-4">
+                            <div class="col-md-3">
+                                <div class="card inventory-system-blood-card blood-type-a-pos">
+                                    <div class="card-body p-3">
+                                        <h6 class="inventory-system-blood-title">Blood Type A+</h6>
+                                        <p class="inventory-system-blood-availability">Availability</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card inventory-system-blood-card blood-type-a-neg">
+                                    <div class="card-body p-3">
+                                        <h6 class="inventory-system-blood-title">Blood Type A-</h6>
+                                        <p class="inventory-system-blood-availability">Availability</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card inventory-system-blood-card blood-type-b-pos">
+                                    <div class="card-body p-3">
+                                        <h6 class="inventory-system-blood-title">Blood Type B+</h6>
+                                        <p class="inventory-system-blood-availability">Availability</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card inventory-system-blood-card blood-type-b-neg">
+                                    <div class="card-body p-3">
+                                        <h6 class="inventory-system-blood-title">Blood Type B-</h6>
+                                        <p class="inventory-system-blood-availability">Availability</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card inventory-system-blood-card blood-type-o-pos">
+                                    <div class="card-body p-3">
+                                        <h6 class="inventory-system-blood-title">Blood Type O+</h6>
+                                        <p class="inventory-system-blood-availability">Availability</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card inventory-system-blood-card blood-type-o-neg">
+                                    <div class="card-body p-3">
+                                        <h6 class="inventory-system-blood-title">Blood Type O-</h6>
+                                        <p class="inventory-system-blood-availability">Availability</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card inventory-system-blood-card blood-type-ab-pos">
+                                    <div class="card-body p-3">
+                                        <h6 class="inventory-system-blood-title">Blood Type AB+</h6>
+                                        <p class="inventory-system-blood-availability">Availability</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card inventory-system-blood-card blood-type-ab-neg">
+                                    <div class="card-body p-3">
+                                        <h6 class="inventory-system-blood-title">Blood Type AB-</h6>
+                                        <p class="inventory-system-blood-availability">Availability</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- GIS Mapping Section -->
+                    <div class="mb-4">
+                        <div class="d-flex align-items-center mb-3">
+                            <span class="me-2">■</span>
+                            <h6 class="mb-0" style="font-weight: 500;">GIS Mapping</h6>
+                        </div>
+                        <div id="map" class="bg-light rounded-3" style="height: 600px; width: 100%; max-width: 100%; margin: 0 auto;">
+                            <!-- Map will be loaded here -->
                         </div>
                     </div>
                 </div>
-
-                <!-- DSS Quick Insights (4 Cards) -->
-                <div class="row row-cols-1 row-cols-md-4 g-3 mt-4" id="quick-insights">
-                    <!-- JS will generate these -->
-                </div>
-
-                <!-- GIS Mapping Placeholder -->
-                
             </main>
         </div>
     </div>

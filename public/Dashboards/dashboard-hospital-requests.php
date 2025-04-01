@@ -127,8 +127,8 @@ $blood_requests = fetchBloodRequests($_SESSION['user_id']);
 
         /* Form Controls */
         .form-control:focus {
-            border-color: var(--redcross-red);
-            box-shadow: 0 0 0 0.2rem rgba(148, 16, 34, 0.25);
+            box-shadow: none !important;
+            border-color: #dee2e6;
         }
 
         /* Sidebar Active State */
@@ -203,17 +203,33 @@ $blood_requests = fetchBloodRequests($_SESSION['user_id']);
         .search-box .input-group {
             border-radius: 8px;
             overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-        .search-box .input-group-text {
-            border-right: none;
-        }
-        .search-box .form-control {
-            border-left: none;
-        }
-        .search-box .form-control:focus {
             box-shadow: none;
-            border-color: #dee2e6;
+            border: 1px solid #dee2e6;
+        }
+
+        .search-box .input-group-text {
+            background: transparent;
+            border: none;
+            padding-left: 15px;
+            padding-right: 15px;
+        }
+
+        .search-box .form-control {
+            border: none;
+            padding-left: 0;
+            padding-right: 15px;
+            background: transparent;
+        }
+
+        .search-box .form-control:focus {
+            box-shadow: none !important;
+            outline: none;
+            border: none;
+        }
+
+        .search-box .input-group:focus-within {
+            border: 1px solid #dee2e6;
+            box-shadow: none !important;
         }
         /* Logo and Title Styling */
         .dashboard-home-sidebar img {
@@ -463,6 +479,38 @@ th {
 .btn-loading .btn-text {
     opacity: 0;
 }
+
+/* Search bar styling */
+.search-box .input-group-text,
+.search-box .form-control {
+    padding-top: 15px;    /* Increased vertical padding */
+    padding-bottom: 15px; /* Increased vertical padding */
+    height: auto;
+}
+
+.search-box .input-group {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: none;
+}
+
+.search-box .input-group-text {
+    border-right: none;
+}
+
+.search-box .form-control {
+    border-left: none;
+}
+
+.search-box .form-control:focus {
+    box-shadow: none !important;
+    outline: none;
+    border: none;
+}
+
+#requestSearchBar:focus {
+    box-shadow: none !important;
+}
     </style>
 </head>
 <body>
@@ -523,6 +571,17 @@ th {
                     <div class="container-fluid p-4 custom-margin">
                         <h2 style="color: #941022; border-bottom: 2px solid #941022; padding-bottom: 18px; margin-bottom: 25px;">Your Blood Requests</h2>
                     
+                        <!-- Add search bar -->
+                        <div class="search-box mb-4">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-end-0">
+                                    <i class="fas fa-search text-muted"></i>
+                                </span>
+                                <input type="text" id="requestSearchBar" class="form-control border-start-0 ps-0" 
+                                       placeholder="Search requests..." 
+                                       style="background-color: #ffffff; color: #333333;">
+                            </div>
+                        </div>
 
                         <!-- Requests Table -->
                         <table class="table table-bordered table-hover">
@@ -1452,6 +1511,30 @@ document.addEventListener("DOMContentLoaded", function () {
                     submitButton.innerHTML = originalContent;
                 }, 2000);
             }
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Search functionality
+            const searchBar = document.getElementById('requestSearchBar');
+            searchBar.addEventListener('keyup', function() {
+                const searchText = this.value.toLowerCase();
+                const table = document.getElementById('requestTable');
+                const rows = table.getElementsByTagName('tr');
+
+                for (let row of rows) {
+                    const text = row.textContent.toLowerCase();
+                    row.style.display = text.includes(searchText) ? '' : 'none';
+                }
+            });
+
+            // Add focus styles for search bar
+            searchBar.addEventListener('focus', function() {
+                this.style.boxShadow = '0 0 0 0.2rem rgba(148, 16, 34, 0.25)';
+            });
+
+            searchBar.addEventListener('blur', function() {
+                this.style.boxShadow = 'none';
+            });
         });
     </script>
 </body>

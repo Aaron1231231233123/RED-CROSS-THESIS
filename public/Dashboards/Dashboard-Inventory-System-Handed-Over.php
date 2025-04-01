@@ -140,11 +140,14 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
     }
 }
 
-// Fetch handover requests (accepted, delivering, declined status)
+// Fetch handover requests
 function fetchHandoverRequests() {
-    // Get requests with relevant statuses - updated to only use valid enum values
-    $endpoint = "blood_requests?or=(status.eq.Accepted,status.eq.Declined)&order=last_updated.desc";
+    // Get requests with status Accepted OR Picked up using explicit OR conditions
+    $endpoint = "blood_requests?or=(status.eq.Accepted,status.eq.Picked%20up)&order=request_id.desc";
     $response = supabaseRequest($endpoint);
+    
+    // Debug log the response
+    error_log("Handover requests response: " . json_encode($response));
     
     if ($response['code'] >= 200 && $response['code'] < 300) {
         return $response['data'];
@@ -182,25 +185,24 @@ if (isset($_GET['accepted'])) {
 if (isset($_POST['update_delivering'])) {
     $request_id = $_POST['request_id'];
     
-    // Update the request status to 'Declined' since Delivering is not a valid enum
+    // Update the request status to 'Picked up'
     $endpoint = "blood_requests?request_id=eq.".$request_id;
     
     $data = [
-        'status' => 'Declined', // Changed from Delivering to Declined
-        'decline_reason' => 'Delivered', // Adding a reason to indicate it was delivered
-        'last_updated' => 'now' // The supabaseRequest function will format this correctly
+        'status' => 'Picked up',
+        'last_updated' => 'now'
     ];
     
     $response = supabaseRequest($endpoint, 'PATCH', $data);
     
     if ($response['code'] >= 200 && $response['code'] < 300) {
-        $success_message = "Request #$request_id has been updated to Delivering status.";
+        $success_message = "Request #$request_id has been updated to Picked Up status.";
     } else {
-        $error_message = "Failed to update request to Delivering. Error code: " . $response['code'];
+        $error_message = "Failed to update request status. Error code: " . $response['code'];
         if (isset($response['error'])) {
             $error_message .= " - " . $response['error'];
         }
-        error_log("Failed to update request #$request_id to Delivering: " . json_encode($response));
+        error_log("Failed to update request #$request_id status: " . json_encode($response));
     }
 }
 
@@ -359,6 +361,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
 #bloodDonationsCollapse .nav-link:hover {
     color: #dc3545;
+    font-weight: 600;
     background-color: transparent;
 }
 
@@ -671,10 +674,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         <div class="row">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">
-                <div class="text-center mb-3">
-                    <img src="../../assets/images/redcross-logo.png" alt="Red Cross Logo" style="width: 60px; height: auto;" onerror="this.src='https://www.redcross.org.ph/wp-content/uploads/2021/05/avatar.jpg';">
-                </div>
+            <div class="position-sticky">
+                    <div class="d-flex align-items-center ps-1 mb-4 mt-2">
+                        <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" style="width: 65px; height: 65px; object-fit: contain;">
+                        <span class="text-primary ms-1" style="font-size: 1.5rem; font-weight: 600;">Dashboard</span>
+                    </div>
+                    <input type="text" class="form-control" placeholder="Search...">
                 <a href="dashboard-Inventory-System.php" class="nav-link">
+                    
                     <span><i class="fas fa-home me-2"></i>Home</span>
                 </a>
                 
@@ -703,7 +710,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
                 </a>
             </nav>
-
+        </div>
            <!-- Main Content -->
            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
             <?php if ($success_message): ?>
@@ -780,14 +787,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             <?php 
                                             $status = isset($request['status']) ? $request['status'] : '';
                                             
-                                            if ($status === 'Accepted' || $status === 'accepted'): ?>
-                                                <span class="badge bg-success">Accepted</span>
-                                            <?php elseif ($status === 'Declined' || $status === 'declined'): ?>
-                                                <span class="badge bg-danger">Declined</span>
-                                            <?php elseif ($status === null || $status === 'null' || empty($status)): ?>
-                                                <span class="badge bg-secondary">Not Set</span>
+                                            if ($status === 'Picked up'): ?>
+                                                <span class="badge bg-success">Picked Up</span>
+                                            <?php elseif ($status === 'Accepted'): ?>
+                                                <span class="badge bg-warning">Accepted</span>
                                             <?php else: ?>
-                                                <span class="badge bg-secondary"><?php echo htmlspecialchars($status); ?></span>
+                                                <span class="badge bg-secondary">Not Set</span>
                                             <?php endif; ?>
                                         </td>
                                         <td><?php echo isset($request['decline_reason']) ? htmlspecialchars($request['decline_reason']) : '-'; ?></td>
@@ -798,7 +803,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             
                                             <?php 
                                             // Show appropriate action buttons based on status
-                                            if ($status === 'Accepted' || $status === 'accepted'): 
+                                            if ($status === 'Accepted'): 
                                             ?>
                                             <button type="button" class="btn btn-sm btn-primary update-status" data-request-id="<?php echo $request['request_id']; ?>" title="Update to Delivering">
                                                 <i class="fas fa-truck"></i>
@@ -1017,7 +1022,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 let statusHTML = '';
                 const statusValue = requestData.status || '';
                 
-                if (statusValue === 'Accepted' || statusValue === 'accepted') {
+                if (statusValue === 'Accepted') {
                     statusHTML = '<span class="badge bg-success">Accepted</span>';
                 } else if (statusValue === 'Declined' || statusValue === 'declined') {
                     statusHTML = '<span class="badge bg-danger">Declined</span>';

@@ -741,6 +741,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         <div class="row">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block inventory-sidebar">
+            <div class="d-flex align-items-center ps-1 mb-3 mt-2">
+                        <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" style="width: 65px; height: 65px; object-fit: contain;">
+                        <span class="text-primary ms-1" style="font-size: 1.5rem; font-weight: 600;">Dashboard</span>
+                    </div>
                 <input type="text" class="form-control" placeholder="Search...">
                 <a href="dashboard-Inventory-System.php" class="nav-link">
                     <span><i class="fas fa-home"></i>Home</span>

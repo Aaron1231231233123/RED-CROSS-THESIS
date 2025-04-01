@@ -27,11 +27,7 @@ if ($_SESSION['role_id'] === 3 && !isset($_SESSION['donor_id'])) {
     exit();
 }
 
-// Set donor_id to 46 for admin role (role_id 1)
-if ($_SESSION['role_id'] === 1) {
-    $_SESSION['donor_id'] = 46;
-    error_log("Set donor_id to 46 for admin role");
-}
+
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
