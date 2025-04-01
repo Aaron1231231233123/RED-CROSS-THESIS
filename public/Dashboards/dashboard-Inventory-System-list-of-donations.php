@@ -527,8 +527,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     <div class="collapse-menu">
                         <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" class="nav-link <?php echo $status === 'pending' ? 'active' : ''; ?>">Pending</a>
                         <a href="dashboard-Inventory-System-list-of-donations.php?status=approved" class="nav-link <?php echo $status === 'approved' ? 'active' : ''; ?>">Approved</a>
-                        <a href="dashboard-Inventory-System-list-of-donations.php?status=walk-in" class="nav-link <?php echo $status === 'walk-in' ? 'active' : ''; ?>">Walk-in</a>
-                        <a href="dashboard-Inventory-System-list-of-donations.php?status=donated" class="nav-link <?php echo $status === 'donated' ? 'active' : ''; ?>">Donated</a>
                         <a href="dashboard-Inventory-System-list-of-donations.php?status=declined" class="nav-link <?php echo $status === 'declined' ? 'active' : ''; ?>">Declined</a>
                     </div>
                 </div>

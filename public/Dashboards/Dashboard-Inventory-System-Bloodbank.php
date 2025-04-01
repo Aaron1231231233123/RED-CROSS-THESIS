@@ -768,8 +768,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <div class="collapse-menu">
                             <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" class="nav-link">Pending</a>
                             <a href="dashboard-Inventory-System-list-of-donations.php?status=approved" class="nav-link">Approved</a>
-                            <a href="dashboard-Inventory-System-list-of-donations.php?status=walk-in" class="nav-link">Walk-in</a>
-                            <a href="dashboard-Inventory-System-list-of-donations.php?status=donated" class="nav-link">Donated</a>
                             <a href="dashboard-Inventory-System-list-of-donations.php?status=declined" class="nav-link">Declined</a>
                         </div>
                     </div>
