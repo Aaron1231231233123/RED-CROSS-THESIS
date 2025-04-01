@@ -16,7 +16,10 @@ function logError($message) {
     return ["success" => false, "error" => $message];
 }
 
-// Main function to create eligibility record
+/**
+ * Create a new eligibility record in Supabase
+ * Used when processing a donor from pending to approved status
+ */
 function createEligibilityRecord($data) {
     try {
         // Check required fields
@@ -126,6 +129,9 @@ function createEligibilityRecord($data) {
                 return logError("Error creating screening record: " . $createErr);
             }
             
+            // Log the full screening form creation response for debugging
+            error_log("Screening form creation response: " . $createResponse);
+            
             $newScreening = json_decode($createResponse, true);
             if (is_array($newScreening) && !empty($newScreening)) {
                 $screeningId = $newScreening[0]['screening_id'];
@@ -192,6 +198,9 @@ if ($method === 'POST') {
         echo json_encode(["success" => false, "error" => "Invalid JSON data"]);
         exit;
     }
+    
+    // Debug log incoming data
+    error_log("Received data: " . json_encode($data));
     
     $result = createEligibilityRecord($data);
     echo json_encode($result);

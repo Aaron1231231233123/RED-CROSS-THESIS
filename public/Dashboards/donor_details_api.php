@@ -3,13 +3,16 @@
 include_once '../../assets/conn/db_conn.php';
 
 // Check if required parameters are provided
-if (!isset($_GET['donor_id']) || !isset($_GET['eligibility_id'])) {
-    echo json_encode(['error' => 'Missing required parameters']);
+if (!isset($_GET['donor_id'])) {
+    echo json_encode(['error' => 'Missing donor_id parameter']);
     exit;
 }
 
 $donor_id = $_GET['donor_id'];
-$eligibility_id = $_GET['eligibility_id'];
+$eligibility_id = $_GET['eligibility_id'] ?? null;
+
+// Debug log
+error_log("Fetching donor details for donor_id: $donor_id, eligibility_id: $eligibility_id");
 
 // Function to fetch donor information
 function fetchDonorInfo($donorId) {
@@ -31,15 +34,33 @@ function fetchDonorInfo($donorId) {
     curl_close($curl);
     
     if ($err) {
+        error_log("cURL Error fetching donor info: " . $err);
         return ["error" => "cURL Error #:" . $err];
     } else {
         $data = json_decode($response, true);
+        if (empty($data)) {
+            error_log("No donor data found for ID: $donorId");
+        }
         return !empty($data) ? $data[0] : null;
     }
 }
 
 // Function to fetch eligibility record
 function fetchEligibilityRecord($eligibilityId) {
+    // If eligibility_id starts with "pending_", this is a pending donor without an eligibility record
+    if ($eligibilityId && strpos($eligibilityId, 'pending_') === 0) {
+        return [
+            'eligibility_id' => $eligibilityId,
+            'status' => 'pending',
+            'blood_type' => 'Pending',
+            'donation_type' => 'Pending',
+            'start_date' => date('Y-m-d'),
+            'end_date' => null,
+            'is_pending' => true
+        ];
+    }
+    
+    // Otherwise, fetch from the eligibility table
     $curl = curl_init();
     
     curl_setopt_array($curl, [
@@ -58,27 +79,46 @@ function fetchEligibilityRecord($eligibilityId) {
     curl_close($curl);
     
     if ($err) {
+        error_log("cURL Error fetching eligibility: " . $err);
         return ["error" => "cURL Error #:" . $err];
     } else {
         $data = json_decode($response, true);
-        return !empty($data) ? $data[0] : null;
+        if (empty($data)) {
+            error_log("No eligibility data found for ID: $eligibilityId");
+            // Return a default eligibility object for pending donors
+            return [
+                'eligibility_id' => $eligibilityId ?? 'pending_' . $donor_id,
+                'status' => 'pending',
+                'blood_type' => 'Pending',
+                'donation_type' => 'Pending',
+                'start_date' => date('Y-m-d'),
+                'end_date' => null,
+                'is_pending' => true
+            ];
+        }
+        return $data[0];
     }
 }
 
 // Fetch data
 $donorInfo = fetchDonorInfo($donor_id);
-$eligibilityInfo = fetchEligibilityRecord($eligibility_id);
 
-// Check if data is available
 if (!$donorInfo) {
     echo json_encode(['error' => 'Donor information not found']);
     exit;
 }
 
-if (!$eligibilityInfo) {
-    echo json_encode(['error' => 'Eligibility information not found']);
-    exit;
+// Calculate age if birthdate is available
+if (!empty($donorInfo['birthdate'])) {
+    $birthdate = new DateTime($donorInfo['birthdate']);
+    $today = new DateTime();
+    $donorInfo['age'] = $birthdate->diff($today)->y;
+} else {
+    $donorInfo['age'] = 'N/A';
 }
+
+// Fetch eligibility info
+$eligibilityInfo = fetchEligibilityRecord($eligibility_id);
 
 // Return data as JSON
 echo json_encode([

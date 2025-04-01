@@ -14,6 +14,12 @@ if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['rol
     exit();
 }
 
+// Check if donor_id is passed via URL parameter
+if (isset($_GET['donor_id']) && !empty($_GET['donor_id'])) {
+    $_SESSION['donor_id'] = $_GET['donor_id'];
+    error_log("Set donor_id from URL parameter: " . $_SESSION['donor_id']);
+}
+
 // Only check donor_id for staff role (role_id 3)
 if ($_SESSION['role_id'] === 3 && !isset($_SESSION['donor_id'])) {
     error_log("Missing donor_id in session for staff");
@@ -370,107 +376,6 @@ error_log("All session variables in medical-history.php: " . print_r($_SESSION, 
             0% { transform: translate(-50%, -50%) rotate(0deg); }
             100% { transform: translate(-50%, -50%) rotate(360deg); }
         }
-        /* Confirmation Modal */
-        .confirmation-modal {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 25px;
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
-            text-align: center;
-            z-index: 9999;
-            border-radius: 10px;
-            width: 300px;
-            display: none;
-            opacity: 0;
-        }
-
-        /* Fade-in and Fade-out Animations */
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translate(-50%, -55%);
-            }
-            to {
-                opacity: 1;
-                transform: translate(-50%, -50%);
-            }
-        }
-
-        @keyframes fadeOut {
-            from {
-                opacity: 1;
-                transform: translate(-50%, -50%);
-            }
-            to {
-                opacity: 0;
-                transform: translate(-50%, -55%);
-            }
-        }
-
-        .confirmation-modal.show {
-            display: block;
-            animation: fadeIn 0.3s ease-in-out forwards;
-        }
-
-        .confirmation-modal.hide {
-            animation: fadeOut 0.3s ease-in-out forwards;
-        }
-
-        .modal-header {
-            font-size: 18px;
-            font-weight: bold;
-            color: #d50000;
-            margin-bottom: 15px;
-        }
-
-        .modal-actions {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 20px;
-        }
-
-        .modal-button {
-            width: 45%;
-            padding: 10px;
-            font-size: 16px;
-            font-weight: bold;
-            border: none;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-
-        .cancel-action {
-            background: #aaa;
-            color: white;
-        }
-
-        .cancel-action:hover {
-            background: #888;
-        }
-
-        .confirm-action {
-            background: #c9302c;
-            color: white;
-        }
-
-        .confirm-action:hover {
-            background: #691b19;
-        }
-
-        .modal-body {
-            margin: 15px 0;
-        }
-
-        .modal-body textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            resize: vertical;
-        }
     </style>
 </head>
 <body>
@@ -622,102 +527,31 @@ error_log("All session variables in medical-history.php: " . print_r($_SESSION, 
             });
         </script>
         <div class="submit-section">
-            <button type="button" class="submit-button" id="triggerModalButton">Submit</button>
+            <button type="submit" class="submit-button" id="submitButton">Submit</button>
         </div>
     </form>
-
-    <!-- Confirmation Modal -->
-    <div class="confirmation-modal" id="confirmationDialog">
-        <div class="modal-header">Do you want to continue?</div>
-        <div class="modal-actions">
-            <button class="modal-button cancel-action" id="cancelButton">No</button>
-            <button class="modal-button confirm-action" id="confirmButton">Yes</button>
-        </div>
-    </div>    
 
     <!-- Loading Spinner -->
     <div class="loading-spinner" id="loadingSpinner"></div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            let confirmationDialog = document.getElementById("confirmationDialog");
             let loadingSpinner = document.getElementById("loadingSpinner");
-            let triggerModalButton = document.getElementById("triggerModalButton");
-            let cancelButton = document.getElementById("cancelButton");
-            let confirmButton = document.getElementById("confirmButton");
+            let submitButton = document.getElementById("submitButton");
             let form = document.getElementById("medicalHistoryForm");
 
-            // Open Submit Modal
-            triggerModalButton.addEventListener("click", function() {
+            // Handle direct form submission
+            form.addEventListener("submit", function(e) {
+                e.preventDefault();
+                
                 if (!form.checkValidity()) {
                     alert("Please fill in all required fields before proceeding.");
                     return;
                 }
-
-                confirmationDialog.classList.remove("hide");
-                confirmationDialog.classList.add("show");
-                confirmationDialog.style.display = "block";
-                triggerModalButton.disabled = true;
-            });
-
-            // Close Submit Modal
-            function closeModal() {
-                confirmationDialog.classList.remove("show");
-                confirmationDialog.classList.add("hide");
-                setTimeout(() => {
-                    confirmationDialog.style.display = "none";
-                    triggerModalButton.disabled = false;
-                }, 300);
-            }
-
-            // Handle Submit Confirmation
-            confirmButton.addEventListener("click", function() {
-                closeModal();
+                
                 loadingSpinner.style.display = "block";
-                
-                // Get all form data
-                const formData = new FormData(form);
-                
-                // Submit the form
-                fetch(window.location.href, {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    // Check if the response is JSON
-                    const contentType = response.headers.get("content-type");
-                    if (contentType && contentType.indexOf("application/json") !== -1) {
-                        return response.json();
-                    } else {
-                        // For admin role, response will be a redirect
-                        window.location.href = 'screening-form.php';
-                        return null;
-                    }
-                })
-                .then(data => {
-                    loadingSpinner.style.display = "none";
-                    if (data === null) {
-                        // Admin redirect already handled
-                        return;
-                    }
-                    if (data.success) {
-                        window.location.href = "../../../public/Dashboards/dashboard-staff-donor-submission.php";
-                    } else {
-                        throw new Error(data.error || 'Unknown error occurred');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    loadingSpinner.style.display = "none";
-                    alert(error.message || "Error submitting form. Please try again.");
-                });
+                form.submit();
             });
-
-            // Cancel Submit
-            cancelButton.addEventListener("click", closeModal);
         });
     </script>
 
