@@ -112,7 +112,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'last_hosp_donation_place' => isset($_POST['history']) && $_POST['history'] === 'yes' ? ($_POST['last-hosp-donation-place'] ?: "") : "",
             'last_rc_donation_date' => isset($_POST['history']) && $_POST['history'] === 'yes' && !empty($_POST['last-rc-donation-date']) ? $_POST['last-rc-donation-date'] : '0001-01-01',
             'last_hosp_donation_date' => isset($_POST['history']) && $_POST['history'] === 'yes' && !empty($_POST['last-hosp-donation-date']) ? $_POST['last-hosp-donation-date'] : '0001-01-01',
-            'disapproval_reason' => isset($_POST['disapproval_reason']) ? $_POST['disapproval_reason'] : "",
             'mobile_location' => $_POST['donation-type'] === 'mobile' ? ($_POST['mobile-place'] ?: "") : "",
             'mobile_organizer' => $_POST['donation-type'] === 'mobile' ? ($_POST['mobile-organizer'] ?: "") : "",
             'patient_name' => $_POST['donation-type'] === 'mobile' ? ($_POST['patient-name'] ?: "") : "",
@@ -852,23 +851,10 @@ select:focus {
                 <p>Date: <?php echo date('m/d/Y'); ?></p>
             </div>
             <div class="submit-section">
-                <button type="button" class="disapprove-button" id="triggerDisapproveModalButton">Disapprove</button>
-                                <button type="button" class="submit-button" id="triggerModalButton">Submit</button>
+                <button type="button" class="submit-button" id="triggerModalButton">Submit</button>
             </div>
         </div>
     </form>
-    <!-- Disapproval Modal -->
-    <div class="confirmation-modal" id="disapprovalDialog">
-        <div class="modal-header">Provide Reason for Disapproval</div>
-        <div class="modal-body">
-            <textarea id="disapprovalReason" class="form-control" rows="4" placeholder="Enter reason for disapproval..."></textarea>
-        </div>
-        <div class="modal-actions">
-            <button class="modal-button cancel-action" id="cancelDisapproveButton">Cancel</button>
-            <button class="modal-button disapprove-action" id="confirmDisapproveButton">Confirm Disapproval</button>
-        </div>
-    </div>
-
     <!-- Existing Confirmation Modal -->
     <div class="confirmation-modal" id="confirmationDialog">
         <div class="modal-header">Do you want to continue?</div>
@@ -887,11 +873,6 @@ select:focus {
             let triggerModalButton = document.getElementById("triggerModalButton");
             let cancelButton = document.getElementById("cancelButton");
             let confirmButton = document.getElementById("confirmButton");
-            let disapprovalDialog = document.getElementById("disapprovalDialog");
-            let triggerDisapproveModalButton = document.getElementById("triggerDisapproveModalButton");
-            let cancelDisapproveButton = document.getElementById("cancelDisapproveButton");
-            let confirmDisapproveButton = document.getElementById("confirmDisapproveButton");
-            let disapprovalReason = document.getElementById("disapprovalReason");
             let form = document.getElementById("screeningForm");
 
             // Open Submit Modal
@@ -981,79 +962,6 @@ select:focus {
             // Cancel Submit
             cancelButton.addEventListener("click", closeModal);
 
-            // Open Disapproval Modal
-            triggerDisapproveModalButton.addEventListener("click", function() {
-                disapprovalDialog.classList.remove("hide");
-                disapprovalDialog.classList.add("show");
-                disapprovalDialog.style.display = "block";
-                triggerDisapproveModalButton.disabled = true;
-            });
-
-            // Close Disapproval Modal
-            function closeDisapprovalModal() {
-                disapprovalDialog.classList.remove("show");
-                disapprovalDialog.classList.add("hide");
-                setTimeout(() => {
-                    disapprovalDialog.style.display = "none";
-                    triggerDisapproveModalButton.disabled = false;
-                }, 300);
-            }
-
-            // Handle Disapproval Confirmation
-            confirmDisapproveButton.addEventListener("click", function() {
-                if (!disapprovalReason.value.trim()) {
-                    alert("Please provide a reason for disapproval");
-                    return;
-                }
-
-                closeDisapprovalModal();
-                loadingSpinner.style.display = "block";
-
-                // Get all form data
-                const formData = new FormData(form);
-                formData.append('disapproval_reason', disapprovalReason.value.trim());
-
-                // Submit the form
-                fetch(window.location.href, {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    // Check if the response is JSON
-                    const contentType = response.headers.get("content-type");
-                    if (contentType && contentType.indexOf("application/json") !== -1) {
-                        return response.json();
-                    } else {
-                        // For admin role, response will be a redirect
-                        window.location.href = 'physical-examination-form.php';
-                        return null;
-                    }
-                })
-                .then(data => {
-                    loadingSpinner.style.display = "none";
-                    if (data === null) {
-                        // Admin redirect already handled
-                        return;
-                    }
-                    if (data.success) {
-                        window.location.href = "../../../public/Dashboards/dashboard-staff-donor-submission.php";
-                    } else {
-                        throw new Error(data.error || 'Unknown error occurred');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    loadingSpinner.style.display = "none";
-                    alert(error.message || "Error submitting form. Please try again.");
-                });
-            });
-
-            // Cancel Disapproval
-            cancelDisapproveButton.addEventListener("click", closeDisapprovalModal);
-
             // Add radio button change handler for mobile donation section and patient details
             const donationTypeRadios = document.querySelectorAll('input[name="donation-type"]');
             const mobileDonationSection = document.getElementById('mobileDonationSection');
@@ -1062,9 +970,17 @@ select:focus {
             donationTypeRadios.forEach(radio => {
                 radio.addEventListener('change', function() {
                     if (this.value === 'mobile') {
+                        // Show mobile donation section with only Place and Organizer
                         mobileDonationSection.style.display = 'block';
+                        // Hide patient details table
+                        patientDetailsTable.style.display = 'none';
+                    } else if (this.value === 'patient-directed') {
+                        // Show patient details table
                         patientDetailsTable.style.display = 'table';
+                        // Hide mobile donation section
+                        mobileDonationSection.style.display = 'none';
                     } else {
+                        // Hide both sections for other options
                         mobileDonationSection.style.display = 'none';
                         patientDetailsTable.style.display = 'none';
                     }
@@ -1073,10 +989,24 @@ select:focus {
 
             // Check initial state for mobile donation
             const selectedDonationType = document.querySelector('input[name="donation-type"]:checked');
-            if (selectedDonationType && selectedDonationType.value === 'mobile') {
-                mobileDonationSection.style.display = 'block';
-                patientDetailsTable.style.display = 'table';
+            if (selectedDonationType) {
+                if (selectedDonationType.value === 'mobile') {
+                    // Show mobile donation section
+                    mobileDonationSection.style.display = 'block';
+                    // Hide patient details table
+                    patientDetailsTable.style.display = 'none';
+                } else if (selectedDonationType.value === 'patient-directed') {
+                    // Show patient details table
+                    patientDetailsTable.style.display = 'table';
+                    // Hide mobile donation section
+                    mobileDonationSection.style.display = 'none';
+                } else {
+                    // Hide both sections for other options
+                    mobileDonationSection.style.display = 'none';
+                    patientDetailsTable.style.display = 'none';
+                }
             }
+            
 
             // Add handler for donation history radio buttons
             const historyRadios = document.querySelectorAll('input[name="history"]');

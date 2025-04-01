@@ -211,7 +211,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
 
     <div class="login-form">
-        <h2>Smart Blood<br>Management System</h2>
+        <h2>Hospital Request</h2>
         <hr>
         <h2>Login</h2>
         

@@ -460,33 +460,6 @@ error_log("All session variables in medical-history.php: " . print_r($_SESSION, 
             background: #691b19;
         }
 
-        .disapprove-button {
-            background-color: #dc3545;
-            color: white;
-            font-weight: bold;
-            padding: 12px 22px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: background-color 0.3s ease, transform 0.2s ease;
-            font-size: 15px;
-            margin-left: 10px;
-        }
-
-        .disapprove-button:hover {
-            background-color: #c82333;
-            transform: translateY(-2px);
-        }
-
-        .disapprove-action {
-            background: #dc3545;
-            color: white;
-        }
-
-        .disapprove-action:hover {
-            background: #c82333;
-        }
-
         .modal-body {
             margin: 15px 0;
         }
@@ -649,25 +622,11 @@ error_log("All session variables in medical-history.php: " . print_r($_SESSION, 
             });
         </script>
         <div class="submit-section">
-            <button type="button" class="disapprove-button" id="triggerDisapproveModalButton">Disapprove</button>
-            <button type="button" class="submit-button" id="triggerModalButton">Next</button>
-            
+            <button type="button" class="submit-button" id="triggerModalButton">Submit</button>
         </div>
     </form>
 
-    <!-- Disapproval Modal -->
-    <div class="confirmation-modal" id="disapprovalDialog">
-        <div class="modal-header">Provide Reason for Disapproval</div>
-        <div class="modal-body">
-            <textarea id="disapprovalReason" class="form-control" rows="4" placeholder="Enter reason for disapproval..."></textarea>
-        </div>
-        <div class="modal-actions">
-            <button class="modal-button cancel-action" id="cancelDisapproveButton">Cancel</button>
-            <button class="modal-button disapprove-action" id="confirmDisapproveButton">Confirm Disapproval</button>
-        </div>
-    </div>
-
-    <!-- Existing Confirmation Modal -->
+    <!-- Confirmation Modal -->
     <div class="confirmation-modal" id="confirmationDialog">
         <div class="modal-header">Do you want to continue?</div>
         <div class="modal-actions">
@@ -688,22 +647,10 @@ error_log("All session variables in medical-history.php: " . print_r($_SESSION, 
             let confirmButton = document.getElementById("confirmButton");
             let form = document.getElementById("medicalHistoryForm");
 
-            // Open Modal
+            // Open Submit Modal
             triggerModalButton.addEventListener("click", function() {
-                // Check if all required fields are filled
-                const allRadioGroups = form.querySelectorAll('input[type="radio"]');
-                const radioGroupNames = new Set();
-                allRadioGroups.forEach(radio => radioGroupNames.add(radio.name));
-
-                let allAnswered = true;
-                radioGroupNames.forEach(name => {
-                    if (!form.querySelector(`input[name="${name}"]:checked`)) {
-                        allAnswered = false;
-                    }
-                });
-
-                if (!allAnswered) {
-                    alert("Please answer all questions before proceeding.");
+                if (!form.checkValidity()) {
+                    alert("Please fill in all required fields before proceeding.");
                     return;
                 }
 
@@ -713,7 +660,7 @@ error_log("All session variables in medical-history.php: " . print_r($_SESSION, 
                 triggerModalButton.disabled = true;
             });
 
-            // Close Modal Function
+            // Close Submit Modal
             function closeModal() {
                 confirmationDialog.classList.remove("show");
                 confirmationDialog.classList.add("hide");
@@ -723,68 +670,14 @@ error_log("All session variables in medical-history.php: " . print_r($_SESSION, 
                 }, 300);
             }
 
-            // Yes Button (Triggers form submission)
+            // Handle Submit Confirmation
             confirmButton.addEventListener("click", function() {
                 closeModal();
                 loadingSpinner.style.display = "block";
-                form.submit();
-            });
-
-            // No Button (Closes Modal)
-            cancelButton.addEventListener("click", closeModal);
-
-            let disapprovalDialog = document.getElementById("disapprovalDialog");
-            let triggerDisapproveModalButton = document.getElementById("triggerDisapproveModalButton");
-            let cancelDisapproveButton = document.getElementById("cancelDisapproveButton");
-            let confirmDisapproveButton = document.getElementById("confirmDisapproveButton");
-            let disapprovalReason = document.getElementById("disapprovalReason");
-
-            // Open Disapproval Modal
-            triggerDisapproveModalButton.addEventListener("click", function() {
-                disapprovalDialog.classList.remove("hide");
-                disapprovalDialog.classList.add("show");
-                disapprovalDialog.style.display = "block";
-                triggerDisapproveModalButton.disabled = true;
-            });
-
-            // Close Disapproval Modal Function
-            function closeDisapprovalModal() {
-                disapprovalDialog.classList.remove("show");
-                disapprovalDialog.classList.add("hide");
-                setTimeout(() => {
-                    disapprovalDialog.style.display = "none";
-                    triggerDisapproveModalButton.disabled = false;
-                }, 300);
-            }
-
-            // Confirm Disapproval
-            confirmDisapproveButton.addEventListener("click", function() {
-                if (!disapprovalReason.value.trim()) {
-                    alert("Please provide a reason for disapproval");
-                    return;
-                }
-
-                closeDisapprovalModal();
-                loadingSpinner.style.display = "block";
-
-                // Create form data with disapproval action
-                const formData = new FormData();
-                formData.append('action', 'disapprove');
-                formData.append('disapproval_reason', disapprovalReason.value.trim());
-
-                // Add all form fields to formData
-                const form = document.getElementById('medicalHistoryForm');
-                const formElements = form.elements;
-                for (let element of formElements) {
-                    if (element.type === 'radio') {
-                        if (element.checked) {
-                            formData.append(element.name, element.value);
-                        }
-                    } else if (element.type === 'select-one') {
-                        formData.append(element.name, element.value);
-                    }
-                }
-
+                
+                // Get all form data
+                const formData = new FormData(form);
+                
                 // Submit the form
                 fetch(window.location.href, {
                     method: 'POST',
@@ -792,33 +685,39 @@ error_log("All session variables in medical-history.php: " . print_r($_SESSION, 
                 })
                 .then(response => {
                     if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
+                        throw new Error('Network response was not ok');
                     }
-                    return response.text();
+                    // Check if the response is JSON
+                    const contentType = response.headers.get("content-type");
+                    if (contentType && contentType.indexOf("application/json") !== -1) {
+                        return response.json();
+                    } else {
+                        // For admin role, response will be a redirect
+                        window.location.href = 'screening-form.php';
+                        return null;
+                    }
                 })
-                .then(text => {
-                    try {
-                        const data = JSON.parse(text);
-                        if (data.success) {
-                            window.location.href = "../../../public/Dashboards/dashboard-staff-donor-submission.php";
-                        } else {
-                            throw new Error(data.message || 'Submission failed');
-                        }
-                    } catch (e) {
-                        console.error('Error parsing response:', e);
-                        console.error('Raw response text:', text);
-                        throw new Error('Failed to process server response: ' + text);
+                .then(data => {
+                    loadingSpinner.style.display = "none";
+                    if (data === null) {
+                        // Admin redirect already handled
+                        return;
+                    }
+                    if (data.success) {
+                        window.location.href = "../../../public/Dashboards/dashboard-staff-donor-submission.php";
+                    } else {
+                        throw new Error(data.error || 'Unknown error occurred');
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    alert("Error submitting form: " + error.message);
                     loadingSpinner.style.display = "none";
+                    alert(error.message || "Error submitting form. Please try again.");
                 });
             });
 
-            // Cancel Disapproval
-            cancelDisapproveButton.addEventListener("click", closeDisapprovalModal);
+            // Cancel Submit
+            cancelButton.addEventListener("click", closeModal);
         });
     </script>
 
