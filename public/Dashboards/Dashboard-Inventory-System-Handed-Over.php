@@ -1,3 +1,238 @@
+<?php
+session_start();
+require_once '../../assets/conn/db_conn.php';
+
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../login.php");
+    exit();
+}
+
+// Check for correct role (admin only)
+$required_role = 1; // Admin role
+if ($_SESSION['role_id'] !== $required_role) {
+    header("Location: ../unauthorized.php");
+    exit();
+}
+
+// Function to make API requests to Supabase
+function supabaseRequest($endpoint, $method = 'GET', $data = null) {
+    $url = SUPABASE_URL . "/rest/v1/" . $endpoint;
+
+    $headers = [
+        "Content-Type: application/json",
+        "apikey: " . SUPABASE_API_KEY,
+        "Authorization: Bearer " . SUPABASE_API_KEY,
+        "Prefer: return=representation"
+    ];
+
+    // Debug log the endpoint and method
+    error_log("supabaseRequest: $method $url");
+    if ($data) {
+        error_log("Request data: " . json_encode($data));
+    }
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Only if needed for local development
+    
+    // Set the appropriate HTTP method
+    if ($method !== 'GET') {
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        if ($data !== null) {
+            // CRITICAL FIX: Ensure enum values are using the correct values
+            // This fixes the "invalid input value for enum request_status" error
+            if (isset($data['status'])) {
+                // Map status values to allowed enum values
+                $status_map = [// Fix the status name!
+                    'Declined' => 'Declined',
+                    'Pending' => 'Pending',
+                    'Accepted' => 'Accepted',
+                ];
+                
+                // If the status is in our map, use the correct value
+                if (array_key_exists($data['status'], $status_map)) {
+                    $data['status'] = $status_map[$data['status']];
+                    error_log("Status mapped to valid enum value: " . $data['status']);
+                } else {
+                    error_log("WARNING: Unknown status value: " . $data['status']);
+                }
+            }
+            
+            // Handle timestamp format for Supabase's PostgreSQL
+            if (isset($data['last_updated'])) {
+                // Format: "2023-05-30T15:30:45+00:00" (SQLite and PostgreSQL compatible)
+                $data['last_updated'] = gmdate('Y-m-d\TH:i:s\+00:00');
+            }
+            
+            // Convert data to JSON
+            $json_data = json_encode($data);
+            if ($json_data === false) {
+                error_log("JSON encode error: " . json_last_error_msg());
+                return [
+                    'code' => 0,
+                    'data' => null,
+                    'error' => "JSON encode error: " . json_last_error_msg()
+                ];
+            }
+            
+            // Log request for debugging
+            error_log("Supabase request to $url: $method with data: $json_data");
+            
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $json_data);
+        }
+    }
+
+    // Execute the request
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    
+    // Check for cURL errors
+    if ($response === false) {
+        $error = curl_error($ch);
+        $errno = curl_errno($ch);
+        curl_close($ch);
+        
+        error_log("cURL Error ($errno): $error in request to $url");
+        return [
+            'code' => 0,
+            'data' => null,
+            'error' => "Connection error: $error"
+        ];
+    }
+    
+    curl_close($ch);
+
+    // Log response
+    error_log("Supabase response from $url: Code $httpCode, Response: " . substr($response, 0, 500));
+    
+    // Handle the response
+    if ($httpCode >= 200 && $httpCode < 300) {
+        if (empty($response)) {
+            return [
+                'code' => $httpCode,
+                'data' => []
+            ];
+        }
+        
+        $decoded = json_decode($response, true);
+        if ($decoded === null && $response !== 'null' && $response !== '') {
+            error_log("JSON decode error: " . json_last_error_msg() . " - Raw response: " . substr($response, 0, 500));
+            return [
+                'code' => $httpCode,
+                'data' => null,
+                'error' => "JSON decode error: " . json_last_error_msg()
+            ];
+        }
+        
+        return [
+            'code' => $httpCode,
+            'data' => $decoded
+        ];
+    } else {
+        error_log("HTTP Error $httpCode: $response");
+        return [
+            'code' => $httpCode,
+            'data' => null,
+            'error' => "HTTP Error $httpCode: " . substr($response, 0, 500)
+        ];
+    }
+}
+
+// Fetch handover requests (accepted, delivering, declined status)
+function fetchHandoverRequests() {
+    // Get requests with relevant statuses - updated to only use valid enum values
+    $endpoint = "blood_requests?or=(status.eq.Accepted,status.eq.Declined)&order=last_updated.desc";
+    $response = supabaseRequest($endpoint);
+    
+    if ($response['code'] >= 200 && $response['code'] < 300) {
+        return $response['data'];
+    } else {
+        error_log("Failed to fetch handover requests. Status code: " . $response['code']);
+        return [];
+    }
+}
+
+// Handle status updates
+$success_message = '';
+$error_message = '';
+
+// Check if redirected after accepting a request
+if (isset($_GET['accepted'])) {
+    $accepted_id = $_GET['accepted'];
+    
+    // Fetch the details of the accepted request to verify it was updated correctly
+    $verifyEndpoint = "blood_requests?request_id=eq.$accepted_id&select=*";
+    $verifyResponse = supabaseRequest($verifyEndpoint);
+    
+    if ($verifyResponse['code'] >= 200 && $verifyResponse['code'] < 300 && !empty($verifyResponse['data'])) {
+        $request = $verifyResponse['data'][0];
+        $status = isset($request['status']) ? $request['status'] : 'Unknown';
+        
+        $success_message = "Request #$accepted_id has been accepted and moved to handover successfully. Status: $status";
+        error_log("Successfully accepted request #$accepted_id with status: $status");
+    } else {
+        $success_message = "Request #$accepted_id has been accepted and moved to handover.";
+        error_log("Verification incomplete for request #$accepted_id. Code: " . $verifyResponse['code']);
+    }
+}
+
+// Update to delivering status
+if (isset($_POST['update_delivering'])) {
+    $request_id = $_POST['request_id'];
+    
+    // Update the request status to 'Declined' since Delivering is not a valid enum
+    $endpoint = "blood_requests?request_id=eq.".$request_id;
+    
+    $data = [
+        'status' => 'Declined', // Changed from Delivering to Declined
+        'decline_reason' => 'Delivered', // Adding a reason to indicate it was delivered
+        'last_updated' => 'now' // The supabaseRequest function will format this correctly
+    ];
+    
+    $response = supabaseRequest($endpoint, 'PATCH', $data);
+    
+    if ($response['code'] >= 200 && $response['code'] < 300) {
+        $success_message = "Request #$request_id has been updated to Delivering status.";
+    } else {
+        $error_message = "Failed to update request to Delivering. Error code: " . $response['code'];
+        if (isset($response['error'])) {
+            $error_message .= " - " . $response['error'];
+        }
+        error_log("Failed to update request #$request_id to Delivering: " . json_encode($response));
+    }
+}
+
+// Update to completed status
+if (isset($_POST['update_completed'])) {
+    $request_id = $_POST['request_id'];
+    
+    // Update the request status to 'Declined' since Completed is not a valid enum
+    $endpoint = "blood_requests?request_id=eq.".$request_id;
+    
+    $data = [
+        'status' => 'Declined', // Changed from Completed to Declined
+        'decline_reason' => 'Completed', // Adding a reason to indicate it was completed
+        'last_updated' => 'now' // The supabaseRequest function will format this correctly
+    ];
+    
+    $response = supabaseRequest($endpoint, 'PATCH', $data);
+    
+    if ($response['code'] >= 200 && $response['code'] < 300) {
+        $success_message = "Request #$request_id has been marked as Completed.";
+    } else {
+        $error_message = "Failed to update request to Completed. Error code: " . $response['code'];
+        if (isset($response['error'])) {
+            $error_message .= " - " . $response['error'];
+        }
+        error_log("Failed to update request #$request_id to Completed: " . json_encode($response));
+    }
+}
+
+// Fetch blood requests
+$handover_requests = fetchHandoverRequests();
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -436,13 +671,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         <div class="row">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">
-                <input type="text" class="form-control" placeholder="Search...">
+                <div class="text-center mb-3">
+                    <img src="../../assets/images/redcross-logo.png" alt="Red Cross Logo" style="width: 60px; height: auto;" onerror="this.src='https://www.redcross.org.ph/wp-content/uploads/2021/05/avatar.jpg';">
+                </div>
                 <a href="dashboard-Inventory-System.php" class="nav-link">
-                    <span><i class="fas fa-home"></i>Home</span>
+                    <span><i class="fas fa-home me-2"></i>Home</span>
                 </a>
                 
                 <a class="nav-link" data-bs-toggle="collapse" href="#bloodDonationsCollapse" role="button" aria-expanded="false" aria-controls="bloodDonationsCollapse">
-                    <span><i class="fas fa-tint"></i>Blood Donations</span>
+                    <span><i class="fas fa-tint me-2"></i>Blood Donations</span>
                     <i class="fas fa-chevron-down"></i>
                 </a>
                 <div class="collapse" id="bloodDonationsCollapse">
@@ -456,21 +693,35 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 </div>
 
                 <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
-                    <span><i class="fas fa-tint"></i>Blood Bank</span>
+                    <span><i class="fas fa-tint me-2"></i>Blood Bank</span>
                 </a>
                 <a href="Dashboard-Inventory-System-Hospital-Request.php" class="nav-link">
-                    <span><i class="fas fa-list"></i>Requests</span>
+                    <span><i class="fas fa-list me-2"></i>Requests</span>
                 </a>
                 <a href="Dashboard-Inventory-System-Handed-Over.php" class="nav-link active">
-                    <span><i class="fas fa-check"></i>Handover</span>
+                    <span><i class="fas fa-check me-2"></i>Handover</span>
                 </a>
                 <a href="../../assets/php_func/logout.php" class="nav-link">
-                        <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
+                    <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
                 </a>
             </nav>
 
            <!-- Main Content -->
            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+            <?php if ($success_message): ?>
+                <div class="alert alert-success alert-dismissible fade show mt-3" role="alert">
+                    <?php echo $success_message; ?>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            <?php endif; ?>
+            
+            <?php if ($error_message): ?>
+                <div class="alert alert-danger alert-dismissible fade show mt-3" role="alert">
+                    <?php echo $error_message; ?>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            <?php endif; ?>
+
             <div class="container-fluid p-3 email-container">
                     <h2 class="text-left">List of Handed Over Requests</h2>
                     <div class="row mb-3">
@@ -509,54 +760,152 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     <th>Doctor</th>
                                     <th>Status</th>
                                     <th>Reason (if Declined)</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <!-- Accepted Request -->
+                                <?php if (empty($handover_requests)): ?>
                                 <tr>
-                                    <td>#001</td>
-                                    <td>John Doe</td>
-                                    <td>B+</td>
-                                    <td>3</td>
-                                    <td>Whole Blood</td>
-                                    <td>SPH</td>
-                                    <td>Dr. Patro</td>
-                                    <td><span class="badge bg-success">Accepted</span></td>
-                                    <td>-</td>
+                                    <td colspan="10" class="text-center">No handover requests found</td>
                                 </tr>
-            
-                                <!-- Delivering Request -->
-                                <tr>
-                                    <td>#002</td>
-                                    <td>Jane Smith</td>
-                                    <td>A-</td>
-                                    <td>2</td>
-                                    <td>Platelet Concentrate</td>
-                                    <td>MMC</td>
-                                    <td>Dr. Reyes</td>
-                                    <td><span class="badge bg-primary">Delivering</span></td>
-                                    <td>-</td>
-                                </tr>
-            
-                                <!-- Declined Request -->
-                                <tr>
-                                    <td>#003</td>
-                                    <td>Mark Wilson</td>
-                                    <td>O+</td>
-                                    <td>5</td>
-                                    <td>Plasma</td>
-                                    <td>GH</td>
-                                    <td>Dr. Santos</td>
-                                    <td><span class="badge bg-danger">Declined</span></td>
-                                    <td>Insufficient stock</td>
-                                </tr>
+                                <?php else: ?>
+                                    <?php foreach ($handover_requests as $request): ?>
+                                    <tr>
+                                        <td><?php echo $request['request_id']; ?></td>
+                                        <td><?php echo htmlspecialchars($request['patient_name']); ?></td>
+                                        <td><?php echo htmlspecialchars($request['patient_blood_type']) . (strtolower($request['rh_factor']) == 'positive' ? '+' : '-'); ?></td>
+                                        <td><?php echo $request['units_requested']; ?></td>
+                                        <td><?php echo htmlspecialchars($request['component'] ?? 'Whole Blood'); ?></td>
+                                        <td><?php echo htmlspecialchars($request['hospital_admitted']); ?></td>
+                                        <td><?php echo htmlspecialchars($request['physician_name']); ?></td>
+                                        <td>
+                                            <?php 
+                                            $status = isset($request['status']) ? $request['status'] : '';
+                                            
+                                            if ($status === 'Accepted' || $status === 'accepted'): ?>
+                                                <span class="badge bg-success">Accepted</span>
+                                            <?php elseif ($status === 'Declined' || $status === 'declined'): ?>
+                                                <span class="badge bg-danger">Declined</span>
+                                            <?php elseif ($status === null || $status === 'null' || empty($status)): ?>
+                                                <span class="badge bg-secondary">Not Set</span>
+                                            <?php else: ?>
+                                                <span class="badge bg-secondary"><?php echo htmlspecialchars($status); ?></span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td><?php echo isset($request['decline_reason']) ? htmlspecialchars($request['decline_reason']) : '-'; ?></td>
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-info view-details" data-request='<?php echo json_encode($request); ?>' title="View Details">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            
+                                            <?php 
+                                            // Show appropriate action buttons based on status
+                                            if ($status === 'Accepted' || $status === 'accepted'): 
+                                            ?>
+                                            <button type="button" class="btn btn-sm btn-primary update-status" data-request-id="<?php echo $request['request_id']; ?>" title="Update to Delivering">
+                                                <i class="fas fa-truck"></i>
+                                            </button>
+                                            <?php endif; ?>
+                                            
+                                            <?php if ($status === 'Declined' || $status === 'declined'): ?>
+                                            <span class="badge bg-danger">Declined</span>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </main>
             
+            <!-- Request Details Modal -->
+            <div class="modal fade" id="requestDetailsModal" tabindex="-1" aria-labelledby="requestDetailsModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header bg-dark text-white">
+                            <h5 class="modal-title" id="requestDetailsModalLabel">Request Details</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <p><strong>Request ID:</strong> <span id="detail-request-id"></span></p>
+                                    <p><strong>Patient Name:</strong> <span id="detail-patient-name"></span></p>
+                                    <p><strong>Patient Age:</strong> <span id="detail-patient-age"></span></p>
+                                    <p><strong>Patient Gender:</strong> <span id="detail-patient-gender"></span></p>
+                                    <p><strong>Blood Type:</strong> <span id="detail-blood-type"></span></p>
+                                    <p><strong>Component:</strong> <span id="detail-component"></span></p>
+                                </div>
+                                <div class="col-md-6">
+                                    <p><strong>Units Requested:</strong> <span id="detail-units"></span></p>
+                                    <p><strong>Urgent:</strong> <span id="detail-urgent"></span></p>
+                                    <p><strong>Hospital:</strong> <span id="detail-hospital"></span></p>
+                                    <p><strong>Doctor:</strong> <span id="detail-doctor"></span></p>
+                                    <p><strong>Requested On:</strong> <span id="detail-requested-on"></span></p>
+                                    <p><strong>Status:</strong> <span id="detail-status"></span></p>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-12">
+                                    <h6>Diagnosis/Reason for Request:</h6>
+                                    <p id="detail-diagnosis" class="border p-2 rounded bg-light"></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
             
+            <!-- Update Status Modal -->
+            <div class="modal fade" id="updateStatusModal" tabindex="-1" aria-labelledby="updateStatusModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header bg-dark text-white">
+                            <h5 class="modal-title" id="updateStatusModalLabel">Update Request Status</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form method="post">
+                            <div class="modal-body">
+                                <p>Are you sure you want to update this request to <strong>Delivering</strong> status?</p>
+                                <p>This indicates that the blood units are currently being transported to the requesting hospital.</p>
+                                <input type="hidden" id="update-request-id" name="request_id">
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" name="update_delivering" class="btn btn-primary">Update to Delivering</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Complete Request Modal -->
+            <div class="modal fade" id="completeRequestModal" tabindex="-1" aria-labelledby="completeRequestModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header bg-dark text-white">
+                            <h5 class="modal-title" id="completeRequestModalLabel">Complete Request</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form method="post">
+                            <div class="modal-body">
+                                <p>Are you sure you want to mark this request as <strong>Completed</strong>?</p>
+                                <p>This indicates that the blood units have been successfully delivered to the requesting hospital.</p>
+                                <input type="hidden" id="complete-request-id" name="request_id">
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" name="update_completed" class="btn btn-success">Mark as Completed</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -565,6 +914,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <script>
     function searchTable() {
         const searchInput = document.getElementById('searchInput').value.toLowerCase();
+        const searchCategory = document.getElementById('searchCategory').value;
         const table = document.querySelector('table');
         const rows = table.getElementsByTagName('tr');
 
@@ -573,11 +923,35 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             const cells = row.getElementsByTagName('td');
             let found = false;
 
-            for (let j = 0; j < cells.length; j++) {
-                const cellText = cells[j].textContent.toLowerCase();
-                if (cellText.includes(searchInput)) {
-                    found = true;
-                    break;
+            // If no cells (like in "No requests found" row), skip
+            if (cells.length <= 1) continue;
+
+            if (searchCategory === 'all') {
+                // Search all columns
+                for (let j = 0; j < cells.length; j++) {
+                    const cellText = cells[j].textContent.toLowerCase();
+                    if (cellText.includes(searchInput)) {
+                        found = true;
+                        break;
+                    }
+                }
+            } else if (searchCategory === 'hospital') {
+                // Search hospital column (5)
+                const cellText = cells[5].textContent.toLowerCase();
+                found = cellText.includes(searchInput);
+            } else if (searchCategory === 'blood_type') {
+                // Search blood type column (2)
+                const cellText = cells[2].textContent.toLowerCase();
+                found = cellText.includes(searchInput);
+            } else if (searchCategory === 'date') {
+                // For date, we would need to display and search on a date column
+                // Since we don't have it visible in the table, we'll search all columns
+                for (let j = 0; j < cells.length; j++) {
+                    const cellText = cells[j].textContent.toLowerCase();
+                    if (cellText.includes(searchInput)) {
+                        found = true;
+                        break;
+                    }
                 }
             }
 
@@ -587,6 +961,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
     // Add event listener for real-time search
     document.getElementById('searchInput').addEventListener('keyup', searchTable);
+    document.getElementById('searchCategory').addEventListener('change', searchTable);
 
     document.addEventListener('DOMContentLoaded', function() {
         // Initialize modals
@@ -595,6 +970,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             backdrop: false,
             keyboard: false
         });
+        const requestDetailsModal = new bootstrap.Modal(document.getElementById('requestDetailsModal'));
+        const updateStatusModal = new bootstrap.Modal(document.getElementById('updateStatusModal'));
+        const completeRequestModal = new bootstrap.Modal(document.getElementById('completeRequestModal'));
 
         // Function to show confirmation modal
         window.showConfirmationModal = function() {
@@ -611,7 +989,82 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             }, 1500);
         };
 
-        // ... rest of your existing JavaScript ...
+        // Handle view details button clicks
+        document.querySelectorAll('.view-details').forEach(button => {
+            button.addEventListener('click', function() {
+                const requestData = JSON.parse(this.getAttribute('data-request'));
+                
+                // Populate the modal with request details
+                document.getElementById('detail-request-id').textContent = '#' + requestData.request_id;
+                document.getElementById('detail-patient-name').textContent = requestData.patient_name;
+                document.getElementById('detail-patient-age').textContent = requestData.patient_age || 'N/A';
+                document.getElementById('detail-patient-gender').textContent = requestData.patient_gender || 'N/A';
+                document.getElementById('detail-blood-type').textContent = requestData.patient_blood_type + 
+                    (requestData.rh_factor && requestData.rh_factor.toLowerCase() === 'positive' ? '+' : '-');
+                document.getElementById('detail-component').textContent = requestData.component || 'Whole Blood';
+                document.getElementById('detail-units').textContent = requestData.units_requested;
+                document.getElementById('detail-urgent').textContent = requestData.is_asap ? 'Yes (ASAP)' : 'No';
+                document.getElementById('detail-hospital').textContent = requestData.hospital_admitted;
+                document.getElementById('detail-doctor').textContent = requestData.physician_name;
+                
+                // Format date if it exists
+                if (requestData.requested_on) {
+                    const requestDate = new Date(requestData.requested_on);
+                    document.getElementById('detail-requested-on').textContent = requestDate.toLocaleString();
+                } else {
+                    document.getElementById('detail-requested-on').textContent = 'N/A';
+                }
+                
+                // Set status with appropriate styling
+                let statusHTML = '';
+                const statusValue = requestData.status || '';
+                
+                if (statusValue === 'Accepted' || statusValue === 'accepted') {
+                    statusHTML = '<span class="badge bg-success">Accepted</span>';
+                } else if (statusValue === 'Declined' || statusValue === 'declined') {
+                    statusHTML = '<span class="badge bg-danger">Declined</span>';
+                } else if (!statusValue) {
+                    statusHTML = '<span class="badge bg-secondary">Not Set</span>';
+                } else {
+                    statusHTML = `<span class="badge bg-secondary">${statusValue}</span>`;
+                }
+                
+                document.getElementById('detail-status').innerHTML = statusHTML;
+                
+                // Set diagnosis
+                document.getElementById('detail-diagnosis').textContent = requestData.patient_diagnosis || 'No diagnosis provided';
+                
+                // Show the modal
+                requestDetailsModal.show();
+            });
+        });
+        
+        // Handle update status button clicks
+        document.querySelectorAll('.update-status').forEach(button => {
+            button.addEventListener('click', function() {
+                const requestId = this.getAttribute('data-request-id');
+                document.getElementById('update-request-id').value = requestId;
+                updateStatusModal.show();
+            });
+        });
+        
+        // Handle complete request button clicks
+        document.querySelectorAll('.update-completed').forEach(button => {
+            button.addEventListener('click', function() {
+                const requestId = this.getAttribute('data-request-id');
+                document.getElementById('complete-request-id').value = requestId;
+                completeRequestModal.show();
+            });
+        });
+        
+        // Auto-dismiss alerts after 5 seconds
+        setTimeout(() => {
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(alert => {
+                const bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            });
+        }, 5000);
     });
     </script>
 </body>
