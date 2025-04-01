@@ -17,7 +17,7 @@ if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['rol
 
 // For staff role (role_id 3), check for required session variables
 if ($_SESSION['role_id'] === 3) {
-    if (!isset($_SESSION['donor_id'])) {
+    if (!isset($_SESSION['donor_id'])) {    
         error_log("Missing donor_id in session for staff");
         header('Location: ../../public/Dashboards/dashboard-Inventory-System.php');
         exit();

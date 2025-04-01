@@ -2,95 +2,61 @@
 // Include database connection
 include_once '../../assets/conn/db_conn.php';
 
-// Function to fetch eligibility data from Supabase
-function fetchEligibilityData() {
-    $curl = curl_init();
-    
-    curl_setopt_array($curl, [
-        CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility?select=eligibility_id,donor_id,blood_type,donation_type,collection_successful,donor_reaction,start_date,end_date,status,blood_collection_id&order=created_at.desc",
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => [
-            "apikey: " . SUPABASE_API_KEY,
-            "Authorization: Bearer " . SUPABASE_API_KEY,
-            "Content-Type: application/json",
-            "Prefer: count=exact"
-        ],
-    ]);
-    
-    $response = curl_exec($curl);
-    $err = curl_error($curl);
-    
-    curl_close($curl);
-    
-    if ($err) {
-        return ["error" => "cURL Error #:" . $err];
-    } else {
-        return json_decode($response, true);
-    }
-}
+// Get the status parameter from URL
+$status = isset($_GET['status']) ? $_GET['status'] : 'pending';
+$donations = [];
+$error = null;
+$pageTitle = "Loading...";
 
-// Function to fetch donor information by donor_id
-function fetchDonorInfo($donorId) {
-    $curl = curl_init();
-    
-    curl_setopt_array($curl, [
-        CURLOPT_URL => SUPABASE_URL . "/rest/v1/donor_form?donor_id=eq." . $donorId . "&select=donor_id,surname,first_name,middle_name,birthdate,age,sex",
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => [
-            "apikey: " . SUPABASE_API_KEY,
-            "Authorization: Bearer " . SUPABASE_API_KEY,
-            "Content-Type: application/json"
-        ],
-    ]);
-    
-    $response = curl_exec($curl);
-    $err = curl_error($curl);
-    
-    curl_close($curl);
-    
-    if ($err) {
-        return ["error" => "cURL Error #:" . $err];
-    } else {
-        $data = json_decode($response, true);
-        return !empty($data) ? $data[0] : null;
+// Based on status, include the appropriate module
+try {
+    switch ($status) {
+        case 'pending':
+            include_once 'modules/donation_pending.php';
+            $donations = $pendingDonations ?? [];
+            $pageTitle = "Pending Donations";
+            break;
+        case 'approved':
+            include_once 'modules/donation_approved.php';
+            $donations = $approvedDonations ?? [];
+            $pageTitle = "Approved Donations";
+            break;
+        case 'walk-in':
+            include_once 'modules/donation_walkin.php';
+            $donations = $walkinDonations ?? [];
+            $pageTitle = "Walk-in Donations";
+            break;
+        case 'donated':
+            include_once 'modules/donation_donated.php';
+            $donations = $donatedDonations ?? [];
+            $pageTitle = "Completed Donations";
+            break;
+        case 'declined':
+            include_once 'modules/donation_declined.php';
+            $donations = $declinedDonations ?? [];
+            $pageTitle = "Declined Donations";
+            break;
+        default:
+            include_once 'modules/donation_pending.php';
+            $donations = $pendingDonations ?? [];
+            $pageTitle = "Pending Donations";
+            break;
     }
+} catch (Exception $e) {
+    $error = "Error loading module: " . $e->getMessage();
 }
-
-// Function to get donor eligibility status
-function getDonorEligibilityStatus($donorId) {
-    $curl = curl_init();
-    
-    curl_setopt_array($curl, [
-        CURLOPT_URL => SUPABASE_URL . "/rest/v1/rpc/get_eligibility_status",
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => [
-            "apikey: " . SUPABASE_API_KEY,
-            "Authorization: Bearer " . SUPABASE_API_KEY,
-            "Content-Type: application/json"
-        ],
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => json_encode(["p_donor_id" => $donorId])
-    ]);
-    
-    $response = curl_exec($curl);
-    $err = curl_error($curl);
-    
-    curl_close($curl);
-    
-    if ($err) {
-        return ["error" => "cURL Error #:" . $err];
-    } else {
-        return json_decode($response, true);
-    }
-}
-
-// Fetch eligibility data
-$eligibilityData = fetchEligibilityData();
 
 // Check if there's an error in fetching data
-$error = null;
-if (isset($eligibilityData['error'])) {
-    $error = $eligibilityData['error'];
+if (!$error && isset($donations['error'])) {
+    $error = $donations['error'];
+}
+
+// Ensure $donations is always an array
+if (!is_array($donations)) {
+    $donations = [];
+    if (!$error) {
+        $error = "No data returned or invalid data format";
+    }
 }
 
 // Calculate age from birthdate
@@ -495,6 +461,70 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         </div>
     </div>
 
+    <!-- View Donor Confirmation Modal -->
+    <div class="modal fade" id="viewDonorConfirmationModal" tabindex="-1" aria-labelledby="viewDonorConfirmationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">Donor Details</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Would you like to view this donor's details or process this donor now?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-info" id="viewDonorDetailsBtn">View Details</button>
+                    <button type="button" class="btn btn-primary" id="processDonorBtn">Process Donor</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Process Donor Confirmation Modal -->
+    <div class="modal fade" id="processDonorConfirmationModal" tabindex="-1" aria-labelledby="processDonorConfirmationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">Process Donor</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>You are about to process this donor. This will redirect you to the medical history and physical examination forms.</p>
+                    
+                    <div class="mb-3">
+                        <label for="bloodType" class="form-label">Blood Type</label>
+                        <select class="form-select" id="bloodType">
+                            <option value="A+">A+</option>
+                            <option value="A-">A-</option>
+                            <option value="B+">B+</option>
+                            <option value="B-">B-</option>
+                            <option value="AB+">AB+</option>
+                            <option value="AB-">AB-</option>
+                            <option value="O+">O+</option>
+                            <option value="O-">O-</option>
+                            <option value="Unknown">Unknown</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="donationType" class="form-label">Donation Type</label>
+                        <select class="form-select" id="donationType">
+                            <option value="Whole Blood">Whole Blood</option>
+                            <option value="Platelet">Platelet</option>
+                            <option value="Plasma">Plasma</option>
+                            <option value="Double Red Cell">Double Red Cell</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmProcessDonorBtn">Yes, Process Donor</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="container-fluid">
         <!-- Header -->
         <div class="dashboard-home-header bg-light p-3 border-bottom">
@@ -545,7 +575,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
            <!-- Main Content -->
            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
             <div class="container-fluid p-4 custom-margin">
-                        <h2 class="card-title">List of Donations</h2>
+                        <h2 class="card-title"><?php echo $pageTitle; ?></h2>
                         <div class="row mb-3">
                             <div class="col-12">
                                 <div class="search-container">
@@ -581,66 +611,93 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <table class="table table-striped table-hover">
                                 <thead class="table-dark">
                                     <tr>
-                                        <th>Donor ID</th>
-                                        <th>Surname</th>
-                                        <th>First Name</th>
-                                        <th>Middle Name</th>
-                                        <th>Birthdate</th>
-                                        <th>Age</th>
-                                        <th>Sex</th>
-                                        <th>Blood Type</th>
-                                        <th>Donation Type</th>
-                                        <th>Status</th>
-                                        <th>Actions</th>
+                                        <?php if ($status === 'approved'): ?>
+                                            <th>Surname</th>
+                                            <th>First Name</th>
+                                            <th>Middle Name</th>
+                                            <th>Age</th>
+                                            <th>Sex</th>
+                                            <th>Blood Type</th>
+                                            <th>Donation Type</th>
+                                            <th>Actions</th>
+                                        <?php elseif ($status === 'pending'): ?>
+                                            <th>Surname</th>
+                                            <th>First Name</th>
+                                            <th>Birthdate</th>
+                                            <th>Sex</th>
+                                            <th>Date Submitted</th>
+                                            <th>Actions</th>
+                                        <?php elseif ($status === 'declined'): ?>
+                                            <th>Donor ID</th>
+                                            <th>Surname</th>
+                                            <th>First Name</th>
+                                            <th>Rejection Source</th>
+                                            <th>Reason for Rejection</th>
+                                            <th>Rejection Date</th>
+                                            <th>Actions</th>
+                                        <?php else: ?>
+                                            <th>Donor ID</th>
+                                            <th>Surname</th>
+                                            <th>First Name</th>
+                                            <th>Middle Name</th>
+                                            <th>Blood Type</th>
+                                            <th>Donation Type</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        <?php endif; ?>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php if (!$error && is_array($eligibilityData) && count($eligibilityData) > 0): ?>
-                                        <?php foreach ($eligibilityData as $eligibility): ?>
-                                            <?php 
-                                            // Fetch donor information for each eligibility record
-                                            $donorInfo = fetchDonorInfo($eligibility['donor_id']);
-                                            $statusInfo = getDonorEligibilityStatus($eligibility['donor_id']);
-                                            
-                                            if (!$donorInfo) continue; // Skip if no donor info found
-                                            ?>
-                                            <tr>
-                                                <td><?php echo htmlspecialchars($eligibility['donor_id']); ?></td>
-                                                <td><?php echo htmlspecialchars($donorInfo['surname']); ?></td>
-                                                <td><?php echo htmlspecialchars($donorInfo['first_name']); ?></td>
-                                                <td><?php echo htmlspecialchars($donorInfo['middle_name'] ?? ''); ?></td>
-                                                <td><?php echo htmlspecialchars($donorInfo['birthdate']); ?></td>
-                                                <td><?php echo htmlspecialchars($donorInfo['age'] ?? calculateAge($donorInfo['birthdate'])); ?></td>
-                                                <td><?php echo htmlspecialchars($donorInfo['sex']); ?></td>
-                                                <td><?php echo htmlspecialchars($eligibility['blood_type']); ?></td>
-                                                <td><?php echo htmlspecialchars($eligibility['donation_type']); ?></td>
-                                                <td>
-                                                    <?php if ($statusInfo && isset($statusInfo['is_eligible'])): ?>
-                                                        <?php if ($statusInfo['is_eligible']): ?>
-                                                            <span class="badge bg-success">Eligible</span>
+                                    <?php if (!$error && is_array($donations) && count($donations) > 0): ?>
+                                        <?php foreach ($donations as $donation): ?>
+                                            <tr class="donor-row" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>" style="cursor: pointer;">
+                                                <?php if ($status === 'approved'): ?>
+                                                    <td><?php echo htmlspecialchars($donation['surname'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['first_name'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['middle_name'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['age'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['sex'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['blood_type'] ?? 'Unknown'); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['donation_type'] ?? 'Unknown'); ?></td>
+                                                <?php elseif ($status === 'pending'): ?>
+                                                    <td><?php echo htmlspecialchars($donation['surname'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['first_name'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['birthdate'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['sex'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['date_submitted'] ?? ''); ?></td>
+                                                <?php elseif ($status === 'declined'): ?>
+                                                    <td><?php echo htmlspecialchars($donation['donor_id']); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['surname'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['first_name'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['rejection_source'] ?? 'Physical Examination'); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['rejection_reason'] ?? 'Unspecified'); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['rejection_date'] ?? date('M d, Y')); ?></td>
+                                                <?php else: ?>
+                                                    <td><?php echo htmlspecialchars($donation['donor_id']); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['surname'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['first_name'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['middle_name'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['blood_type'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['donation_type'] ?? ''); ?></td>
+                                                    <td>
+                                                        <?php if ($status === 'walk-in'): ?>
+                                                            <span class="badge bg-info">Walk-in</span>
+                                                        <?php elseif ($status === 'donated'): ?>
+                                                            <span class="badge bg-primary">Donated</span>
                                                         <?php else: ?>
-                                                            <span class="badge bg-warning text-dark">Not Eligible</span>
+                                                            <span class="badge bg-danger">Declined</span>
                                                         <?php endif; ?>
-                                                    <?php else: ?>
-                                                        <?php if ($eligibility['status'] === 'eligible'): ?>
-                                                            <span class="badge bg-success">Eligible</span>
-                                                        <?php elseif ($eligibility['status'] === 'disapproved'): ?>
-                                                            <span class="badge bg-danger">Disapproved</span>
-                                                        <?php elseif ($eligibility['status'] === 'failed_collection'): ?>
-                                                            <span class="badge bg-warning text-dark">Failed Collection</span>
-                                                        <?php else: ?>
-                                                            <span class="badge bg-warning text-dark">Ineligible</span>
-                                                        <?php endif; ?>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <button class="btn btn-sm btn-info view-donor" data-donor-id="<?php echo htmlspecialchars($eligibility['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($eligibility['eligibility_id']); ?>" data-bs-toggle="modal" data-bs-target="#donorModal">
+                                                    </td>
+                                                <?php endif; ?>
+                                                
+                                                <td onclick="event.stopPropagation();">
+                                                    <button class="btn btn-sm btn-info view-donor" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>" data-bs-toggle="modal" data-bs-target="#viewDonorConfirmationModal">
                                                         <i class="fas fa-eye"></i>
                                                     </button>
-                                                    <button class="btn btn-sm btn-warning edit-donor" data-donor-id="<?php echo htmlspecialchars($eligibility['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($eligibility['eligibility_id']); ?>" data-bs-toggle="modal" data-bs-target="#editDonorForm">
+                                                    <button class="btn btn-sm btn-warning edit-donor" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>" data-bs-toggle="modal" data-bs-target="#editDonorForm">
                                                         <i class="fas fa-edit"></i>
                                                     </button>
-                                                    <button class="btn btn-sm btn-danger delete-donor" data-donor-id="<?php echo htmlspecialchars($eligibility['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($eligibility['eligibility_id']); ?>" onclick="deleteDonor(<?php echo htmlspecialchars($eligibility['eligibility_id']); ?>)">
+                                                    <button class="btn btn-sm btn-danger delete-donor" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>" onclick="deleteDonor(<?php echo htmlspecialchars($donation['eligibility_id'] ?? '0'); ?>)">
                                                         <i class="fas fa-trash-alt"></i>
                                                     </button>
                                                 </td>
@@ -648,7 +705,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         <?php endforeach; ?>
                                     <?php else: ?>
                                         <tr>
-                                            <td colspan="11" class="text-center">No donation records found</td>
+                                            <td colspan="<?php echo ($status === 'approved') ? '8' : (($status === 'pending') ? '6' : (($status === 'declined') ? '7' : '8')); ?>" class="text-center">No donation records found</td>
                                         </tr>
                                     <?php endif; ?>
                                 </tbody>
@@ -734,22 +791,38 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             // Initialize modals
             let confirmationModal = null;
             let loadingModal = null;
+            let viewDonorConfirmationModal = null;
+            let processDonorConfirmationModal = null;
+            let donorModal = null;
             
             // Get modal elements
             const confirmationModalEl = document.getElementById('confirmationModal');
             const loadingModalEl = document.getElementById('loadingModal');
+            const viewDonorConfirmationModalEl = document.getElementById('viewDonorConfirmationModal');
+            const processDonorConfirmationModalEl = document.getElementById('processDonorConfirmationModal');
+            const donorModalEl = document.getElementById('donorModal');
             
-            if (confirmationModalEl && loadingModalEl) {
+            if (confirmationModalEl && loadingModalEl && viewDonorConfirmationModalEl && processDonorConfirmationModalEl && donorModalEl) {
                 console.log('Modal elements found, initializing Bootstrap modals...');
                 confirmationModal = new bootstrap.Modal(confirmationModalEl);
                 loadingModal = new bootstrap.Modal(loadingModalEl);
+                viewDonorConfirmationModal = new bootstrap.Modal(viewDonorConfirmationModalEl);
+                processDonorConfirmationModal = new bootstrap.Modal(processDonorConfirmationModalEl);
+                donorModal = new bootstrap.Modal(donorModalEl);
             } else {
-                console.error('Modal elements not found');
+                console.error('Some modal elements not found');
             }
             
             // Get button elements
             const addWalkInBtn = document.getElementById('addWalkInBtn');
             const proceedBtn = document.getElementById('proceedBtn');
+            const viewDonorDetailsBtn = document.getElementById('viewDonorDetailsBtn');
+            const processDonorBtn = document.getElementById('processDonorBtn');
+            const confirmProcessDonorBtn = document.getElementById('confirmProcessDonorBtn');
+            
+            // Variables to store current donor info
+            let currentDonorId = null;
+            let currentEligibilityId = null;
             
             // Add Walk-in button click handler
             if (addWalkInBtn) {
@@ -779,6 +852,148 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             } else {
                 console.error('Proceed button not found');
             }
+            
+            // Make rows clickable
+            document.querySelectorAll('.donor-row').forEach(row => {
+                row.addEventListener('click', function() {
+                    currentDonorId = this.getAttribute('data-donor-id');
+                    currentEligibilityId = this.getAttribute('data-eligibility-id');
+                    
+                    if (viewDonorConfirmationModal) {
+                        viewDonorConfirmationModal.show();
+                    }
+                });
+            });
+            
+            // View donor details button click handler
+            if (viewDonorDetailsBtn) {
+                viewDonorDetailsBtn.addEventListener('click', function() {
+                    if (viewDonorConfirmationModal && donorModal && currentDonorId && currentEligibilityId) {
+                        viewDonorConfirmationModal.hide();
+                        fetchDonorDetails(currentDonorId, currentEligibilityId);
+                        donorModal.show();
+                    }
+                });
+            }
+            
+            // Process donor button click handler
+            if (processDonorBtn) {
+                processDonorBtn.addEventListener('click', function() {
+                    if (viewDonorConfirmationModal && processDonorConfirmationModal) {
+                        viewDonorConfirmationModal.hide();
+                        processDonorConfirmationModal.show();
+                    }
+                });
+            }
+            
+            // Confirm process donor button click handler
+            if (confirmProcessDonorBtn) {
+                confirmProcessDonorBtn.addEventListener('click', function() {
+                    if (processDonorConfirmationModal && loadingModal && currentDonorId) {
+                        processDonorConfirmationModal.hide();
+                        loadingModal.show();
+
+                        // Get blood type and donation type from form
+                        const bloodType = document.getElementById('bloodType').value;
+                        const donationType = document.getElementById('donationType').value;
+
+                        console.log('Processing donor:', {
+                            donor_id: currentDonorId,
+                            blood_type: bloodType,
+                            donation_type: donationType
+                        });
+
+                        // First create an eligibility record with approved status
+                        fetch('create_eligibility.php', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                donor_id: currentDonorId,
+                                status: 'approved',
+                                blood_type: bloodType,
+                                donation_type: donationType
+                            })
+                        })
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(`HTTP error! Status: ${response.status}`);
+                            }
+                            return response.text();
+                        })
+                        .then(text => {
+                            try {
+                                return JSON.parse(text);
+                            } catch (e) {
+                                throw new Error(`Invalid JSON response: ${text}`);
+                            }
+                        })
+                        .then(eligibilityData => {
+                            // After creating eligibility record, store donor_id in session
+                            if (eligibilityData.success) {
+                                console.log('Created eligibility record successfully:', eligibilityData);
+                                
+                                // Then store the donor_id in the session
+                                return fetch('set_donor_session.php', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify({
+                                        donor_id: currentDonorId,
+                                        eligibility_id: eligibilityData.data && eligibilityData.data[0] ? eligibilityData.data[0].eligibility_id : null
+                                    })
+                                });
+                            } else {
+                                throw new Error(eligibilityData.error || 'Failed to create eligibility record');
+                            }
+                        })
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(`HTTP error! Status: ${response.status}`);
+                            }
+                            return response.text();
+                        })
+                        .then(text => {
+                            try {
+                                return JSON.parse(text);
+                            } catch (e) {
+                                throw new Error(`Invalid JSON response: ${text}`);
+                            }
+                        })
+                        .then(data => {
+                            if (data.success) {
+                                console.log('Donor ID stored in session successfully');
+                                
+                                // Show success message
+                                alert("Donor has been approved successfully! Redirecting to medical history form.");
+                                
+                                // Redirect to medical history form with donor_id parameter
+                                window.location.href = `../../src/views/forms/medical-history.php?donor_id=${currentDonorId}`;
+                            } else {
+                                console.error('Failed to store donor ID in session:', data.error);
+                                alert('Error: Failed to process donor. Please try again.');
+                                loadingModal.hide();
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error processing donor:', error);
+                            alert('Error: Failed to process donor. ' + error.message);
+                            loadingModal.hide();
+                        });
+                    }
+                });
+            }
+
+            // View donor buttons (eye icon) click handler
+            document.querySelectorAll('.view-donor').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.stopPropagation(); // Prevent row click
+                    currentDonorId = this.getAttribute('data-donor-id');
+                    currentEligibilityId = this.getAttribute('data-eligibility-id');
+                });
+            });
             
             // Rest of your existing event listeners...
         });
@@ -823,9 +1038,70 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <p class="fs-5"><strong>Donor Reaction:</strong> ${eligibility.donor_reaction || 'None'}</p>
                             <p class="fs-5"><strong>Management Done:</strong> ${eligibility.management_done || 'None'}</p>
                         </div>
+                    </div>
+                    
+                    <div class="text-center mt-4">
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-primary btn-lg process-from-details me-2" data-donor-id="${donor.donor_id}">
+                                <i class="fas fa-tasks me-2"></i>Process This Donor
+                            </button>
+                            <button type="button" class="btn btn-success btn-lg view-donor-form me-2" data-donor-id="${donor.donor_id}">
+                                <i class="fas fa-edit me-2"></i>View/Edit Donor Form
+                            </button>
+                        </div>
                     </div>`;
                     
                     donorDetailsContainer.innerHTML = html;
+                    
+                    // Add event listener to the process button in details modal
+                    document.querySelector('.process-from-details').addEventListener('click', function() {
+                        const donorId = this.getAttribute('data-donor-id');
+                        const donorModal = bootstrap.Modal.getInstance(document.getElementById('donorModal'));
+                        const processDonorConfirmationModal = new bootstrap.Modal(document.getElementById('processDonorConfirmationModal'));
+                        
+                        if (donorModal) donorModal.hide();
+                        if (processDonorConfirmationModal) processDonorConfirmationModal.show();
+                    });
+                    
+                    // Add event listener to the view donor form button
+                    document.querySelector('.view-donor-form').addEventListener('click', function() {
+                        const donorId = this.getAttribute('data-donor-id');
+                        const donorModal = bootstrap.Modal.getInstance(document.getElementById('donorModal'));
+                        
+                        // Show loading modal
+                        const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+                        
+                        if (donorModal) donorModal.hide();
+                        loadingModal.show();
+                        
+                        // Store the donor_id in the session then redirect
+                        fetch('set_donor_session.php', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                donor_id: donorId,
+                                view_mode: true // Flag to indicate this is for viewing/editing
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                setTimeout(() => {
+                                    window.location.href = '../../src/views/forms/donor-form.php?mode=edit&donor_id=' + donorId;
+                                }, 1000);
+                            } else {
+                                alert('Error: Failed to prepare donor form. Please try again.');
+                                loadingModal.hide();
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert('Error: Failed to prepare donor form. Please try again.');
+                            loadingModal.hide();
+                        });
+                    });
                 })
                 .catch(error => {
                     console.error('Error fetching donor details:', error);
@@ -998,18 +1274,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
         // Event listeners for view and edit buttons
         document.addEventListener('DOMContentLoaded', function() {
-            // View donor details
-            document.querySelectorAll('.view-donor').forEach(button => {
-                button.addEventListener('click', function() {
-                    const donorId = this.getAttribute('data-donor-id');
-                    const eligibilityId = this.getAttribute('data-eligibility-id');
-                    fetchDonorDetails(donorId, eligibilityId);
-                });
-            });
-
             // Edit donor details
             document.querySelectorAll('.edit-donor').forEach(button => {
-                button.addEventListener('click', function() {
+                button.addEventListener('click', function(e) {
+                    e.stopPropagation(); // Prevent row click
                     const donorId = this.getAttribute('data-donor-id');
                     const eligibilityId = this.getAttribute('data-eligibility-id');
                     loadEditForm(donorId, eligibilityId);
@@ -1017,12 +1285,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             });
 
             // Sorting functionality
-            document.getElementById('sortSelect').addEventListener('change', function() {
-                const sortValue = this.value;
-                if (sortValue !== 'default') {
-                    window.location.href = `?sort=${sortValue}`;
-                }
-            });
+            const sortSelect = document.getElementById('sortSelect');
+            if (sortSelect) {
+                sortSelect.addEventListener('change', function() {
+                    const sortValue = this.value;
+                    if (sortValue !== 'default') {
+                        window.location.href = `?sort=${sortValue}`;
+                    }
+                });
+            }
 
             // Search functionality
             function searchTable() {
@@ -1048,7 +1319,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             }
 
             // Add event listener for real-time search
-            document.getElementById('searchInput').addEventListener('keyup', searchTable);
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.addEventListener('keyup', searchTable);
+            }
         });
     </script>
 </body>
