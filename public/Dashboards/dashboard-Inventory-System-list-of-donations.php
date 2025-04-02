@@ -837,6 +837,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Global variables for tracking current donor
+        var currentDonorId = null;
+        var currentEligibilityId = null;
+        
         // Search function for the donations table
         function searchDonations() {
             const searchInput = document.getElementById('searchInput');
@@ -855,17 +859,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             function performSearch() {
                 const value = searchInput.value.toLowerCase().trim();
                 const category = searchCategory.value;
-                const rows = tbody.querySelectorAll('tr:not(.no-results)');
                 
                 // Remove any existing "no results" message
-                const existingNoResults = tbody.querySelector('.no-results');
+                const existingNoResults = table.querySelector('.no-results');
                 if (existingNoResults) {
                     existingNoResults.remove();
                 }
                 
                 let visibleCount = 0;
                 
-                rows.forEach(row => {
+                tbody.children.forEach(row => {
                     let found = false;
                     
                     if (category === 'all') {
@@ -908,13 +911,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     if (found) {
                         row.style.display = '';
                         visibleCount++;
-            } else {
+                    } else {
                         row.style.display = 'none';
                     }
                 });
                 
                 // Show "no results" message if needed
-                if (visibleCount === 0 && rows.length > 0) {
+                if (visibleCount === 0 && tbody.children.length > 0) {
                     const noResultsRow = document.createElement('tr');
                     noResultsRow.className = 'no-results';
                     const colspan = table.querySelector('thead th:last-child').cellIndex + 1;
@@ -934,7 +937,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 }
                 
                 // Update search info
-                updateSearchInfo(visibleCount, rows.length);
+                updateSearchInfo(visibleCount, tbody.children.length);
             }
         }
         
@@ -956,109 +959,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         
         // Initialize search when page loads
         document.addEventListener('DOMContentLoaded', function() {
-            searchDonations();
-        });
-
-        // Function to search the table
-        function searchTable() {
-            const searchInput = document.getElementById('searchInput').value.toLowerCase();
-            const searchCategory = document.getElementById('searchCategory').value;
-            const table = document.getElementById('donationsTable');
-            const rows = table.querySelectorAll('tbody tr');
-            
-            // Check if no results message already exists
-            let noResultsRow = document.getElementById('noResultsRow');
-            if (noResultsRow) {
-                noResultsRow.remove();
-            }
-            
-            let visibleRows = 0;
-            const totalRows = rows.length;
-            
-            rows.forEach(row => {
-                let shouldShow = false;
-                if (searchInput.trim() === '') {
-                    shouldShow = true;
-            } else {
-                    const cells = row.querySelectorAll('td');
-                    if (cells.length === 0) return;
-                    
-                    if (searchCategory === 'all') {
-                        // Search all columns
-                        Array.from(cells).some(cell => {
-                            if (cell.textContent.toLowerCase().includes(searchInput)) {
-                                shouldShow = true;
-                                return true;
-                            }
-                            return false;
-                        });
-                    } else if (searchCategory === 'donor') {
-                        // Search only name columns (first 3 columns)
-                        const nameColumns = [0, 1, 2]; // Surname, First name, Middle name
-                        nameColumns.some(idx => {
-                            if (idx < cells.length && cells[idx].textContent.toLowerCase().includes(searchInput)) {
-                                shouldShow = true;
-                                return true;
-                            }
-                            return false;
-                        });
-                    } else if (searchCategory === 'status') {
-                        // Find the status column index based on the table structure
-                        const statusColumnIndex = cells.length - 2;
-                        if (statusColumnIndex >= 0 && statusColumnIndex < cells.length) {
-                            if (cells[statusColumnIndex].textContent.toLowerCase().includes(searchInput)) {
-                                shouldShow = true;
-                            }
-                        }
-                    } else if (searchCategory === 'date') {
-                        // Search for date pattern in the date column
-                        const dateColumns = cells.length === 6 ? [4] : [cells.length - 3]; // Adjust this based on your table structure
-                        if (dateColumns[0] < cells.length) {
-                            const dateText = cells[dateColumns[0]].textContent.toLowerCase();
-                            // Create a regex for flexible date matching
-                            const datePattern = new RegExp(searchInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-                            if (datePattern.test(dateText)) {
-                                shouldShow = true;
-                            }
-                        }
-                    }
-                }
-                
-                row.style.display = shouldShow ? '' : 'none';
-                if (shouldShow) visibleRows++;
-            });
-            
-            // Show "No results" message if no matches
-            if (visibleRows === 0 && totalRows > 0) {
-                const tbody = table.querySelector('tbody');
-                const colspan = table.querySelector('thead tr').children.length;
-                
-                noResultsRow = document.createElement('tr');
-                noResultsRow.id = 'noResultsRow';
-                noResultsRow.innerHTML = `
-                    <td colspan="${colspan}" class="text-center">
-                        <div class="alert alert-info m-2">
-                            No matching donations found
-                            <button class="btn btn-outline-primary btn-sm ms-2" onclick="clearSearch()">
-                                Clear Search
-                            </button>
-                        </div>
-                    </td>
-                `;
-                tbody.appendChild(noResultsRow);
-            }
-            
-            // Update search results info
-            updateSearchInfo(visibleRows, totalRows);
-        }
-        
-        // Wait for the DOM to be fully loaded
-        document.addEventListener('DOMContentLoaded', function() {
             console.log('DOM loaded, initializing modals and buttons...');
             
             // Add event listeners for search
-            document.getElementById('searchInput').addEventListener('keyup', searchTable);
-            document.getElementById('searchCategory').addEventListener('change', searchTable);
+            document.getElementById('searchInput').addEventListener('keyup', searchDonations);
+            document.getElementById('searchCategory').addEventListener('change', searchDonations);
             
             // Initialize modals
             const donorModal = new bootstrap.Modal(document.getElementById('donorModal'));
@@ -1067,11 +972,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 keyboard: false
             });
             const processDonorConfirmationModal = new bootstrap.Modal(document.getElementById('processDonorConfirmationModal'));
-            const editDonorFormModal = new bootstrap.Modal(document.getElementById('editDonorForm'));
-            
-            // Global variables for tracking current donor
-            let currentDonorId = null;
-            let currentEligibilityId = null;
             
             // Initialize the search functionality
             searchDonations();
@@ -1147,21 +1047,25 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             const confirmProcessDonorBtn = document.getElementById('confirmProcessDonorBtn');
             if (confirmProcessDonorBtn) {
                 confirmProcessDonorBtn.addEventListener('click', function() {
-                    if (!currentDonorId) {
+                    if (!window.currentDonorId) {
                         console.error('No donor ID found for processing');
                         alert('Error: Unable to process donor. Donor ID is missing.');
                         return;
                     }
                     
+                    // Close the confirmation modal first
+                    const processDonorConfirmationModal = bootstrap.Modal.getInstance(document.getElementById('processDonorConfirmationModal'));
                     if (processDonorConfirmationModal) {
                         processDonorConfirmationModal.hide();
                     }
                     
+                    // Then show loading modal
+                    const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
                     if (loadingModal) {
                         loadingModal.show();
                     }
 
-                    console.log('Processing donor ID:', currentDonorId);
+                    console.log('Processing donor ID:', window.currentDonorId);
                     
                     // Store donor ID in session
                     fetch('set_donor_session.php', {
@@ -1170,7 +1074,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                            donor_id: currentDonorId
+                            donor_id: window.currentDonorId
                         })
                     })
                     .then(response => response.json())
@@ -1179,14 +1083,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         
                         // Redirect to medical history form regardless of eligibility creation
                         setTimeout(() => {
-                            window.location.href = `../../src/views/forms/medical-history.php?donor_id=${currentDonorId}`;
+                            window.location.href = `../../src/views/forms/medical-history.php?donor_id=${window.currentDonorId}`;
                         }, 1000);
                     })
                     .catch(error => {
                         console.error('Error storing donor ID in session:', error);
                         // Redirect anyway as a fallback
                         setTimeout(() => {
-                            window.location.href = `../../src/views/forms/medical-history.php?donor_id=${currentDonorId}`;
+                            window.location.href = `../../src/views/forms/medical-history.php?donor_id=${window.currentDonorId}`;
                         }, 1000);
                     });
                 });
@@ -1311,8 +1215,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         
                         console.log('Processing donor ID:', donorId);
                         
-                        // Update current donor ID for the process modal
-                        currentDonorId = donorId;
+                        // Set global variable
+                        window.currentDonorId = donorId;
                         
                         // Close donor details modal and show process confirmation modal
                         const donorModal = bootstrap.Modal.getInstance(document.getElementById('donorModal'));
@@ -1383,8 +1287,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             
                             console.log('Processing donor ID:', donorId);
                             
-                            // Update current donor ID for the process modal
-                            currentDonorId = donorId;
+                            // Set global variable
+                            window.currentDonorId = donorId;
                             
                             // Close donor details modal and show process confirmation modal
                             const donorModal = bootstrap.Modal.getInstance(document.getElementById('donorModal'));
