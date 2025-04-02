@@ -659,6 +659,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         z-index: 1050;
     }
 
+    /* Make sure the accept request modal appears on top */
+    #acceptRequestModal {
+        z-index: 1060;
+    }
+
+    /* Make sure the loading modal appears on top of everything */
+    #loadingModal {
+        z-index: 1070;
+    }
+
     .modal-dialog {
         margin: 1.75rem auto;
     }
@@ -745,7 +755,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" style="width: 65px; height: 65px; object-fit: contain;">
                         <span class="text-primary ms-1" style="font-size: 1.5rem; font-weight: 600;">Dashboard</span>
                     </div>
-                <input type="text" class="form-control" placeholder="Search...">
                 <a href="dashboard-Inventory-System.php" class="nav-link">
                     <span><i class="fas fa-home"></i>Home</span>
                 </a>
@@ -835,7 +844,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     <?php foreach ($blood_requests as $request): ?>
                         <?php 
                             $blood_type_display = $request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-');
-                            $component_display = $request['component'] ? $request['component'] : 'Whole Blood';
+                            $component_display = "Whole Blood";
                             $priority_display = $request['is_asap'] ? 'Urgent' : 'Routine';
                             $hospital_name = $request['hospital_admitted'] ? $request['hospital_admitted'] : 'Hospital';
                         ?>
@@ -956,7 +965,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             
                             <div class="modal-footer">
                                 <button type="button" class="btn btn-danger" id="declineRequest">
-                                    <i class="fas fa-times-circle"></i> Unable to Process
+                                    <i class="fas fa-times-circle"></i> Decline Request
                                 </button>
                                 <button type="button" class="btn btn-success" id="modalAcceptButton">
                                     <i class="fas fa-check-circle"></i> Accept Request
@@ -1065,7 +1074,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 }
 
                 // Show confirmation modal with selected reason
-                modalBodyText.innerHTML = `Are you sure you want to decline the request for the following reason? <br><strong>("${reason}")</strong>`;
+                modalBodyText.innerHTML = `Are you sure you want to decline this request for the following reason? <br><strong>("${reason}")</strong>`;
                 confirmDeclineModal.show();
             });
         }
@@ -1142,6 +1151,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         const modalAcceptButton = document.getElementById('modalAcceptButton');
         if (modalAcceptButton) {
             modalAcceptButton.addEventListener('click', function(e) {
+                // Check if a decline reason is selected
+                const declineReason = document.getElementById('responseSelect').value;
+                if (declineReason && declineReason !== '') {
+                    // Show an alert if a decline reason is selected
+                    showAlert("warning", "You've selected a reason for declining. Please clear the reason if you want to accept this request.");
+                    return;
+                }
+                
                 // Get the request ID from the hidden field
                 const requestId = document.getElementById('modalRequestId').value;
                 
@@ -1196,22 +1213,20 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         }
 
         // Add event listeners for the main list Accept Request buttons
-        const listAcceptButtons = document.querySelectorAll('.email-item form button[name="accept_request"]');
+        const listAcceptButtons = document.querySelectorAll('.accept-request-btn');
         if (listAcceptButtons.length > 0) {
             listAcceptButtons.forEach(button => {
                 button.addEventListener('click', function(e) {
-                    // Prevent the click from bubbling up to the email-item and prevent default form action
+                    // Prevent the click from bubbling up to the email-item
                     e.preventDefault();
                     e.stopPropagation();
                     
-                    // Get request ID from the nearest form
-                    const requestId = this.closest('form').querySelector('input[name="request_id"]').value;
+                    // Get request ID and row data
+                    const requestId = this.getAttribute('data-request-id');
+                    const row = this.closest('.email-item');
                     
-                    // Set the request ID in the confirmation modal
-                    document.getElementById('accept-request-id').value = requestId;
-                    
-                    // Show the confirmation modal
-                    acceptRequestModal.show();
+                    // Manually trigger the click on the row to show the details modal first
+                    row.click();
                 });
             });
         }
@@ -1252,6 +1267,22 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         const searchCategoryField = document.getElementById('searchCategory');
         if (searchCategoryField) {
             searchCategoryField.addEventListener('change', searchRequests);
+        }
+
+        // Add event listener to responseSelect to update the accept button state
+        if (responseSelect) {
+            responseSelect.addEventListener('change', function() {
+                const acceptButton = document.getElementById('modalAcceptButton');
+                if (this.value && this.value !== '') {
+                    // If a reason is selected, disable the accept button
+                    acceptButton.disabled = true;
+                    acceptButton.title = "Clear the decline reason to enable acceptance";
+                } else {
+                    // If no reason is selected, enable the accept button
+                    acceptButton.disabled = false;
+                    acceptButton.title = "";
+                }
+            });
         }
     });
     </script>

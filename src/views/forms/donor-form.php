@@ -259,12 +259,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <div class="donor_form_header">
             <div>
                 <label class="donor_form_label">PRC BLOOD DONOR NUMBER:</label>
-                <input type="text" class="donor_form_input" name="prc_donor_number" readonly> <!-- This field is set by the database -->
+                <input type="text" class="donor_form_input" name="prc_donor_number" readonly> <!-- Auto-generated -->
             </div>
             <h2>BLOOD DONOR INTERVIEW SHEET</h2>
             <div>
                 <label class="donor_form_label">DOH NNBNets Barcode:</label>
-                <input type="text" class="donor_form_input" name="doh_nnbnets_barcode" readonly> <!-- This field is set by the database -->
+                <input type="text" class="donor_form_input" name="doh_nnbnets_barcode" readonly> <!-- Auto-generated -->
             </div>
         </div>
         <div class="donor_form_section">
@@ -410,6 +410,27 @@ document.addEventListener("DOMContentLoaded", function () {
     let cancelButton = document.getElementById("cancelButton");
     let confirmButton = document.getElementById("confirmButton");
     let donorForm = document.getElementById("donorForm");
+
+    // Generate PRC Donor Number (format: PRC-YYYY-XXXXX where X is random number)
+    const generatePrcDonorNumber = () => {
+        const year = new Date().getFullYear();
+        const randomNum = Math.floor(10000 + Math.random() * 90000); // 5-digit random number
+        return `PRC-${year}-${randomNum}`;
+    };
+
+    // Generate DOH NNBNETS Barcode (Format: DOH-YYYYMMDD-XXXXX where X is random number)
+    const generateDohBarcode = () => {
+        const date = new Date();
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const randomNum = Math.floor(10000 + Math.random() * 90000); // 5-digit random number
+        return `DOH-${year}${month}${day}-${randomNum}`;
+    };
+
+    // Set initial values for PRC donor number and DOH barcode
+    document.querySelector('input[name="prc_donor_number"]').value = generatePrcDonorNumber();
+    document.querySelector('input[name="doh_nnbnets_barcode"]').value = generateDohBarcode();
 
     // Open Modal Function
     function openModal() {

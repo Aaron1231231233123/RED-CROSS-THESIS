@@ -130,6 +130,74 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_SESSION['donor_data'])) {
             'submitted_data' => $supabaseData
         ]) . ');</script>';
     } else {
+        // Get the donor_id from the response headers (Supabase returns id in a Location header)
+        $location = curl_getinfo($ch, CURLINFO_REDIRECT_URL);
+        $donorId = null;
+        
+        // If we can't get the ID from the URL, query the database for it
+        if (!$donorId) {
+            // Query Supabase to get the donor_id
+            $findDonorCh = curl_init();
+            curl_setopt_array($findDonorCh, [
+                CURLOPT_URL => SUPABASE_URL . '/rest/v1/donor_form?select=donor_id&surname=eq.' . urlencode($supabaseData['surname']) . 
+                               '&first_name=eq.' . urlencode($supabaseData['first_name']) . 
+                               '&order=submitted_at.desc&limit=1',
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Content-Type: application/json'
+                ]
+            ]);
+            
+            $findResponse = curl_exec($findDonorCh);
+            curl_close($findDonorCh);
+            
+            $donorResult = json_decode($findResponse, true);
+            if (is_array($donorResult) && !empty($donorResult)) {
+                $donorId = $donorResult[0]['donor_id'];
+                error_log("Found donor ID: " . $donorId);
+            } else {
+                error_log("Could not find donor ID after submission");
+            }
+        }
+        
+        // If we have a donor ID, create an eligibility record
+        if ($donorId) {
+            // Create an eligibility record with 'pending' status
+            $eligibilityData = [
+                'donor_id' => $donorId,
+                'status' => 'pending',
+                'start_date' => date('Y-m-d\TH:i:s.000\Z'),
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s')
+            ];
+            
+            $eligibilityCh = curl_init();
+            curl_setopt_array($eligibilityCh, [
+                CURLOPT_URL => SUPABASE_URL . '/rest/v1/eligibility',
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($eligibilityData),
+                CURLOPT_HTTPHEADER => [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Content-Type: application/json',
+                    'Prefer: return=minimal'
+                ]
+            ]);
+            
+            $eligibilityResponse = curl_exec($eligibilityCh);
+            $eligibilityHttpCode = curl_getinfo($eligibilityCh, CURLINFO_HTTP_CODE);
+            curl_close($eligibilityCh);
+            
+            if ($eligibilityHttpCode >= 200 && $eligibilityHttpCode < 300) {
+                error_log("Created eligibility record for donor ID: " . $donorId);
+            } else {
+                error_log("Failed to create eligibility record. Status: " . $eligibilityHttpCode . ", Response: " . $eligibilityResponse);
+            }
+        }
+        
         unset($_SESSION['donor_data']);
         echo '<script>alert("Submission successful!"); window.location.href = "../../../public/Dashboards/dashboard-Inventory-System.php";</script>';
     }

@@ -23,6 +23,46 @@ if (isset($data['donor_id']) && !empty($data['donor_id'])) {
     } else {
         $_SESSION['admin_processing'] = true; // Flag to indicate admin is processing
         error_log("Session updated: donor_id set to {$_SESSION['donor_id']}, admin_processing flag set to true");
+        
+        // Call the create_eligibility_record.php to ensure eligibility record is created
+        try {
+            $donor_id = $data['donor_id'];
+            error_log("Calling create_eligibility_record.php for donor_id: $donor_id");
+            
+            // Make API call to create/update eligibility record
+            $ch = curl_init('./create_eligibility_record.php');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CUSTOMREQUEST => 'POST',
+                CURLOPT_POSTFIELDS => json_encode(['donor_id' => $donor_id, 'processing_flow' => true]),
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/json'
+                ]
+            ]);
+            
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $err = curl_error($ch);
+            curl_close($ch);
+            
+            if ($err) {
+                error_log("cURL error creating eligibility record: $err");
+            } else {
+                $result = json_decode($response, true);
+                if (isset($result['success']) && $result['success']) {
+                    error_log("Successfully created/updated eligibility record for donor ID: $donor_id");
+                    if (isset($result['status'])) {
+                        error_log("Donor status is now: " . $result['status']);
+                    }
+                } else {
+                    error_log("Failed to create/update eligibility record: " . ($result['error'] ?? 'Unknown error'));
+                }
+            }
+            
+            error_log("Eligibility record creation response: " . substr($response, 0, 200) . "... (HTTP code: $http_code)");
+        } catch (Exception $e) {
+            error_log("Error creating eligibility record: " . $e->getMessage());
+        }
     }
     
     // Return success response

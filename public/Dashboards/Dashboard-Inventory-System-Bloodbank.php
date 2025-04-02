@@ -99,10 +99,10 @@ if (is_array($eligibilityData) && !empty($eligibilityData)) {
             $bloodCollectionData = isset($bloodCollectionData[0]) ? $bloodCollectionData[0] : null;
         }
         
-        // Calculate expiration date (42 days from collection)
+        // Calculate expiration date (35 days from collection)
         $collectionDate = new DateTime($item['collection_start_time']);
         $expirationDate = clone $collectionDate;
-        $expirationDate->modify('+42 days');
+        $expirationDate->modify('+35 days');
         
         // Create blood bag entry
         $bloodBag = [
@@ -155,97 +155,48 @@ if (is_array($eligibilityData) && !empty($eligibilityData)) {
     }
 }
 
-// If no records found, use sample data for testing
+
+// If no records found, keep the bloodInventory array empty
 if (empty($bloodInventory)) {
-    $bloodInventory = [
-        [
-            'serial_number' => 'BC-20250330-0001',
-            'blood_type' => 'AB+',
-            'bags' => '999',
-            'bag_type' => 'AMI',
-            'collection_date' => '2025-03-30',
-            'expiration_date' => '2025-05-11',
-            'status' => 'Valid',
-            'donor' => [
-                'surname' => 'Seeker',
-                'first_name' => 'Light',
-                'middle_name' => 'Devoid',
-                'birthdate' => '25/03/2000',
-                'age' => '25',
-                'sex' => 'Male',
-                'civil_status' => 'Single'
-            ]
-        ],
-        [
-            'serial_number' => 'BC-20250330-0002',
-            'blood_type' => 'O+',
-            'bags' => '500',
-            'bag_type' => 'S',
-            'collection_date' => '2025-03-30',
-            'expiration_date' => '2025-05-11',
-            'status' => 'Valid',
-            'donor' => [
-                'surname' => 'Seeker',
-                'first_name' => 'Light',
-                'middle_name' => 'Devoid',
-                'birthdate' => '25/03/2000',
-                'age' => '25',
-                'sex' => 'Male',
-                'civil_status' => 'Single'
-            ]
-        ],
-        [
-            'serial_number' => 'BC-20250331-0002',
-            'blood_type' => 'A+',
-            'bags' => '12',
-            'bag_type' => 'D',
-            'collection_date' => '2025-03-31',
-            'expiration_date' => '2025-05-12',
-            'status' => 'Valid',
-            'donor' => [
-                'surname' => 'Seeker',
-                'first_name' => 'Light',
-                'middle_name' => 'Devoid',
-                'birthdate' => '25/03/2000',
-                'age' => '25',
-                'sex' => 'Male',
-                'civil_status' => 'Single'
-            ]
-        ],
-        [
-            'serial_number' => 'BC-20250331-0004',
-            'blood_type' => 'O-',
-            'bags' => '1',
-            'bag_type' => 'Q',
-            'collection_date' => '2025-03-31',
-            'expiration_date' => '2025-05-12',
-            'status' => 'Valid',
-            'donor' => [
-                'surname' => 'Seeker',
-                'first_name' => 'Light',
-                'middle_name' => 'Devoid',
-                'birthdate' => '25/03/2000',
-                'age' => '25',
-                'sex' => 'Male',
-                'civil_status' => 'Single'
-            ]
-        ]
-    ];
+    $bloodInventory = [];
 }
 
+// Pagination settings
+$itemsPerPage = 10;
+$totalItems = count($bloodInventory);
+$totalPages = ceil($totalItems / $itemsPerPage);
+$currentPage = isset($_GET['page']) ? intval($_GET['page']) : 1;
+
+// Ensure current page is valid
+if ($currentPage < 1) {
+    $currentPage = 1;
+} else if ($currentPage > $totalPages && $totalPages > 0) {
+    $currentPage = $totalPages;
+}
+
+// Calculate the starting index for the current page
+$startIndex = ($currentPage - 1) * $itemsPerPage;
+
+// Get the subset of blood inventory for the current page
+$currentPageInventory = array_slice($bloodInventory, $startIndex, $itemsPerPage);
+
+// Count stats for display
+$validBags = 0;
+$expiredBags = 0;
+$totalBags = 0; // Initialize to 0 instead of count($bloodInventory)
+
 // Calculate inventory statistics
-$totalBags = 0; // Initialize to 0 instead of count
 $availableTypes = [];
 $expiringBags = 0;
-$expiredBags = 0;
 
 $today = new DateTime();
 $expiryLimit = (new DateTime())->modify('+7 days');
 
 foreach ($bloodInventory as $bag) {
-    // Add to total bags (sum of amount_taken)
-    if (is_numeric($bag['bags'])) {
+    // Add to total bags (sum of amount_taken) only if valid
+    if (is_numeric($bag['bags']) && $bag['status'] == 'Valid') {
         $totalBags += floatval($bag['bags']); // Sum the amount values
+        $validBags++;
     }
     
     // Track unique blood types
@@ -261,6 +212,9 @@ foreach ($bloodInventory as $bag) {
         $expiringBags++;
     }
 }
+
+// Convert to integer for display
+$totalBags = (int)$totalBags;
 
 // Get default sorting
 $sortBy = "Default (Latest)";
@@ -803,7 +757,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">
                 <div class="sidebar-main-content">
-                    <input type="text" class="form-control" placeholder="Search...">
+                    <div class="d-flex align-items-center ps-1 mb-3 mt-2">
+                        <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" style="width: 65px; height: 65px; object-fit: contain;">
+                        <span class="text-primary ms-1" style="font-size: 1.5rem; font-weight: 600;">Dashboard</span>
+                    </div>
                     <a href="dashboard-Inventory-System.php" class="nav-link">
                         <span><i class="fas fa-home"></i>Home</span>
                     </a>
@@ -877,7 +834,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <div class="card text-center p-3 h-100 inventory-stat-card">
                                 <div class="card-body">
                                     <h5 class="card-title text-dark fw-bold">Total Blood Units</h5>
-                                    <h1 class="inventory-stat-number my-3"><?php echo (int)$totalBags; ?></h1>
+                                    <h1 class="inventory-stat-number my-3"><?php echo $totalBags; ?></h1>
                                 </div>
                             </div>
                         </div>
@@ -1072,12 +1029,19 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     
                     <!-- Blood Bank Table -->
                     <div class="table-responsive mt-4">
-                        <table class="table table-bordered table-hover">
+                        <!-- Total Records Display -->
+                        <div class="row mb-3">
+                            <div class="col-12 text-center">
+                                <span class="text-muted">Total records: <?php echo $totalItems; ?></span>
+                            </div>
+                        </div>
+                        
+                        <table class="table table-bordered table-hover" id="bloodInventoryTable">
                             <thead>
                                 <tr class="bg-danger text-white">
                                     <th>Serial Number</th>
                                     <th>Blood Type</th>
-                                    <th>Amount (ml)</th>
+                                    <th>Units</th>
                                     <th>Bag Type</th>
                                     <th>Collection Date</th>
                                     <th>Expiration Date</th>
@@ -1085,7 +1049,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($bloodInventory as $index => $bag): ?>
+                                <?php foreach ($currentPageInventory as $index => $bag): ?>
                                 <tr>
                                     <td><?php echo $bag['serial_number']; ?></td>
                                     <td><?php echo $bag['blood_type']; ?></td>
@@ -1100,8 +1064,79 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
+                                <?php if (empty($currentPageInventory)): ?>
+                                <tr>
+                                    <td colspan="7" class="text-center">No blood inventory records found. Please wait for an administrator to add data.</td>
+                                </tr>
+                                <?php endif; ?>
                             </tbody>
                         </table>
+                    </div>
+
+                    <!-- Pagination Controls -->
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination justify-content-center">
+                            <?php if ($currentPage > 1): ?>
+                                <li class="page-item">
+                                    <a class="page-link" href="Dashboard-Inventory-System-Bloodbank.php?page=<?php echo $currentPage - 1; ?>" aria-label="Previous">
+                                        <span aria-hidden="true">&laquo;</span>
+                                    </a>
+                                </li>
+                            <?php endif; ?>
+
+                            <?php
+                            // Display limited number of page links
+                            $maxPagesToShow = 5;
+                            $startPage = max(1, $currentPage - floor($maxPagesToShow / 2));
+                            $endPage = min($totalPages, $startPage + $maxPagesToShow - 1);
+                            
+                            // Adjust start page if we're near the end
+                            if ($endPage - $startPage + 1 < $maxPagesToShow && $startPage > 1) {
+                                $startPage = max(1, $endPage - $maxPagesToShow + 1);
+                            }
+                            
+                            // Show first page with ellipsis if needed
+                            if ($startPage > 1) {
+                                echo '<li class="page-item"><a class="page-link" href="Dashboard-Inventory-System-Bloodbank.php?page=1">1</a></li>';
+                                if ($startPage > 2) {
+                                    echo '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                                }
+                            }
+                            
+                            // Show page links
+                            for ($i = $startPage; $i <= $endPage; $i++): 
+                            ?>
+                                <li class="page-item <?php echo ($i == $currentPage) ? 'active' : ''; ?>">
+                                    <a class="page-link" href="Dashboard-Inventory-System-Bloodbank.php?page=<?php echo $i; ?>">
+                                        <?php echo $i; ?>
+                                    </a>
+                                </li>
+                            <?php endfor; 
+                            
+                            // Show last page with ellipsis if needed
+                            if ($endPage < $totalPages) {
+                                if ($endPage < $totalPages - 1) {
+                                    echo '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                                }
+                                echo '<li class="page-item"><a class="page-link" href="Dashboard-Inventory-System-Bloodbank.php?page=' . $totalPages . '">' . $totalPages . '</a></li>';
+                            }
+                            ?>
+
+                            <?php if ($currentPage < $totalPages): ?>
+                                <li class="page-item">
+                                    <a class="page-link" href="Dashboard-Inventory-System-Bloodbank.php?page=<?php echo $currentPage + 1; ?>" aria-label="Next">
+                                        <span aria-hidden="true">&raquo;</span>
+                                    </a>
+                                </li>
+                            <?php endif; ?>
+                        </ul>
+                    </nav>
+                    
+                    <!-- Showing entries information -->
+                    <div class="text-center mt-2 mb-4">
+                        <p class="text-muted">
+                            Showing <?php echo min($totalItems, $startIndex + 1); ?> to <?php echo min($totalItems, $startIndex + $itemsPerPage); ?> of <?php echo $totalItems; ?> entries
+                        </p>
                     </div>
                 </div>
             </main>
@@ -1264,12 +1299,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Sample data for demonstration
+        // Data for the current page
         const bloodInventory = <?php echo json_encode($bloodInventory); ?>;
+        const currentPageInventory = <?php echo json_encode($currentPageInventory); ?>;
+        const startIndex = <?php echo $startIndex; ?>;
         
         // Function to display donor details in modal
         function showDonorDetails(index) {
-            const bag = bloodInventory[index];
+            // We need to use the real index from the full inventory array
+            const realIndex = startIndex + index;
+            const bag = bloodInventory[realIndex];
             const donor = bag.donor;
             
             // Blood Unit Information
@@ -1345,31 +1384,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 noteElem.textContent = 'Donor can donate blood now';
             }
         }
-
-        function searchTable() {
-            const searchInput = document.getElementById('searchInput').value.toLowerCase();
-            const table = document.querySelector('table');
-            const rows = table.getElementsByTagName('tr');
-
-            for (let i = 1; i < rows.length; i++) { // Start from 1 to skip header
-                const row = rows[i];
-                const cells = row.getElementsByTagName('td');
-                let found = false;
-
-                for (let j = 0; j < cells.length; j++) {
-                    const cellText = cells[j].textContent.toLowerCase();
-                    if (cellText.includes(searchInput)) {
-                        found = true;
-                        break;
-                    }
-                }
-
-                row.style.display = found ? '' : 'none';
-            }
-        }
-
-        // Add event listener for real-time search
-        document.getElementById('searchInput').addEventListener('keyup', searchTable);
 
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize modals

@@ -14,6 +14,8 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Signature Pad Library -->
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.5/dist/signature_pad.umd.min.js"></script>
     <style>
         /* General Body Styling */
         body {
@@ -325,15 +327,6 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                         <small class="text-muted">Hospital Request Dashboard</small>
                     </div>
                     
-                    <div class="search-box mb-4">
-                        <div class="input-group">
-                            <span class="input-group-text bg-white border-end-0">
-                                <i class="fas fa-search text-muted"></i>
-                            </span>
-                            <input type="text" class="form-control border-start-0 ps-0" placeholder="Search...">
-                        </div>
-                    </div>
-
                     <ul class="nav flex-column">
                         <li class="nav-item">
                             <a class="nav-link active" href="#">
@@ -366,31 +359,6 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                     <h3 class="card-title mb-3">Progress Tracker</h3>
                     <div class="modal-body mt-4">
 
-                    <!-- Countdown Timer -->
-                    <div class="countdown-container text-center mb-4">
-                        <h3 class="text-danger mb-2">Estimated Time Remaining</h3>
-                        <div class="countdown-timer d-flex justify-content-center gap-3">
-                            <div class="time-block">
-                                <div id="staticHours" class="time-value display-4 fw-bold text-danger">00</div>
-                                <div class="time-label text-muted">HOURS</div>
-                            </div>
-                            <div class="time-block">
-                                <div class="display-4 fw-bold text-danger">:</div>
-                            </div>
-                            <div class="time-block">
-                                <div id="staticMinutes" class="time-value display-4 fw-bold text-danger">20</div>
-                                <div class="time-label text-muted">MINUTES</div>
-                            </div>
-                            <div class="time-block">
-                                <div class="display-4 fw-bold text-danger">:</div>
-                            </div>
-                            <div class="time-block">
-                                <div id="staticSeconds" class="time-value display-4 fw-bold text-danger">00</div>
-                                <div class="time-label text-muted">SECONDS</div>
-                            </div>
-                        </div>
-                    </div>
-                
                     <!-- Progress Tracker -->
                     <div class="progress-tracker">
                         <div class="progress-steps">
@@ -441,40 +409,16 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                     </div>
 
                     <script>
-                        // Add countdown timer for main dashboard
-                        let mainDashboardCountdown;
-
-                        function startMainDashboardCountdown() {
-                            if (mainDashboardCountdown) {
-                                clearInterval(mainDashboardCountdown);
-                            }
-
-                            let totalSeconds = 20 * 60; // 20 minutes in seconds
-
-                            mainDashboardCountdown = setInterval(() => {
-                                if (totalSeconds <= 0) {
-                                    clearInterval(mainDashboardCountdown);
-                                    return;
-                                }
-
-                                totalSeconds--;
-                                const hours = Math.floor(totalSeconds / 3600);
-                                const minutes = Math.floor((totalSeconds % 3600) / 60);
-                                const seconds = totalSeconds % 60;
-
-                                document.getElementById('staticHours').textContent = String(hours).padStart(2, '0');
-                                document.getElementById('staticMinutes').textContent = String(minutes).padStart(2, '0');
-                                document.getElementById('staticSeconds').textContent = String(seconds).padStart(2, '0');
-
-                                // Update progress line (75% to 100% during delivery)
-                                const progress = 75 + (25 * (1 - totalSeconds / (20 * 60)));
-                                document.querySelector('.progress-line-fill').style.width = `${progress}%`;
-                            }, 1000);
-                        }
-
-                        // Start the countdown when the page loads
+                        // Update progress line
                         document.addEventListener('DOMContentLoaded', () => {
-                            startMainDashboardCountdown();
+                            // Update progress line (75% to 100% during delivery)
+                            let progress = 75;
+                            setInterval(() => {
+                                if (progress < 100) {
+                                    progress += 0.05;
+                                    document.querySelector('.progress-line-fill').style.width = `${progress}%`;
+                                }
+                            }, 1000);
                         });
                     </script>
 
@@ -776,13 +720,7 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <form id="bloodRequestForm" method="POST" action="<?php echo $_SERVER['PHP_SELF']; ?>">
-                    <!-- Add this hidden input for form identification -->
-                    <input type="hidden" name="submit_blood_request" value="1">
-                    <!-- Add hidden fields for is_asap and when_needed -->
-                    <input type="hidden" name="is_asap" value="true">
-                    <input type="hidden" name="when_needed" value="">
-                    
+                <form id="bloodRequestForm">
                     <!-- Patient Information Section -->
                     <h6 class="mb-3 fw-bold">Patient Information</h6>
                     <div class="mb-3">
@@ -813,7 +751,7 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                     <div class="mb-3 row">
                         <div class="col">
                             <label class="form-label">Blood Type</label>
-                            <select class="form-select" name="blood_type" required>
+                            <select class="form-select" name="patient_blood_type" required>
                                 <option value="">Select Type</option>
                                 <option value="A">A</option>
                                 <option value="B">B</option>
@@ -833,13 +771,8 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                     <div class="mb-3 row gx-3">
                         <div class="col-md-4">
                             <label class="form-label">Component</label>
-                            <select class="form-select" name="component" required style="width: 105%;">
-                                <option value="">Select Component</option>
-                                <option value="Whole Blood">Whole Blood</option>
-                                <option value="Platelet Concentrate">Platelet Concentrate</option>
-                                <option value="Fresh Frozen Plasma">Fresh Frozen Plasma</option>
-                                <option value="Packed Red Blood Cells">Packed Red Blood Cells</option>
-                            </select>
+                            <input type="hidden" name="blood_component" value="Whole Blood">
+                            <input type="text" class="form-control" value="Whole Blood" readonly style="width: 105%;">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Number of Units</label>
@@ -862,11 +795,11 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                     <h6 class="mb-3 mt-4 fw-bold">Additional Information</h6>
                     <div class="mb-3">
                         <label class="form-label">Hospital Admitted</label>
-                        <input type="text" class="form-control" name="hospital_admitted" value="<?php echo $_SESSION['user_first_name']; ?>" readonly>
+                        <input type="text" class="form-control" name="hospital_admitted" value="<?php echo $_SESSION['user_first_name'] ?? ''; ?>" readonly>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Requesting Physician</label>
-                        <input type="text" class="form-control" name="physician_name" value="<?php echo $_SESSION['user_surname']; ?>" readonly>
+                        <input type="text" class="form-control" name="physician_name" value="<?php echo $_SESSION['user_surname'] ?? ''; ?>" readonly>
                     </div>
 
                     <!-- File Upload and Signature Section -->
@@ -908,7 +841,7 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
 
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="submit" class="btn btn-danger" id="submitRequest">Submit Request</button>
+                        <button type="submit" class="btn btn-danger">Submit Request</button>
                     </div>
                 </form>
             </div>
@@ -925,31 +858,6 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <!-- Countdown Timer -->
-                <div class="countdown-container text-center mb-4">
-                    <h3 class="text-danger mb-2">Estimated Time Remaining</h3>
-                    <div class="countdown-timer d-flex justify-content-center gap-3">
-                        <div class="time-block">
-                            <div id="hours" class="time-value display-4 fw-bold text-danger">00</div>
-                            <div class="time-label text-muted">Hours</div>
-                        </div>
-                        <div class="time-block">
-                            <div class="display-4 fw-bold text-danger">:</div>
-                        </div>
-                        <div class="time-block">
-                            <div id="minutes" class="time-value display-4 fw-bold text-danger">00</div>
-                            <div class="time-label text-muted">Minutes</div>
-                        </div>
-                        <div class="time-block">
-                            <div class="display-4 fw-bold text-danger">:</div>
-                        </div>
-                        <div class="time-block">
-                            <div id="seconds" class="time-value display-4 fw-bold text-danger">00</div>
-                            <div class="time-label text-muted">Seconds</div>
-                        </div>
-                    </div>
-                </div>
-                
                 <!-- Progress Tracker -->
                 <div class="progress-tracker">
                     <div class="progress-steps">
@@ -965,7 +873,7 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                             <div class="step-time"></div>
                         </div>
                         
-                                                <div class="step">
+                        <div class="step">
                             <div class="step-icon">
                                 <i class="fas fa-vial"></i>
                             </div>
@@ -980,8 +888,6 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                             <div class="step-label">Request Approved</div>
                             <div class="step-time"></div>
                         </div>
-
-
 
                         <div class="step">
                             <div class="step-icon">
@@ -1006,34 +912,6 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
 </div>
 
 <style>
-    /* Countdown Timer Styles */
-    .countdown-container {
-        padding: 20px;
-        border-radius: 10px;
-        margin-bottom: 30px;
-    }
-
-    .countdown-timer {
-        font-family: 'Arial', sans-serif;
-    }
-
-    .time-block {
-        text-align: center;
-        min-width: 80px;
-    }
-
-    .time-value {
-        font-size: 48px;
-        font-weight: bold;
-        line-height: 1;
-    }
-
-    .time-label {
-        font-size: 14px;
-        text-transform: uppercase;
-        margin-top: 5px;
-    }
-
     /* Progress Tracker Styles */
     .progress-tracker {
         margin-top: 30px;
@@ -1124,16 +1002,18 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
 </style>
 
 <script>
-    let countdownInterval;
-    let totalSeconds = 0;
+    // Track delivery progress
+    let progressInterval;
+    let deliveryDuration = 0;
+    let progressValue = 75; // Start at 75% (3 steps complete)
 
     function showTrackingModal(requestId, originLat, originLon, destLat, destLon) {
         const trackingModal = new bootstrap.Modal(document.getElementById('trackingModal'));
         trackingModal.show();
 
         // First mark the first three steps as completed immediately
-        const steps = document.querySelectorAll('.step');
-        for(let i = 0; i < 3; i++) { // First 3 steps: Submitted, Approved, Processing
+        const steps = document.querySelectorAll('#trackingModal .step');
+        for(let i = 0; i < 3; i++) { // First 3 steps: Submitted, Processing, Approved
             steps[i].classList.add('completed');
             steps[i].classList.remove('active');
             steps[i].querySelector('.step-time').textContent = new Date().toLocaleTimeString();
@@ -1143,6 +1023,9 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
         steps[3].classList.add('active');
         steps[3].classList.remove('completed');
         steps[3].querySelector('.step-time').textContent = new Date().toLocaleTimeString();
+
+        // Set initial progress (75% as first 3 steps are complete)
+        document.querySelector('#trackingModal .progress-line-fill').style.width = '75%';
 
         // Calculate ETA using OpenRoute API
         fetch('track_delivery_progress.php', {
@@ -1161,61 +1044,47 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
         .then(response => response.json())
         .then(data => {
             if (!data.error) {
-                // Set countdown based on API's ETA
-                totalSeconds = data.duration * 60; // Convert API minutes to seconds
-                document.querySelector('.countdown-container h3').textContent = 
-                    `Estimated Time of Arrival: ${Math.round(data.duration)} minutes (${data.distance} km)`;
+                // Save delivery duration for progress calculation
+                deliveryDuration = data.duration * 60; // Convert API minutes to seconds
                 
-                // Start the countdown
-                startCountdown();
-
-                // Set initial progress (75% as first 3 steps are complete)
-                document.querySelector('.progress-line-fill').style.width = '75%';
+                // Start the progress animation
+                startProgressAnimation();
             }
         })
         .catch(error => console.error('Error:', error));
     }
 
-    function startCountdown() {
+    function startProgressAnimation() {
         // Clear any existing interval
-        if (countdownInterval) {
-            clearInterval(countdownInterval);
+        if (progressInterval) {
+            clearInterval(progressInterval);
         }
 
-        // Update immediately then start interval
-        updateCountdown();
-        countdownInterval = setInterval(updateCountdown, 1000);
-    }
+        // Set up progress animation
+        progressInterval = setInterval(() => {
+            if (progressValue >= 100) {
+                clearInterval(progressInterval);
+                completeDelivery();
+                return;
+            }
 
-    function updateCountdown() {
-        if (totalSeconds <= 0) {
-            clearInterval(countdownInterval);
-            completeDelivery();
-            return;
-        }
+            // Increment progress value
+            progressValue += 0.1;
+            document.querySelector('#trackingModal .progress-line-fill').style.width = `${progressValue}%`;
+        }, 1000);
 
-        const hours = Math.floor(totalSeconds / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        const seconds = totalSeconds % 60;
-
-        document.getElementById('hours').textContent = String(hours).padStart(2, '0');
-        document.getElementById('minutes').textContent = String(minutes).padStart(2, '0');
-        document.getElementById('seconds').textContent = String(seconds).padStart(2, '0');
-
-        // Calculate progress for just the delivery phase (75% to 100%)
-        const initialSeconds = document.querySelector('.countdown-container h3').textContent
-            .match(/(\d+) minutes/)[1] * 60;
-        const progressPercentage = ((initialSeconds - totalSeconds) / initialSeconds) * 25;
-        const totalProgress = 75 + progressPercentage; // Start at 75% (3 steps complete) and progress to 100%
-        
-        document.querySelector('.progress-line-fill').style.width = `${totalProgress}%`;
-
-        totalSeconds--;
+        // Auto-complete after the calculated duration (with a little buffer)
+        setTimeout(() => {
+            if (progressValue < 100) {
+                clearInterval(progressInterval);
+                completeDelivery();
+            }
+        }, deliveryDuration * 1000 + 5000); // Add 5 second buffer
     }
 
     function completeDelivery() {
         // Mark all steps as completed
-        const steps = document.querySelectorAll('.step');
+        const steps = document.querySelectorAll('#trackingModal .step');
         steps.forEach(step => {
             step.classList.add('completed');
             step.classList.remove('active');
@@ -1223,15 +1092,7 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
         });
 
         // Set progress to 100%
-        document.querySelector('.progress-line-fill').style.width = '100%';
-
-        // Update countdown display to show 00:00:00
-        document.getElementById('hours').textContent = '00';
-        document.getElementById('minutes').textContent = '00';
-        document.getElementById('seconds').textContent = '00';
-
-        // Update status text
-        document.querySelector('.countdown-container h3').textContent = 'Blood Delivery Completed';
+        document.querySelector('#trackingModal .progress-line-fill').style.width = '100%';
 
         // Trigger confetti animation
         triggerConfetti();
@@ -1458,6 +1319,241 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                 }
             });
         });
+    </script>
+
+    <!-- Blood Request Form JavaScript -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add blood request form submission handler
+        const bloodRequestForm = document.getElementById('bloodRequestForm');
+        if (bloodRequestForm) {
+            bloodRequestForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // Show loading state
+                const submitBtn = this.querySelector('button[type="submit"]');
+                const originalBtnText = submitBtn.innerHTML;
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+                
+                // Create FormData object
+                const formData = new FormData(this);
+                
+                // Add additional data
+                formData.append('user_id', '<?php echo $_SESSION['user_id']; ?>');
+                formData.append('status', 'Pending');
+                formData.append('physician_name', '<?php echo $_SESSION['user_surname']; ?>');
+                formData.append('requested_on', new Date().toISOString());
+                
+                // Handle "when needed" logic
+                const whenNeeded = document.getElementById('whenNeeded').value;
+                const isAsap = whenNeeded === 'ASAP';
+                formData.append('is_asap', isAsap ? 'true' : 'false');
+                
+                // Always set when_needed as a timestamp
+                if (isAsap) {
+                    // For ASAP, use current date/time
+                    formData.set('when_needed', new Date().toISOString());
+                } else {
+                    // For Scheduled, use the selected date/time
+                    const scheduledDate = document.querySelector('#scheduleDateTime input').value;
+                    if (scheduledDate) {
+                        formData.set('when_needed', new Date(scheduledDate).toISOString());
+                    } else {
+                        // If no date selected for scheduled, default to current date
+                        formData.set('when_needed', new Date().toISOString());
+                    }
+                }
+                
+                // Define exact fields from the database schema
+                const validFields = [
+                    'request_id', 'user_id', 'patient_name', 'patient_age', 'patient_gender', 
+                    'patient_diagnosis', 'patient_blood_type', 'rh_factor', 'blood_component', 
+                    'units_requested', 'when_needed', 'is_asap', 'hospital_admitted', 
+                    'physician_name', 'requested_on', 'status'
+                ];
+                
+                // Convert FormData to JSON object, only including valid fields
+                const data = {};
+                validFields.forEach(field => {
+                    if (formData.has(field)) {
+                        const value = formData.get(field);
+                        
+                        // Convert numeric values to numbers
+                        if (field === 'patient_age' || field === 'units_requested') {
+                            data[field] = parseInt(value, 10);
+                        } 
+                        // Convert boolean strings to actual booleans
+                        else if (field === 'is_asap') {
+                            data[field] = value === 'true';
+                        }
+                        // Format timestamps properly
+                        else if (field === 'when_needed' || field === 'requested_on') {
+                            try {
+                                // Ensure we have a valid date
+                                const dateObj = new Date(value);
+                                if (isNaN(dateObj.getTime())) {
+                                    throw new Error(`Invalid date for ${field}: ${value}`);
+                                }
+                                // Format as ISO string with timezone
+                                data[field] = dateObj.toISOString();
+                            } catch (err) {
+                                console.error(`Error formatting date for ${field}:`, err);
+                                // Default to current time if invalid
+                                data[field] = new Date().toISOString();
+                            }
+                        }
+                        // All other fields as strings
+                        else {
+                            data[field] = value;
+                        }
+                    }
+                });
+                
+                console.log('Submitting request data:', data);
+                console.log('Valid fields in database:', validFields);
+                console.log('FormData keys:', Array.from(formData.keys()));
+                console.log('when_needed value:', data.when_needed);
+                console.log('requested_on value:', data.requested_on);
+                console.log('is_asap value:', data.is_asap);
+                
+                // Send data to server
+                fetch('<?php echo SUPABASE_URL; ?>/rest/v1/blood_requests', {
+                    method: 'POST',
+                    headers: {
+                        'apikey': '<?php echo SUPABASE_API_KEY; ?>',
+                        'Authorization': 'Bearer <?php echo SUPABASE_API_KEY; ?>',
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(response => {
+                    console.log('Request response status:', response.status);
+                    if (!response.ok) {
+                        return response.text().then(text => {
+                            console.error('Error response body:', text);
+                            // Try to parse as JSON to extract more details
+                            try {
+                                const errorJson = JSON.parse(text);
+                                throw new Error(`Error ${response.status}: ${errorJson.message || errorJson.error || text}`);
+                            } catch (jsonError) {
+                                // If can't parse as JSON, use the raw text
+                                throw new Error(`Error ${response.status}: ${text}`);
+                            }
+                        });
+                    }
+                    return response.text();
+                })
+                .then(result => {
+                    console.log('Request submitted successfully:', result);
+                    
+                    // Show success message
+                    alert('Blood request submitted successfully!');
+                    
+                    // Reset form and close modal
+                    bloodRequestForm.reset();
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('bloodRequestModal'));
+                    modal.hide();
+                    
+                    // Reload the page to show the new request
+                    window.location.reload();
+                })
+                .catch(error => {
+                    console.error('Error submitting request:', error);
+                    alert('Error submitting request: ' + error.message);
+                })
+                .finally(() => {
+                    // Restore button state
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalBtnText;
+                });
+            });
+        }
+        
+        // Handle when needed change
+        const whenNeededSelect = document.getElementById('whenNeeded');
+        const scheduleDateTimeDiv = document.getElementById('scheduleDateTime');
+        
+        if (whenNeededSelect && scheduleDateTimeDiv) {
+            whenNeededSelect.addEventListener('change', function() {
+                if (this.value === 'Scheduled') {
+                    scheduleDateTimeDiv.classList.remove('d-none');
+                    scheduleDateTimeDiv.style.opacity = 1;
+                    scheduleDateTimeDiv.querySelector('input').required = true;
+                } else {
+                    scheduleDateTimeDiv.style.opacity = 0;
+                    setTimeout(() => {
+                        scheduleDateTimeDiv.classList.add('d-none');
+                        scheduleDateTimeDiv.querySelector('input').required = false;
+                    }, 500);
+                }
+            });
+        }
+        
+        // Handle signature method toggle
+        const uploadSignatureRadio = document.getElementById('uploadSignature');
+        const drawSignatureRadio = document.getElementById('drawSignature');
+        const signatureUploadDiv = document.getElementById('signatureUpload');
+        const signaturePadDiv = document.getElementById('signaturePad');
+        
+        if (uploadSignatureRadio && drawSignatureRadio) {
+            uploadSignatureRadio.addEventListener('change', function() {
+                if (this.checked) {
+                    signatureUploadDiv.classList.remove('d-none');
+                    signaturePadDiv.classList.add('d-none');
+                }
+            });
+            
+            drawSignatureRadio.addEventListener('change', function() {
+                if (this.checked) {
+                    signatureUploadDiv.classList.add('d-none');
+                    signaturePadDiv.classList.remove('d-none');
+                    initSignaturePad();
+                }
+            });
+        }
+    });
+
+    // Initialize signature pad
+    function initSignaturePad() {
+        const canvas = document.getElementById('physicianSignaturePad');
+        if (!canvas) return;
+        
+        const signaturePad = new SignaturePad(canvas, {
+            backgroundColor: 'white',
+            penColor: 'black'
+        });
+        
+        // Clear button
+        document.getElementById('clearSignature').addEventListener('click', function() {
+            signaturePad.clear();
+        });
+        
+        // Save button
+        document.getElementById('saveSignature').addEventListener('click', function() {
+            if (signaturePad.isEmpty()) {
+                alert('Please provide a signature first.');
+                return;
+            }
+            
+            const signatureData = signaturePad.toDataURL();
+            document.getElementById('signatureData').value = signatureData;
+            alert('Signature saved!');
+        });
+        
+        // Resize canvas
+        function resizeCanvas() {
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
+            canvas.getContext('2d').scale(ratio, ratio);
+            signaturePad.clear(); // Clear the canvas
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+    }
     </script>
 </body>
 </html>

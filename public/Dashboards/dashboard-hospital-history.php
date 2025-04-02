@@ -37,7 +37,7 @@ function updateBloodRequestAndInventory($request_id) {
         $ch = curl_init();
         
         // Log the start of the process
-        error_log("Starting blood request pickup process for request ID: " . $request_id);
+        error_log("Starting blood request confirmation process for request ID: " . $request_id);
         
         $headers = [
             'apikey: ' . SUPABASE_API_KEY,
@@ -255,7 +255,7 @@ function updateBloodRequestAndInventory($request_id) {
                 'updated_at' => date('Y-m-d H:i:s')
             ]);
             
-            error_log("Marking collection {$collection['blood_collection_id']} as picked up and setting amount to 1");
+            error_log("Marking collection {$collection['blood_collection_id']} as confirmed and setting amount to 1");
             
             $update_url = SUPABASE_URL . '/rest/v1/blood_collection';
             $update_url .= '?blood_collection_id=eq.' . $collection['blood_collection_id'];
@@ -286,7 +286,7 @@ function updateBloodRequestAndInventory($request_id) {
 
         // Update request status to Picked up
         $request_update_data = json_encode([
-            'status' => 'Picked up',
+            'status' => 'Confirmed',
             'last_updated' => date('Y-m-d H:i:s')
         ]);
         
@@ -435,8 +435,8 @@ function getCompatibleBloodTypes($blood_type, $rh_factor) {
     return $compatible_types;
 }
 
-// Handle AJAX request for blood pickup
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'pickup') {
+// Handle AJAX request for blood confirmation
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'confirm') {
     header('Content-Type: application/json');
     
     try {
@@ -450,7 +450,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         echo json_encode($result);
         
     } catch (Exception $e) {
-        error_log("Error processing pickup request: " . $e->getMessage());
+        error_log("Error processing confirmation request: " . $e->getMessage());
         echo json_encode([
             'success' => false,
             'message' => $e->getMessage()
@@ -462,16 +462,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 // Fetch blood requests for the current user
 $blood_requests = fetchBloodRequests($_SESSION['user_id']);
 
-// Sort the blood requests to put "No Action" at the bottom
+// Sort the blood requests to match the desired order
 usort($blood_requests, function($a, $b) {
-    $statusA = $a['status'] === 'Picked up' ? 'No Action' : $a['status'];
-    $statusB = $b['status'] === 'Picked up' ? 'No Action' : $b['status'];
+    // Priority: Approved/Accepted first
+    if (($a['status'] === 'Approved' || $a['status'] === 'Accepted') && 
+        ($b['status'] !== 'Approved' && $b['status'] !== 'Accepted')) {
+        return -1;
+    }
+    if (($a['status'] !== 'Approved' && $a['status'] !== 'Accepted') && 
+        ($b['status'] === 'Approved' || $b['status'] === 'Accepted')) {
+        return 1;
+    }
     
-    // If one is "No Action" and the other isn't
-    if ($statusA === 'No Action' && $statusB !== 'No Action') return 1;
-    if ($statusA !== 'No Action' && $statusB === 'No Action') return -1;
+    // Priority: Pending second
+    if ($a['status'] === 'Pending' && $b['status'] !== 'Pending' && 
+        $b['status'] !== 'Approved' && $b['status'] !== 'Accepted') {
+        return -1;
+    }
+    if ($a['status'] !== 'Pending' && $a['status'] !== 'Approved' && 
+        $a['status'] !== 'Accepted' && $b['status'] === 'Pending') {
+        return 1;
+    }
     
-    // If both are "No Action" or neither is, sort by date
+    // Priority: Declined last
+    if ($a['status'] === 'Declined' && $b['status'] !== 'Declined') {
+        return 1;
+    }
+    if ($a['status'] !== 'Declined' && $b['status'] === 'Declined') {
+        return -1;
+    }
+    
+    // For same status, sort by date (newest first)
     return strtotime($b['requested_on']) - strtotime($a['requested_on']);
 });
 
@@ -486,7 +507,7 @@ if (!empty($blood_requests)) {
         $total_units += $request['units_requested'];
         
         // Count picked up units
-        if ($request['status'] === 'Picked up') {
+        if ($request['status'] === 'Confirmed') {
             $total_picked_up += $request['units_requested'];
         }
         
@@ -516,6 +537,8 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Signature Pad Library -->
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.5/dist/signature_pad.umd.min.js"></script>
     <style>
         /* General Body Styling */
         body {
@@ -614,6 +637,11 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
 
         .text-success {
             color: #198754 !important;
+            font-weight: bold;
+        }
+        
+        .text-warning {
+            color: #FFC107 !important;
             font-weight: bold;
         }
 
@@ -823,15 +851,6 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                         <small class="text-muted">Hospital Request Dashboard</small>
                     </div>
                     
-                    <div class="search-box mb-4">
-                        <div class="input-group">
-                            <span class="input-group-text bg-white border-0">
-                                <i class="fas fa-search text-muted"></i>
-                            </span>
-                            <input type="text" id="requestSearchBar" class="form-control border-0" placeholder="Search Requests.">
-                        </div>
-                    </div>
-
                     <ul class="nav flex-column">
                         <li class="nav-item">
                             <a class="nav-link" href="dashboard-hospital-main.php">
@@ -871,7 +890,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                     <i class="fas fa-search text-muted"></i>
                                 </span>
                                 <input type="text" id="requestSearchBar" class="form-control border-start-0 ps-0" 
-                                       placeholder="Search requests..." 
+                                       placeholder="Search by patient name..." 
                                        style="background-color: #ffffff; color: #333333;">
                             </div>
                         </div>
@@ -944,9 +963,11 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                                     <td class="<?php 
                                                         if ($request['status'] === 'Approved') {
                                                             echo 'text-approved';
-                                                        } elseif ($request['status'] === 'Completed' || $request['status'] === 'Picked up') {
+                                                        } elseif ($request['status'] === 'Completed' || $request['status'] === 'Confirmed') {
                                                             echo 'text-success';
                                                         } elseif ($request['status'] === 'Pending') {
+                                                            echo 'text-warning';
+                                                        } elseif ($request['status'] === 'Declined') {
                                                             echo 'text-danger';
                                                         } else {
                                                             echo 'text-success';
@@ -961,15 +982,22 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                                     <?php if ($request['status'] === 'Approved' || $request['status'] === 'Accepted'): ?>
                                                         <button class="btn btn-success pickup-btn" 
                                                                 data-request-id="<?php echo htmlspecialchars($request['request_id']); ?>"
-                                                                onclick="markAsPickedUp(<?php echo htmlspecialchars($request['request_id']); ?>)">
-                                                            <i class="fas fa-check me-1"></i> Pick Up
+                                                                onclick="markAsConfirmed(<?php echo htmlspecialchars($request['request_id']); ?>)">
+                                                            <i class="fas fa-check me-1"></i> Confirm
                                                         </button>
                                                     <?php elseif ($request['status'] === 'Completed'): ?>
                                                         <span class="badge bg-success">Completed</span>
                                                     <?php elseif ($request['status'] === 'Pending'): ?>
-                                                        <span class="badge bg-danger">Pending</span>
+                                                        <span class="badge bg-warning">Pending</span>
+                                                    <?php elseif ($request['status'] === 'Declined'): ?>
+                                                        <span class="badge bg-danger decline-reason-badge" style="cursor: pointer;" 
+                                                              data-request-id="<?php echo htmlspecialchars($request['request_id']); ?>"
+                                                              data-bs-toggle="modal" data-bs-target="#declineReasonModal"
+                                                              onclick="showDeclineReason(<?php echo htmlspecialchars($request['request_id']); ?>, '<?php echo htmlspecialchars($request['decline_reason'] ?? 'No reason provided'); ?>')">
+                                                            Declined
+                                                        </span>
                                                     <?php else: ?>
-                                                        <span class="badge bg-success">Picked-Up</span>
+                                                        <span class="badge bg-success">Confirmed</span>
                                                     <?php endif; ?>
                                                 </td>
                                                 </tr>
@@ -986,7 +1014,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
 
 <!-- Blood Request Modal -->
 <div class="modal fade" id="bloodRequestModal" tabindex="-1" aria-labelledby="bloodRequestModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="bloodRequestModalLabel">Blood Request Form</h5>
@@ -1003,11 +1031,11 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                     <div class="mb-3 row">
                         <div class="col">
                             <label class="form-label">Age</label>
-                            <input type="number" class="form-control" name="age" required>
+                            <input type="number" class="form-control" name="patient_age" required>
                         </div>
                         <div class="col">
                             <label class="form-label">Gender</label>
-                            <select class="form-select" name="gender" required>
+                            <select class="form-select" name="patient_gender" required>
                                 <option value="">Select Gender</option>
                                 <option value="Male">Male</option>
                                 <option value="Female">Female</option>
@@ -1016,7 +1044,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Diagnosis</label>
-                        <input type="text" class="form-control" name="diagnosis" placeholder="e.g., T/E, FTE, Septic Shock" required>
+                        <input type="text" class="form-control" name="patient_diagnosis" placeholder="e.g., T/E, FTE, Septic Shock" required>
                     </div>
 
                     <!-- Blood Request Details Section -->
@@ -1024,7 +1052,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                     <div class="mb-3 row">
                         <div class="col">
                             <label class="form-label">Blood Type</label>
-                            <select class="form-select" name="blood_type" required>
+                            <select class="form-select" name="patient_blood_type" required>
                                 <option value="">Select Type</option>
                                 <option value="A">A</option>
                                 <option value="B">B</option>
@@ -1044,17 +1072,12 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                     <div class="mb-3 row gx-3">
                         <div class="col-md-4">
                             <label class="form-label">Component</label>
-                            <select class="form-select" name="component" required style="width: 105%;">
-                                <option value="">Select Component</option>
-                                <option value="Whole Blood">Whole Blood</option>
-                                <option value="Platelet Concentrate">Platelet Concentrate</option>
-                                <option value="Fresh Frozen Plasma">Fresh Frozen Plasma</option>
-                                <option value="Packed Red Blood Cells">Packed Red Blood Cells</option>
-                            </select>
+                            <input type="hidden" name="blood_component" value="Whole Blood">
+                            <input type="text" class="form-control" value="Whole Blood" readonly style="width: 105%;">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Number of Units</label>
-                            <input type="number" class="form-control" name="units" min="1" required style="width: 105%;">
+                            <input type="number" class="form-control" name="units_requested" min="1" required style="width: 105%;">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">When Needed</label>
@@ -1073,11 +1096,11 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                     <h6 class="mb-3 mt-4 fw-bold">Additional Information</h6>
                     <div class="mb-3">
                         <label class="form-label">Hospital Admitted</label>
-                        <input type="text" class="form-control" name="hospital" value="<?php echo $_SESSION['user_first_name'] ?? ''; ?>" readonly>
+                        <input type="text" class="form-control" name="hospital_admitted" value="<?php echo $_SESSION['user_first_name'] ?? ''; ?>" readonly>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Requesting Physician</label>
-                        <input type="text" class="form-control" name="physician" value="<?php echo $_SESSION['user_surname'] ?? ''; ?>" readonly>
+                        <input type="text" class="form-control" name="physician_name" value="<?php echo $_SESSION['user_surname'] ?? ''; ?>" readonly>
                     </div>
 
                     <!-- File Upload and Signature Section -->
@@ -1126,12 +1149,36 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
         </div>
     </div>
 </div>
+
+<!-- Decline Reason Modal -->
+<div class="modal fade" id="declineReasonModal" tabindex="-1" aria-labelledby="declineReasonModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="declineReasonModalLabel">Request Declined</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <h6 class="fw-bold">Reason for Decline:</h6>
+                    <div id="declineReasonText" class="p-3 bg-light rounded">
+                        <!-- Decline reason will be inserted here -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
      <script>
       document.addEventListener('DOMContentLoaded', function() {
-          // Search functionality
+          // Search functionality - focus on patient names
           const searchBar = document.getElementById('requestSearchBar');
           searchBar.addEventListener('keyup', function() {
               const searchText = this.value.toLowerCase();
@@ -1139,8 +1186,19 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
               const rows = table.getElementsByTagName('tr');
 
               for (let row of rows) {
-                  const text = row.textContent.toLowerCase();
-                  row.style.display = text.includes(searchText) ? '' : 'none';
+                  // Get the patient name (2nd column)
+                  const patientNameCell = row.querySelector('td:nth-child(2)');
+                  
+                  if (patientNameCell) {
+                      const patientName = patientNameCell.textContent.toLowerCase();
+                      
+                      // Show row if patient name contains search text, hide otherwise
+                      if (patientName.includes(searchText)) {
+                          row.style.display = '';
+                      } else {
+                          row.style.display = 'none';
+                      }
+                  }
               }
           });
 
@@ -1151,13 +1209,13 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
 
           searchBar.addEventListener('blur', function() {
               this.style.boxShadow = 'none';
-    });
-});
+          });
+      });
      </script>
 
 <script>
-function markAsPickedUp(requestId) {
-    if (!confirm('Are you sure you want to mark this blood request as picked up? This will deduct the units from inventory.')) {
+function markAsConfirmed(requestId) {
+    if (!confirm('Are you sure you want to mark this blood request as confirmed? This will deduct the units from inventory.')) {
         return;
     }
     
@@ -1172,7 +1230,7 @@ function markAsPickedUp(requestId) {
 
     // Create form data
     const formData = new FormData();
-    formData.append('action', 'pickup');
+    formData.append('action', 'confirm');
     formData.append('request_id', requestId);
 
     // Make the request
@@ -1183,165 +1241,95 @@ function markAsPickedUp(requestId) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Update the button's parent row to show completed status
-            const row = button.closest('tr');
-            if (row) {
-                // Update status cell
-                const statusCell = row.querySelector('td:nth-child(7)'); // 7th column is status
-                if (statusCell) {
-                    statusCell.textContent = 'Picked up';
-                    statusCell.className = 'text-success';
-                }
-                
-                // Replace button with completed badge
-                const actionCell = button.parentElement;
-                actionCell.innerHTML = '<span class="badge bg-success">Completed</span>';
-            }
-
-            // Show success message
-            showSuccessModal(data);
-
-            // Add this line to resort the table
-            sortTableByStatus();
+            // Show detailed success message
+            const modalContent = `
+                <div class="modal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header bg-success text-white">
+                                <h5 class="modal-title">Request Confirmed Successfully</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <h6>Request has been confirmed and units have been deducted from inventory.</h6>
+                                <p class="mb-0 mt-3"><strong>Details:</strong></p>
+                                <pre class="bg-light p-3 mt-2 rounded">${data.detailed_message}</pre>
+                                
+                                <div class="mt-3 mb-2"><strong>Units Deducted:</strong></div>
+                                <ul class="list-group">
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        ${data.blood_type}
+                                        <span class="badge bg-danger rounded-pill">${data.units_deducted} units</span>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="button" class="btn btn-success" onclick="window.location.reload()">Reload Page</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Create and show the modal
+            const modalContainer = document.createElement('div');
+            modalContainer.innerHTML = modalContent;
+            document.body.appendChild(modalContainer);
+            
+            const modal = new bootstrap.Modal(modalContainer.querySelector('.modal'));
+            modal.show();
+            
+            // Update the button
+            button.innerHTML = 'Confirmed <i class="bi bi-check-circle-fill"></i>';
+            button.classList.remove('btn-success');
+            button.classList.add('btn-secondary');
+            button.disabled = true;
+            
+            // Listen for modal hidden event to clean up
+            modalContainer.querySelector('.modal').addEventListener('hidden.bs.modal', function() {
+                document.body.removeChild(modalContainer);
+                window.location.reload(); // Reload after modal is closed
+            });
         } else {
-            // Restore button state
+            // Show error message
+            alert('Error: ' + data.message);
             button.innerHTML = originalContent;
             button.disabled = false;
-
-            // Show error message
-            showErrorModal(data);
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        // Restore button state
+        alert('An error occurred. Please try again.');
         button.innerHTML = originalContent;
         button.disabled = false;
-        alert('An error occurred while processing your request. Please try again.');
     });
 }
 
-function showSuccessModal(data) {
-    // Create blood type breakdown HTML
-    let bloodTypeBreakdown = '';
-    if (data.deducted_by_type) {
-        bloodTypeBreakdown = `
-            <div class="card mb-3">
-                <div class="card-header bg-danger text-white">Blood Type Breakdown</div>
-                <div class="card-body">
-                    <table class="table table-striped table-sm">
-                        <thead>
-                            <tr>
-                                <th>Blood Type</th>
-                                <th>Units Deducted</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${Object.entries(data.deducted_by_type).map(([type, units]) => 
-                                `<tr>
-                                    <td><strong>${type}</strong></td>
-                                    <td>${units} units</td>
-                                </tr>`
-                            ).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            </div>`;
-    }
-
-    const modalHTML = `
-        <div class="modal fade" id="successModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header bg-success text-white">
-                        <h5 class="modal-title">Blood Request Completed</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="alert alert-success">
-                            ${data.message}
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="card mb-3">
-                                    <div class="card-header">Transaction Details</div>
-                                    <div class="card-body">
-                                        <p><strong>Requested Blood Type:</strong> ${data.blood_type}</p>
-                                        <p><strong>Total Units Deducted:</strong> ${data.units_deducted}</p>
-                                        <p><strong>Collections Updated:</strong> ${data.collections_updated}</p>
-                                        <p><strong>Time of Pickup:</strong> ${new Date().toLocaleString()}</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                ${bloodTypeBreakdown}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
-                        <button type="button" class="btn btn-success" onclick="window.print()">Print Receipt</button>
-                    </div>
-                </div>
-            </div>
-        </div>`;
-
-    // Remove existing modal if any
-    const existingModal = document.getElementById('successModal');
-    if (existingModal) {
-        existingModal.remove();
-    }
-
-    // Add new modal to body
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
-
-    // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('successModal'));
-    modal.show();
-
-    // Refresh page when modal is closed
-    document.getElementById('successModal').addEventListener('hidden.bs.modal', function() {
-        window.location.reload();
+function showDeclineReason(requestId, reason) {
+    // Get the decline reason element
+    const reasonElement = document.getElementById('declineReasonText');
+    
+    // Set reason text
+    reasonElement.textContent = reason || 'No specific details provided';
+    
+    // Fetch additional details if needed (optional enhancement)
+    fetch('<?php echo SUPABASE_URL; ?>/rest/v1/blood_requests?request_id=eq.' + requestId, {
+        headers: {
+            'apikey': '<?php echo SUPABASE_API_KEY; ?>',
+            'Authorization': 'Bearer <?php echo SUPABASE_API_KEY; ?>'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data && data.length > 0 && data[0].decline_reason) {
+            // Update with the most current reason from the database
+            reasonElement.textContent = data[0].decline_reason || 'No specific details provided';
+        }
+    })
+    .catch(error => {
+        console.error('Error fetching decline reason:', error);
     });
-}
-
-function showErrorModal(data) {
-    const modalHTML = `
-        <div class="modal fade" id="errorModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header bg-danger text-white">
-                        <h5 class="modal-title">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            Insufficient Blood Inventory
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="alert alert-danger">
-                            <pre class="mb-0" style="white-space: pre-wrap;">${data.message}</pre>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="button" class="btn btn-primary" onclick="window.location.reload()">Refresh Inventory</button>
-                    </div>
-                </div>
-            </div>
-        </div>`;
-
-    // Remove existing modal if any
-    const existingModal = document.getElementById('errorModal');
-    if (existingModal) {
-        existingModal.remove();
-    }
-
-    // Add new modal to body
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
-
-    // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('errorModal'));
-    modal.show();
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -1358,23 +1346,268 @@ document.addEventListener('DOMContentLoaded', function() {
         for (let row of rows) {
             const text = row.textContent.toLowerCase();
             row.style.display = text.includes(searchText) ? '' : 'none';
+        }
+    });
+    
+    // Add blood request form submission handler
+    const bloodRequestForm = document.getElementById('bloodRequestForm');
+    if (bloodRequestForm) {
+        bloodRequestForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Show loading state
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalBtnText = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+            
+            // Create FormData object
+            const formData = new FormData(this);
+            
+            // Add additional data
+            formData.append('user_id', '<?php echo $_SESSION['user_id']; ?>');
+            formData.append('status', 'Pending');
+            formData.append('physician_name', '<?php echo $_SESSION['user_surname']; ?>');
+            formData.append('requested_on', new Date().toISOString());
+            
+            // Handle "when needed" logic
+            const whenNeeded = document.getElementById('whenNeeded').value;
+            const isAsap = whenNeeded === 'ASAP';
+            formData.append('is_asap', isAsap ? 'true' : 'false');
+            
+            // Always set when_needed as a timestamp
+            if (isAsap) {
+                // For ASAP, use current date/time
+                formData.set('when_needed', new Date().toISOString());
+            } else {
+                // For Scheduled, use the selected date/time
+                const scheduledDate = document.querySelector('#scheduleDateTime input').value;
+                if (scheduledDate) {
+                    formData.set('when_needed', new Date(scheduledDate).toISOString());
+                } else {
+                    // If no date selected for scheduled, default to current date
+                    formData.set('when_needed', new Date().toISOString());
+                }
+            }
+            
+            // Define exact fields from the database schema
+            const validFields = [
+                'request_id', 'user_id', 'patient_name', 'patient_age', 'patient_gender', 
+                'patient_diagnosis', 'patient_blood_type', 'rh_factor', 'blood_component', 
+                'units_requested', 'when_needed', 'is_asap', 'hospital_admitted', 
+                'physician_name', 'requested_on', 'status'
+            ];
+            
+            // Convert FormData to JSON object, only including valid fields
+            const data = {};
+            validFields.forEach(field => {
+                if (formData.has(field)) {
+                    const value = formData.get(field);
+                    
+                    // Convert numeric values to numbers
+                    if (field === 'patient_age' || field === 'units_requested') {
+                        data[field] = parseInt(value, 10);
+                    } 
+                    // Convert boolean strings to actual booleans
+                    else if (field === 'is_asap') {
+                        data[field] = value === 'true';
+                    }
+                    // Format timestamps properly
+                    else if (field === 'when_needed' || field === 'requested_on') {
+                        try {
+                            // Ensure we have a valid date
+                            const dateObj = new Date(value);
+                            if (isNaN(dateObj.getTime())) {
+                                throw new Error(`Invalid date for ${field}: ${value}`);
+                            }
+                            // Format as ISO string with timezone
+                            data[field] = dateObj.toISOString();
+                        } catch (err) {
+                            console.error(`Error formatting date for ${field}:`, err);
+                            // Default to current time if invalid
+                            data[field] = new Date().toISOString();
+                        }
+                    }
+                    // All other fields as strings
+                    else {
+                        data[field] = value;
+                    }
+                }
+            });
+            
+            console.log('Submitting request data:', data);
+            console.log('Valid fields in database:', validFields);
+            console.log('FormData keys:', Array.from(formData.keys()));
+            console.log('when_needed value:', data.when_needed);
+            console.log('requested_on value:', data.requested_on);
+            console.log('is_asap value:', data.is_asap);
+            
+            // Send data to server
+            fetch('<?php echo SUPABASE_URL; ?>/rest/v1/blood_requests', {
+                method: 'POST',
+                headers: {
+                    'apikey': '<?php echo SUPABASE_API_KEY; ?>',
+                    'Authorization': 'Bearer <?php echo SUPABASE_API_KEY; ?>',
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => {
+                console.log('Request response status:', response.status);
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        console.error('Error response body:', text);
+                        // Try to parse as JSON to extract more details
+                        try {
+                            const errorJson = JSON.parse(text);
+                            throw new Error(`Error ${response.status}: ${errorJson.message || errorJson.error || text}`);
+                        } catch (jsonError) {
+                            // If can't parse as JSON, use the raw text
+                            throw new Error(`Error ${response.status}: ${text}`);
+                        }
+                    });
+                }
+                return response.text();
+            })
+            .then(result => {
+                console.log('Request submitted successfully:', result);
+                
+                // Show success message
+                alert('Blood request submitted successfully!');
+                
+                // Reset form and close modal
+                bloodRequestForm.reset();
+                const modal = bootstrap.Modal.getInstance(document.getElementById('bloodRequestModal'));
+                modal.hide();
+                
+                // Reload the page to show the new request
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Error submitting request:', error);
+                alert('Error submitting request: ' + error.message);
+            })
+            .finally(() => {
+                // Restore button state
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnText;
+            });
+        });
+    }
+    
+    // Handle when needed change
+    const whenNeededSelect = document.getElementById('whenNeeded');
+    const scheduleDateTimeDiv = document.getElementById('scheduleDateTime');
+    
+    if (whenNeededSelect && scheduleDateTimeDiv) {
+        whenNeededSelect.addEventListener('change', function() {
+            if (this.value === 'Scheduled') {
+                scheduleDateTimeDiv.classList.remove('d-none');
+                scheduleDateTimeDiv.style.opacity = 1;
+                scheduleDateTimeDiv.querySelector('input').required = true;
+            } else {
+                scheduleDateTimeDiv.style.opacity = 0;
+                setTimeout(() => {
+                    scheduleDateTimeDiv.classList.add('d-none');
+                    scheduleDateTimeDiv.querySelector('input').required = false;
+                }, 500);
             }
         });
+    }
+    
+    // Handle signature method toggle
+    const uploadSignatureRadio = document.getElementById('uploadSignature');
+    const drawSignatureRadio = document.getElementById('drawSignature');
+    const signatureUploadDiv = document.getElementById('signatureUpload');
+    const signaturePadDiv = document.getElementById('signaturePad');
+    
+    if (uploadSignatureRadio && drawSignatureRadio) {
+        uploadSignatureRadio.addEventListener('change', function() {
+            if (this.checked) {
+                signatureUploadDiv.classList.remove('d-none');
+                signaturePadDiv.classList.add('d-none');
+            }
+        });
+        
+        drawSignatureRadio.addEventListener('change', function() {
+            if (this.checked) {
+                signatureUploadDiv.classList.add('d-none');
+                signaturePadDiv.classList.remove('d-none');
+                initSignaturePad();
+            }
+        });
+    }
+});
+
+// Initialize signature pad
+function initSignaturePad() {
+    const canvas = document.getElementById('physicianSignaturePad');
+    if (!canvas) return;
+    
+    const signaturePad = new SignaturePad(canvas, {
+        backgroundColor: 'white',
+        penColor: 'black'
     });
+    
+    // Clear button
+    document.getElementById('clearSignature').addEventListener('click', function() {
+        signaturePad.clear();
+    });
+    
+    // Save button
+    document.getElementById('saveSignature').addEventListener('click', function() {
+        if (signaturePad.isEmpty()) {
+            alert('Please provide a signature first.');
+            return;
+        }
+        
+        const signatureData = signaturePad.toDataURL();
+        document.getElementById('signatureData').value = signatureData;
+        alert('Signature saved!');
+    });
+    
+    // Resize canvas
+    function resizeCanvas() {
+        const ratio = Math.max(window.devicePixelRatio || 1, 1);
+        canvas.width = canvas.offsetWidth * ratio;
+        canvas.height = canvas.offsetHeight * ratio;
+        canvas.getContext('2d').scale(ratio, ratio);
+        signaturePad.clear(); // Clear the canvas
+    }
+    
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+}
 
 function sortTableByStatus() {
     const table = document.getElementById('requestTable');
     const rows = Array.from(table.getElementsByTagName('tr'));
     
-    // Sort function that puts "Picked-Up" at the bottom
+    // Sort function that puts rows in order: 
+    // 1. Approved/Accepted (with button) first
+    // 2. Pending
+    // 3. Confirmed (badged)
+    // 4. Declined at the very end
     rows.sort((a, b) => {
         const statusA = a.querySelector('td:nth-child(7)')?.textContent.trim();
         const statusB = b.querySelector('td:nth-child(7)')?.textContent.trim();
+        const hasButtonA = a.querySelector('button.pickup-btn') !== null;
+        const hasButtonB = b.querySelector('button.pickup-btn') !== null;
         
         if (!statusA || !statusB) return 0;
         
-        if (statusA === 'Picked-Up' && statusB !== 'Picked-Up') return 1;
-        if (statusA !== 'Picked-Up' && statusB === 'Picked-Up') return -1;
+        // Priority: buttons first (Approved/Accepted)
+        if (hasButtonA && !hasButtonB) return -1;
+        if (!hasButtonA && hasButtonB) return 1;
+        
+        // If neither has buttons, check status
+        if (statusA === 'Declined' && statusB !== 'Declined') return 1; // Declined last
+        if (statusA !== 'Declined' && statusB === 'Declined') return -1;
+        
+        if (statusA === 'Confirmed' && statusB === 'Pending') return 1; // Pending before Confirmed
+        if (statusA === 'Pending' && statusB === 'Confirmed') return -1;
+        
         return 0;
     });
     

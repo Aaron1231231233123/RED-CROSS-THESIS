@@ -21,16 +21,6 @@ try {
             $donations = $approvedDonations ?? [];
             $pageTitle = "Approved Donations";
             break;
-        case 'walk-in':
-            include_once 'modules/donation_walkin.php';
-            $donations = $walkinDonations ?? [];
-            $pageTitle = "Walk-in Donations";
-            break;
-        case 'donated':
-            include_once 'modules/donation_donated.php';
-            $donations = $donatedDonations ?? [];
-            $pageTitle = "Completed Donations";
-            break;
         case 'declined':
             include_once 'modules/donation_declined.php';
             $donations = $declinedDonations ?? [];
@@ -58,6 +48,25 @@ if (!is_array($donations)) {
         $error = "No data returned or invalid data format";
     }
 }
+
+// Pagination settings
+$itemsPerPage = 10;
+$totalItems = count($donations);
+$totalPages = ceil($totalItems / $itemsPerPage);
+$currentPage = isset($_GET['page']) ? intval($_GET['page']) : 1;
+
+// Ensure current page is valid
+if ($currentPage < 1) {
+    $currentPage = 1;
+} elseif ($currentPage > $totalPages && $totalPages > 0) {
+    $currentPage = $totalPages;
+}
+
+// Calculate the starting index for the current page
+$startIndex = ($currentPage - 1) * $itemsPerPage;
+
+// Get the subset of donations for the current page
+$currentPageDonations = array_slice($donations, $startIndex, $itemsPerPage);
 
 // Calculate age from birthdate
 function calculateAge($birthdate) {
@@ -549,7 +558,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" style="width: 65px; height: 65px; object-fit: contain;">
                         <span class="text-primary ms-1" style="font-size: 1.5rem; font-weight: 600;">Dashboard</span>
                     </div>
-                <input type="text" class="form-control" placeholder="Search...">
                 <a href="dashboard-Inventory-System.php" class="nav-link">
                     <span><i class="fas fa-home"></i>Home</span>
                 </a>
@@ -616,7 +624,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 <hr class="mt-0 mb-3 border-2 border-secondary opacity-50 mb-2">
                         <!-- Responsive Table -->
                         <div class="table-responsive">
-                            <table class="table table-striped table-hover">
+                            <table class="table table-striped table-hover" id="donationsTable" data-start-index="<?php echo $startIndex; ?>" data-items-per-page="<?php echo $itemsPerPage; ?>" data-total-items="<?php echo $totalItems; ?>" data-current-page="<?php echo $currentPage; ?>" data-status="<?php echo $status; ?>">
                                 <thead class="table-dark">
                                     <tr>
                                         <?php if ($status === 'approved'): ?>
@@ -636,15 +644,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             <th>Date Submitted</th>
                                             <th>Actions</th>
                                         <?php elseif ($status === 'declined'): ?>
-                                            <th>Donor ID</th>
                                             <th>Surname</th>
                                             <th>First Name</th>
-                                            <th>Rejection Source</th>
+                                            <th>Remarks</th>
                                             <th>Reason for Rejection</th>
                                             <th>Rejection Date</th>
                                             <th>Actions</th>
                                         <?php else: ?>
-                                            <th>Donor ID</th>
                                             <th>Surname</th>
                                             <th>First Name</th>
                                             <th>Middle Name</th>
@@ -656,8 +662,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php if (!$error && is_array($donations) && count($donations) > 0): ?>
-                                        <?php foreach ($donations as $donation): ?>
+                                    <?php if (!$error && is_array($currentPageDonations) && count($currentPageDonations) > 0): ?>
+                                        <?php foreach ($currentPageDonations as $donation): ?>
                                             <tr class="donor-row" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>" style="cursor: pointer;">
                                                 <?php if ($status === 'approved'): ?>
                                                     <td><?php echo htmlspecialchars($donation['surname'] ?? ''); ?></td>
@@ -674,26 +680,26 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                     <td><?php echo htmlspecialchars($donation['sex'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['date_submitted'] ?? ''); ?></td>
                                                 <?php elseif ($status === 'declined'): ?>
-                                                    <td><?php echo htmlspecialchars($donation['donor_id']); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['surname'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['first_name'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['rejection_source'] ?? 'Physical Examination'); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['rejection_reason'] ?? 'Unspecified'); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['rejection_date'] ?? date('M d, Y')); ?></td>
                                                 <?php else: ?>
-                                                    <td><?php echo htmlspecialchars($donation['donor_id']); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['surname'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['first_name'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['middle_name'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['blood_type'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['donation_type'] ?? ''); ?></td>
                                                     <td>
-                                                        <?php if ($status === 'walk-in'): ?>
-                                                            <span class="badge bg-info">Walk-in</span>
-                                                        <?php elseif ($status === 'donated'): ?>
-                                                            <span class="badge bg-primary">Donated</span>
+                                                        <?php if ($status === 'pending'): ?>
+                                                        <span class="badge bg-warning">Pending</span>
+                                                        <?php elseif ($status === 'approved'): ?>
+                                                        <span class="badge bg-success">Approved</span>
+                                                        <?php elseif ($status === 'declined'): ?>
+                                                        <span class="badge bg-danger">Declined</span>
                                                         <?php else: ?>
-                                                            <span class="badge bg-danger">Declined</span>
+                                                        <span class="badge bg-secondary"><?php echo ucfirst($status); ?></span>
                                                         <?php endif; ?>
                                                     </td>
                                                 <?php endif; ?>
@@ -705,33 +711,89 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                     <button class="btn btn-sm btn-warning edit-donor" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>" data-bs-toggle="modal" data-bs-target="#editDonorForm">
                                                         <i class="fas fa-edit"></i>
                                                     </button>
-                                                    <button class="btn btn-sm btn-danger delete-donor" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>" onclick="deleteDonor(<?php echo htmlspecialchars($donation['eligibility_id'] ?? '0'); ?>)">
-                                                        <i class="fas fa-trash-alt"></i>
-                                                    </button>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
                                     <?php else: ?>
                                         <tr>
-                                            <td colspan="<?php echo ($status === 'approved') ? '8' : (($status === 'pending') ? '6' : (($status === 'declined') ? '7' : '8')); ?>" class="text-center">No donation records found</td>
+                                            <td colspan="<?php echo ($status === 'approved') ? '8' : (($status === 'pending' || $status === 'declined') ? '6' : '7'); ?>" class="text-center">
+                                                No <?php echo $status; ?> donations found
+                                            </td>
                                         </tr>
                                     <?php endif; ?>
                                 </tbody>
                             </table>
                         </div>
-            
-                        <!-- Pagination -->
-                        <nav>
-                            <ul class="pagination justify-content-center mt-3">
-                                <li class="page-item"><a class="page-link" href="#">&lt;</a></li>
-                                <li class="page-item active"><a class="page-link" href="#">1</a></li>
-                                <li class="page-item"><a class="page-link" href="#">2</a></li>
-                                <li class="page-item"><a class="page-link" href="#">3</a></li>
-                                <li class="page-item"><a class="page-link" href="#">4</a></li>
-                                <li class="page-item"><a class="page-link" href="#">5</a></li>
-                                <li class="page-item"><a class="page-link" href="#">&gt;</a></li>
+                        
+                        <!-- Pagination Controls -->
+                        <?php if (!$error && $totalPages > 1): ?>
+                        <nav aria-label="Page navigation">
+                            <ul class="pagination justify-content-center">
+                                <?php if ($currentPage > 1): ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="dashboard-Inventory-System-list-of-donations.php?status=<?php echo $status; ?>&page=<?php echo $currentPage - 1; ?>" aria-label="Previous">
+                                            <span aria-hidden="true">&laquo;</span>
+                                        </a>
+                                    </li>
+                                <?php endif; ?>
+
+                                <?php
+                                // Display limited number of page links
+                                $maxPagesToShow = 5;
+                                $startPage = max(1, $currentPage - floor($maxPagesToShow / 2));
+                                $endPage = min($totalPages, $startPage + $maxPagesToShow - 1);
+                                
+                                // Adjust start page if we're near the end
+                                if ($endPage - $startPage + 1 < $maxPagesToShow && $startPage > 1) {
+                                    $startPage = max(1, $endPage - $maxPagesToShow + 1);
+                                }
+                                
+                                // Show first page with ellipsis if needed
+                                if ($startPage > 1) {
+                                    echo '<li class="page-item"><a class="page-link" href="dashboard-Inventory-System-list-of-donations.php?status=' . $status . '&page=1">1</a></li>';
+                                    if ($startPage > 2) {
+                                        echo '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                                    }
+                                }
+                                
+                                // Show page links
+                                for ($i = $startPage; $i <= $endPage; $i++): 
+                                ?>
+                                    <li class="page-item <?php echo ($i == $currentPage) ? 'active' : ''; ?>">
+                                        <a class="page-link" href="dashboard-Inventory-System-list-of-donations.php?status=<?php echo $status; ?>&page=<?php echo $i; ?>">
+                                            <?php echo $i; ?>
+                                        </a>
+                                    </li>
+                                <?php endfor; 
+                                
+                                // Show last page with ellipsis if needed
+                                if ($endPage < $totalPages) {
+                                    if ($endPage < $totalPages - 1) {
+                                        echo '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                                    }
+                                    echo '<li class="page-item"><a class="page-link" href="dashboard-Inventory-System-list-of-donations.php?status=' . $status . '&page=' . $totalPages . '">' . $totalPages . '</a></li>';
+                                }
+                                ?>
+
+                                <?php if ($currentPage < $totalPages): ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="dashboard-Inventory-System-list-of-donations.php?status=<?php echo $status; ?>&page=<?php echo $currentPage + 1; ?>" aria-label="Next">
+                                            <span aria-hidden="true">&raquo;</span>
+                                        </a>
+                                    </li>
+                                <?php endif; ?>
                             </ul>
                         </nav>
+                        <?php endif; ?>
+                        
+                        <!-- Showing entries information -->
+                        <?php if (!$error && $totalItems > 0): ?>
+                        <div class="text-center mt-2 mb-4">
+                            <p class="text-muted">
+                                Showing <?php echo min($totalItems, $startIndex + 1); ?> to <?php echo min($totalItems, $startIndex + $itemsPerPage); ?> of <?php echo $totalItems; ?> entries
+                            </p>
+                        </div>
+                        <?php endif; ?>
                     </div>
             
 <!-- Donor Details Modal -->
@@ -1261,28 +1323,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 });
         }
 
-        // Function to delete donor record
-        function deleteDonor(eligibilityId) {
-            if (confirm("Are you sure you want to delete this donation record? This action cannot be undone.")) {
-                fetch(`delete_donation.php?eligibility_id=${eligibilityId}`, {
-                    method: 'DELETE'
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert("Donation record deleted successfully!");
-                        location.reload(); // Refresh the page to see the changes
-                    } else {
-                        alert("Error deleting record: " + data.error);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert("An error occurred while deleting the record.");
-                });
-            }
-        }
-
         // Event listeners for view and edit buttons
         document.addEventListener('DOMContentLoaded', function() {
             // Edit donor details
@@ -1309,15 +1349,18 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             // Search functionality
             function searchTable() {
                 const searchInput = document.getElementById('searchInput').value.toLowerCase();
-                const table = document.querySelector('table');
+                const table = document.getElementById('donationsTable');
                 const rows = table.getElementsByTagName('tr');
+                const status = table.getAttribute('data-status');
 
-                for (let i = 1; i < rows.length; i++) { // Start from 1 to skip header
+                // Skip header row (index 0)
+                for (let i = 1; i < rows.length; i++) {
                     const row = rows[i];
                     const cells = row.getElementsByTagName('td');
                     let found = false;
 
-                    for (let j = 0; j < cells.length; j++) {
+                    // Check if the row contains the search text
+                    for (let j = 0; j < cells.length - 1; j++) { // Skip the actions column
                         const cellText = cells[j].textContent.toLowerCase();
                         if (cellText.includes(searchInput)) {
                             found = true;
@@ -1326,6 +1369,38 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     }
 
                     row.style.display = found ? '' : 'none';
+                }
+                
+                // Update the pagination info to reflect filtered results
+                updatePaginationInfo(searchInput);
+            }
+            
+            // Update pagination info based on search term
+            function updatePaginationInfo(searchTerm) {
+                // If there's a search term, hide pagination and show a message
+                const paginationElement = document.querySelector('nav[aria-label="Page navigation"]');
+                const paginationInfoElement = document.querySelector('.text-center.mt-2.mb-4');
+                const status = document.getElementById('donationsTable').getAttribute('data-status');
+                
+                if (searchTerm) {
+                    if (paginationElement) paginationElement.style.display = 'none';
+                    if (paginationInfoElement) {
+                        paginationInfoElement.innerHTML = '<p class="text-muted">Showing filtered results. <a href="dashboard-Inventory-System-list-of-donations.php?status=' + status + '">Clear filter</a></p>';
+                    }
+                } else {
+                    if (paginationElement) paginationElement.style.display = '';
+                    if (paginationInfoElement) {
+                        // Get data attributes from the table
+                        const table = document.getElementById('donationsTable');
+                        const startIndex = parseInt(table.getAttribute('data-start-index'), 10);
+                        const itemsPerPage = parseInt(table.getAttribute('data-items-per-page'), 10);
+                        const totalItems = parseInt(table.getAttribute('data-total-items'), 10);
+                        
+                        paginationInfoElement.innerHTML = '<p class="text-muted">Showing ' + 
+                            (Math.min(totalItems, startIndex + 1)) + ' to ' + 
+                            (Math.min(totalItems, startIndex + itemsPerPage)) + ' of ' + 
+                            totalItems + ' entries</p>';
+                    }
                 }
             }
 

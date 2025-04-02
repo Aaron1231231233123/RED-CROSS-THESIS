@@ -131,6 +131,180 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['physical_examination_id'] = $response_data[0]['physical_exam_id'];
                 error_log("Stored physical_examination_id in session: " . $_SESSION['physical_examination_id']);
                 
+                // NEW CODE: Create eligibility record based on physical examination status
+                try {
+                    // Get the remarks value to determine eligibility status
+                    $remarks = $data['remarks'] ?? '';
+                    $status = 'pending'; // Default status
+                    
+                    // Determine status based on remarks
+                    if ($remarks === 'Accepted') {
+                        $status = 'approved';
+                    } else if (in_array($remarks, ['Temporarily Deferred', 'Permanently Deferred', 'Refused'])) {
+                        $status = 'declined';
+                    }
+                    
+                    // Calculate appropriate end date
+                    $end_date = new DateTime();
+                    if ($status === 'approved') {
+                        $end_date->modify('+9 months'); // 9 months for approved donors
+                    } else if ($status === 'declined') {
+                        if (strpos($remarks, 'Permanently') !== false) {
+                            $end_date->modify('+100 years'); // Long time for permanent deferral
+                        } else if (strpos($remarks, 'Temporarily') !== false) {
+                            $end_date->modify('+6 months'); // 6 months for temporary deferrals
+                        } else {
+                            $end_date->modify('+3 months'); // 3 months for other declined reasons
+                        }
+                    } else {
+                        $end_date->modify('+3 days'); // Short time for pending
+                    }
+                    $end_date_formatted = $end_date->format('Y-m-d\TH:i:s.000\Z');
+                    
+                    // Check if an eligibility record already exists for this donor
+                    $eligibility_check_ch = curl_init();
+                    curl_setopt_array($eligibility_check_ch, [
+                        CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility?donor_id=eq." . $data['donor_id'] . "&select=eligibility_id&order=created_at.desc&limit=1",
+                        CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_HTTPHEADER => [
+                            'apikey: ' . SUPABASE_API_KEY,
+                            'Authorization: Bearer ' . SUPABASE_API_KEY,
+                            'Content-Type: application/json'
+                        ]
+                    ]);
+                    $eligibility_check_response = curl_exec($eligibility_check_ch);
+                    curl_close($eligibility_check_ch);
+                    
+                    $existing_eligibility = json_decode($eligibility_check_response, true);
+                    
+                    // Get the medical history ID and screening ID
+                    $medical_history_ch = curl_init();
+                    curl_setopt_array($medical_history_ch, [
+                        CURLOPT_URL => SUPABASE_URL . "/rest/v1/medical_history?donor_id=eq." . $data['donor_id'] . "&select=medical_history_id&order=created_at.desc&limit=1",
+                        CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_HTTPHEADER => [
+                            'apikey: ' . SUPABASE_API_KEY,
+                            'Authorization: Bearer ' . SUPABASE_API_KEY,
+                            'Content-Type: application/json'
+                        ]
+                    ]);
+                    $medical_history_response = curl_exec($medical_history_ch);
+                    curl_close($medical_history_ch);
+                    
+                    $medical_history_data = json_decode($medical_history_response, true);
+                    $medical_history_id = !empty($medical_history_data) ? $medical_history_data[0]['medical_history_id'] : null;
+                    
+                    $screening_ch = curl_init();
+                    curl_setopt_array($screening_ch, [
+                        CURLOPT_URL => SUPABASE_URL . "/rest/v1/screening_form?donor_form_id=eq." . $data['donor_id'] . "&select=screening_id,blood_type,donation_type&order=created_at.desc&limit=1",
+                        CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_HTTPHEADER => [
+                            'apikey: ' . SUPABASE_API_KEY,
+                            'Authorization: Bearer ' . SUPABASE_API_KEY,
+                            'Content-Type: application/json'
+                        ]
+                    ]);
+                    $screening_response = curl_exec($screening_ch);
+                    curl_close($screening_ch);
+                    
+                    $screening_data = json_decode($screening_response, true);
+                    $screening_id = !empty($screening_data) ? $screening_data[0]['screening_id'] : null;
+                    $blood_type = !empty($screening_data) ? $screening_data[0]['blood_type'] : null;
+                    $donation_type = !empty($screening_data) ? $screening_data[0]['donation_type'] : null;
+                    
+                    if (!empty($existing_eligibility)) {
+                        // Update existing eligibility record
+                        $eligibility_id = $existing_eligibility[0]['eligibility_id'];
+                        
+                        $update_data = [
+                            'status' => $status,
+                            'physical_exam_id' => $response_data[0]['physical_exam_id'],
+                            'remarks' => $remarks,
+                            'updated_at' => date('Y-m-d H:i:s'),
+                            'end_date' => $end_date_formatted
+                        ];
+                        
+                        // Add optional fields if available
+                        if ($screening_id) $update_data['screening_id'] = $screening_id;
+                        if ($medical_history_id) $update_data['medical_history_id'] = $medical_history_id;
+                        if ($blood_type) $update_data['blood_type'] = $blood_type;
+                        if ($donation_type) $update_data['donation_type'] = $donation_type;
+                        
+                        // Add disapproval reason if status is declined
+                        if ($status === 'declined' && isset($data['disapproval_reason']) && !empty($data['disapproval_reason'])) {
+                            $update_data['disapproval_reason'] = $data['disapproval_reason'];
+                        }
+                        
+                        $update_ch = curl_init();
+                        curl_setopt_array($update_ch, [
+                            CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility?eligibility_id=eq." . $eligibility_id,
+                            CURLOPT_RETURNTRANSFER => true,
+                            CURLOPT_CUSTOMREQUEST => "PATCH",
+                            CURLOPT_POSTFIELDS => json_encode($update_data),
+                            CURLOPT_HTTPHEADER => [
+                                'apikey: ' . SUPABASE_API_KEY,
+                                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                'Content-Type: application/json',
+                                'Prefer: return=minimal'
+                            ]
+                        ]);
+                        
+                        $update_response = curl_exec($update_ch);
+                        $update_http_code = curl_getinfo($update_ch, CURLINFO_HTTP_CODE);
+                        curl_close($update_ch);
+                        
+                        error_log("Eligibility update response code: " . $update_http_code);
+                        error_log("Updated eligibility record with status: " . $status);
+                    } else {
+                        // Create new eligibility record
+                        $new_eligibility_data = [
+                            'donor_id' => $data['donor_id'],
+                            'physical_exam_id' => $response_data[0]['physical_exam_id'],
+                            'status' => $status,
+                            'remarks' => $remarks,
+                            'created_at' => date('Y-m-d H:i:s'),
+                            'updated_at' => date('Y-m-d H:i:s'),
+                            'start_date' => date('Y-m-d\TH:i:s.000\Z'),
+                            'end_date' => $end_date_formatted
+                        ];
+                        
+                        // Add optional fields if available
+                        if ($screening_id) $new_eligibility_data['screening_id'] = $screening_id;
+                        if ($medical_history_id) $new_eligibility_data['medical_history_id'] = $medical_history_id;
+                        if ($blood_type) $new_eligibility_data['blood_type'] = $blood_type;
+                        if ($donation_type) $new_eligibility_data['donation_type'] = $donation_type;
+                        
+                        // Add disapproval reason if status is declined
+                        if ($status === 'declined' && isset($data['disapproval_reason']) && !empty($data['disapproval_reason'])) {
+                            $new_eligibility_data['disapproval_reason'] = $data['disapproval_reason'];
+                        }
+                        
+                        $create_ch = curl_init();
+                        curl_setopt_array($create_ch, [
+                            CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility",
+                            CURLOPT_RETURNTRANSFER => true,
+                            CURLOPT_CUSTOMREQUEST => "POST",
+                            CURLOPT_POSTFIELDS => json_encode($new_eligibility_data),
+                            CURLOPT_HTTPHEADER => [
+                                'apikey: ' . SUPABASE_API_KEY,
+                                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                'Content-Type: application/json',
+                                'Prefer: return=representation'
+                            ]
+                        ]);
+                        
+                        $create_response = curl_exec($create_ch);
+                        $create_http_code = curl_getinfo($create_ch, CURLINFO_HTTP_CODE);
+                        curl_close($create_ch);
+                        
+                        error_log("Eligibility creation response code: " . $create_http_code);
+                        error_log("Created new eligibility record with status: " . $status);
+                    }
+                } catch (Exception $ee) {
+                    error_log("Exception when creating/updating eligibility record: " . $ee->getMessage());
+                    // Continue with normal flow even if eligibility creation fails
+                }
+                
                 // Different redirections based on role
                 if ($_SESSION['role_id'] === 1) {
                     // Admin (role_id 1) - Direct to blood collection
