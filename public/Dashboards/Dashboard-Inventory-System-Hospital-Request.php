@@ -1020,6 +1020,110 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         const confirmDeclineModal = new bootstrap.Modal(document.getElementById('confirmDeclineModal'));
         const acceptRequestModal = new bootstrap.Modal(document.getElementById('acceptRequestModal'));
 
+        // Initialize search functionality
+        const searchInput = document.getElementById('searchInput');
+        const searchCategory = document.getElementById('searchCategory');
+        
+        if (searchInput && searchCategory) {
+            // Add event listeners for real-time search
+            searchInput.addEventListener('keyup', searchRequests);
+            searchCategory.addEventListener('change', searchRequests);
+        }
+        
+        // Function to search blood requests
+        function searchRequests() {
+            const searchInput = document.getElementById('searchInput').value.toLowerCase();
+            const searchCategory = document.getElementById('searchCategory').value;
+            const requestItems = document.querySelectorAll('.email-item');
+            
+            // Check if no results message already exists
+            let noResultsMsg = document.getElementById('noResultsMsg');
+            if (noResultsMsg) {
+                noResultsMsg.remove();
+            }
+            
+            let visibleItems = 0;
+            const totalItems = requestItems.length;
+            
+            requestItems.forEach(item => {
+                let shouldShow = false;
+                if (searchInput.trim() === '') {
+                    shouldShow = true;
+                } else {
+                    const itemText = item.textContent.toLowerCase();
+                    
+                    if (searchCategory === 'all') {
+                        // Search all text in the item
+                        shouldShow = itemText.includes(searchInput);
+                    } else if (searchCategory === 'priority') {
+                        // Search only priority (Urgent/Routine)
+                        const priorityText = item.querySelector('.email-header').textContent.toLowerCase();
+                        shouldShow = priorityText.includes(searchInput);
+                    } else if (searchCategory === 'hospital') {
+                        // Search hospital name
+                        const hospitalName = item.querySelector('.email-header').textContent.toLowerCase();
+                        shouldShow = hospitalName.includes(searchInput);
+                    } else if (searchCategory === 'date') {
+                        // For date, we'd need to check if it's available in the item
+                        // Since it might not be directly visible, we do a general search
+                        // Create a regex for flexible date matching
+                        const datePattern = new RegExp(searchInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+                        shouldShow = datePattern.test(itemText);
+                    }
+                }
+                
+                item.style.display = shouldShow ? '' : 'none';
+                if (shouldShow) visibleItems++;
+            });
+            
+            // Show "No results" message if no matches
+            if (visibleItems === 0 && totalItems > 0) {
+                const container = document.querySelector('.email-container');
+                
+                noResultsMsg = document.createElement('div');
+                noResultsMsg.id = 'noResultsMsg';
+                noResultsMsg.className = 'alert alert-info m-3 text-center';
+                noResultsMsg.innerHTML = `
+                    No matching results found. 
+                    <button class="btn btn-sm btn-outline-primary ms-2" onclick="clearSearch()">
+                        Clear Search
+                    </button>
+                `;
+                container.appendChild(noResultsMsg);
+            }
+            
+            // Update search results info
+            updateSearchInfo(visibleItems, totalItems);
+        }
+        
+        // Function to update search results info
+        function updateSearchInfo(visibleItems, totalItems) {
+            const searchContainer = document.querySelector('.search-container');
+            let searchInfo = document.getElementById('searchInfo');
+            
+            if (!searchInfo) {
+                searchInfo = document.createElement('div');
+                searchInfo.id = 'searchInfo';
+                searchInfo.classList.add('text-muted', 'mt-2', 'small');
+                searchContainer.appendChild(searchInfo);
+            }
+            
+            const searchInput = document.getElementById('searchInput').value.trim();
+            if (searchInput === '') {
+                searchInfo.textContent = '';
+                return;
+            }
+            
+            searchInfo.textContent = `Showing ${visibleItems} of ${totalItems} entries`;
+        }
+        
+        // Function to clear search
+        window.clearSearch = function() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('searchCategory').value = 'all';
+            searchRequests();
+        };
+
         // Function to show confirmation modal
         window.showConfirmationModal = function() {
             confirmationModal.show();
@@ -1171,47 +1275,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             });
         }
 
-        // Add event listener for the confirm accept button
-        if (confirmAcceptBtn) {
-            confirmAcceptBtn.addEventListener('click', function() {
-                // Show processing state
-                this.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Processing...';
-                this.disabled = true;
-                
-                // Get the request ID from the hidden field
-                const requestId = document.getElementById('accept-request-id').value;
-                
-                // Create a form to submit via POST
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = 'Dashboard-Inventory-System-Hospital-Request.php';
-                
-                // Add request_id field
-                const requestIdInput = document.createElement('input');
-                requestIdInput.type = 'hidden';
-                requestIdInput.name = 'request_id';
-                requestIdInput.value = requestId;
-                form.appendChild(requestIdInput);
-                
-                // Add accept_request field
-                const acceptRequestInput = document.createElement('input');
-                acceptRequestInput.type = 'hidden';
-                acceptRequestInput.name = 'accept_request';
-                acceptRequestInput.value = '1';
-                form.appendChild(acceptRequestInput);
-                
-                // Hide the confirmation modal
-                acceptRequestModal.hide();
-                
-                // Show a processing indicator
-                loadingModal.show();
-                
-                // Submit the form to process the request with status 'Accepted'
-                document.body.appendChild(form);
-                form.submit();
-            });
-        }
-
         // Add event listeners for the main list Accept Request buttons
         const listAcceptButtons = document.querySelectorAll('.accept-request-btn');
         if (listAcceptButtons.length > 0) {
@@ -1228,60 +1291,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     // Manually trigger the click on the row to show the details modal first
                     row.click();
                 });
-            });
-        }
-
-        // Function to search requests
-        function searchRequests() {
-            const searchInput = document.getElementById('searchInput').value.toLowerCase();
-            const searchCategory = document.getElementById('searchCategory').value;
-            const emailItems = document.getElementsByClassName('email-item');
-
-            Array.from(emailItems).forEach(item => {
-                const headerText = item.querySelector('.email-header').textContent.toLowerCase();
-                const subtextContent = item.querySelector('.email-subtext').textContent.toLowerCase();
-                let found = false;
-                
-                if (searchCategory === 'all') {
-                    found = headerText.includes(searchInput) || subtextContent.includes(searchInput);
-                } else if (searchCategory === 'priority') {
-                    found = headerText.includes('urgent') && 'urgent'.includes(searchInput) ||
-                            headerText.includes('routine') && 'routine'.includes(searchInput);
-                } else if (searchCategory === 'hospital') {
-                    found = headerText.split(' - ')[0].toLowerCase().includes(searchInput);
-                } else if (searchCategory === 'date') {
-                    // Add date search logic if needed
-                    found = subtextContent.includes(searchInput);
-                }
-                
-                item.style.display = found ? '' : 'none';
-            });
-        }
-
-        // Add event listener for real-time search
-        const searchInputField = document.getElementById('searchInput');
-        if (searchInputField) {
-            searchInputField.addEventListener('keyup', searchRequests);
-        }
-        
-        const searchCategoryField = document.getElementById('searchCategory');
-        if (searchCategoryField) {
-            searchCategoryField.addEventListener('change', searchRequests);
-        }
-
-        // Add event listener to responseSelect to update the accept button state
-        if (responseSelect) {
-            responseSelect.addEventListener('change', function() {
-                const acceptButton = document.getElementById('modalAcceptButton');
-                if (this.value && this.value !== '') {
-                    // If a reason is selected, disable the accept button
-                    acceptButton.disabled = true;
-                    acceptButton.title = "Clear the decline reason to enable acceptance";
-                } else {
-                    // If no reason is selected, enable the accept button
-                    acceptButton.disabled = false;
-                    acceptButton.title = "";
-                }
             });
         }
     });

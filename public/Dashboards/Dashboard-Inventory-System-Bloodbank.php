@@ -875,6 +875,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </p>
                     </div>
                     
+                    <!-- Search Container -->
                     <div class="row mb-3">
                         <div class="col-12">
                             <div class="search-container">
@@ -884,8 +885,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     </span>
                                     <select class="form-select category-select" id="searchCategory" style="max-width: 150px;">
                                         <option value="all">All Fields</option>
+                                        <option value="serial">Serial Number</option>
                                         <option value="blood_type">Blood Type</option>
-                                        <option value="component">Component</option>
+                                        <option value="component">Bag Type</option>
                                         <option value="date">Date</option>
                                     </select>
                                     <input type="text" 
@@ -1477,6 +1479,135 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     window.location.href = '../../src/views/forms/donor-form.php';
                 }, 1500);
             };
+            
+            // ==========================================
+            // SEARCH FUNCTIONALITY
+            // ==========================================
+            // Get search elements
+            const searchInput = document.getElementById('searchInput');
+            const searchCategory = document.getElementById('searchCategory');
+            
+            if (searchInput && searchCategory) {
+                // Add event listeners for real-time search
+                searchInput.addEventListener('keyup', searchTable);
+                searchCategory.addEventListener('change', searchTable);
+            }
+            
+            // Function to search the blood inventory table
+            function searchTable() {
+                const searchInput = document.getElementById('searchInput').value.toLowerCase();
+                const searchCategory = document.getElementById('searchCategory').value;
+                const table = document.getElementById('bloodInventoryTable');
+                const rows = table.querySelectorAll('tbody tr');
+                
+                // Check if no results message already exists
+                let noResultsRow = document.getElementById('noResultsRow');
+                if (noResultsRow) {
+                    noResultsRow.remove();
+                }
+                
+                let visibleRows = 0;
+                const totalRows = rows.length;
+                
+                rows.forEach(row => {
+                    let shouldShow = false;
+                    if (searchInput.trim() === '') {
+                        shouldShow = true;
+                    } else {
+                        const cells = row.querySelectorAll('td');
+                        if (cells.length === 0) return;
+                        
+                        if (searchCategory === 'all') {
+                            // Search all columns
+                            Array.from(cells).some(cell => {
+                                if (cell.textContent.toLowerCase().includes(searchInput)) {
+                                    shouldShow = true;
+                                    return true;
+                                }
+                                return false;
+                            });
+                        } else if (searchCategory === 'serial') {
+                            // Search serial number column
+                            if (cells[0].textContent.toLowerCase().includes(searchInput)) {
+                                shouldShow = true;
+                            }
+                        } else if (searchCategory === 'blood_type') {
+                            // Search blood type column
+                            if (cells[1].textContent.toLowerCase().includes(searchInput)) {
+                                shouldShow = true;
+                            }
+                        } else if (searchCategory === 'component') {
+                            // Search bag type column
+                            if (cells[3].textContent.toLowerCase().includes(searchInput)) {
+                                shouldShow = true;
+                            }
+                        } else if (searchCategory === 'date') {
+                            // Search date columns
+                            const collectionDate = cells[4].textContent.toLowerCase();
+                            const expirationDate = cells[5].textContent.toLowerCase();
+                            // Create a regex for flexible date matching
+                            const datePattern = new RegExp(searchInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+                            if (datePattern.test(collectionDate) || datePattern.test(expirationDate)) {
+                                shouldShow = true;
+                            }
+                        }
+                    }
+                    
+                    row.style.display = shouldShow ? '' : 'none';
+                    if (shouldShow) visibleRows++;
+                });
+                
+                // Show "No results" message if no matches
+                if (visibleRows === 0 && totalRows > 0) {
+                    const tbody = table.querySelector('tbody');
+                    const colspan = table.querySelector('thead tr').children.length;
+                    
+                    noResultsRow = document.createElement('tr');
+                    noResultsRow.id = 'noResultsRow';
+                    noResultsRow.innerHTML = `
+                        <td colspan="${colspan}" class="text-center">
+                            <div class="alert alert-info m-2">
+                                No matching inventory items found
+                                <button class="btn btn-outline-primary btn-sm ms-2" onclick="clearSearch()">
+                                    Clear Search
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(noResultsRow);
+                }
+                
+                // Update search results info
+                updateSearchInfo(visibleRows, totalRows);
+            }
+            
+            // Function to update search results info
+            function updateSearchInfo(visibleRows, totalRows) {
+                const searchContainer = document.querySelector('.search-container');
+                let searchInfo = document.getElementById('searchInfo');
+                
+                if (!searchInfo) {
+                    searchInfo = document.createElement('div');
+                    searchInfo.id = 'searchInfo';
+                    searchInfo.classList.add('text-muted', 'mt-2', 'small');
+                    searchContainer.appendChild(searchInfo);
+                }
+                
+                const searchInput = document.getElementById('searchInput').value.trim();
+                if (searchInput === '') {
+                    searchInfo.textContent = '';
+                    return;
+                }
+                
+                searchInfo.textContent = `Showing ${visibleRows} of ${totalRows} entries`;
+            }
+            
+            // Function to clear search
+            window.clearSearch = function() {
+                document.getElementById('searchInput').value = '';
+                document.getElementById('searchCategory').value = 'all';
+                searchTable();
+            }
         });
     </script>
 </body>

@@ -610,6 +610,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             id="searchInput" 
                                             placeholder="Search donations...">
                                     </div>
+                                    <div id="searchInfo" class="mt-2 small text-muted"></div>
                                 </div>
                             </div>
                         </div>
@@ -854,9 +855,228 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Search function for the donations table
+        function searchDonations() {
+            const searchInput = document.getElementById('searchInput');
+            const searchCategory = document.getElementById('searchCategory');
+            const searchInfo = document.getElementById('searchInfo');
+            const table = document.getElementById('donationsTable');
+            const tbody = table.querySelector('tbody');
+            
+            // Add event listeners for search
+            searchInput.addEventListener('input', performSearch);
+            searchCategory.addEventListener('change', performSearch);
+            
+            // Initialize search info
+            updateSearchInfo(tbody.querySelectorAll('tr:not(.no-results)').length, tbody.querySelectorAll('tr:not(.no-results)').length);
+            
+            function performSearch() {
+                const value = searchInput.value.toLowerCase().trim();
+                const category = searchCategory.value;
+                const rows = tbody.querySelectorAll('tr:not(.no-results)');
+                
+                // Remove any existing "no results" message
+                const existingNoResults = tbody.querySelector('.no-results');
+                if (existingNoResults) {
+                    existingNoResults.remove();
+                }
+                
+                let visibleCount = 0;
+                
+                rows.forEach(row => {
+                    let found = false;
+                    
+                    if (category === 'all') {
+                        // Search all visible cells
+                        const cells = row.querySelectorAll('td');
+                        cells.forEach(cell => {
+                            if (cell.textContent.toLowerCase().includes(value)) {
+                                found = true;
+                            }
+                        });
+                    } else if (category === 'donor') {
+                        // Search donor name (first 3 columns usually have name parts)
+                        const nameColumns = [row.cells[0], row.cells[1]]; // Surname, First Name
+                        if (row.cells[2] && !row.cells[2].querySelector('.badge')) {
+                            nameColumns.push(row.cells[2]); // Middle Name if exists
+                        }
+                        
+                        nameColumns.forEach(cell => {
+                            if (cell && cell.textContent.toLowerCase().includes(value)) {
+                                found = true;
+                            }
+                        });
+                    } else if (category === 'status') {
+                        // Search status column
+                        const statusColumn = row.querySelector('td:nth-child(6)') || row.querySelector('td .badge');
+                        if (statusColumn && statusColumn.textContent.toLowerCase().includes(value)) {
+                            found = true;
+                        }
+                    } else if (category === 'date') {
+                        // Search date-related columns
+                        const dateRegex = /\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\w+ \d{1,2}, \d{4}|\d{4}-\d{2}-\d{2}/i;
+                        const cells = row.querySelectorAll('td');
+                        cells.forEach(cell => {
+                            if (dateRegex.test(cell.textContent) && cell.textContent.toLowerCase().includes(value)) {
+                                found = true;
+                            }
+                        });
+                    }
+                    
+                    if (found) {
+                        row.style.display = '';
+                        visibleCount++;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+                
+                // Show "no results" message if needed
+                if (visibleCount === 0 && rows.length > 0) {
+                    const noResultsRow = document.createElement('tr');
+                    noResultsRow.className = 'no-results';
+                    const colspan = table.querySelector('thead th:last-child').cellIndex + 1;
+                    
+                    noResultsRow.innerHTML = `
+                        <td colspan="${colspan}" class="text-center">
+                            <div class="alert alert-info m-2">
+                                No matching donations found
+                                <button class="btn btn-outline-primary btn-sm ms-2" onclick="clearSearch()">
+                                    Clear Search
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    
+                    tbody.appendChild(noResultsRow);
+                }
+                
+                // Update search info
+                updateSearchInfo(visibleCount, rows.length);
+            }
+        }
+        
+        function updateSearchInfo(visibleCount, totalCount) {
+            const searchInfo = document.getElementById('searchInfo');
+            searchInfo.textContent = `Showing ${visibleCount} of ${totalCount} entries`;
+        }
+        
+        function clearSearch() {
+            const searchInput = document.getElementById('searchInput');
+            const searchCategory = document.getElementById('searchCategory');
+            
+            searchInput.value = '';
+            searchCategory.value = 'all';
+            
+            // Trigger the search event to update the table
+            searchInput.dispatchEvent(new Event('input'));
+        }
+        
+        // Initialize search when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            searchDonations();
+        });
+
+        // Function to search the table
+        function searchTable() {
+            const searchInput = document.getElementById('searchInput').value.toLowerCase();
+            const searchCategory = document.getElementById('searchCategory').value;
+            const table = document.getElementById('donationsTable');
+            const rows = table.querySelectorAll('tbody tr');
+            
+            // Check if no results message already exists
+            let noResultsRow = document.getElementById('noResultsRow');
+            if (noResultsRow) {
+                noResultsRow.remove();
+            }
+            
+            let visibleRows = 0;
+            const totalRows = rows.length;
+            
+            rows.forEach(row => {
+                let shouldShow = false;
+                if (searchInput.trim() === '') {
+                    shouldShow = true;
+                } else {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length === 0) return;
+                    
+                    if (searchCategory === 'all') {
+                        // Search all columns
+                        Array.from(cells).some(cell => {
+                            if (cell.textContent.toLowerCase().includes(searchInput)) {
+                                shouldShow = true;
+                                return true;
+                            }
+                            return false;
+                        });
+                    } else if (searchCategory === 'donor') {
+                        // Search only name columns (first 3 columns)
+                        const nameColumns = [0, 1, 2]; // Surname, First name, Middle name
+                        nameColumns.some(idx => {
+                            if (idx < cells.length && cells[idx].textContent.toLowerCase().includes(searchInput)) {
+                                shouldShow = true;
+                                return true;
+                            }
+                            return false;
+                        });
+                    } else if (searchCategory === 'status') {
+                        // Find the status column index based on the table structure
+                        const statusColumnIndex = cells.length - 2;
+                        if (statusColumnIndex >= 0 && statusColumnIndex < cells.length) {
+                            if (cells[statusColumnIndex].textContent.toLowerCase().includes(searchInput)) {
+                                shouldShow = true;
+                            }
+                        }
+                    } else if (searchCategory === 'date') {
+                        // Search for date pattern in the date column
+                        const dateColumns = cells.length === 6 ? [4] : [cells.length - 3]; // Adjust this based on your table structure
+                        if (dateColumns[0] < cells.length) {
+                            const dateText = cells[dateColumns[0]].textContent.toLowerCase();
+                            // Create a regex for flexible date matching
+                            const datePattern = new RegExp(searchInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+                            if (datePattern.test(dateText)) {
+                                shouldShow = true;
+                            }
+                        }
+                    }
+                }
+                
+                row.style.display = shouldShow ? '' : 'none';
+                if (shouldShow) visibleRows++;
+            });
+            
+            // Show "No results" message if no matches
+            if (visibleRows === 0 && totalRows > 0) {
+                const tbody = table.querySelector('tbody');
+                const colspan = table.querySelector('thead tr').children.length;
+                
+                noResultsRow = document.createElement('tr');
+                noResultsRow.id = 'noResultsRow';
+                noResultsRow.innerHTML = `
+                    <td colspan="${colspan}" class="text-center">
+                        <div class="alert alert-info m-2">
+                            No matching donations found
+                            <button class="btn btn-outline-primary btn-sm ms-2" onclick="clearSearch()">
+                                Clear Search
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(noResultsRow);
+            }
+            
+            // Update search results info
+            updateSearchInfo(visibleRows, totalRows);
+        }
+        
         // Wait for the DOM to be fully loaded
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOM loaded, initializing modals and buttons...');
+            
+            // Add event listeners for search
+            document.getElementById('searchInput').addEventListener('keyup', searchTable);
+            document.getElementById('searchCategory').addEventListener('change', searchTable);
             
             // Initialize modals
             let confirmationModal = null;
@@ -1344,70 +1564,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         window.location.href = `?sort=${sortValue}`;
                     }
                 });
-            }
-
-            // Search functionality
-            function searchTable() {
-                const searchInput = document.getElementById('searchInput').value.toLowerCase();
-                const table = document.getElementById('donationsTable');
-                const rows = table.getElementsByTagName('tr');
-                const status = table.getAttribute('data-status');
-
-                // Skip header row (index 0)
-                for (let i = 1; i < rows.length; i++) {
-                    const row = rows[i];
-                    const cells = row.getElementsByTagName('td');
-                    let found = false;
-
-                    // Check if the row contains the search text
-                    for (let j = 0; j < cells.length - 1; j++) { // Skip the actions column
-                        const cellText = cells[j].textContent.toLowerCase();
-                        if (cellText.includes(searchInput)) {
-                            found = true;
-                            break;
-                        }
-                    }
-
-                    row.style.display = found ? '' : 'none';
-                }
-                
-                // Update the pagination info to reflect filtered results
-                updatePaginationInfo(searchInput);
-            }
-            
-            // Update pagination info based on search term
-            function updatePaginationInfo(searchTerm) {
-                // If there's a search term, hide pagination and show a message
-                const paginationElement = document.querySelector('nav[aria-label="Page navigation"]');
-                const paginationInfoElement = document.querySelector('.text-center.mt-2.mb-4');
-                const status = document.getElementById('donationsTable').getAttribute('data-status');
-                
-                if (searchTerm) {
-                    if (paginationElement) paginationElement.style.display = 'none';
-                    if (paginationInfoElement) {
-                        paginationInfoElement.innerHTML = '<p class="text-muted">Showing filtered results. <a href="dashboard-Inventory-System-list-of-donations.php?status=' + status + '">Clear filter</a></p>';
-                    }
-                } else {
-                    if (paginationElement) paginationElement.style.display = '';
-                    if (paginationInfoElement) {
-                        // Get data attributes from the table
-                        const table = document.getElementById('donationsTable');
-                        const startIndex = parseInt(table.getAttribute('data-start-index'), 10);
-                        const itemsPerPage = parseInt(table.getAttribute('data-items-per-page'), 10);
-                        const totalItems = parseInt(table.getAttribute('data-total-items'), 10);
-                        
-                        paginationInfoElement.innerHTML = '<p class="text-muted">Showing ' + 
-                            (Math.min(totalItems, startIndex + 1)) + ' to ' + 
-                            (Math.min(totalItems, startIndex + itemsPerPage)) + ' of ' + 
-                            totalItems + ' entries</p>';
-                    }
-                }
-            }
-
-            // Add event listener for real-time search
-            const searchInput = document.getElementById('searchInput');
-            if (searchInput) {
-                searchInput.addEventListener('keyup', searchTable);
             }
         });
     </script>

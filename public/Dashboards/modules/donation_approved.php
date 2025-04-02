@@ -35,7 +35,8 @@ try {
             error_log("Found " . count($physicalExamRecords) . " physical exam records with non-accepted remarks");
             
             foreach ($physicalExamRecords as $record) {
-                error_log("Physical exam record with remarks '" . $record['remarks'] . "' for donor_id: " . 
+                $remarks = isset($record['remarks']) ? $record['remarks'] : 'Unknown';
+                error_log("Physical exam record with remarks '" . $remarks . "' for donor_id: " . 
                     ($record['donor_id'] ?? 'null') . ", donor_form_id: " . ($record['donor_form_id'] ?? 'null'));
                 
                 // Add both donor_id and donor_form_id to exclusion list
@@ -160,6 +161,12 @@ try {
             
             $donor = $donorData[0];
             
+            // Make sure donor_id exists
+            if (!isset($donor['donor_id']) || empty($donor['donor_id'])) {
+                error_log("Donor data missing donor_id for record ID $donorId");
+                continue;
+            }
+            
             // Fetch screening data using donor_form_id
             $screeningCurl = curl_init();
             curl_setopt_array($screeningCurl, [
@@ -246,17 +253,17 @@ try {
                 
             // Combine all data
             $donation = [
-                'eligibility_id' => $eligibility['eligibility_id'],
-                'donor_id' => $donorId,
+                'eligibility_id' => $eligibility['eligibility_id'] ?? '',
+                'donor_id' => $donorId ?? '',
                 'surname' => $donor['surname'] ?? '',
                 'first_name' => $donor['first_name'] ?? '',
                 'middle_name' => $donor['middle_name'] ?? '',
                 'age' => $age ?: '0',
                 'sex' => $donor['sex'] ?? '',
-                'blood_type' => $bloodType,
-                'donation_type' => $donationType,
+                'blood_type' => $bloodType ?? '',
+                'donation_type' => $donationType ?? '',
                 'status' => 'Approved',
-                'date_submitted' => $createdAt
+                'date_submitted' => $createdAt ?? ''
             ];
             
             $approvedDonations[] = $donation;

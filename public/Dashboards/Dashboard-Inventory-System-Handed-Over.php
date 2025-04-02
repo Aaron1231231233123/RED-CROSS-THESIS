@@ -917,54 +917,149 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         const searchInput = document.getElementById('searchInput').value.toLowerCase();
         const searchCategory = document.getElementById('searchCategory').value;
         const table = document.querySelector('table');
-        const rows = table.getElementsByTagName('tr');
+        const rows = table.querySelectorAll('tbody tr');
+        
+        let visibleRows = 0;
+        let totalRows = 0;
+        
+        // Remove any existing "no results" message
+        const existingNoResults = document.getElementById('noResultsRow');
+        if (existingNoResults) {
+            existingNoResults.remove();
+        }
 
-        for (let i = 1; i < rows.length; i++) { // Start from 1 to skip header
+        for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
-            const cells = row.getElementsByTagName('td');
+            const cells = row.querySelectorAll('td');
+            
+            // Skip rows with no cells or "No requests found" message rows
+            if (cells.length <= 1 || row.querySelector('td[colspan]')) {
+                continue;
+            }
+            
+            totalRows++;
             let found = false;
 
-            // If no cells (like in "No requests found" row), skip
-            if (cells.length <= 1) continue;
-
             if (searchCategory === 'all') {
-                // Search all columns
-                for (let j = 0; j < cells.length; j++) {
-                    const cellText = cells[j].textContent.toLowerCase();
+                // Search all columns except actions
+                for (let j = 0; j < cells.length - 1; j++) {
+                    const cellText = cells[j]?.textContent.toLowerCase() || '';
                     if (cellText.includes(searchInput)) {
                         found = true;
                         break;
                     }
                 }
-            } else if (searchCategory === 'hospital') {
-                // Search hospital column (5)
-                const cellText = cells[5].textContent.toLowerCase();
-                found = cellText.includes(searchInput);
-            } else if (searchCategory === 'blood_type') {
-                // Search blood type column (2)
-                const cellText = cells[2].textContent.toLowerCase();
-                found = cellText.includes(searchInput);
-            } else if (searchCategory === 'date') {
-                // For date, we would need to display and search on a date column
-                // Since we don't have it visible in the table, we'll search all columns
-                for (let j = 0; j < cells.length; j++) {
-                    const cellText = cells[j].textContent.toLowerCase();
-                    if (cellText.includes(searchInput)) {
-                        found = true;
+            } else {
+                // Map category to column index based on the table structure
+                let columnIndex;
+                
+                switch(searchCategory) {
+                    case 'hospital':
+                        columnIndex = 5; // Hospital name column
                         break;
-                    }
+                    case 'blood_type':
+                        columnIndex = 2; // Blood type column
+                        break;
+                    case 'patient':
+                        columnIndex = 1; // Patient name column
+                        break;
+                    case 'doctor':
+                        columnIndex = 6; // Doctor column
+                        break;
+                    case 'date':
+                        // For dates, try to look for date patterns in multiple columns
+                        const dateRegex = /\d{1,2}\/\d{1,2}\/\d{2,4}|\d{1,2}-\d{1,2}-\d{2,4}|\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{2,4}/i;
+                        
+                        for (let j = 0; j < cells.length - 1; j++) {
+                            const cellText = cells[j]?.textContent.toLowerCase() || '';
+                            const dateMatches = cellText.match(dateRegex);
+                            
+                            if (dateMatches && dateMatches.some(date => date.toLowerCase().includes(searchInput))) {
+                                found = true;
+                                break;
+                            }
+                        }
+                        break;
+                    default:
+                        columnIndex = null;
+                }
+                
+                if (columnIndex !== null && cells[columnIndex]) {
+                    const cellText = cells[columnIndex].textContent.toLowerCase();
+                    found = cellText.includes(searchInput);
                 }
             }
 
-            row.style.display = found ? '' : 'none';
+            // Show or hide row based on search results
+            if (found) {
+                row.style.display = '';
+                visibleRows++;
+            } else {
+                row.style.display = 'none';
+            }
         }
+        
+        // If no results found and there was input, show a message
+        if (visibleRows === 0 && totalRows > 0) {
+            const tbody = table.querySelector('tbody');
+            const noResultsRow = document.createElement('tr');
+            noResultsRow.id = 'noResultsRow';
+            
+            // Get the number of columns from the header
+            const headerCells = table.querySelectorAll('thead th');
+            const colCount = headerCells.length || 10;
+            
+            noResultsRow.innerHTML = `
+                <td colspan="${colCount}" class="text-center">
+                    <div class="alert alert-info m-2">
+                        No matching requests found for "${searchInput}" in category "${searchCategory}"
+                        <button class="btn btn-outline-primary btn-sm ms-2" onclick="clearSearch()">
+                            Clear Search
+                        </button>
+                    </div>
+                </td>
+            `;
+            
+            tbody.appendChild(noResultsRow);
+        }
+        
+        // Update search results info
+        updateSearchInfo(visibleRows, totalRows);
+    }
+    
+    // Function to update search information
+    function updateSearchInfo(visibleCount, totalCount) {
+        const searchContainer = document.querySelector('.search-container');
+        let searchInfo = document.getElementById('searchInfo');
+        
+        if (!searchInfo) {
+            searchInfo = document.createElement('div');
+            searchInfo.id = 'searchInfo';
+            searchInfo.classList.add('text-muted', 'mt-2', 'small');
+            searchContainer.appendChild(searchInfo);
+        }
+        
+        const searchInputValue = document.getElementById('searchInput').value.trim();
+        if (searchInputValue === '') {
+            searchInfo.textContent = '';
+            return;
+        }
+        
+        searchInfo.textContent = `Showing ${visibleCount} of ${totalCount} entries`;
+    }
+    
+    // Function to clear search
+    function clearSearch() {
+        document.getElementById('searchInput').value = '';
+        document.getElementById('searchCategory').value = 'all';
+        searchTable();
     }
 
-    // Add event listener for real-time search
-    document.getElementById('searchInput').addEventListener('keyup', searchTable);
-    document.getElementById('searchCategory').addEventListener('change', searchTable);
-
     document.addEventListener('DOMContentLoaded', function() {
+        // Add event listeners for real-time search
+        document.getElementById('searchInput').addEventListener('keyup', searchTable);
+        document.getElementById('searchCategory').addEventListener('change', searchTable);
+        
         // Initialize modals
         const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
         const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
