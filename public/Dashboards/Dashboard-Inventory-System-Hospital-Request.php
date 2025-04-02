@@ -1293,6 +1293,40 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 });
             });
         }
+        
+        // Add event listener for the Confirm Acceptance button in the accept modal
+        if (confirmAcceptBtn) {
+            confirmAcceptBtn.addEventListener('click', function() {
+                // Create a form to submit via POST
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = 'Dashboard-Inventory-System-Hospital-Request.php';
+                
+                // Add request_id field
+                const requestIdInput = document.createElement('input');
+                requestIdInput.type = 'hidden';
+                requestIdInput.name = 'request_id';
+                requestIdInput.value = document.getElementById('accept-request-id').value;
+                form.appendChild(requestIdInput);
+                
+                // Add accept_request field
+                const acceptRequestInput = document.createElement('input');
+                acceptRequestInput.type = 'hidden';
+                acceptRequestInput.name = 'accept_request';
+                acceptRequestInput.value = '1';
+                form.appendChild(acceptRequestInput);
+                
+                // Hide the confirmation modal
+                acceptRequestModal.hide();
+                
+                // Show loading modal
+                loadingModal.show();
+                
+                // Append form to body, submit it, then remove it
+                document.body.appendChild(form);
+                form.submit();
+            });
+        }
     });
     </script>
 </body>
