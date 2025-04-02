@@ -374,12 +374,6 @@ error_log("Blood Received Count: " . $bloodReceivedCount);
 error_log("Blood In Stock Count: " . $bloodInStockCount);
 error_log("Blood By Type: " . json_encode($bloodByType));
 
-// Temporary debug output to verify blood inventory calculation
-echo "<!-- Debug Info:\n";
-echo "Blood Inventory Count: " . count($bloodInventory) . "\n";
-echo "Blood In Stock Count: " . $bloodInStockCount . "\n";
-echo "Blood Type Counts: " . json_encode($bloodByType) . "\n";
-echo "-->\n";
 ?>
 
 <!DOCTYPE html>
@@ -779,15 +773,16 @@ h6 {
 }
 
 .inventory-system-blood-title {
-    font-size: 1.1rem;
-    font-weight: 600;
+    font-size: 1.5rem;
+    font-weight: 700;
     color: #333;
     margin-bottom: 0.5rem;
 }
 
 .inventory-system-blood-availability {
-    font-size: 0.875rem;
-    color: #666;
+    font-size: 2rem;
+    font-weight: 600;
+    color: #333;
     margin-bottom: 0;
 }
 

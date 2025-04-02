@@ -616,8 +616,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </div>
                         
                         <?php if ($error): ?>
-                        <div class="alert alert-danger">
-                            Error loading data: <?php echo $error; ?>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>No pending donations found. New donor submissions will appear here.
                         </div>
                         <?php endif; ?>
 
