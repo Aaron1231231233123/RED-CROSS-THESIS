@@ -77,7 +77,7 @@ $bloodInventory = [];
 // Query eligibility table for valid blood units
 $eligibilityData = querySQL(
     'eligibility', 
-    'eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status',
+    'eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status,blood_collection_id',
     ['collection_successful' => 'eq.true']
 );
 
@@ -92,6 +92,13 @@ if (is_array($eligibilityData) && !empty($eligibilityData)) {
         $donorData = querySQL('donor_form', '*', ['donor_id' => 'eq.' . $item['donor_id']]);
         $donor = isset($donorData[0]) ? $donorData[0] : null;
         
+        // Get blood collection data to get amount_taken
+        $bloodCollectionData = null;
+        if (!empty($item['blood_collection_id'])) {
+            $bloodCollectionData = querySQL('blood_collection', '*', ['blood_collection_id' => 'eq.' . $item['blood_collection_id']]);
+            $bloodCollectionData = isset($bloodCollectionData[0]) ? $bloodCollectionData[0] : null;
+        }
+        
         // Calculate expiration date (42 days from collection)
         $collectionDate = new DateTime($item['collection_start_time']);
         $expirationDate = clone $collectionDate;
@@ -103,7 +110,7 @@ if (is_array($eligibilityData) && !empty($eligibilityData)) {
             'donor_id' => $item['donor_id'],
             'serial_number' => $item['unit_serial_number'],
             'blood_type' => $item['blood_type'],
-            'bags' => '1 Bag',
+            'bags' => $bloodCollectionData && isset($bloodCollectionData['amount_taken']) ? $bloodCollectionData['amount_taken'] : 'N/A',
             'bag_type' => $item['blood_bag_type'] ?: 'Standard',
             'collection_date' => $collectionDate->format('Y-m-d'),
             'expiration_date' => $expirationDate->format('Y-m-d'),
@@ -154,10 +161,10 @@ if (empty($bloodInventory)) {
         [
             'serial_number' => 'BC-20250330-0001',
             'blood_type' => 'AB+',
-            'bags' => '1 Bag',
+            'bags' => '999',
             'bag_type' => 'AMI',
             'collection_date' => '2025-03-30',
-            'expiration_date' => '2025-05-04',
+            'expiration_date' => '2025-05-11',
             'status' => 'Valid',
             'donor' => [
                 'surname' => 'Seeker',
@@ -172,10 +179,46 @@ if (empty($bloodInventory)) {
         [
             'serial_number' => 'BC-20250330-0002',
             'blood_type' => 'O+',
-            'bags' => '1 Bag',
+            'bags' => '500',
             'bag_type' => 'S',
             'collection_date' => '2025-03-30',
-            'expiration_date' => '2025-05-04',
+            'expiration_date' => '2025-05-11',
+            'status' => 'Valid',
+            'donor' => [
+                'surname' => 'Seeker',
+                'first_name' => 'Light',
+                'middle_name' => 'Devoid',
+                'birthdate' => '25/03/2000',
+                'age' => '25',
+                'sex' => 'Male',
+                'civil_status' => 'Single'
+            ]
+        ],
+        [
+            'serial_number' => 'BC-20250331-0002',
+            'blood_type' => 'A+',
+            'bags' => '12',
+            'bag_type' => 'D',
+            'collection_date' => '2025-03-31',
+            'expiration_date' => '2025-05-12',
+            'status' => 'Valid',
+            'donor' => [
+                'surname' => 'Seeker',
+                'first_name' => 'Light',
+                'middle_name' => 'Devoid',
+                'birthdate' => '25/03/2000',
+                'age' => '25',
+                'sex' => 'Male',
+                'civil_status' => 'Single'
+            ]
+        ],
+        [
+            'serial_number' => 'BC-20250331-0004',
+            'blood_type' => 'O-',
+            'bags' => '1',
+            'bag_type' => 'Q',
+            'collection_date' => '2025-03-31',
+            'expiration_date' => '2025-05-12',
             'status' => 'Valid',
             'donor' => [
                 'surname' => 'Seeker',
@@ -191,7 +234,7 @@ if (empty($bloodInventory)) {
 }
 
 // Calculate inventory statistics
-$totalBags = count($bloodInventory);
+$totalBags = 0; // Initialize to 0 instead of count
 $availableTypes = [];
 $expiringBags = 0;
 $expiredBags = 0;
@@ -200,6 +243,11 @@ $today = new DateTime();
 $expiryLimit = (new DateTime())->modify('+7 days');
 
 foreach ($bloodInventory as $bag) {
+    // Add to total bags (sum of amount_taken)
+    if (is_numeric($bag['bags'])) {
+        $totalBags += floatval($bag['bags']); // Sum the amount values
+    }
+    
     // Track unique blood types
     if (!in_array($bag['blood_type'], $availableTypes)) {
         $availableTypes[] = $bag['blood_type'];
@@ -829,7 +877,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <div class="card text-center p-3 h-100 inventory-stat-card">
                                 <div class="card-body">
                                     <h5 class="card-title text-dark fw-bold">Total Blood Units</h5>
-                                    <h1 class="inventory-stat-number my-3"><?php echo $totalBags; ?></h1>
+                                    <h1 class="inventory-stat-number my-3"><?php echo (int)$totalBags; ?></h1>
                                 </div>
                             </div>
                         </div>
@@ -874,7 +922,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: A+</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['A+'] ?? 0; ?></span>
+                                        <span class="fw-bold"><?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'A+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -885,7 +941,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: A-</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['A-'] ?? 0; ?></span>
+                                        <span class="fw-bold"><?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'A-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -896,7 +960,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: B+</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['B+'] ?? 0; ?></span>
+                                        <span class="fw-bold"><?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'B+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -907,7 +979,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: B-</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['B-'] ?? 0; ?></span>
+                                        <span class="fw-bold"><?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'B-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -918,7 +998,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: O+</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['O+'] ?? 0; ?></span>
+                                        <span class="fw-bold"><?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'O+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -929,7 +1017,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: O-</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['O-'] ?? 0; ?></span>
+                                        <span class="fw-bold"><?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'O-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -940,7 +1036,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: AB+</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['AB+'] ?? 0; ?></span>
+                                        <span class="fw-bold"><?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'AB+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -951,7 +1055,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: AB-</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo array_count_values(array_column($bloodInventory, 'blood_type'))['AB-'] ?? 0; ?></span>
+                                        <span class="fw-bold"><?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'AB-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -965,11 +1077,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <tr class="bg-danger text-white">
                                     <th>Serial Number</th>
                                     <th>Blood Type</th>
-                                    <th>Bags</th>
+                                    <th>Amount (ml)</th>
                                     <th>Bag Type</th>
                                     <th>Collection Date</th>
                                     <th>Expiration Date</th>
-                                    <th>Status</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -982,11 +1093,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     <td><?php echo $bag['bag_type']; ?></td>
                                     <td><?php echo $bag['collection_date']; ?></td>
                                     <td><?php echo $bag['expiration_date']; ?></td>
-                                    <td>
-                                        <span class="badge <?php echo ($bag['status'] == 'Valid') ? 'bg-success' : 'bg-danger'; ?>">
-                                            <?php echo $bag['status']; ?>
-                                        </span>
-                                    </td>
                                     <td class="text-center">
                                         <button class="btn btn-primary btn-sm" onclick="showDonorDetails(<?php echo $index; ?>)">
                                             <i class="fas fa-eye"></i>
@@ -1031,7 +1137,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             </div>
                             <div class="col-md-4">
                                 <div class="donor-details-form-group">
-                                    <label class="donor-details-form-label">Bags</label>
+                                    <label class="donor-details-form-label">Amount (ml)</label>
                                     <input type="text" class="donor-details-form-control" id="modal-bags" readonly>
                                 </div>
                             </div>
@@ -1047,12 +1153,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="donor-details-form-group">
                                     <label class="donor-details-form-label">Expiration Date</label>
                                     <input type="text" class="donor-details-form-control" id="modal-expiration-date" readonly>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="donor-details-form-group">
-                                    <label class="donor-details-form-label">Status</label>
-                                    <input type="text" class="donor-details-form-control" id="modal-status" readonly>
                                 </div>
                             </div>
                         </div>
@@ -1178,7 +1278,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             document.getElementById('modal-bags').value = bag.bags;
             document.getElementById('modal-collection-date').value = bag.collection_date;
             document.getElementById('modal-expiration-date').value = bag.expiration_date;
-            document.getElementById('modal-status').value = bag.status;
             
             // Donor Information
             document.getElementById('modal-surname').value = donor.surname;
