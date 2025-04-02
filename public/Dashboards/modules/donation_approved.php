@@ -11,13 +11,13 @@ $approvedDonations = [];
 $error = null;
 
 try {
-    // First, get all declined donors to exclude them
+    // First, get all donors with non-accepted remarks in physical examination
     $declinedDonorIds = [];
     
-    // Check physical examination for declined/deferred donors
-    $declinedCurl = curl_init();
-    curl_setopt_array($declinedCurl, [
-        CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?or=(remarks.eq.Temporarily%20Deferred,remarks.eq.Permanently%20Deferred,remarks.eq.Refused)&select=donor_id,donor_form_id",
+    // Query physical examination for non-accepted remarks
+    $physicalExamQuery = curl_init();
+    curl_setopt_array($physicalExamQuery, [
+        CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?remarks=neq.Accepted&select=donor_id,donor_form_id,remarks",
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
             "apikey: " . SUPABASE_API_KEY,
@@ -26,14 +26,19 @@ try {
         ],
     ]);
     
-    $declinedResponse = curl_exec($declinedCurl);
-    curl_close($declinedCurl);
+    $physicalExamResponse = curl_exec($physicalExamQuery);
+    curl_close($physicalExamQuery);
     
-    if ($declinedResponse) {
-        $declinedRecords = json_decode($declinedResponse, true);
-        if (is_array($declinedRecords)) {
-            foreach ($declinedRecords as $record) {
-                // Add both donor_id and donor_form_id to the exclusion list
+    if ($physicalExamResponse) {
+        $physicalExamRecords = json_decode($physicalExamResponse, true);
+        if (is_array($physicalExamRecords)) {
+            error_log("Found " . count($physicalExamRecords) . " physical exam records with non-accepted remarks");
+            
+            foreach ($physicalExamRecords as $record) {
+                error_log("Physical exam record with remarks '" . $record['remarks'] . "' for donor_id: " . 
+                    ($record['donor_id'] ?? 'null') . ", donor_form_id: " . ($record['donor_form_id'] ?? 'null'));
+                
+                // Add both donor_id and donor_form_id to exclusion list
                 if (!empty($record['donor_id'])) {
                     $declinedDonorIds[] = $record['donor_id'];
                 }
@@ -44,35 +49,9 @@ try {
         }
     }
     
-    // Also check eligibility table for all non-approved statuses
-    $declinedEligCurl = curl_init();
-    curl_setopt_array($declinedEligCurl, [
-        CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility?or=(status.neq.approved,disapproval_reason.not.is.null)&select=donor_id",
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => [
-            "apikey: " . SUPABASE_API_KEY,
-            "Authorization: Bearer " . SUPABASE_API_KEY,
-            "Content-Type: application/json"
-        ],
-    ]);
-    
-    $declinedEligResponse = curl_exec($declinedEligCurl);
-    curl_close($declinedEligCurl);
-    
-    if ($declinedEligResponse) {
-        $declinedEligRecords = json_decode($declinedEligResponse, true);
-        if (is_array($declinedEligRecords)) {
-            foreach ($declinedEligRecords as $record) {
-                if (!empty($record['donor_id'])) {
-                    $declinedDonorIds[] = $record['donor_id'];
-                }
-            }
-        }
-    }
-    
     // Remove duplicates
     $declinedDonorIds = array_unique($declinedDonorIds);
-    error_log("Found " . count($declinedDonorIds) . " declined donor IDs to exclude");
+    error_log("Found " . count($declinedDonorIds) . " unique donor IDs to exclude based on physical exam remarks");
     
     // Now fetch eligibility records with status 'approved'
     $curl = curl_init();
@@ -110,15 +89,15 @@ try {
         foreach ($eligibilityRecords as $eligibility) {
             $donorId = $eligibility['donor_id'];
             
-            // Skip this donor if they're in the declined list
+            // Skip this donor if they're in the excluded list
             if (in_array($donorId, $declinedDonorIds)) {
-                error_log("Skipping donor ID $donorId because they are in declined list");
+                error_log("Skipping donor ID $donorId because they have non-accepted physical exam remarks");
                 continue;
             }
             
-            // Double-check physical examination remarks for this specific donor
-            $remarksCurl = curl_init();
-            curl_setopt_array($remarksCurl, [
+            // For each eligibility record, check if there's a physical examination with non-accepted remarks
+            $physicalExamCheck = curl_init();
+            curl_setopt_array($physicalExamCheck, [
                 CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?donor_id=eq." . $donorId . "&select=remarks",
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_HTTPHEADER => [
@@ -128,17 +107,27 @@ try {
                 ],
             ]);
             
-            $remarksResponse = curl_exec($remarksCurl);
-            curl_close($remarksCurl);
+            $physicalExamCheckResponse = curl_exec($physicalExamCheck);
+            curl_close($physicalExamCheck);
             
-            $remarksData = json_decode($remarksResponse, true);
-            if (is_array($remarksData) && !empty($remarksData)) {
-                $remarks = $remarksData[0]['remarks'] ?? '';
-                // Skip if remarks indicate deferral or refusal
-                if (in_array($remarks, ['Temporarily Deferred', 'Permanently Deferred', 'Refused'])) {
-                    error_log("Skipping donor ID $donorId because physical exam remarks: $remarks");
-                    continue;
+            // Check if we have a physical exam record and if it has non-accepted remarks
+            $skipThisDonor = false;
+            if ($physicalExamCheckResponse) {
+                $physicalExamCheckRecords = json_decode($physicalExamCheckResponse, true);
+                if (is_array($physicalExamCheckRecords) && !empty($physicalExamCheckRecords)) {
+                    foreach ($physicalExamCheckRecords as $examRecord) {
+                        $remarks = $examRecord['remarks'] ?? '';
+                        if ($remarks !== 'Accepted' && !empty($remarks)) {
+                            error_log("Excluding donor ID $donorId due to physical exam remarks: $remarks");
+                            $skipThisDonor = true;
+                            break;
+                        }
+                    }
                 }
+            }
+            
+            if ($skipThisDonor) {
+                continue;
             }
             
             // Fetch donor data

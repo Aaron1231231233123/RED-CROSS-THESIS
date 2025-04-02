@@ -120,9 +120,82 @@ if (isset($bloodRequestsResponse['data']) && is_array($bloodRequestsResponse['da
 // ----------------------------------------------------
 // This represents the number of approved donations (donors from the approved dropdown)
 $bloodReceivedCount = 0;
-$approvedDonationsResponse = supabaseRequest("eligibility?status=eq.approved&select=eligibility_id");
+
+// First, get all donors with non-accepted remarks in physical examination
+$declinedDonorIdsForApproved = [];
+
+// Query physical examination for non-accepted remarks
+$physicalExamQueryApproved = curl_init();
+curl_setopt_array($physicalExamQueryApproved, [
+    CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?remarks=neq.Accepted&select=donor_id,donor_form_id",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        "apikey: " . SUPABASE_API_KEY,
+        "Authorization: Bearer " . SUPABASE_API_KEY,
+        "Content-Type: application/json"
+    ],
+]);
+
+$physicalExamResponseApproved = curl_exec($physicalExamQueryApproved);
+curl_close($physicalExamQueryApproved);
+
+if ($physicalExamResponseApproved) {
+    $physicalExamRecordsApproved = json_decode($physicalExamResponseApproved, true);
+    if (is_array($physicalExamRecordsApproved)) {
+        foreach ($physicalExamRecordsApproved as $record) {
+            if (!empty($record['donor_id'])) {
+                $declinedDonorIdsForApproved[] = $record['donor_id'];
+            }
+            if (!empty($record['donor_form_id'])) {
+                $declinedDonorIdsForApproved[] = $record['donor_form_id'];
+            }
+        }
+    }
+}
+
+// Remove duplicates
+$declinedDonorIdsForApproved = array_unique($declinedDonorIdsForApproved);
+
+// Now get approved eligibility records
+$approvedDonationsResponse = supabaseRequest("eligibility?status=eq.approved&select=eligibility_id,donor_id");
 if (isset($approvedDonationsResponse['data']) && is_array($approvedDonationsResponse['data'])) {
-    $bloodReceivedCount = count($approvedDonationsResponse['data']);
+    // Filter out donors with non-accepted physical examination remarks
+    foreach ($approvedDonationsResponse['data'] as $donation) {
+        if (!in_array($donation['donor_id'], $declinedDonorIdsForApproved)) {
+            // Double-check physical examination remarks for this donor
+            $physicalExamCheckApproved = curl_init();
+            curl_setopt_array($physicalExamCheckApproved, [
+                CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?donor_id=eq." . $donation['donor_id'] . "&select=remarks",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    "apikey: " . SUPABASE_API_KEY,
+                    "Authorization: Bearer " . SUPABASE_API_KEY,
+                    "Content-Type: application/json"
+                ],
+            ]);
+            
+            $physicalExamCheckResponseApproved = curl_exec($physicalExamCheckApproved);
+            curl_close($physicalExamCheckApproved);
+            
+            $skipDonorApproved = false;
+            if ($physicalExamCheckResponseApproved) {
+                $physicalExamCheckRecordsApproved = json_decode($physicalExamCheckResponseApproved, true);
+                if (is_array($physicalExamCheckRecordsApproved) && !empty($physicalExamCheckRecordsApproved)) {
+                    foreach ($physicalExamCheckRecordsApproved as $examRecord) {
+                        $remarks = $examRecord['remarks'] ?? '';
+                        if ($remarks !== 'Accepted' && !empty($remarks)) {
+                            $skipDonorApproved = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (!$skipDonorApproved) {
+                $bloodReceivedCount++;
+            }
+        }
+    }
 }
 
 // ----------------------------------------------------
@@ -135,6 +208,42 @@ $today = date('Y-m-d');
 // Fetch blood inventory data from eligibility table
 $bloodInventory = [];
 
+// First, get all donors with non-accepted remarks in physical examination
+$declinedDonorIds = [];
+
+// Query physical examination for non-accepted remarks (anything that's not "Accepted")
+$physicalExamQuery = curl_init();
+curl_setopt_array($physicalExamQuery, [
+    CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?remarks=neq.Accepted&select=donor_id,donor_form_id,remarks",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        "apikey: " . SUPABASE_API_KEY,
+        "Authorization: Bearer " . SUPABASE_API_KEY,
+        "Content-Type: application/json"
+    ],
+]);
+
+$physicalExamResponse = curl_exec($physicalExamQuery);
+curl_close($physicalExamQuery);
+
+if ($physicalExamResponse) {
+    $physicalExamRecords = json_decode($physicalExamResponse, true);
+    if (is_array($physicalExamRecords)) {
+        foreach ($physicalExamRecords as $record) {
+            // Add both donor_id and donor_form_id to exclusion list for comprehensive matching
+            if (!empty($record['donor_id'])) {
+                $declinedDonorIds[] = $record['donor_id'];
+            }
+            if (!empty($record['donor_form_id'])) {
+                $declinedDonorIds[] = $record['donor_form_id'];
+            }
+        }
+    }
+}
+
+// Remove duplicates
+$declinedDonorIds = array_unique($declinedDonorIds);
+
 // Query eligibility table for valid blood units
 $eligibilityData = querySQL(
     'eligibility', 
@@ -144,8 +253,42 @@ $eligibilityData = querySQL(
 
 if (is_array($eligibilityData) && !empty($eligibilityData)) {
     foreach ($eligibilityData as $item) {
-        // Skip if no serial number
-        if (empty($item['unit_serial_number'])) {
+        // Skip if no serial number or if donor is in declined list
+        if (empty($item['unit_serial_number']) || in_array($item['donor_id'], $declinedDonorIds)) {
+            continue;
+        }
+        
+        // Double-check physical examination remarks for this specific donor
+        $physicalExamCheck = curl_init();
+        curl_setopt_array($physicalExamCheck, [
+            CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?donor_id=eq." . $item['donor_id'] . "&select=remarks",
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                "apikey: " . SUPABASE_API_KEY,
+                "Authorization: Bearer " . SUPABASE_API_KEY,
+                "Content-Type: application/json"
+            ],
+        ]);
+        
+        $physicalExamCheckResponse = curl_exec($physicalExamCheck);
+        curl_close($physicalExamCheck);
+        
+        // Skip this donor if they have non-accepted remarks
+        $skipDonor = false;
+        if ($physicalExamCheckResponse) {
+            $physicalExamCheckRecords = json_decode($physicalExamCheckResponse, true);
+            if (is_array($physicalExamCheckRecords) && !empty($physicalExamCheckRecords)) {
+                foreach ($physicalExamCheckRecords as $examRecord) {
+                    $remarks = $examRecord['remarks'] ?? '';
+                    if ($remarks !== 'Accepted' && !empty($remarks)) {
+                        $skipDonor = true;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if ($skipDonor) {
             continue;
         }
         
