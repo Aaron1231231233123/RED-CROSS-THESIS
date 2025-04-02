@@ -45,10 +45,82 @@ function fetchDonorInfo($donorId) {
     }
 }
 
+// Function to fetch physical examination data (for declined donors)
+function fetchPhysicalExamData($physicalExamId) {
+    error_log("Fetching physical exam data for ID: $physicalExamId");
+    $curl = curl_init();
+    
+    curl_setopt_array($curl, [
+        CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?physical_exam_id=eq." . $physicalExamId,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            "apikey: " . SUPABASE_API_KEY,
+            "Authorization: Bearer " . SUPABASE_API_KEY,
+            "Content-Type: application/json"
+        ],
+    ]);
+    
+    $response = curl_exec($curl);
+    $err = curl_error($curl);
+    
+    curl_close($curl);
+    
+    if ($err) {
+        error_log("cURL Error fetching physical exam data: " . $err);
+        return null;
+    } else {
+        $data = json_decode($response, true);
+        if (empty($data)) {
+            error_log("No physical exam data found for ID: $physicalExamId");
+            return null;
+        }
+        error_log("Successfully retrieved physical exam data for ID: $physicalExamId");
+        return $data[0];
+    }
+}
+
+// Function to fetch screening data by donor ID
+function fetchScreeningDataByDonorId($donorId) {
+    error_log("Fetching screening data for donor_id: $donorId");
+    $curl = curl_init();
+    
+    curl_setopt_array($curl, [
+        CURLOPT_URL => SUPABASE_URL . "/rest/v1/screening_form?donor_form_id=eq." . $donorId . "&order=created_at.desc&limit=1",
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            "apikey: " . SUPABASE_API_KEY,
+            "Authorization: Bearer " . SUPABASE_API_KEY,
+            "Content-Type: application/json"
+        ],
+    ]);
+    
+    $response = curl_exec($curl);
+    $err = curl_error($curl);
+    
+    curl_close($curl);
+    
+    if ($err) {
+        error_log("cURL Error fetching screening data by donor ID: " . $err);
+        return null;
+    } else {
+        $data = json_decode($response, true);
+        if (empty($data)) {
+            error_log("No screening data found for donor ID: $donorId");
+            return null;
+        }
+        error_log("Successfully retrieved screening data for donor ID: $donorId");
+        return $data[0];
+    }
+}
+
 // Function to fetch eligibility record
 function fetchEligibilityRecord($eligibilityId) {
+    global $donor_id;
+    error_log("Processing eligibility record: $eligibilityId");
+
     // If eligibility_id starts with "pending_", this is a pending donor without an eligibility record
     if ($eligibilityId && strpos($eligibilityId, 'pending_') === 0) {
+        error_log("Handling pending eligibility record");
         return [
             'eligibility_id' => $eligibilityId,
             'status' => 'pending',
@@ -60,7 +132,77 @@ function fetchEligibilityRecord($eligibilityId) {
         ];
     }
     
+    // If eligibility_id starts with "declined_", this is a declined donor from physical examination
+    if ($eligibilityId && strpos($eligibilityId, 'declined_') === 0) {
+        error_log("Handling declined eligibility record");
+        
+        // Extract the physical exam ID from the format "declined_[physical_exam_id]"
+        $physicalExamId = substr($eligibilityId, strlen('declined_'));
+        error_log("Extracted physical exam ID: $physicalExamId");
+        
+        $bloodType = "Unknown";
+        $donationType = "Unknown";
+        
+        // First try to get the physical exam record to get more details
+        if (is_numeric($physicalExamId)) {
+            $physicalExamData = fetchPhysicalExamData($physicalExamId);
+            
+            // If we have physical exam data, extract what we can
+            if ($physicalExamData) {
+                error_log("Found physical exam data for ID: $physicalExamId");
+                $remarks = $physicalExamData['remarks'] ?? '';
+                $disapprovalReason = $physicalExamData['disapproval_reason'] ?? '';
+                
+                // Some physical exam records might have blood type or donation type
+                if (!empty($physicalExamData['blood_type'])) {
+                    $bloodType = $physicalExamData['blood_type'];
+                    error_log("Found blood type from physical exam: $bloodType");
+                }
+                
+                if (!empty($physicalExamData['donation_type'])) {
+                    $donationType = $physicalExamData['donation_type'];
+                    error_log("Found donation type from physical exam: $donationType");
+                }
+            }
+        }
+        
+        // If we still don't have blood type or donation type, try looking in the screening form
+        if ($bloodType === "Unknown" || $donationType === "Unknown") {
+            $screeningData = fetchScreeningDataByDonorId($donor_id);
+            
+            if ($screeningData) {
+                error_log("Found screening data for donor ID: $donor_id");
+                
+                if (!empty($screeningData['blood_type']) && $bloodType === "Unknown") {
+                    $bloodType = $screeningData['blood_type'];
+                    error_log("Found blood type from screening: $bloodType");
+                }
+                
+                if (!empty($screeningData['donation_type']) && $donationType === "Unknown") {
+                    $donationType = $screeningData['donation_type'];
+                    error_log("Found donation type from screening: $donationType");
+                }
+            }
+        }
+        
+        // Return the declined eligibility record with all available information
+        error_log("Returning declined eligibility record with blood_type: $bloodType, donation_type: $donationType");
+        return [
+            'eligibility_id' => $eligibilityId,
+            'status' => 'declined',
+            'blood_type' => $bloodType,
+            'donation_type' => $donationType,
+            'start_date' => date('Y-m-d'),
+            'end_date' => null,
+            'blood_bag_type' => 'Not applicable',
+            'amount_collected' => 'Not applicable',
+            'donor_reaction' => 'Not applicable',
+            'management_done' => 'Not applicable'
+        ];
+    }
+    
     // Otherwise, fetch from the eligibility table
+    error_log("Fetching from eligibility table for ID: $eligibilityId");
     $curl = curl_init();
     
     curl_setopt_array($curl, [
@@ -151,28 +293,42 @@ function fetchScreeningData($screeningId) {
     }
 }
 
-// Fetch data
-$donorInfo = fetchDonorInfo($donor_id);
+try {
+    // Fetch data
+    $donorInfo = fetchDonorInfo($donor_id);
+    
+    if (!$donorInfo) {
+        error_log("No donor information found for ID: $donor_id");
+        echo json_encode(['error' => 'Donor information not found']);
+        exit;
+    }
+    
+    // Calculate age if birthdate is available
+    if (!empty($donorInfo['birthdate'])) {
+        $birthdate = new DateTime($donorInfo['birthdate']);
+        $today = new DateTime();
+        $donorInfo['age'] = $birthdate->diff($today)->y;
+    } else {
+        $donorInfo['age'] = 'N/A';
+    }
+    
+    // Fetch eligibility info
+    error_log("Fetching eligibility record with ID: $eligibility_id");
+    $eligibilityInfo = fetchEligibilityRecord($eligibility_id);
+    
+    if (isset($eligibilityInfo['error'])) {
+        error_log("Error fetching eligibility: " . $eligibilityInfo['error']);
+    } else {
+        error_log("Successfully fetched eligibility record: " . json_encode(['status' => $eligibilityInfo['status'] ?? 'unknown']));
+    }
+    
+    // Return data as JSON
+    echo json_encode([
+        'donor' => $donorInfo,
+        'eligibility' => $eligibilityInfo
+    ]);
 
-if (!$donorInfo) {
-    echo json_encode(['error' => 'Donor information not found']);
-    exit;
-}
-
-// Calculate age if birthdate is available
-if (!empty($donorInfo['birthdate'])) {
-    $birthdate = new DateTime($donorInfo['birthdate']);
-    $today = new DateTime();
-    $donorInfo['age'] = $birthdate->diff($today)->y;
-} else {
-    $donorInfo['age'] = 'N/A';
-}
-
-// Fetch eligibility info
-$eligibilityInfo = fetchEligibilityRecord($eligibility_id);
-
-// Return data as JSON
-echo json_encode([
-    'donor' => $donorInfo,
-    'eligibility' => $eligibilityInfo
-]); 
+} catch (Exception $e) {
+    error_log("Error in donor_details_api.php: " . $e->getMessage());
+    echo json_encode(['error' => 'An error occurred while processing your request: ' . $e->getMessage()]);
+} 

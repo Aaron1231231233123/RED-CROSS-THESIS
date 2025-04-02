@@ -810,9 +810,9 @@ h6 {
         <div class="dashboard-home-header bg-light p-3 border-bottom">
             <div class="d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Blood Donor Management System</h4>
-                <button class="btn btn-danger" onclick="showConfirmationModal()">
+                <a href="../../src/views/forms/donor-form.php" class="btn btn-danger">
                     <i class="fas fa-plus me-2"></i>Add Walk-in Donor
-                </button>
+                </a>
             </div>
         </div>
 
@@ -989,91 +989,17 @@ h6 {
         </div>
     </div>
 
-    <!-- Confirmation Modal -->
-    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header bg-dark text-white">
-                    <h5 class="modal-title" id="confirmationModalLabel">Confirm Action</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to proceed to the donor form?</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" onclick="proceedToDonorForm()">Proceed</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Loading Modal -->
-    <div class="modal" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="false" data-bs-keyboard="false">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content" style="background: transparent; border: none; box-shadow: none;">
-                <div class="modal-body text-center">
-                    <div class="spinner-border text-danger" style="width: 3rem; height: 3rem;" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Initialize modals and add button functionality
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize modals
-            const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
             const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
                 backdrop: false,
                 keyboard: false
             });
-
-            // Function to show confirmation modal
-            window.showConfirmationModal = function() {
-                confirmationModal.show();
-            };
-
-            // Function to handle form submission
-            window.proceedToDonorForm = function() {
-                confirmationModal.hide();
-                loadingModal.show();
-                
-                setTimeout(() => {
-                    window.location.href = '../../src/views/forms/donor-form.php';
-                }, 1500);
-            };
         });
     </script>
-        <!-- 🔗 PHP Integration Guide -->
-        <!--
-        1 Remove the JavaScript static data in bloodAvailabilityData[].
-        2 Connect your PHP backend to fetch blood stock levels from the database.
-        3 Use PHP to echo the data inside the <div id="blood-availability">.
-    
-        Example PHP Code:
-        ---------------------------------
-        <?php
-            include '../src/config/database/php'; // Your database connection file
-            $result = mysqli_query($conn, "SELECT blood_type, stock_level FROM blood_inventory");
-            while ($row = mysqli_fetch_assoc($result)) {
-                echo '<div class="col">
-                          <div class="card p-3 shadow-sm">
-                              <h5>🩸 Blood Type: ' . $row['blood_type'] . '</h5>
-                              <p>Availability: <span>' . $row['stock_level'] . '%</span></p>
-                              <div class="progress" style="height: 10px;">
-                                  <div class="progress-bar bg-success" role="progressbar" style="width: ' . $row['stock_level'] . '%" aria-valuenow="' . $row['stock_level'] . '" aria-valuemin="0" aria-valuemax="100"></div>
-                              </div>
-                          </div>
-                      </div>';
-            }
-        ?>
-        ---------------------------------
-        4️⃣ Insert this PHP snippet inside the <div id="blood-availability"> to replace JS-generated cards.
-        -->
 </body>
 </html>

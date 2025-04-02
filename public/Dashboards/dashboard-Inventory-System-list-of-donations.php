@@ -500,26 +500,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         </div>
     </div>
 
-    <!-- View Donor Confirmation Modal -->
-    <div class="modal fade" id="viewDonorConfirmationModal" tabindex="-1" aria-labelledby="viewDonorConfirmationModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header bg-dark text-white">
-                    <h5 class="modal-title">Donor Details</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Would you like to view this donor's details or process this donor now?</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-info" id="viewDonorDetailsBtn">View Details</button>
-                    <button type="button" class="btn btn-primary" id="processDonorBtn">Process Donor</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
     <!-- Process Donor Confirmation Modal -->
     <div class="modal fade" id="processDonorConfirmationModal" tabindex="-1" aria-labelledby="processDonorConfirmationModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -706,12 +686,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                 <?php endif; ?>
                                                 
                                                 <td onclick="event.stopPropagation();">
-                                                    <button class="btn btn-sm btn-info view-donor" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>" data-bs-toggle="modal" data-bs-target="#viewDonorConfirmationModal">
+                                                    <button class="btn btn-sm btn-info view-donor" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>">
                                                         <i class="fas fa-eye"></i>
                                                     </button>
+                                                    <?php if ($status !== 'declined' && $status !== 'approved'): ?>
                                                     <button class="btn btn-sm btn-warning edit-donor" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>" data-bs-toggle="modal" data-bs-target="#editDonorForm">
                                                         <i class="fas fa-edit"></i>
                                                     </button>
+                                                    <?php endif; ?>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
@@ -926,7 +908,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     if (found) {
                         row.style.display = '';
                         visibleCount++;
-                    } else {
+            } else {
                         row.style.display = 'none';
                     }
                 });
@@ -997,7 +979,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 let shouldShow = false;
                 if (searchInput.trim() === '') {
                     shouldShow = true;
-                } else {
+            } else {
                     const cells = row.querySelectorAll('td');
                     if (cells.length === 0) return;
                     
@@ -1079,104 +1061,90 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             document.getElementById('searchCategory').addEventListener('change', searchTable);
             
             // Initialize modals
-            let confirmationModal = null;
-            let loadingModal = null;
-            let viewDonorConfirmationModal = null;
-            let processDonorConfirmationModal = null;
-            let donorModal = null;
+            const donorModal = new bootstrap.Modal(document.getElementById('donorModal'));
+            const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
+                backdrop: false,
+                keyboard: false
+            });
+            const processDonorConfirmationModal = new bootstrap.Modal(document.getElementById('processDonorConfirmationModal'));
+            const editDonorFormModal = new bootstrap.Modal(document.getElementById('editDonorForm'));
             
-            // Get modal elements
-            const confirmationModalEl = document.getElementById('confirmationModal');
-            const loadingModalEl = document.getElementById('loadingModal');
-            const viewDonorConfirmationModalEl = document.getElementById('viewDonorConfirmationModal');
-            const processDonorConfirmationModalEl = document.getElementById('processDonorConfirmationModal');
-            const donorModalEl = document.getElementById('donorModal');
-            
-            if (confirmationModalEl && loadingModalEl && viewDonorConfirmationModalEl && processDonorConfirmationModalEl && donorModalEl) {
-                console.log('Modal elements found, initializing Bootstrap modals...');
-                confirmationModal = new bootstrap.Modal(confirmationModalEl);
-                loadingModal = new bootstrap.Modal(loadingModalEl);
-                viewDonorConfirmationModal = new bootstrap.Modal(viewDonorConfirmationModalEl);
-                processDonorConfirmationModal = new bootstrap.Modal(processDonorConfirmationModalEl);
-                donorModal = new bootstrap.Modal(donorModalEl);
-            } else {
-                console.error('Some modal elements not found');
-            }
-            
-            // Get button elements
-            const addWalkInBtn = document.getElementById('addWalkInBtn');
-            const proceedBtn = document.getElementById('proceedBtn');
-            const viewDonorDetailsBtn = document.getElementById('viewDonorDetailsBtn');
-            const processDonorBtn = document.getElementById('processDonorBtn');
-            const confirmProcessDonorBtn = document.getElementById('confirmProcessDonorBtn');
-            
-            // Variables to store current donor info
+            // Global variables for tracking current donor
             let currentDonorId = null;
             let currentEligibilityId = null;
             
-            // Add Walk-in button click handler
-            if (addWalkInBtn) {
-                console.log('Add Walk-in button found, adding click handler...');
-                addWalkInBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    if (confirmationModal) {
-                        confirmationModal.show();
-                    }
-                });
-            } else {
-                console.error('Add Walk-in button not found');
-            }
+            // Initialize the search functionality
+            searchDonations();
             
-            // Proceed button click handler
-            if (proceedBtn) {
-                console.log('Proceed button found, adding click handler...');
-                proceedBtn.addEventListener('click', function() {
-                    if (confirmationModal && loadingModal) {
-                        confirmationModal.hide();
+            // Add Walk-in Donor button click handler (if it exists)
+            const addWalkInBtn = document.getElementById('addWalkInBtn');
+            if (addWalkInBtn) {
+                addWalkInBtn.addEventListener('click', function() {
                         loadingModal.show();
+                    
                         setTimeout(() => {
                             window.location.href = '../../src/views/forms/donor-form.php';
-                        }, 1500);
-                    }
+                    }, 500);
                 });
-            } else {
-                console.error('Proceed button not found');
             }
             
-            // Make rows clickable
+            // Event listeners for view and edit buttons
             document.querySelectorAll('.donor-row').forEach(row => {
                 row.addEventListener('click', function() {
-                    currentDonorId = this.getAttribute('data-donor-id');
-                    currentEligibilityId = this.getAttribute('data-eligibility-id');
+                    const donorId = this.getAttribute('data-donor-id');
+                    const eligibilityId = this.getAttribute('data-eligibility-id');
                     
-                    if (viewDonorConfirmationModal) {
-                        viewDonorConfirmationModal.show();
-                    }
+                    fetchDonorDetails(donorId, eligibilityId);
+                    
+                    // Show donor details modal
+                    new bootstrap.Modal(document.getElementById('donorModal')).show();
                 });
             });
             
-            // View donor details button click handler
-            if (viewDonorDetailsBtn) {
-                viewDonorDetailsBtn.addEventListener('click', function() {
-                    if (viewDonorConfirmationModal && donorModal && currentDonorId && currentEligibilityId) {
-                        viewDonorConfirmationModal.hide();
-                        fetchDonorDetails(currentDonorId, currentEligibilityId);
-                        donorModal.show();
-                    }
+            // When clicking the eye icon in the table
+            document.querySelectorAll('.view-donor').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.stopPropagation(); // Prevent row click
+                    const donorId = this.getAttribute('data-donor-id');
+                    const eligibilityId = this.getAttribute('data-eligibility-id');
+                    
+                    fetchDonorDetails(donorId, eligibilityId);
+                    
+                    // Show donor details modal
+                    new bootstrap.Modal(document.getElementById('donorModal')).show();
                 });
-            }
+            });
+            
+            // When clicking the edit icon in the table, but only for pending donors
+            document.querySelectorAll('.edit-donor').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.stopPropagation(); // Prevent row click
+                    const donorId = this.getAttribute('data-donor-id');
+                    const eligibilityId = this.getAttribute('data-eligibility-id');
+                    const status = document.getElementById('donationsTable').getAttribute('data-status');
+                    
+                    // Skip if this is a declined or approved donor
+                    if (status === 'declined' || status === 'approved') {
+                        e.preventDefault();
+                        return false;
+                    }
+                    
+                    loadEditForm(donorId, eligibilityId);
+                });
+            });
             
             // Process donor button click handler
+            const processDonorBtn = document.getElementById('processDonorBtn');
             if (processDonorBtn) {
                 processDonorBtn.addEventListener('click', function() {
-                    if (viewDonorConfirmationModal && processDonorConfirmationModal) {
-                        viewDonorConfirmationModal.hide();
+                    if (processDonorConfirmationModal) {
                         processDonorConfirmationModal.show();
                     }
                 });
             }
             
             // Confirm process donor button click handler
+            const confirmProcessDonorBtn = document.getElementById('confirmProcessDonorBtn');
             if (confirmProcessDonorBtn) {
                 confirmProcessDonorBtn.addEventListener('click', function() {
                     if (!currentDonorId) {
@@ -1223,18 +1191,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     });
                 });
             }
-
-            // View donor buttons (eye icon) click handler
-            document.querySelectorAll('.view-donor').forEach(button => {
-                button.addEventListener('click', function(e) {
-                    e.stopPropagation(); // Prevent row click
-                    currentDonorId = this.getAttribute('data-donor-id');
-                    currentEligibilityId = this.getAttribute('data-eligibility-id');
-                });
-            });
-            
-            // NOTE: The View/Edit Donor Form and Process This Donor button handlers are now
-            // added directly in the fetchDonorDetails function when the buttons are created
         });
 
         // Function to fetch donor details
@@ -1292,12 +1248,29 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     </div>
                     
                     <div class="d-flex justify-content-center gap-3 mt-4">
+                        ${eligibility.status === 'pending' ? `
                         <button type="button" class="btn btn-primary" id="processThisDonorBtn" data-donor-id="${donor.donor_id}">
                             <i class="fas fa-list-check me-2"></i> Process This Donor
                         </button>
                         <button type="button" class="btn btn-success" id="viewEditDonorFormBtn" data-donor-id="${donor.donor_id}">
                             <i class="fas fa-edit me-2"></i> View/Edit Donor Form
                         </button>
+                        ` : eligibility.status === 'declined' ? `
+                        <button type="button" class="btn btn-secondary" disabled>
+                            <i class="fas fa-info-circle me-2"></i> Donor is Declined
+                        </button>
+                        ` : eligibility.status === 'approved' ? `
+                        <button type="button" class="btn btn-primary" id="processThisDonorBtn" data-donor-id="${donor.donor_id}">
+                            <i class="fas fa-list-check me-2"></i> Process This Donor
+                        </button>
+                        ` : `
+                        <button type="button" class="btn btn-primary" id="processThisDonorBtn" data-donor-id="${donor.donor_id}">
+                            <i class="fas fa-list-check me-2"></i> Process This Donor
+                        </button>
+                        <button type="button" class="btn btn-success" id="viewEditDonorFormBtn" data-donor-id="${donor.donor_id}">
+                            <i class="fas fa-edit me-2"></i> View/Edit Donor Form
+                        </button>
+                        `}
                     </div>`;
                     
                     donorDetailsContainer.innerHTML = html;
@@ -1325,6 +1298,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     donorDetailsContainer.appendChild(styleElement);
                     
                     // Add click handlers for the newly created buttons
+                    if (eligibility.status !== 'declined' && eligibility.status !== 'approved') {
+                        // Only add event listeners for buttons that exist for eligible donors
                     document.getElementById('processThisDonorBtn').addEventListener('click', function() {
                         const donorId = this.getAttribute('data-donor-id');
                         
@@ -1395,6 +1370,30 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             loadingModal.hide();
                         });
                     });
+                    } else if (eligibility.status === 'approved') {
+                        // For approved donors, only add event listener for process button
+                        document.getElementById('processThisDonorBtn').addEventListener('click', function() {
+                            const donorId = this.getAttribute('data-donor-id');
+                            
+                            if (!donorId) {
+                                console.error('No donor ID found for process button');
+                                alert('Error: Donor ID not found. Please try again.');
+                                return;
+                            }
+                            
+                            console.log('Processing donor ID:', donorId);
+                            
+                            // Update current donor ID for the process modal
+                            currentDonorId = donorId;
+                            
+                            // Close donor details modal and show process confirmation modal
+                            const donorModal = bootstrap.Modal.getInstance(document.getElementById('donorModal'));
+                            const processDonorConfirmationModal = new bootstrap.Modal(document.getElementById('processDonorConfirmationModal'));
+                            
+                            if (donorModal) donorModal.hide();
+                            if (processDonorConfirmationModal) processDonorConfirmationModal.show();
+                        });
+                    }
                 })
                 .catch(error => {
                     console.error('Error fetching donor details:', error);

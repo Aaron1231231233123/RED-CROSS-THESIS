@@ -1,20 +1,166 @@
 <?php
 session_start();
-// Supabase Configuration
-define("SUPABASE_URL", "https://nwakbxwglhxcpunrzstf.supabase.co");
-define("SUPABASE_API_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53YWtieHdnbGh4Y3B1bnJ6c3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIyODA1NzIsImV4cCI6MjA1Nzg1NjU3Mn0.y4CIbDT2UQf2ieJTQukuJRRzspSZPehSgNKivBwpvc4");
+
+// Initialize error variable
+$errorMessage = '';
+
+// Include database connection from assets
+try {
+    include_once '../../../assets/conn/db_conn.php';
+    
+    // Make the constants available as global variables for use in cURL requests
+    $SUPABASE_URL = SUPABASE_URL;
+    $SUPABASE_API_KEY = SUPABASE_API_KEY;
+    
+    // Check if Supabase connection variables are defined
+    if (empty($SUPABASE_URL) || empty($SUPABASE_API_KEY)) {
+        throw new Exception("Database connection parameters are not properly defined");
+    }
+} catch (Exception $e) {
+    $errorMessage = "Database connection error: " . $e->getMessage();
+    error_log("DB Connection Error: " . $e->getMessage());
+}
+
+// Initialize variables to store donor data
+$donorData = null;
+$editMode = false;
+
+// Check if donor ID is provided in URL or session
+if (isset($_GET['donor_id']) || isset($_SESSION['donor_id'])) {
+    // We're in edit mode
+    $editMode = true;
+    $donor_id = isset($_GET['donor_id']) ? $_GET['donor_id'] : $_SESSION['donor_id'];
+    
+    // Logging attempt to fetch donor data
+    error_log("Attempting to fetch donor data for ID: $donor_id");
+    
+    try {
+        // Fetch donor data from Supabase using the correct donor_form table
+        $ch = curl_init("$SUPABASE_URL/rest/v1/donor_form?donor_id=eq.$donor_id");
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . $SUPABASE_API_KEY,
+            'Authorization: Bearer ' . $SUPABASE_API_KEY
+        ]);
+        
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($httpCode >= 200 && $httpCode < 300) {
+            $donors = json_decode($response, true);
+            if (!empty($donors)) {
+                $donorData = $donors[0];
+                error_log("Successfully fetched donor data: " . json_encode($donorData));
+            } else {
+                error_log("No donor found with ID: $donor_id");
+            }
+        } else {
+            error_log("Error fetching donor data: HTTP $httpCode - $response");
+        }
+    } catch (Exception $e) {
+        error_log("Exception fetching donor data: " . $e->getMessage());
+    }
+}
 
 // Check if form is submitted
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Store form data in session
-    $_SESSION['donor_data'] = $_POST;
-    // Redirect to the signature page
-    header("Location: donor-declaration.php");
-    exit();
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Collect all form data
+    $formData = [
+        'surname' => $_POST['surname'] ?? '',
+        'first_name' => $_POST['first_name'] ?? '',
+        'middle_name' => $_POST['middle_name'] ?? '',
+        'birthdate' => $_POST['birthdate'] ?? '',
+        'age' => $_POST['age'] ?? '',
+        'sex' => $_POST['sex'] ?? '',
+        'civil_status' => $_POST['civil_status'] ?? '',
+        'permanent_address' => $_POST['permanent_address'] ?? '',
+        'office_address' => $_POST['office_address'] ?? '',
+        'nationality' => $_POST['nationality'] ?? '',
+        'religion' => $_POST['religion'] ?? '',
+        'education' => $_POST['education'] ?? '',
+        'occupation' => $_POST['occupation'] ?? '',
+        'telephone' => $_POST['telephone'] ?? '',
+        'mobile' => $_POST['mobile'] ?? '',
+        'email' => $_POST['email'] ?? '',
+        'id_school' => $_POST['id_school'] ?? '',
+        'id_company' => $_POST['id_company'] ?? '',
+        'id_prc' => $_POST['id_prc'] ?? '',
+        'id_drivers' => $_POST['id_drivers'] ?? '',
+        'id_sss_gsis_bir' => $_POST['id_sss_gsis_bir'] ?? '',
+        'id_others' => $_POST['id_others'] ?? '',
+    ];
+
+    // Check if we're updating an existing donor
+    if (isset($_POST['donor_id']) && !empty($_POST['donor_id'])) {
+        // Update existing donor
+        $donor_id = $_POST['donor_id'];
+        $formData['donor_id'] = $donor_id;
+        
+        // Retain the existing PRC donor number and DOH barcode
+        if (!empty($_POST['prc_donor_number'])) {
+            $formData['prc_donor_number'] = $_POST['prc_donor_number'];
+        }
+        if (!empty($_POST['doh_nnbnets_barcode'])) {
+            $formData['doh_nnbnets_barcode'] = $_POST['doh_nnbnets_barcode'];
+        }
+        
+        // Log update attempt
+        error_log("Updating donor with ID: $donor_id");
+        
+        try {
+            // Update donor record in the database
+            $ch = curl_init("$SUPABASE_URL/rest/v1/donor_form?donor_id=eq.$donor_id");
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($formData));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . $SUPABASE_API_KEY,
+                'Authorization: Bearer ' . $SUPABASE_API_KEY,
+                'Content-Type: application/json',
+                'Prefer: return=minimal'
+            ]);
+            
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($httpCode >= 200 && $httpCode < 300) {
+                error_log("Donor updated successfully");
+                
+                // Store updated donor data in session for next forms
+                $_SESSION['donor_data'] = $formData;
+                
+                // Redirect back to the donation list - using relative path
+                header('Location: ../../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php?update_success=1');
+                exit;
+            } else {
+                error_log("Error updating donor: " . $response);
+                // Handle error (could display error message)
+            }
+        } catch (Exception $e) {
+            error_log("Exception updating donor: " . $e->getMessage());
+        }
+    } else {
+        // New donor submission
+        // Generate unique donor number and barcode if not in edit mode
+        if (empty($formData['prc_donor_number'])) {
+            $formData['prc_donor_number'] = generateDonorNumber();
+        }
+        if (empty($formData['doh_nnbnets_barcode'])) {
+            $formData['doh_nnbnets_barcode'] = generateNNBNetBarcode();
+        }
+        
+        // Store donor data in session for next forms
+        $_SESSION['donor_data'] = $formData;
+        
+        // Redirect to signature page
+        header('Location: donor-declaration.php');
+        exit;
+    }
 }
+
 ?>
-
-
 
 <!DOCTYPE html>
 <html lang="en">
@@ -255,16 +401,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     </style>
 </head>
 <body>
-    <form class="donor_form_container" id="donorForm" action="donor-form.php" method="POST">
+    <form class="donor_form_container" id="donorForm" action="donor-form.php<?php echo $editMode ? '?mode=edit' : ''; ?>" method="POST">
+        <?php if ($editMode && $donorData): ?>
+        <input type="hidden" name="donor_id" value="<?php echo htmlspecialchars($donorData['donor_id']); ?>">
+        <?php endif; ?>
         <div class="donor_form_header">
             <div>
                 <label class="donor_form_label">PRC BLOOD DONOR NUMBER:</label>
-                <input type="text" class="donor_form_input" name="prc_donor_number" readonly> <!-- Auto-generated -->
+                <input type="text" class="donor_form_input" name="prc_donor_number" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['prc_donor_number'] ?? '') : ''; ?>" readonly> <!-- Auto-generated -->
             </div>
             <h2>BLOOD DONOR INTERVIEW SHEET</h2>
             <div>
                 <label class="donor_form_label">DOH NNBNets Barcode:</label>
-                <input type="text" class="donor_form_input" name="doh_nnbnets_barcode" readonly> <!-- Auto-generated -->
+                <input type="text" class="donor_form_input" name="doh_nnbnets_barcode" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['doh_nnbnets_barcode'] ?? '') : ''; ?>" readonly> <!-- Auto-generated -->
             </div>
         </div>
         <div class="donor_form_section">
@@ -273,42 +422,42 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <div class="donor_form_grid grid-3">
                 <div>
                     <label class="donor_form_label">Surname</label>
-                    <input type="text" class="donor_form_input" name="surname">
+                    <input type="text" class="donor_form_input" name="surname" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['surname'] ?? '') : ''; ?>">
                 </div>
                 <div>
                     <label class="donor_form_label">First Name</label>
-                    <input type="text" class="donor_form_input" name="first_name">
+                    <input type="text" class="donor_form_input" name="first_name" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['first_name'] ?? '') : ''; ?>">
                 </div>
                 <div>
                     <label class="donor_form_label">Middle Name</label>
-                    <input type="text" class="donor_form_input" name="middle_name">
+                    <input type="text" class="donor_form_input" name="middle_name" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['middle_name'] ?? '') : ''; ?>">
                 </div>
             </div>
             <div class="donor_form_grid grid-4">
                 <div>
                     <label class="donor_form_label">Birthdate</label>
-                    <input type="date" class="donor_form_input" name="birthdate">
+                    <input type="date" class="donor_form_input" name="birthdate" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['birthdate'] ?? '') : ''; ?>">
                 </div>
                 <div>
                     <label class="donor_form_label">Age</label>
-                    <input type="number" class="donor_form_input" name="age">
+                    <input type="number" class="donor_form_input" name="age" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['age'] ?? '') : ''; ?>">
                 </div>
                 <div>
                     <label class="donor_form_label">Sex</label>
                     <select class="donor_form_input" name="sex">
                     <option value=""></option>
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Female</option>
+                        <option value="Male" <?php echo ($editMode && $donorData && ($donorData['sex'] ?? '') === 'Male') ? 'selected' : ''; ?>>Male</option>
+                        <option value="Female" <?php echo ($editMode && $donorData && ($donorData['sex'] ?? '') === 'Female') ? 'selected' : ''; ?>>Female</option>
+                        <option value="Other" <?php echo ($editMode && $donorData && ($donorData['sex'] ?? '') === 'Other') ? 'selected' : ''; ?>>Other</option>
                     </select>
                 </div>
                 <div>
                     <label class="donor_form_label">Civil Status</label>
                     <select class="donor_form_input" name="civil_status">
-                        <option value="Single">Single</option>
-                        <option value="Married">Married</option>
-                        <option value="Widowed">Widowed</option>
-                        <option value="Divorced">Divorced</option>
+                        <option value="Single" <?php echo ($editMode && $donorData && ($donorData['civil_status'] ?? '') === 'Single') ? 'selected' : ''; ?>>Single</option>
+                        <option value="Married" <?php echo ($editMode && $donorData && ($donorData['civil_status'] ?? '') === 'Married') ? 'selected' : ''; ?>>Married</option>
+                        <option value="Widowed" <?php echo ($editMode && $donorData && ($donorData['civil_status'] ?? '') === 'Widowed') ? 'selected' : ''; ?>>Widowed</option>
+                        <option value="Divorced" <?php echo ($editMode && $donorData && ($donorData['civil_status'] ?? '') === 'Divorced') ? 'selected' : ''; ?>>Divorced</option>
                     </select>
                 </div>
             </div>
@@ -316,28 +465,28 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         <div class="donor_form_section">
             <h3>PERMANENT ADDRESS</h3>
-            <input type="text" class="donor_form_input" name="permanent_address">
+            <input type="text" class="donor_form_input" name="permanent_address" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['permanent_address'] ?? '') : ''; ?>">
             
             <h3>OFFICE ADDRESS</h3>
             <div class="donor_form_grid grid-1">
-                <input type="text" class="donor_form_input" name="office_address">
+                <input type="text" class="donor_form_input" name="office_address" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['office_address'] ?? '') : ''; ?>">
             </div>
             <div class="donor_form_grid grid-4">
                 <div>
                     <label class="donor_form_label">Nationality</label>
-                    <input type="text" class="donor_form_input" name="nationality">
+                    <input type="text" class="donor_form_input" name="nationality" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['nationality'] ?? '') : ''; ?>">
                 </div>
                 <div>
                     <label class="donor_form_label">Religion</label>
-                    <input type="text" class="donor_form_input" name="religion">
+                    <input type="text" class="donor_form_input" name="religion" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['religion'] ?? '') : ''; ?>">
                 </div>
                 <div>
                     <label class="donor_form_label">Education</label>
-                    <input type="text" class="donor_form_input" name="education">
+                    <input type="text" class="donor_form_input" name="education" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['education'] ?? '') : ''; ?>">
                 </div>
                 <div>
                     <label class="donor_form_label">Occupation</label>
-                    <input type="text" class="donor_form_input" name="occupation">
+                    <input type="text" class="donor_form_input" name="occupation" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['occupation'] ?? '') : ''; ?>">
                 </div>
             </div>
         </div>
@@ -346,15 +495,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <div class="donor_form_grid grid-3">
                 <div>
                     <label class="donor_form_label">Telephone No.</label>
-                    <input type="text" class="donor_form_input" name="telephone">
+                    <input type="text" class="donor_form_input" name="telephone" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['telephone'] ?? '') : ''; ?>">
                 </div>
                 <div>
                     <label class="donor_form_label">Mobile No.</label>
-                    <input type="text" class="donor_form_input" name="mobile">
+                    <input type="text" class="donor_form_input" name="mobile" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['mobile'] ?? '') : ''; ?>">
                 </div>
                 <div>
                     <label class="donor_form_label">Email Address</label>
-                    <input type="email" class="donor_form_input" name="email">
+                    <input type="email" class="donor_form_input" name="email" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['email'] ?? '') : ''; ?>">
                 </div>
             </div>
         </div>
@@ -363,32 +512,32 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <div class="donor_form_grid grid-6">
             <div>
                 <label class="donor_form_label">School</label>
-                <input type="text" class="donor_form_input" name="id_school">
+                <input type="text" class="donor_form_input" name="id_school" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['id_school'] ?? '') : ''; ?>">
             </div>
             <div>
                 <label class="donor_form_label">Company</label>
-                <input type="text" class="donor_form_input" name="id_company">
+                <input type="text" class="donor_form_input" name="id_company" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['id_company'] ?? '') : ''; ?>">
             </div>
             <div>
                 <label class="donor_form_label">PRC</label>
-                <input type="text" class="donor_form_input" name="id_prc">
+                <input type="text" class="donor_form_input" name="id_prc" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['id_prc'] ?? '') : ''; ?>">
             </div>
             <div>
                 <label class="donor_form_label">Driver's</label>
-                <input type="text" class="donor_form_input" name="id_drivers">
+                <input type="text" class="donor_form_input" name="id_drivers" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['id_drivers'] ?? '') : ''; ?>">
             </div>
             <div>
                 <label class="donor_form_label">SSS/GSIS/BIR</label>
-                <input type="text" class="donor_form_input" name="id_sss_gsis_bir">
+                <input type="text" class="donor_form_input" name="id_sss_gsis_bir" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['id_sss_gsis_bir'] ?? '') : ''; ?>">
             </div>
             <div>
                 <label class="donor_form_label">Others</label>
-                <input type="text" class="donor_form_input" name="id_others">
+                <input type="text" class="donor_form_input" name="id_others" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['id_others'] ?? '') : ''; ?>">
             </div>
         </div>
         </div>
         <div class="submit-section">
-            <button class="submit-button" id="triggerModalButton">Next</button>
+            <button class="submit-button" id="triggerModalButton"><?php echo $editMode ? 'Update' : 'Next'; ?></button>
         </div>
     </form>
     <!-- Confirmation Modal -->
@@ -418,19 +567,28 @@ document.addEventListener("DOMContentLoaded", function () {
         return `PRC-${year}-${randomNum}`;
     };
 
-    // Generate DOH NNBNETS Barcode (Format: DOH-YYYYMMDD-XXXXX where X is random number)
+    // Generate DOH NNBNETS Barcode (Format: DOH-YYYYXXXX where X is random number)
     const generateDohBarcode = () => {
-        const date = new Date();
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const randomNum = Math.floor(10000 + Math.random() * 90000); // 5-digit random number
-        return `DOH-${year}${month}${day}-${randomNum}`;
+        const year = new Date().getFullYear();
+        const randomNum = Math.floor(1000 + Math.random() * 9000); // 4-digit random number
+        return `DOH-${year}${randomNum}`;
     };
 
-    // Set initial values for PRC donor number and DOH barcode
-    document.querySelector('input[name="prc_donor_number"]').value = generatePrcDonorNumber();
-    document.querySelector('input[name="doh_nnbnets_barcode"]').value = generateDohBarcode();
+    // Set initial values for PRC donor number and DOH barcode only for new donors
+    const isEditMode = <?php echo $editMode ? 'true' : 'false'; ?>;
+    if (!isEditMode) {
+        const prcDonorNumberField = document.querySelector('input[name="prc_donor_number"]');
+        const dohBarcodeField = document.querySelector('input[name="doh_nnbnets_barcode"]');
+        
+        // Only set if the fields are empty
+        if (prcDonorNumberField && prcDonorNumberField.value === '') {
+            prcDonorNumberField.value = generatePrcDonorNumber();
+        }
+        
+        if (dohBarcodeField && dohBarcodeField.value === '') {
+            dohBarcodeField.value = generateDohBarcode();
+        }
+    }
 
     // Open Modal Function
     function openModal() {
