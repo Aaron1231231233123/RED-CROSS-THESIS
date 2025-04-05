@@ -1135,7 +1135,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             loadingModal.show();
             
             setTimeout(() => {
-                window.location.href = '../../src/views/forms/donor-form.php';
+                window.location.href = '../../src/views/forms/donor-form-modal.php';
             }, 1500);
         };
 

@@ -469,12 +469,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     </style>
 </head>
 <body>
-    <!-- Place modals at the root level -->
-    <div class="modal fade" id="confirmationModal" tabindex="-1" role="dialog" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+    <!-- Confirmation Modal -->
+    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header bg-dark text-white">
-                    <h5 class="modal-title">Confirm Action</h5>
+                    <h5 class="modal-title" id="confirmationModalLabel">Confirm Action</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -482,15 +482,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" id="proceedBtn">Proceed</button>
+                    <button type="button" class="btn btn-danger" onclick="proceedToDonorForm()">Proceed</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="modal fade" id="loadingModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+    <!-- Loading Modal -->
+    <div class="modal" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="false" data-bs-keyboard="false">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-transparent border-0">
+            <div class="modal-content" style="background: transparent; border: none; box-shadow: none;">
                 <div class="modal-body text-center">
                     <div class="spinner-border text-danger" style="width: 3rem; height: 3rem;" role="status">
                         <span class="visually-hidden">Loading...</span>
@@ -965,26 +966,38 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             document.getElementById('searchInput').addEventListener('keyup', searchDonations);
             document.getElementById('searchCategory').addEventListener('change', searchDonations);
             
-            // Initialize modals
+            // Initialize all modals
             const donorModal = new bootstrap.Modal(document.getElementById('donorModal'));
             const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
-                backdrop: false,
+                backdrop: 'static',
                 keyboard: false
             });
             const processDonorConfirmationModal = new bootstrap.Modal(document.getElementById('processDonorConfirmationModal'));
+            const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
             
             // Initialize the search functionality
             searchDonations();
+            
+            // Function to show confirmation modal
+            window.showConfirmationModal = function() {
+                confirmationModal.show();
+            };
+            
+            // Function to handle form submission
+            window.proceedToDonorForm = function() {
+                confirmationModal.hide();
+                loadingModal.show();
+                
+                setTimeout(() => {
+                    window.location.href = '../../src/views/forms/donor-form-modal.php';
+                }, 1500);
+            };
             
             // Add Walk-in Donor button click handler (if it exists)
             const addWalkInBtn = document.getElementById('addWalkInBtn');
             if (addWalkInBtn) {
                 addWalkInBtn.addEventListener('click', function() {
-                        loadingModal.show();
-                    
-                        setTimeout(() => {
-                            window.location.href = '../../src/views/forms/donor-form.php';
-                    }, 500);
+                    showConfirmationModal();
                 });
             }
             
