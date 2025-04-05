@@ -747,6 +747,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         id="searchInput" 
                                         placeholder="Search handovers...">
                                 </div>
+                                <div id="searchInfo" class="mt-2 small text-muted"></div>
                             </div>
                         </div>
                     </div>

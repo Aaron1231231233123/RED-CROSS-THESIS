@@ -821,15 +821,17 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 </span>
                                 <select class="form-select category-select" id="searchCategory" style="max-width: 150px;">
                                     <option value="all">All Fields</option>
-                                    <option value="priority">Priority</option>
                                     <option value="hospital">Hospital</option>
-                                    <option value="date">Date</option>
+                                    <option value="blood_type">Blood Type</option>
+                                    <option value="date">Request Date</option>
+                                    <option value="urgent">Urgent</option>
                                 </select>
                                 <input type="text" 
                                     class="form-control" 
                                     id="searchInput" 
                                     placeholder="Search requests...">
                             </div>
+                            <div id="searchInfo" class="mt-2 small text-muted"></div>
                         </div>
                     </div>
                 </div>

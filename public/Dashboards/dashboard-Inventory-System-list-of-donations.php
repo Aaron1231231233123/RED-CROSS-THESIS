@@ -849,42 +849,65 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             const searchInfo = document.getElementById('searchInfo');
             const table = document.getElementById('donationsTable');
             const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr:not(.no-results)'));
             
-            // Add event listeners for search
-            searchInput.addEventListener('input', performSearch);
-            searchCategory.addEventListener('change', performSearch);
+            // Update search info based on visible rows
+            function updateSearchInfo() {
+                const visibleCount = rows.filter(row => row.style.display !== 'none').length;
+                const totalCount = rows.length;
+                if (searchInfo) {
+                    searchInfo.textContent = `Showing ${visibleCount} of ${totalCount} entries`;
+                }
+            }
             
-            // Initialize search info
-            updateSearchInfo(tbody.querySelectorAll('tr:not(.no-results)').length, tbody.querySelectorAll('tr:not(.no-results)').length);
+            // Clear search and reset display
+            window.clearSearch = function() {
+                if (searchInput) searchInput.value = '';
+                if (searchCategory) searchCategory.value = 'all';
+                
+                rows.forEach(row => {
+                    row.style.display = '';
+                });
+                
+                // Remove any existing "no results" message
+                const existingNoResults = tbody.querySelector('.no-results');
+                if (existingNoResults) {
+                    existingNoResults.remove();
+                }
+                
+                updateSearchInfo();
+            };
             
+            // Perform search filtering
             function performSearch() {
                 const value = searchInput.value.toLowerCase().trim();
                 const category = searchCategory.value;
                 
                 // Remove any existing "no results" message
-                const existingNoResults = table.querySelector('.no-results');
+                const existingNoResults = tbody.querySelector('.no-results');
                 if (existingNoResults) {
                     existingNoResults.remove();
                 }
                 
                 let visibleCount = 0;
                 
-                tbody.children.forEach(row => {
+                // Filter rows based on search criteria
+                rows.forEach(row => {
                     let found = false;
                     
                     if (category === 'all') {
-                        // Search all visible cells
-                        const cells = row.querySelectorAll('td');
+                        // Search all cells
+                        const cells = Array.from(row.querySelectorAll('td'));
                         cells.forEach(cell => {
                             if (cell.textContent.toLowerCase().includes(value)) {
                                 found = true;
                             }
                         });
                     } else if (category === 'donor') {
-                        // Search donor name (first 3 columns usually have name parts)
-                        const nameColumns = [row.cells[0], row.cells[1]]; // Surname, First Name
+                        // Search donor name (columns 0 and 1 for surname and first name)
+                        const nameColumns = [row.cells[0], row.cells[1]];
                         if (row.cells[2] && !row.cells[2].querySelector('.badge')) {
-                            nameColumns.push(row.cells[2]); // Middle Name if exists
+                            nameColumns.push(row.cells[2]); // Middle name if it exists
                         }
                         
                         nameColumns.forEach(cell => {
@@ -893,22 +916,28 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             }
                         });
                     } else if (category === 'status') {
-                        // Search status column
-                        const statusColumn = row.querySelector('td:nth-child(6)') || row.querySelector('td .badge');
-                        if (statusColumn && statusColumn.textContent.toLowerCase().includes(value)) {
+                        // Search for status badge or status column
+                        const statusBadge = row.querySelector('.badge');
+                        if (statusBadge && statusBadge.textContent.toLowerCase().includes(value)) {
+                            found = true;
+                        } else if (row.cells[5] && row.cells[5].textContent.toLowerCase().includes(value)) {
+                            // Assuming status is in column 5 in some views
                             found = true;
                         }
                     } else if (category === 'date') {
-                        // Search date-related columns
-                        const dateRegex = /\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\w+ \d{1,2}, \d{4}|\d{4}-\d{2}-\d{2}/i;
-                        const cells = row.querySelectorAll('td');
+                        // Search for date in any cell
+                        const cells = Array.from(row.querySelectorAll('td'));
                         cells.forEach(cell => {
-                            if (dateRegex.test(cell.textContent) && cell.textContent.toLowerCase().includes(value)) {
-                                found = true;
+                            if (cell.textContent.toLowerCase().includes(value)) {
+                                // Simple check for date patterns
+                                if (/\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}|\d{4}-\d{2}-\d{2}|[a-z]{3}\s\d{1,2},\s\d{4}/i.test(cell.textContent)) {
+                                    found = true;
+                                }
                             }
                         });
                     }
                     
+                    // Show/hide row based on search result
                     if (found) {
                         row.style.display = '';
                         visibleCount++;
@@ -918,10 +947,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 });
                 
                 // Show "no results" message if needed
-                if (visibleCount === 0 && tbody.children.length > 0) {
+                if (visibleCount === 0 && rows.length > 0) {
                     const noResultsRow = document.createElement('tr');
                     noResultsRow.className = 'no-results';
-                    const colspan = table.querySelector('thead th:last-child').cellIndex + 1;
+                    const colspan = table.querySelector('thead th:last-child') ? 
+                                    table.querySelector('thead th:last-child').cellIndex + 1 : 6;
                     
                     noResultsRow.innerHTML = `
                         <td colspan="${colspan}" class="text-center">
@@ -937,30 +967,26 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     tbody.appendChild(noResultsRow);
                 }
                 
-                // Update search info
-                updateSearchInfo(visibleCount, tbody.children.length);
+                updateSearchInfo();
             }
-        }
-        
-        function updateSearchInfo(visibleCount, totalCount) {
-            const searchInfo = document.getElementById('searchInfo');
-            searchInfo.textContent = `Showing ${visibleCount} of ${totalCount} entries`;
-        }
-        
-        function clearSearch() {
-            const searchInput = document.getElementById('searchInput');
-            const searchCategory = document.getElementById('searchCategory');
             
-            searchInput.value = '';
-            searchCategory.value = 'all';
-            
-            // Trigger the search event to update the table
-            searchInput.dispatchEvent(new Event('input'));
+            // Initialize
+            if (searchInput && searchCategory) {
+                // Add input event for real-time filtering
+                searchInput.addEventListener('input', performSearch);
+                searchCategory.addEventListener('change', performSearch);
+                
+                // Initial update
+                updateSearchInfo();
+            }
         }
         
         // Initialize search when page loads
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOM loaded, initializing modals and buttons...');
+            
+            // Initialize search
+            searchDonations();
             
             // Add event listeners for search
             document.getElementById('searchInput').addEventListener('keyup', searchDonations);
@@ -974,9 +1000,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             });
             const processDonorConfirmationModal = new bootstrap.Modal(document.getElementById('processDonorConfirmationModal'));
             const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
-            
-            // Initialize the search functionality
-            searchDonations();
             
             // Function to show confirmation modal
             window.showConfirmationModal = function() {
