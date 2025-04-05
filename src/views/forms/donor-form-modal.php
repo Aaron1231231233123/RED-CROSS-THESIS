@@ -29,6 +29,138 @@ if (!isset($_SESSION['donor_form_referrer'])) {
     // Use the stored referrer if available
     $referrer = $_SESSION['donor_form_referrer'];
 }
+
+// Include database connection
+try {
+    include_once '../../../assets/conn/db_conn.php';
+    
+    // Make the constants available as global variables for use in cURL requests
+    $SUPABASE_URL = SUPABASE_URL;
+    $SUPABASE_API_KEY = SUPABASE_API_KEY;
+    
+    // Check if Supabase connection variables are defined
+    if (empty($SUPABASE_URL) || empty($SUPABASE_API_KEY)) {
+        throw new Exception("Database connection parameters are not properly defined");
+    }
+} catch (Exception $e) {
+    $errorMessage = "Database connection error: " . $e->getMessage();
+    error_log("DB Connection Error: " . $e->getMessage());
+}
+
+// Generate a unique PRC donor number (format: PRC-YYYY-XXXXX)
+function generateDonorNumber() {
+    $year = date('Y');
+    $randomNumber = mt_rand(10000, 99999); // 5-digit random number
+    return "PRC-$year-$randomNumber";
+}
+
+// Generate a unique DOH NNBNETS barcode (format: DOH-YYYYXXXX)
+function generateNNBNetBarcode() {
+    $year = date('Y');
+    $randomNumber = mt_rand(1000, 9999); // 4-digit random number
+    return "DOH-$year$randomNumber";
+}
+
+// Check if form is submitted
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) {
+    // Process form data
+    // Combine address fields into a single permanent_address field
+    $permanent_address = "";
+    if (!empty($_POST['street'])) {
+        $permanent_address .= $_POST['street'];
+    }
+    if (!empty($_POST['barangay'])) {
+        $permanent_address .= ($permanent_address ? ", " : "") . $_POST['barangay'];
+    }
+    if (!empty($_POST['town_municipality'])) {
+        $permanent_address .= ($permanent_address ? ", " : "") . $_POST['town_municipality'];
+    }
+    if (!empty($_POST['province_city'])) {
+        $permanent_address .= ($permanent_address ? ", " : "") . $_POST['province_city'];
+    }
+    
+    // Prepare data for Supabase
+    $formData = [
+        'surname' => $_POST['surname'] ?? '',
+        'first_name' => $_POST['first_name'] ?? '',
+        'middle_name' => $_POST['middle_name'] ?? '',
+        'birthdate' => $_POST['birthdate'] ?? '',
+        'age' => intval($_POST['age'] ?? 0),
+        'sex' => $_POST['sex'] ?? '',
+        'civil_status' => $_POST['civil_status'] ?? '',
+        'permanent_address' => $permanent_address,
+        'nationality' => $_POST['nationality'] ?? '',
+        'religion' => $_POST['religion'] ?? '',
+        'education' => $_POST['education'] ?? '',
+        'occupation' => $_POST['occupation'] ?? '',
+        'mobile' => $_POST['mobile'] ?? '',
+        'email' => $_POST['email'] ?? '',
+        // Generate unique donor number and barcode
+        'prc_donor_number' => generateDonorNumber(),
+        'doh_nnbnets_barcode' => generateNNBNetBarcode()
+    ];
+    
+    // Log the data being sent
+    error_log("Sending data to Supabase: " . json_encode($formData));
+    
+    try {
+        // Insert donor record in Supabase
+        $ch = curl_init("$SUPABASE_URL/rest/v1/donor_form");
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($formData));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . $SUPABASE_API_KEY,
+            'Authorization: Bearer ' . $SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=representation' // Get response data with inserted record
+        ]);
+        
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        
+        // Check for cURL errors
+        if (curl_errno($ch)) {
+            error_log("cURL Error: " . curl_error($ch));
+        }
+        
+        curl_close($ch);
+        
+        if ($httpCode >= 200 && $httpCode < 300) {
+            error_log("Donor added successfully. Response: " . $response);
+            
+            // Make sure the session is started (for consistency)
+            if (session_status() == PHP_SESSION_NONE) {
+                session_start();
+            }
+            
+            // Get the referrer URL for redirection
+            $redirect_url = isset($_SESSION['donor_form_referrer']) ? 
+                            $_SESSION['donor_form_referrer'] : 
+                            '../../public/Dashboards/dashboard-Inventory-System.php';
+            
+            // Show the completion modal before redirect
+            echo '<script>
+                document.addEventListener("DOMContentLoaded", function() {
+                    localStorage.setItem("donorFormSubmitted", "true");
+                    showCompletionModal();
+                });
+            </script>';
+        } else {
+            error_log("Error adding donor. HTTP Code: $httpCode. Response: " . $response);
+            // Add user-facing error message
+            echo '<div class="alert alert-danger mt-3" role="alert">
+                Error submitting form. Please try again or contact support.
+            </div>';
+        }
+    } catch (Exception $e) {
+        error_log("Exception adding donor: " . $e->getMessage());
+        // Add user-facing error message
+        echo '<div class="alert alert-danger mt-3" role="alert">
+            An error occurred: ' . htmlspecialchars($e->getMessage()) . '
+        </div>';
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -205,6 +337,22 @@ if (!isset($_SESSION['donor_form_referrer'])) {
             padding-top: 20px;
             margin-top: 30px;
             border-top: 1px solid var(--border-color);
+        }
+        
+        /* Invalid field highlighting */
+        .form-control.is-invalid,
+        .form-select.is-invalid {
+            border-color: #dc3545;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23dc3545' stroke='none'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right calc(0.375em + 0.1875rem) center;
+            background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+        }
+        
+        .form-select.is-invalid {
+            padding-right: 4.125rem;
+            background-position: right 0.75rem center, center right 2.25rem;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e"), url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23dc3545' stroke='none'/%3e%3c/svg%3e");
         }
 
         .btn-navigate {
@@ -501,35 +649,6 @@ if (!isset($_SESSION['donor_form_referrer'])) {
     </div>
 </div>
 
-<?php
-// PHP Form Handling
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) {
-    // Process form data
-    // You can add code here to save the form data to a database
-    
-    // Make sure the session is started (for consistency)
-    if (session_status() == PHP_SESSION_NONE) {
-        session_start();
-    }
-    
-    // Get the referrer URL for redirection
-    $redirect_url = '../../public/Dashboards/dashboard-Inventory-System.php'; // Default fallback
-    
-    if (isset($_SESSION['donor_form_referrer'])) {
-        $redirect_url = $_SESSION['donor_form_referrer'];
-    }
-    
-    // Show the completion modal before redirect
-    // The modal will handle redirection after it's closed
-    echo '<script>
-        document.addEventListener("DOMContentLoaded", function() {
-            localStorage.setItem("donorFormSubmitted", "true");
-            showCompletionModal();
-        });
-    </script>';
-}
-?>
-
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
@@ -582,6 +701,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
         if (!valid) {
             alert('Please fill all required fields');
             return;
+        }
+        
+        // Special validation for section 3 (permanent address)
+        if (currentSection === 3) {
+            const barangay = document.getElementById('barangay').value.trim();
+            const town = document.getElementById('town_municipality').value.trim();
+            const province = document.getElementById('province_city').value.trim();
+            
+            if (!barangay || !town || !province) {
+                if (!barangay) document.getElementById('barangay').classList.add('is-invalid');
+                if (!town) document.getElementById('town_municipality').classList.add('is-invalid');
+                if (!province) document.getElementById('province_city').classList.add('is-invalid');
+                alert('Please fill all required address fields');
+                return;
+            }
         }
         
         // Hide current section and show next section
@@ -813,6 +947,27 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
                     e.preventDefault();
                     return false;
                 }
+                
+                // Final validation of all required fields
+                const form = document.getElementById('donorForm');
+                const requiredFields = form.querySelectorAll('[required]');
+                let valid = true;
+                
+                requiredFields.forEach(field => {
+                    if (!field.value.trim()) {
+                        field.classList.add('is-invalid');
+                        valid = false;
+                    } else {
+                        field.classList.remove('is-invalid');
+                    }
+                });
+                
+                if (!valid) {
+                    e.preventDefault();
+                    alert('Please fill all required fields before submitting');
+                    return false;
+                }
+                
                 return handleFormSubmit();
             });
         }
