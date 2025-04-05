@@ -811,7 +811,7 @@ h6 {
             <div class="d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Blood Donor Management System</h4>
                 <a href="../../src/views/forms/donor-form.php" class="btn btn-danger">
-                    <i class="fas fa-plus me-2"></i>Add Walk-in Donor
+                    <i class="fas fa-plus me-2"></i>Register Donor
                 </a>
             </div>
         </div>

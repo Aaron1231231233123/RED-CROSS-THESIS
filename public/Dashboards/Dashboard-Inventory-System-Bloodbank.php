@@ -818,7 +818,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             <div class="d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Blood Donor Management System</h4>
                 <button class="btn btn-danger" onclick="showConfirmationModal()">
-                    <i class="fas fa-plus me-2"></i>Add Walk-in Donor
+                    <i class="fas fa-plus me-2"></i>Register Donor
                 </button>
             </div>
         </div>
