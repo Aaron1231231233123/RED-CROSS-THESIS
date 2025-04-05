@@ -313,7 +313,7 @@ if (!isset($_SESSION['donor_form_referrer'])) {
                 </div>
                 
                 <!-- Form Starts -->
-                <form id="donorForm" method="post" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" onsubmit="return handleFormSubmit()">
+                <form id="donorForm" method="post" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" onsubmit="return handleFormSubmit()" onkeydown="return preventEnterSubmit(event)" data-allow-enter="false">
                     <!-- Section 1: NAME -->
                     <div class="form-section active" id="section1">
                         <h3 class="section-title">NAME</h3>
@@ -409,17 +409,17 @@ if (!isset($_SESSION['donor_form_referrer'])) {
                         
                         <div class="mb-3">
                             <label for="barangay" class="form-label">Barangay</label>
-                            <input type="text" class="form-control" id="barangay" name="barangay">
+                            <input type="text" class="form-control" id="barangay" name="barangay" required>
                         </div>
                         
                         <div class="mb-3">
                             <label for="town_municipality" class="form-label">Town/Municipality</label>
-                            <input type="text" class="form-control" id="town_municipality" name="town_municipality">
+                            <input type="text" class="form-control" id="town_municipality" name="town_municipality" required>
                         </div>
                         
                         <div class="mb-3">
                             <label for="province_city" class="form-label">Province/City</label>
-                            <input type="text" class="form-control" id="province_city" name="province_city">
+                            <input type="text" class="form-control" id="province_city" name="province_city" required>
                         </div>
                         
                         <div class="navigation-buttons">
@@ -436,17 +436,17 @@ if (!isset($_SESSION['donor_form_referrer'])) {
                         
                         <div class="mb-3">
                             <label for="nationality" class="form-label">Nationality</label>
-                            <input type="text" class="form-control" id="nationality" name="nationality" value="Filipino">
+                            <input type="text" class="form-control" id="nationality" name="nationality" value="Filipino" required>
                         </div>
                         
                         <div class="mb-3">
                             <label for="religion" class="form-label">Religion</label>
-                            <input type="text" class="form-control" id="religion" name="religion">
+                            <input type="text" class="form-control" id="religion" name="religion" required>
                         </div>
                         
                         <div class="mb-3">
                             <label for="education" class="form-label">Education</label>
-                            <select class="form-select" id="education" name="education">
+                            <select class="form-select" id="education" name="education" required>
                                 <option value="" selected disabled>Select Education Level</option>
                                 <option value="Elementary">Elementary</option>
                                 <option value="High School">High School</option>
@@ -457,7 +457,7 @@ if (!isset($_SESSION['donor_form_referrer'])) {
                         
                         <div class="mb-3">
                             <label for="occupation" class="form-label">Occupation</label>
-                            <input type="text" class="form-control" id="occupation" name="occupation">
+                            <input type="text" class="form-control" id="occupation" name="occupation" required>
                         </div>
                         
                         <div class="navigation-buttons">
@@ -474,7 +474,7 @@ if (!isset($_SESSION['donor_form_referrer'])) {
                         
                         <div class="mb-3">
                             <label for="mobile" class="form-label">Mobile Number</label>
-                            <input type="tel" class="form-control" id="mobile" name="mobile">
+                            <input type="tel" class="form-control" id="mobile" name="mobile" required>
                         </div>
                         
                         <div class="mb-3">
@@ -484,7 +484,7 @@ if (!isset($_SESSION['donor_form_referrer'])) {
                         
                         <div class="navigation-buttons">
                             <button type="button" class="btn btn-secondary btn-navigate" onclick="prevSection(5)">&lt; Previous</button>
-                            <button type="submit" class="btn btn-primary btn-navigate" name="submit_donor_form">Submit &gt;</button>
+                            <button type="submit" class="btn btn-primary btn-navigate" id="submitButton" name="submit_donor_form">Submit &gt;</button>
                         </div>
                     </div>
                 </form>
@@ -512,14 +512,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
         session_start();
     }
     
-    // Ensure we have a referrer for the JavaScript to use
+    // Get the referrer URL for redirection
+    $redirect_url = '../../public/Dashboards/dashboard-Inventory-System.php'; // Default fallback
+    
     if (isset($_SESSION['donor_form_referrer'])) {
-        $referrer = $_SESSION['donor_form_referrer'];
+        $redirect_url = $_SESSION['donor_form_referrer'];
     }
     
-    // Display success message and show completion modal
+    // Show the completion modal before redirect
+    // The modal will handle redirection after it's closed
     echo '<script>
         document.addEventListener("DOMContentLoaded", function() {
+            localStorage.setItem("donorFormSubmitted", "true");
             showCompletionModal();
         });
     </script>';
@@ -548,6 +552,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
             ageInput.value = age;
         } else {
             ageInput.value = '';
+        }
+    }
+    
+    // Function to update the form's data-allow-enter attribute based on the current section
+    function updateEnterKeyBehavior(sectionNumber) {
+        const form = document.getElementById('donorForm');
+        if (form) {
+            // Allow Enter key submission only on the last section
+            form.setAttribute('data-allow-enter', sectionNumber === 5 ? 'true' : 'false');
         }
     }
     
@@ -591,6 +604,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
         
         // Update the modal title
         updateModalTitle(currentSection + 1);
+        
+        // Update Enter key behavior
+        updateEnterKeyBehavior(currentSection + 1);
     }
     
     function prevSection(currentSection) {
@@ -614,6 +630,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
         
         // Update the modal title
         updateModalTitle(currentSection - 1);
+        
+        // Update Enter key behavior
+        updateEnterKeyBehavior(currentSection - 1);
     }
     
     function updateModalTitle(sectionNumber) {
@@ -652,39 +671,95 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
         modal.style.display = 'none';
         
         // Redirect to the dashboard after submission is complete
-        goBackToDashboard();
+        // Skip confirmation since this is after a successful form submission
+        goBackToDashboard(true);
     }
     
     // Handle form submission
     function handleFormSubmit() {
         // Perform any client-side validation here
         
-        // Store the current URL to maintain form state
+        // Store the current URL to maintain form state and 
+        // set a flag indicating form has been submitted
         if (typeof(Storage) !== "undefined") {
             localStorage.setItem("donorFormReferrer", "<?php echo $referrer; ?>");
+            localStorage.setItem("donorFormSubmitted", "true");
         }
         
         return true; // Allow the form to submit
     }
     
-    // Function to go back to previous page
-    function goBackToDashboard() {
-        // First check if the user has entered data
-        const formInputs = document.querySelectorAll('input[type="text"], input[type="date"], input[type="email"], select');
-        let hasData = false;
+    // Prevent form submission when Enter key is pressed
+    function preventEnterSubmit(event) {
+        // Only prevent if Enter key is pressed
+        if (event.key !== 'Enter') {
+            return true;
+        }
         
-        formInputs.forEach(input => {
-            if ((input.type === 'text' || input.type === 'date' || input.type === 'email') && input.value.trim() !== '') {
-                hasData = true;
-            } else if (input.tagName === 'SELECT' && input.selectedIndex > 0) {
-                hasData = true;
+        // Get form and check if Enter submission is allowed
+        const form = document.getElementById('donorForm');
+        const allowEnter = form && form.getAttribute('data-allow-enter') === 'true';
+        
+        // Get the current active section
+        const activeSection = document.querySelector('.form-section.active');
+        const isLastSection = activeSection && activeSection.id === 'section5';
+        
+        // If on the last section and form allows enter, or if the target is the submit button, allow submission
+        if ((isLastSection && allowEnter) || (event.target && event.target.id === 'submitButton')) {
+            return true;
+        }
+        
+        // Prevent form submission on Enter key press in all other cases
+        event.preventDefault();
+        
+        // If focus is on an input, move to the next input
+        if (event.target && (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT')) {
+            // Find the next input to focus
+            const inputs = Array.from(form.elements);
+            const currentIndex = inputs.indexOf(event.target);
+            
+            if (currentIndex > -1 && currentIndex < inputs.length - 1) {
+                const nextInput = inputs[currentIndex + 1];
+                if (nextInput) {
+                    nextInput.focus();
+                }
             }
-        });
+            
+            // If this is the last input in a section other than section5, click the Next button
+            if (activeSection && !isLastSection) {
+                const isLastInputInSection = Array.from(activeSection.querySelectorAll('input, select')).pop() === event.target;
+                if (isLastInputInSection) {
+                    const nextButton = activeSection.querySelector('.btn-primary.btn-navigate');
+                    if (nextButton) {
+                        nextButton.click();
+                    }
+                }
+            }
+        }
         
-        if (hasData) {
-            const confirmLeave = confirm('You have unsaved data. Are you sure you want to leave this page?');
-            if (!confirmLeave) {
-                return false;
+        return false;
+    }
+    
+    // Function to go back to previous page
+    function goBackToDashboard(skipConfirmation = false) {
+        // First check if the user has entered data
+        if (!skipConfirmation) {
+            const formInputs = document.querySelectorAll('input[type="text"], input[type="date"], input[type="email"], select');
+            let hasData = false;
+            
+            formInputs.forEach(input => {
+                if ((input.type === 'text' || input.type === 'date' || input.type === 'email') && input.value.trim() !== '') {
+                    hasData = true;
+                } else if (input.tagName === 'SELECT' && input.selectedIndex > 0) {
+                    hasData = true;
+                }
+            });
+            
+            if (hasData) {
+                const confirmLeave = confirm('You have unsaved data. Are you sure you want to leave this page?');
+                if (!confirmLeave) {
+                    return false;
+                }
             }
         }
         
@@ -725,6 +800,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
             }
         });
         
+        // Initialize Enter key behavior - disable on first section
+        updateEnterKeyBehavior(1);
+        
+        // Ensure the submit button triggers the handleFormSubmit function
+        const submitButton = document.getElementById('submitButton');
+        if (submitButton) {
+            submitButton.addEventListener('click', function(e) {
+                // Allow regular form submission only from the final section
+                const activeSection = document.querySelector('.form-section.active');
+                if (activeSection && activeSection.id !== 'section5') {
+                    e.preventDefault();
+                    return false;
+                }
+                return handleFormSubmit();
+            });
+        }
+        
         // Ensure close button works - but don't add multiple event listeners
         const closeButton = document.getElementById('closeButton');
         if (closeButton) {
@@ -755,7 +847,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
         // Add ESC key listener to close the form
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
-                goBackToDashboard();
+                // Check if we're after a form submission
+                const formSubmitted = localStorage.getItem("donorFormSubmitted") === "true";
+                goBackToDashboard(!formSubmitted);
             }
         });
         
