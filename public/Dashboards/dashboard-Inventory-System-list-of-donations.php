@@ -621,7 +621,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         <?php elseif ($status === 'pending'): ?>
                                             <th>Surname</th>
                                             <th>First Name</th>
-                                            <th>Birthdate</th>
+                                            <th>Age</th>
                                             <th>Sex</th>
                                             <th>Date Submitted</th>
                                             <th>Actions</th>
@@ -658,7 +658,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                 <?php elseif ($status === 'pending'): ?>
                                                     <td><?php echo htmlspecialchars($donation['surname'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['first_name'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['birthdate'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['age'] ?? calculateAge($donation['birthdate'])); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['sex'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['date_submitted'] ?? ''); ?></td>
                                                 <?php elseif ($status === 'declined'): ?>
@@ -1203,9 +1203,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <i class="fas fa-info-circle me-2"></i> Donor is Declined
                         </button>
                         ` : eligibility.status === 'approved' ? `
-                        <button type="button" class="btn btn-primary" id="processThisDonorBtn" data-donor-id="${donor.donor_id}">
-                            <i class="fas fa-list-check me-2"></i> Process This Donor
-                        </button>
                         ` : `
                         <button type="button" class="btn btn-primary" id="processThisDonorBtn" data-donor-id="${donor.donor_id}">
                             <i class="fas fa-list-check me-2"></i> Process This Donor
@@ -1321,28 +1318,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         });
                     });
                     } else if (eligibility.status === 'approved') {
-                        // For approved donors, only add event listener for process button
-                        document.getElementById('processThisDonorBtn').addEventListener('click', function() {
-                            const donorId = this.getAttribute('data-donor-id');
-                            
-                            if (!donorId) {
-                                console.error('No donor ID found for process button');
-                                alert('Error: Donor ID not found. Please try again.');
-                                return;
-                            }
-                            
-                            console.log('Processing donor ID:', donorId);
-                            
-                            // Set global variable
-                            window.currentDonorId = donorId;
-                            
-                            // Close donor details modal and show process confirmation modal
-                            const donorModal = bootstrap.Modal.getInstance(document.getElementById('donorModal'));
-                            const processDonorConfirmationModal = new bootstrap.Modal(document.getElementById('processDonorConfirmationModal'));
-                            
-                            if (donorModal) donorModal.hide();
-                            if (processDonorConfirmationModal) processDonorConfirmationModal.show();
-                        });
+                        // For approved donors, no buttons to handle
                     }
                 })
                 .catch(error => {
