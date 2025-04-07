@@ -1119,14 +1119,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         
                         // Redirect to medical history form regardless of eligibility creation
                         setTimeout(() => {
-                            window.location.href = `../../src/views/forms/medical-history.php?donor_id=${window.currentDonorId}`;
+                            window.location.href = `../../src/views/forms/medical-history-modal.php?donor_id=${window.currentDonorId}`;
                         }, 1000);
                     })
                     .catch(error => {
                         console.error('Error storing donor ID in session:', error);
                         // Redirect anyway as a fallback
                         setTimeout(() => {
-                            window.location.href = `../../src/views/forms/medical-history.php?donor_id=${window.currentDonorId}`;
+                            window.location.href = `../../src/views/forms/medical-history-modal.php?donor_id=${window.currentDonorId}`;
                         }, 1000);
                     });
                 });

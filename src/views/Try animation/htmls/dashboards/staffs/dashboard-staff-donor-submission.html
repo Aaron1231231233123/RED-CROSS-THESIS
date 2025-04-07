@@ -797,7 +797,7 @@ select.donor_form_input[disabled] {
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        window.location.href = '../../src/views/forms/medical-history.php';
+                        window.location.href = '../../src/views/forms/medical-history-modal.php';
                     } else {
                         console.error('Server response:', data);
                         alert('Error: Could not process approval');

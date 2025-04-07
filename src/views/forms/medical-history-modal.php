@@ -1,6 +1,194 @@
 <?php
 // Start the session to maintain state
 session_start();
+require_once '../../../assets/conn/db_conn.php';
+
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../../../public/login.php");
+    exit();
+}
+
+// Check for correct roles (admin role_id 1 or staff role_id 3)
+if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['role_id'] != 3)) {
+    header("Location: ../../../public/unauthorized.php");
+    exit();
+}
+
+// Check if donor_id is passed via URL parameter
+if (isset($_GET['donor_id']) && !empty($_GET['donor_id'])) {
+    $_SESSION['donor_id'] = $_GET['donor_id'];
+    error_log("Set donor_id from URL parameter: " . $_SESSION['donor_id']);
+}
+
+// Only check donor_id for staff role (role_id 3)
+if ($_SESSION['role_id'] === 3 && !isset($_SESSION['donor_id'])) {
+    error_log("Missing donor_id in session for staff");
+    header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
+    exit();
+}
+
+// Handle form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    try {
+        // Debug log the POST data
+        error_log("POST data received: " . print_r($_POST, true));
+        error_log("Session data before processing: " . print_r($_SESSION, true));
+
+        // Prepare the data for insertion
+        $medical_history_data = [
+            'donor_id' => $_SESSION['donor_id'],
+            'feels_well' => isset($_POST['q1']) && $_POST['q1'] === 'Yes',
+            'feels_well_remarks' => $_POST['q1_remarks'] !== 'None' ? $_POST['q1_remarks'] : null,
+            'previously_refused' => isset($_POST['q2']) && $_POST['q2'] === 'Yes',
+            'previously_refused_remarks' => $_POST['q2_remarks'] !== 'None' ? $_POST['q2_remarks'] : null,
+            'testing_purpose_only' => isset($_POST['q3']) && $_POST['q3'] === 'Yes',
+            'testing_purpose_only_remarks' => $_POST['q3_remarks'] !== 'None' ? $_POST['q3_remarks'] : null,
+            'understands_transmission_risk' => isset($_POST['q4']) && $_POST['q4'] === 'Yes',
+            'understands_transmission_risk_remarks' => $_POST['q4_remarks'] !== 'None' ? $_POST['q4_remarks'] : null,
+            'recent_alcohol_consumption' => isset($_POST['q5']) && $_POST['q5'] === 'Yes',
+            'recent_alcohol_consumption_remarks' => $_POST['q5_remarks'] !== 'None' ? $_POST['q5_remarks'] : null,
+            'recent_aspirin' => isset($_POST['q6']) && $_POST['q6'] === 'Yes',
+            'recent_aspirin_remarks' => $_POST['q6_remarks'] !== 'None' ? $_POST['q6_remarks'] : null,
+            'recent_medication' => isset($_POST['q7']) && $_POST['q7'] === 'Yes',
+            'recent_medication_remarks' => $_POST['q7_remarks'] !== 'None' ? $_POST['q7_remarks'] : null,
+            'recent_donation' => isset($_POST['q8']) && $_POST['q8'] === 'Yes',
+            'recent_donation_remarks' => $_POST['q8_remarks'] !== 'None' ? $_POST['q8_remarks'] : null,
+            'zika_travel' => isset($_POST['q9']) && $_POST['q9'] === 'Yes',
+            'zika_travel_remarks' => $_POST['q9_remarks'] !== 'None' ? $_POST['q9_remarks'] : null,
+            'zika_contact' => isset($_POST['q10']) && $_POST['q10'] === 'Yes',
+            'zika_contact_remarks' => $_POST['q10_remarks'] !== 'None' ? $_POST['q10_remarks'] : null,
+            'zika_sexual_contact' => isset($_POST['q11']) && $_POST['q11'] === 'Yes',
+            'zika_sexual_contact_remarks' => $_POST['q11_remarks'] !== 'None' ? $_POST['q11_remarks'] : null,
+            'blood_transfusion' => isset($_POST['q12']) && $_POST['q12'] === 'Yes',
+            'blood_transfusion_remarks' => $_POST['q12_remarks'] !== 'None' ? $_POST['q12_remarks'] : null,
+            'surgery_dental' => isset($_POST['q13']) && $_POST['q13'] === 'Yes',
+            'surgery_dental_remarks' => $_POST['q13_remarks'] !== 'None' ? $_POST['q13_remarks'] : null,
+            'tattoo_piercing' => isset($_POST['q14']) && $_POST['q14'] === 'Yes',
+            'tattoo_piercing_remarks' => $_POST['q14_remarks'] !== 'None' ? $_POST['q14_remarks'] : null,
+            'risky_sexual_contact' => isset($_POST['q15']) && $_POST['q15'] === 'Yes',
+            'risky_sexual_contact_remarks' => $_POST['q15_remarks'] !== 'None' ? $_POST['q15_remarks'] : null,
+            'unsafe_sex' => isset($_POST['q16']) && $_POST['q16'] === 'Yes',
+            'unsafe_sex_remarks' => $_POST['q16_remarks'] !== 'None' ? $_POST['q16_remarks'] : null,
+            'hepatitis_contact' => isset($_POST['q17']) && $_POST['q17'] === 'Yes',
+            'hepatitis_contact_remarks' => $_POST['q17_remarks'] !== 'None' ? $_POST['q17_remarks'] : null,
+            'imprisonment' => isset($_POST['q18']) && $_POST['q18'] === 'Yes',
+            'imprisonment_remarks' => $_POST['q18_remarks'] !== 'None' ? $_POST['q18_remarks'] : null,
+            'uk_europe_stay' => isset($_POST['q19']) && $_POST['q19'] === 'Yes',
+            'uk_europe_stay_remarks' => $_POST['q19_remarks'] !== 'None' ? $_POST['q19_remarks'] : null,
+            'foreign_travel' => isset($_POST['q20']) && $_POST['q20'] === 'Yes',
+            'foreign_travel_remarks' => $_POST['q20_remarks'] !== 'None' ? $_POST['q20_remarks'] : null,
+            'drug_use' => isset($_POST['q21']) && $_POST['q21'] === 'Yes',
+            'drug_use_remarks' => $_POST['q21_remarks'] !== 'None' ? $_POST['q21_remarks'] : null,
+            'clotting_factor' => isset($_POST['q22']) && $_POST['q22'] === 'Yes',
+            'clotting_factor_remarks' => $_POST['q22_remarks'] !== 'None' ? $_POST['q22_remarks'] : null,
+            'positive_disease_test' => isset($_POST['q23']) && $_POST['q23'] === 'Yes',
+            'positive_disease_test_remarks' => $_POST['q23_remarks'] !== 'None' ? $_POST['q23_remarks'] : null,
+            'malaria_history' => isset($_POST['q24']) && $_POST['q24'] === 'Yes',
+            'malaria_history_remarks' => $_POST['q24_remarks'] !== 'None' ? $_POST['q24_remarks'] : null,
+            'std_history' => isset($_POST['q25']) && $_POST['q25'] === 'Yes',
+            'std_history_remarks' => $_POST['q25_remarks'] !== 'None' ? $_POST['q25_remarks'] : null,
+            'cancer_blood_disease' => isset($_POST['q26']) && $_POST['q26'] === 'Yes',
+            'cancer_blood_disease_remarks' => $_POST['q26_remarks'] !== 'None' ? $_POST['q26_remarks'] : null,
+            'heart_disease' => isset($_POST['q27']) && $_POST['q27'] === 'Yes',
+            'heart_disease_remarks' => $_POST['q27_remarks'] !== 'None' ? $_POST['q27_remarks'] : null,
+            'lung_disease' => isset($_POST['q28']) && $_POST['q28'] === 'Yes',
+            'lung_disease_remarks' => $_POST['q28_remarks'] !== 'None' ? $_POST['q28_remarks'] : null,
+            'kidney_disease' => isset($_POST['q29']) && $_POST['q29'] === 'Yes',
+            'kidney_disease_remarks' => $_POST['q29_remarks'] !== 'None' ? $_POST['q29_remarks'] : null,
+            'chicken_pox' => isset($_POST['q30']) && $_POST['q30'] === 'Yes',
+            'chicken_pox_remarks' => $_POST['q30_remarks'] !== 'None' ? $_POST['q30_remarks'] : null,
+            'chronic_illness' => isset($_POST['q31']) && $_POST['q31'] === 'Yes',
+            'chronic_illness_remarks' => $_POST['q31_remarks'] !== 'None' ? $_POST['q31_remarks'] : null,
+            'recent_fever' => isset($_POST['q32']) && $_POST['q32'] === 'Yes',
+            'recent_fever_remarks' => $_POST['q32_remarks'] !== 'None' ? $_POST['q32_remarks'] : null,
+            'pregnancy_history' => isset($_POST['q33']) && $_POST['q33'] === 'Yes',
+            'pregnancy_history_remarks' => $_POST['q33_remarks'] !== 'None' ? $_POST['q33_remarks'] : null,
+            'last_childbirth' => isset($_POST['q34']) && $_POST['q34'] === 'Yes',
+            'last_childbirth_remarks' => $_POST['q34_remarks'] !== 'None' ? $_POST['q34_remarks'] : null,
+            'recent_miscarriage' => isset($_POST['q35']) && $_POST['q35'] === 'Yes',
+            'recent_miscarriage_remarks' => $_POST['q35_remarks'] !== 'None' ? $_POST['q35_remarks'] : null,
+            'breastfeeding' => isset($_POST['q36']) && $_POST['q36'] === 'Yes',
+            'breastfeeding_remarks' => $_POST['q36_remarks'] !== 'None' ? $_POST['q36_remarks'] : null,
+            'last_menstruation' => isset($_POST['q37']) && $_POST['q37'] === 'Yes',
+            'last_menstruation_remarks' => $_POST['q37_remarks'] !== 'None' ? $_POST['q37_remarks'] : null
+        ];
+
+        // Remove any null values from the data array
+        $medical_history_data = array_filter($medical_history_data, function($value) {
+            return $value !== null;
+        });
+
+        // Debug log
+        error_log("Submitting medical history data: " . print_r($medical_history_data, true));
+
+        // Initialize cURL session for Supabase
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history');
+
+        // Set the headers
+        $headers = array(
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=representation'
+        );
+
+        // Set cURL options
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($medical_history_data));
+
+        // Execute the request
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        
+        // Debug log
+        error_log("Supabase response code: " . $http_code);
+        error_log("Supabase response: " . $response);
+        
+        curl_close($ch);
+
+        if ($http_code === 201) {
+            // Parse the response to get the medical history ID
+            $response_data = json_decode($response, true);
+            
+            // Debug log the response data
+            error_log("Supabase response data: " . print_r($response_data, true));
+            
+            // Check if we have a valid response array and it contains the medical_history_id
+            if (is_array($response_data) && isset($response_data[0]['medical_history_id'])) {
+                $_SESSION['medical_history_id'] = $response_data[0]['medical_history_id'];
+                error_log("Stored medical_history_id in session: " . $_SESSION['medical_history_id']);
+                
+                // Both admin and staff should go to screening form
+                error_log("Redirecting to screening form");
+                header('Location: screening-form.php');
+                exit();
+            } else {
+                error_log("Invalid response format or missing medical_history_id: " . print_r($response_data, true));
+                throw new Exception("Medical history ID not found in response. Response: " . $response);
+            }
+        } else {
+            throw new Exception("Failed to submit medical history. HTTP Code: " . $http_code . " Response: " . $response);
+        }
+    } catch (Exception $e) {
+        error_log("Error in medical history form: " . $e->getMessage());
+        $_SESSION['error_message'] = $e->getMessage();
+        header('Location: medical-history-modal.php?error=1');
+        exit();
+    }
+}
+
+// Debug log to check all session variables
+error_log("All session variables in medical-history-modal.php: " . print_r($_SESSION, true));
+
+// Set error message from session to be used by JavaScript
+$error_message = '';
+if (isset($_SESSION['error_message'])) {
+    $error_message = $_SESSION['error_message'];
+    unset($_SESSION['error_message']);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -8,6 +196,12 @@ session_start();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Medical History Modal</title>
+    <script>
+        // Store error message in sessionStorage if it exists
+        <?php if (!empty($error_message)): ?>
+        sessionStorage.setItem('error_message', <?php echo json_encode($error_message); ?>);
+        <?php endif; ?>
+    </script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -314,6 +508,11 @@ session_start();
             background-color: rgba(156, 0, 0, 0.1);
             border-radius: 5px;
         }
+
+        @keyframes rotateSpinner {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -338,7 +537,7 @@ session_start();
                 <div class="step" id="step6" data-step="6">6</div>
             </div>
             
-            <form id="medicalHistoryForm" method="post" action="process_medical_history.php">
+            <form id="medicalHistoryForm" method="post" action="<?php echo $_SERVER['PHP_SELF'] . (isset($_GET['donor_id']) ? '?donor_id=' . htmlspecialchars($_GET['donor_id']) : ''); ?>">
                 <!-- Step 1: Health & Risk Assessment -->
                 <div class="form-step active" data-step="1">
                     <div class="step-title">HEALTH & RISK ASSESSMENT:</div>
@@ -1154,7 +1353,7 @@ session_start();
                 
                 <!-- Step 6: General Health History -->
                 <div class="form-step" data-step="6">
-                    <div class="step-title">GENERAL HEALTH HISTORY:</div>
+                    <div class="step-title">FOR FEMALE DONORS ONLY:</div>
                     <div class="step-description">Tick the appropriate answer.</div>
                     
                     <div class="form-group">
@@ -1165,7 +1364,7 @@ session_start();
                         <div class="form-header">REMARKS</div>
                         
                         <div class="question-number">33</div>
-                        <div class="question-text">Have you been diagnosed with any chronic health conditions in the past year?</div>
+                        <div class="question-text">Are you currently pregnant or have you ever been pregnant?</div>
                         <div class="radio-cell">
                             <label class="radio-container">
                                 <input type="radio" name="q33" value="Yes">
@@ -1181,14 +1380,14 @@ session_start();
                         <div class="remarks-cell">
                             <select class="remarks-input" name="q33_remarks">
                                 <option value="None">None</option>
-                                <option value="Autoimmune Condition">Autoimmune Condition</option>
-                                <option value="Metabolic Disorder">Metabolic Disorder</option>
-                                <option value="Other Condition">Other Condition</option>
+                                <option value="Current Pregnancy">Current Pregnancy</option>
+                                <option value="Past Pregnancy">Past Pregnancy</option>
+                                <option value="Other Details">Other Details</option>
                             </select>
                         </div>
                         
                         <div class="question-number">34</div>
-                        <div class="question-text">Have you had any major surgery in the past year?</div>
+                        <div class="question-text">When was your last childbirth?</div>
                         <div class="radio-cell">
                             <label class="radio-container">
                                 <input type="radio" name="q34" value="Yes">
@@ -1204,14 +1403,14 @@ session_start();
                         <div class="remarks-cell">
                             <select class="remarks-input" name="q34_remarks">
                                 <option value="None">None</option>
-                                <option value="Less than 3 months ago">Less than 3 months ago</option>
-                                <option value="3-6 months ago">3-6 months ago</option>
+                                <option value="Less than 6 months">Less than 6 months</option>
                                 <option value="6-12 months ago">6-12 months ago</option>
+                                <option value="More than 1 year ago">More than 1 year ago</option>
                             </select>
                         </div>
                         
                         <div class="question-number">35</div>
-                        <div class="question-text">Are you currently taking any medications regularly?</div>
+                        <div class="question-text">In the past 1 YEAR, did you have a miscarriage or abortion?</div>
                         <div class="radio-cell">
                             <label class="radio-container">
                                 <input type="radio" name="q35" value="Yes">
@@ -1227,14 +1426,14 @@ session_start();
                         <div class="remarks-cell">
                             <select class="remarks-input" name="q35_remarks">
                                 <option value="None">None</option>
-                                <option value="Blood Pressure Medication">Blood Pressure Medication</option>
-                                <option value="Anticoagulants">Anticoagulants</option>
-                                <option value="Other Medication">Other Medication</option>
+                                <option value="Less than 3 months ago">Less than 3 months ago</option>
+                                <option value="3-6 months ago">3-6 months ago</option>
+                                <option value="6-12 months ago">6-12 months ago</option>
                             </select>
                         </div>
                         
                         <div class="question-number">36</div>
-                        <div class="question-text">Have you ever had a severe allergic reaction requiring medical attention?</div>
+                        <div class="question-text">Are you currently breastfeeding?</div>
                         <div class="radio-cell">
                             <label class="radio-container">
                                 <input type="radio" name="q36" value="Yes">
@@ -1250,14 +1449,14 @@ session_start();
                         <div class="remarks-cell">
                             <select class="remarks-input" name="q36_remarks">
                                 <option value="None">None</option>
-                                <option value="Food Allergy">Food Allergy</option>
-                                <option value="Drug Allergy">Drug Allergy</option>
-                                <option value="Other Allergy">Other Allergy</option>
+                                <option value="Currently Breastfeeding">Currently Breastfeeding</option>
+                                <option value="Recently Stopped">Recently Stopped</option>
+                                <option value="Other">Other</option>
                             </select>
                         </div>
                         
                         <div class="question-number">37</div>
-                        <div class="question-text">Do you have any family history of blood disorders?</div>
+                        <div class="question-text">When was your last menstrual period?</div>
                         <div class="radio-cell">
                             <label class="radio-container">
                                 <input type="radio" name="q37" value="Yes">
@@ -1273,10 +1472,10 @@ session_start();
                         <div class="remarks-cell">
                             <select class="remarks-input" name="q37_remarks">
                                 <option value="None">None</option>
-                                <option value="Hemophilia">Hemophilia</option>
-                                <option value="Thalassemia">Thalassemia</option>
-                                <option value="Sickle Cell">Sickle Cell</option>
-                                <option value="Other Blood Disorder">Other Blood Disorder</option>
+                                <option value="Within last week">Within last week</option>
+                                <option value="1-2 weeks ago">1-2 weeks ago</option>
+                                <option value="2-4 weeks ago">2-4 weeks ago</option>
+                                <option value="More than 1 month ago">More than 1 month ago</option>
                             </select>
                         </div>
                     </div>
@@ -1292,6 +1491,10 @@ session_start();
         </div>
     </div>
 
+    <!-- Loading Spinner -->
+    <div class="loading-spinner" id="loadingSpinner" style="display: none; position: fixed; top: 50%; left: 50%; width: 50px; height: 50px; border-radius: 50%; border: 8px solid #ddd; border-top: 8px solid #9c0000; animation: rotateSpinner 1s linear infinite; z-index: 10000; transform: translate(-50%, -50%);">
+    </div>
+
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // Get form and button elements
@@ -1300,6 +1503,7 @@ session_start();
             const nextButton = document.getElementById('nextButton');
             const closeButton = document.querySelector('.close-button');
             const errorMessage = document.getElementById('validationError');
+            const loadingSpinner = document.getElementById('loadingSpinner');
             
             // Get all form steps and step indicators
             const formSteps = document.querySelectorAll('.form-step');
@@ -1374,6 +1578,27 @@ session_start();
                 return allQuestionsAnswered;
             }
             
+            // Function to validate all steps
+            function validateAllSteps() {
+                let allValid = true;
+                const originalStep = currentStep;
+                
+                for (let i = 1; i <= totalSteps; i++) {
+                    currentStep = i;
+                    const isValid = validateCurrentStep();
+                    if (!isValid) {
+                        allValid = false;
+                        break;
+                    }
+                }
+                
+                // Restore original step
+                currentStep = originalStep;
+                updateStepDisplay();
+                
+                return allValid;
+            }
+            
             // Function to update step display
             function updateStepDisplay() {
                 // Hide all steps
@@ -1440,8 +1665,19 @@ session_start();
                         currentStep++;
                         updateStepDisplay();
                     } else {
-                        // Submit the form if on the last step
-                        form.submit();
+                        // On last step, validate all steps before submitting
+                        if (validateAllSteps()) {
+                            // Show loading spinner
+                            loadingSpinner.style.display = 'block';
+                            // Submit the form
+                            form.submit();
+                        } else {
+                            // Go to the first invalid step
+                            updateStepDisplay();
+                            // Show error message
+                            errorMessage.style.display = 'block';
+                            errorMessage.textContent = 'Please answer all questions before submitting.';
+                        }
                     }
                     // Hide error message
                     errorMessage.style.display = 'none';
@@ -1489,8 +1725,41 @@ session_start();
                 }
             });
             
+            // Handle form submission
+            form.addEventListener('submit', function(e) {
+                // Prevent default form submission
+                e.preventDefault();
+                
+                // Validate all steps
+                if (validateAllSteps()) {
+                    // Show loading spinner
+                    loadingSpinner.style.display = 'block';
+                    // Actually submit the form
+                    this.submit();
+                } else {
+                    // Go to the first invalid step
+                    updateStepDisplay();
+                    // Show error message
+                    errorMessage.style.display = 'block';
+                    errorMessage.textContent = 'Please answer all questions before submitting.';
+                    // Scroll to the top of the form to show the error message
+                    form.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+            
             // Initialize display
             updateStepDisplay();
+            
+            // Handle URL parameter for error display
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('error')) {
+                errorMessage.textContent = "An error occurred while submitting the form. Please try again.";
+                if (sessionStorage.getItem('error_message')) {
+                    errorMessage.textContent = sessionStorage.getItem('error_message');
+                    sessionStorage.removeItem('error_message');
+                }
+                errorMessage.style.display = 'block';
+            }
         });
     </script>
 </body>
