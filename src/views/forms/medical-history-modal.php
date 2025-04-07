@@ -3,6 +3,34 @@
 session_start();
 require_once '../../../assets/conn/db_conn.php';
 
+// Store the referrer URL to use it for the close button
+$referrer = '';
+
+// Check HTTP_REFERER first
+if (isset($_SERVER['HTTP_REFERER'])) {
+    $referrer = $_SERVER['HTTP_REFERER'];
+}
+
+// If no referrer or it's not from a dashboard, check for a passed parameter
+if (!$referrer || !stripos($referrer, 'dashboard')) {
+    if (isset($_GET['source'])) {
+        $referrer = $_GET['source'];
+    }
+}
+
+// Default fallback
+if (!$referrer) {
+    $referrer = '../../public/Dashboards/dashboard-Inventory-System.php';
+}
+
+// Store the referrer in a session variable to maintain it across form submissions
+if (!isset($_SESSION['medical_history_referrer'])) {
+    $_SESSION['medical_history_referrer'] = $referrer;
+} else {
+    // Use the stored referrer if available
+    $referrer = $_SESSION['medical_history_referrer'];
+}
+
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../../../public/login.php");
@@ -1656,6 +1684,45 @@ if (isset($_SESSION['error_message'])) {
                 clearQuestionHighlights();
             }
             
+            // Function to go back to previous page
+            function goBackToDashboard(skipConfirmation = false) {
+                // First check if the user has entered data
+                if (!skipConfirmation) {
+                    const radioButtons = document.querySelectorAll('input[type="radio"]:checked');
+                    let hasData = radioButtons.length > 0;
+                    
+                    if (hasData) {
+                        const confirmLeave = confirm('You have unsaved data. Are you sure you want to leave this page?');
+                        if (!confirmLeave) {
+                            return false;
+                        }
+                    }
+                }
+                
+                // If we get here, either there's no data or user confirmed leaving
+                let referrerUrl = "<?php echo $referrer; ?>";
+                
+                // Check if referrer is valid, otherwise go to default dashboard
+                if (referrerUrl && (referrerUrl.includes('Dashboard') || referrerUrl.includes('dashboard'))) {
+                    window.location.href = referrerUrl;
+                } else {
+                    // Default fallback
+                    window.location.href = "../../public/Dashboards/dashboard-Inventory-System.php";
+                }
+            }
+            
+            // Handle close button click
+            closeButton.addEventListener('click', function() {
+                goBackToDashboard();
+            });
+            
+            // Add ESC key listener to close the form
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    goBackToDashboard();
+                }
+            });
+            
             // Handle next button click
             nextButton.addEventListener('click', function() {
                 // Validate current step
@@ -1695,14 +1762,6 @@ if (isset($_SESSION['error_message'])) {
                     currentStep--;
                     updateStepDisplay();
                 }
-            });
-            
-            // Handle close button click
-            closeButton.addEventListener('click', function() {
-                // You can add custom close behavior here
-                // For now, let's just log it
-                console.log('Modal closed');
-                window.close();
             });
             
             // Add event listeners to radio buttons to handle checked state
