@@ -125,7 +125,7 @@
         <div class="container">
             <!-- Added links around each card that redirect to login.php -->
             <!-- Added role parameter to differentiate user types in the login form -->
-            <a href="login.php?role=hospital" class="card-link">
+            <a href="hospital-request.php" class="card-link">
                 <div class="card">
                     <div class="icon-wrapper">
                         <img src="assets/img/hospital-icon.png" alt="Hospitals" class="icon">
@@ -134,7 +134,7 @@
                 </div>
             </a>
 
-            <a href="login.php?role=staff" class="card-link">
+            <a href="login.php" class="card-link">
                 <div class="card">
                     <div class="icon-wrapper">
                         <img src="assets/img/staff-icon.png" alt="Staff" class="icon">
@@ -143,7 +143,7 @@
                 </div>
             </a>
 
-            <a href="login.php?role=admin" class="card-link">
+            <a href="login.php" class="card-link">
                 <div class="card">
                     <div class="icon-wrapper">
                         <img src="assets/img/admin-icon.png" alt="Admin" class="icon">
