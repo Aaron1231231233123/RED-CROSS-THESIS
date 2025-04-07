@@ -1175,7 +1175,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <div><strong>Donation Date:</strong> ${eligibility.start_date ? new Date(eligibility.start_date).toLocaleDateString() : '4/1/2025'}</div>
                         
                         <div><strong>Age:</strong> ${donor.age || 'N/A'}</div>
-                        <div><strong>Eligibility End Date:</strong> ${eligibility.end_date ? new Date(eligibility.end_date).toLocaleDateString() : 'N/A'}</div>
+                        ${isApproved ? `<div><strong>Eligibility End Date:</strong> ${eligibility.end_date ? new Date(eligibility.end_date).toLocaleDateString() : 'N/A'}</div>` : ''}
                         
                         <div><strong>Sex:</strong> ${donor.sex || 'N/A'}</div>
                         ${isApproved ? `<div><strong>Blood Bag Type:</strong> ${eligibility.blood_bag_type || 'Not specified'}</div>` : ''}
@@ -1186,7 +1186,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <div><strong>Permanent Address:</strong> ${donor.permanent_address || 'N/A'}</div>
                         ${isApproved ? `<div><strong>Donor Reaction:</strong> ${eligibility.donor_reaction || 'None'}</div>` : ''}
                         
-                        <div><strong>Office Address:</strong> ${donor.office_address || 'Not specified'}</div>
+                        ${isApproved ? `<div><strong>Office Address:</strong> ${donor.office_address || 'Not specified'}</div>` : ''}
                         ${isApproved ? `<div><strong>Management Done:</strong> ${eligibility.management_done || 'None'}</div>` : ''}
                     </div>
                     
