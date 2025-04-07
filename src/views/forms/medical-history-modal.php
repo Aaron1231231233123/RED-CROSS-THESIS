@@ -56,6 +56,39 @@ if ($_SESSION['role_id'] === 3 && !isset($_SESSION['donor_id'])) {
     exit();
 }
 
+// Fetch donor's sex from the database
+$donorSex = 'male'; // Default to male
+$isFemale = false;
+
+if (isset($_SESSION['donor_id'])) {
+    $donor_id = $_SESSION['donor_id'];
+    $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form?donor_id=eq.' . $donor_id);
+    
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ]);
+    
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    
+    curl_close($ch);
+    
+    if ($http_code === 200) {
+        $donorData = json_decode($response, true);
+        if (is_array($donorData) && !empty($donorData)) {
+            $donorSex = strtolower($donorData[0]['sex'] ?? 'male');
+            $isFemale = ($donorSex === 'female');
+            error_log("Donor sex: " . $donorSex . ", isFemale: " . ($isFemale ? 'true' : 'false'));
+        } else {
+            error_log("Failed to parse donor data or empty response");
+        }
+    } else {
+        error_log("Failed to fetch donor data. HTTP Code: " . $http_code);
+    }
+}
+
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
@@ -561,11 +594,13 @@ if (isset($_SESSION['error_message'])) {
                 <div class="step" id="step4" data-step="4">4</div>
                 <div class="step-connector" id="line4-5"></div>
                 <div class="step" id="step5" data-step="5">5</div>
+                <?php if ($isFemale): ?>
                 <div class="step-connector" id="line5-6"></div>
                 <div class="step" id="step6" data-step="6">6</div>
+                <?php endif; ?>
             </div>
             
-            <form id="medicalHistoryForm" method="post" action="<?php echo $_SERVER['PHP_SELF'] . (isset($_GET['donor_id']) ? '?donor_id=' . htmlspecialchars($_GET['donor_id']) : ''); ?>">
+            <form id="medicalHistoryForm" method="post" action="<?php echo $_SERVER['PHP_SELF'] . (isset($_GET['donor_id']) ? '?donor_id=' . htmlspecialchars($_GET['donor_id']) : ''); ?>"><?php if ($isFemale): ?><input type="hidden" name="is_female" value="1"><?php endif; ?>
                 <!-- Step 1: Health & Risk Assessment -->
                 <div class="form-step active" data-step="1">
                     <div class="step-title">HEALTH & RISK ASSESSMENT:</div>
@@ -1380,6 +1415,7 @@ if (isset($_SESSION['error_message'])) {
                 </div>
                 
                 <!-- Step 6: General Health History -->
+                <?php if ($isFemale): ?>
                 <div class="form-step" data-step="6">
                     <div class="step-title">FOR FEMALE DONORS ONLY:</div>
                     <div class="step-description">Tick the appropriate answer.</div>
@@ -1508,6 +1544,7 @@ if (isset($_SESSION['error_message'])) {
                         </div>
                     </div>
                 </div>
+                <?php endif; ?>
             </form>
             
             <div class="error-message" id="validationError">Please answer all questions before proceeding to the next step.</div>
@@ -1525,6 +1562,9 @@ if (isset($_SESSION['error_message'])) {
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Check if the donor is female
+            const isFemale = <?php echo $isFemale ? 'true' : 'false'; ?>;
+            
             // Get form and button elements
             const form = document.getElementById('medicalHistoryForm');
             const prevButton = document.getElementById('prevButton');
@@ -1540,7 +1580,7 @@ if (isset($_SESSION['error_message'])) {
             
             // Current step
             let currentStep = 1;
-            const totalSteps = formSteps.length;
+            const totalSteps = isFemale ? 6 : 5;
             
             // Function to clear any question highlights
             function clearQuestionHighlights() {
@@ -1552,6 +1592,11 @@ if (isset($_SESSION['error_message'])) {
             
             // Function to validate the current step
             function validateCurrentStep() {
+                // Skip validation for step 6 if donor is not female
+                if (currentStep === 6 && !isFemale) {
+                    return true;
+                }
+                
                 const currentStepElement = document.querySelector(`.form-step[data-step="${currentStep}"]`);
                 if (!currentStepElement) return true;
                 
@@ -1611,7 +1656,10 @@ if (isset($_SESSION['error_message'])) {
                 let allValid = true;
                 const originalStep = currentStep;
                 
-                for (let i = 1; i <= totalSteps; i++) {
+                // Use the actual totalSteps value based on donor's sex
+                const stepsToValidate = isFemale ? 6 : 5;
+                
+                for (let i = 1; i <= stepsToValidate; i++) {
                     currentStep = i;
                     const isValid = validateCurrentStep();
                     if (!isValid) {
@@ -1788,6 +1836,29 @@ if (isset($_SESSION['error_message'])) {
             form.addEventListener('submit', function(e) {
                 // Prevent default form submission
                 e.preventDefault();
+                
+                // For non-female donors, ensure the female-specific questions are not required
+                if (!isFemale) {
+                    // Set default empty values for female-specific fields to avoid validation errors
+                    for (let i = 33; i <= 37; i++) {
+                        const radioName = 'q' + i;
+                        if (!document.querySelector(`input[name="${radioName}"]:checked`)) {
+                            // Create hidden inputs with "No" values for female-specific questions
+                            const hiddenInput = document.createElement('input');
+                            hiddenInput.type = 'hidden';
+                            hiddenInput.name = radioName;
+                            hiddenInput.value = 'No';
+                            form.appendChild(hiddenInput);
+                            
+                            // Also add default remark
+                            const hiddenRemark = document.createElement('input');
+                            hiddenRemark.type = 'hidden';
+                            hiddenRemark.name = radioName + '_remarks';
+                            hiddenRemark.value = 'None';
+                            form.appendChild(hiddenRemark);
+                        }
+                    }
+                }
                 
                 // Validate all steps
                 if (validateAllSteps()) {
