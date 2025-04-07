@@ -1,0 +1,5 @@
+Timestamp,Request ID,Blood Type,Units Requested/Deducted,Collections Updated,Status,Reason/Message
+2025-04-01T18:17:46.012Z,1,,,,Failed,An error occurred: Failed to update blood collection
+2025-04-01T18:17:50.755Z,6,B-,21,,Failed,Insufficient blood units available. Found 0 units but 21 units were requested.
+2025-04-01T18:17:58.164Z,7,B-,10,,Failed,Insufficient blood units available. Found 0 units but 10 units were requested.
+2025-04-01T18:20:06.520Z,7,B-,10,,Failed,Insufficient blood units available. Found 0 units but 10 units were requested.
