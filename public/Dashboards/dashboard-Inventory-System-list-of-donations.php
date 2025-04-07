@@ -1156,6 +1156,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     const donor = data.donor;
                     const eligibility = data.eligibility;
                     
+                    // Check if the donor is approved
+                    const isApproved = eligibility.status === 'approved';
+                    
                     // Format the details in the compact style from the image
                     let html = `
                     <div class="donor-details-container">
@@ -1166,7 +1169,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <div><strong>Donation Type:</strong> ${eligibility.donation_type || 'Pending'}</div>
                         
                         <div><strong>Middle Name:</strong> ${donor.middle_name || 'N/A'}</div>
-                        <div><strong>Status:</strong> ${eligibility.status || 'approved'}</div>
+                        <div><strong>Status:</strong> ${eligibility.status || 'pending'}</div>
                         
                         <div><strong>Birthdate:</strong> ${donor.birthdate || 'N/A'}</div>
                         <div><strong>Donation Date:</strong> ${eligibility.start_date ? new Date(eligibility.start_date).toLocaleDateString() : '4/1/2025'}</div>
@@ -1175,16 +1178,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <div><strong>Eligibility End Date:</strong> ${eligibility.end_date ? new Date(eligibility.end_date).toLocaleDateString() : 'N/A'}</div>
                         
                         <div><strong>Sex:</strong> ${donor.sex || 'N/A'}</div>
-                        <div><strong>Blood Bag Type:</strong> ${eligibility.blood_bag_type || 'Not specified'}</div>
+                        ${isApproved ? `<div><strong>Blood Bag Type:</strong> ${eligibility.blood_bag_type || 'Not specified'}</div>` : ''}
                         
                         <div><strong>Civil Status:</strong> ${donor.civil_status || 'Single'}</div>
-                        <div><strong>Amount Collected:</strong> ${eligibility.amount_collected || 'Not specified'}</div>
+                        ${isApproved ? `<div><strong>Amount Collected:</strong> ${eligibility.amount_collected || 'Not specified'}</div>` : ''}
                         
-                        <div><strong>Permanent Address:</strong> ${donor.permanent_address || 'a'}</div>
-                        <div><strong>Donor Reaction:</strong> ${eligibility.donor_reaction || 'None'}</div>
+                        <div><strong>Permanent Address:</strong> ${donor.permanent_address || 'N/A'}</div>
+                        ${isApproved ? `<div><strong>Donor Reaction:</strong> ${eligibility.donor_reaction || 'None'}</div>` : ''}
                         
                         <div><strong>Office Address:</strong> ${donor.office_address || 'Not specified'}</div>
-                        <div><strong>Management Done:</strong> ${eligibility.management_done || 'None'}</div>
+                        ${isApproved ? `<div><strong>Management Done:</strong> ${eligibility.management_done || 'None'}</div>` : ''}
                     </div>
                     
                     <div class="d-flex justify-content-center gap-3 mt-4">
@@ -1226,6 +1229,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         }
                         .donor-details-container > div {
                             padding: 4px 0;
+                        }
+                        /* Make odd items on the left and even items on the right (for pending donors) */
+                        .donor-details-container > div:nth-child(odd) {
+                            grid-column: 1;
+                        }
+                        .donor-details-container > div:nth-child(even) {
+                            grid-column: 2;
                         }
                         .modal-body {
                             padding: 20px 25px;

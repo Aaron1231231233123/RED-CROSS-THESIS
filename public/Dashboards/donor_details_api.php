@@ -128,7 +128,12 @@ function fetchEligibilityRecord($eligibilityId) {
             'donation_type' => 'Pending',
             'start_date' => date('Y-m-d'),
             'end_date' => null,
-            'is_pending' => true
+            'is_pending' => true,
+            // Explicitly set these fields to null for pending donors
+            'blood_bag_type' => null,
+            'amount_collected' => null, 
+            'donor_reaction' => null,
+            'management_done' => null
         ];
     }
     
@@ -194,10 +199,11 @@ function fetchEligibilityRecord($eligibilityId) {
             'donation_type' => $donationType,
             'start_date' => date('Y-m-d'),
             'end_date' => null,
-            'blood_bag_type' => 'Not applicable',
-            'amount_collected' => 'Not applicable',
-            'donor_reaction' => 'Not applicable',
-            'management_done' => 'Not applicable'
+            // Explicitly set these fields to null for declined donors
+            'blood_bag_type' => null,
+            'amount_collected' => null,
+            'donor_reaction' => null,
+            'management_done' => null
         ];
     }
     
@@ -235,7 +241,12 @@ function fetchEligibilityRecord($eligibilityId) {
                 'donation_type' => 'Pending',
                 'start_date' => date('Y-m-d'),
                 'end_date' => null,
-                'is_pending' => true
+                'is_pending' => true,
+                // Explicitly set these fields to null for pending donors
+                'blood_bag_type' => null,
+                'amount_collected' => null, 
+                'donor_reaction' => null,
+                'management_done' => null
             ];
         }
         
