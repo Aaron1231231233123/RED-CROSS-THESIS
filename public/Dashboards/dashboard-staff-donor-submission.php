@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once '../../assets/conn/db_conn.php';
-
+require '../../assets/php_func/user_roles_staff.php';
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
     header("Location: /REDCROSS/public/login.php");
@@ -447,12 +447,38 @@ select.donor_form_input[disabled] {
             <nav class="col-md-3 col-lg-2 d-md-block sidebar">
                 <h4>Red Cross Staff</h4>
                 <ul class="nav flex-column">
-                    <li class="nav-item"><a class="nav-link" href="dashboard-staff-main.php">Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="dashboard-staff-donor-submission.php">Donor Interviews Submissions</a></li>
-                    <li class="nav-item"><a class="nav-link" href="dashboard-staff-physical-submission.php">Physical Exams Submissions</a></li>
-                    <li class="nav-item"><a class="nav-link" href="dashboard-staff-blood-collection-submission.php">Blood Collection Submissions</a></li>
-                    <li class="nav-item"><a class="nav-link" href="dashboard-staff-submit-letter.php">Submit a Letter</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../../assets/php_func/logout.php">Logout</a></li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="dashboard-staff-main.php">Dashboard</a>
+                    </li>
+                    
+                    <?php if ($user_staff_roles === 'interviewer'): ?>
+                        <li class="nav-item">
+                            <a class="nav-link active" href="dashboard-staff-donor-submission.php">
+                                Donor Interviews Submissions
+                            </a>
+                        </li>
+                    <?php endif; ?>
+                    
+                    <?php if ($user_staff_roles === 'physician'): ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="dashboard-staff-physical-submission.php">
+                                Physical Exams Submissions
+                            </a>
+                        </li>
+                    <?php endif; ?>
+                    
+                    <?php if ($user_staff_roles === 'phlebotomist'): ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="dashboard-staff-blood-collection-submission.php">
+                                Blood Collection Submissions
+                            </a>
+                        </li>
+                    <?php endif; ?>
+                    
+
+                    <li class="nav-item">
+                        <a class="nav-link" href="../../assets/php_func/logout.php">Logout</a>
+                    </li>
                 </ul>
             </nav>
             

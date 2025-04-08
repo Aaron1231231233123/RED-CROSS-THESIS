@@ -610,11 +610,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <thead class="table-dark">
                                     <tr>
                                         <?php if ($status === 'approved'): ?>
-                                            <th>Surname</th>
-                                            <th>First Name</th>
-                                            <th>Middle Name</th>
-                                            <th>Age</th>
-                                            <th>Sex</th>
+                                        <th>Surname</th>
+                                        <th>First Name</th>
+                                        <th>Middle Name</th>
+                                        <th>Age</th>
+                                        <th>Sex</th>
                                             <th>Blood Type</th>
                                             <th>Donation Type</th>
                                             <th>Actions</th>
@@ -636,10 +636,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             <th>Surname</th>
                                             <th>First Name</th>
                                             <th>Middle Name</th>
-                                            <th>Blood Type</th>
-                                            <th>Donation Type</th>
-                                            <th>Status</th>
-                                            <th>Actions</th>
+                                        <th>Blood Type</th>
+                                        <th>Donation Type</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
                                         <?php endif; ?>
                                     </tr>
                                 </thead>
@@ -682,8 +682,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                         <span class="badge bg-danger">Declined</span>
                                                         <?php else: ?>
                                                         <span class="badge bg-secondary"><?php echo ucfirst($status); ?></span>
-                                                        <?php endif; ?>
-                                                    </td>
+                                                    <?php endif; ?>
+                                                </td>
                                                 <?php endif; ?>
                                                 
                                                 <td onclick="event.stopPropagation();">
@@ -708,7 +708,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 </tbody>
                             </table>
                         </div>
-                        
+            
                         <!-- Pagination Controls -->
                         <?php if (!$error && $totalPages > 1): ?>
                         <nav aria-label="Page navigation">
@@ -1188,7 +1188,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         
                         ${isApproved ? `<div><strong>Office Address:</strong> ${donor.office_address || 'Not specified'}</div>` : ''}
                         ${isApproved ? `<div><strong>Management Done:</strong> ${eligibility.management_done || 'None'}</div>` : ''}
-                    </div>
+                        </div>
                     
                     <div class="d-flex justify-content-center gap-3 mt-4">
                         ${eligibility.status === 'pending' ? `
@@ -1484,11 +1484,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             const sortSelect = document.getElementById('sortSelect');
             if (sortSelect) {
                 sortSelect.addEventListener('change', function() {
-                    const sortValue = this.value;
-                    if (sortValue !== 'default') {
-                        window.location.href = `?sort=${sortValue}`;
-                    }
-                });
+                const sortValue = this.value;
+                if (sortValue !== 'default') {
+                    window.location.href = `?sort=${sortValue}`;
+                }
+            });
             }
         });
     </script>

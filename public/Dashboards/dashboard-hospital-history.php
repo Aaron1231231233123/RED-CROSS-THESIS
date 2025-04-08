@@ -850,7 +850,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                         <h3 class="text-danger mb-0"><?php echo $_SESSION['user_first_name']; ?></h3>
                         <small class="text-muted">Hospital Request Dashboard</small>
                     </div>
-                    
+
                     <ul class="nav flex-column">
                         <li class="nav-item">
                             <a class="nav-link" href="dashboard-hospital-main.php">
@@ -1379,7 +1379,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (isAsap) {
                 // For ASAP, use current date/time
                 formData.set('when_needed', new Date().toISOString());
-            } else {
+                } else {
                 // For Scheduled, use the selected date/time
                 const scheduledDate = document.querySelector('#scheduleDateTime input').value;
                 if (scheduledDate) {
@@ -1492,8 +1492,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Restore button state
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalBtnText;
-            });
-        });
+    });
+});
     }
     
     // Handle when needed change

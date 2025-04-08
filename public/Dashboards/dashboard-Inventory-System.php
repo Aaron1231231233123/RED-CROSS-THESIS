@@ -1032,12 +1032,12 @@ h6 {
                 backdrop: false,
                 keyboard: false
             });
-            
+
             // Function to show confirmation modal
             window.showConfirmationModal = function() {
                 confirmationModal.show();
             };
-            
+
             // Function to handle form submission
             window.proceedToDonorForm = function() {
                 confirmationModal.hide();

@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Initialize cURL session for Supabase
         $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination');
-        
+
         $headers = array(
             'apikey: ' . SUPABASE_API_KEY,
             'Authorization: Bearer ' . SUPABASE_API_KEY,
@@ -306,10 +306,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 // Different redirections based on role
-                if ($_SESSION['role_id'] === 1) {
+            if ($_SESSION['role_id'] === 1) {
                     // Admin (role_id 1) - Direct to blood collection
                     error_log("Admin role: Redirecting to blood collection form");
-                    header('Location: ../views/forms/blood-collection-form.php');
+                header('Location: ../views/forms/blood-collection-form.php');
                 } else {
                     // Staff (role_id 3) - Back to dashboard
                     error_log("Staff role: Redirecting to dashboard");
