@@ -1,5 +1,5 @@
 <?php
-require_once '../../assets/conn/db_conn.php';
+require_once '../conn/db_conn.php';
 
 header('Content-Type: application/json');
 
@@ -51,5 +51,4 @@ echo json_encode([
     'status_message' => $data['status_message'] ?? 'Unknown status',
     'remaining_days' => $data['remaining_days'] ?? 0,
     'end_date' => $data['end_date'] ?? null
-]);
-?> 
+]); 

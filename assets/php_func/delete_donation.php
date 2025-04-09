@@ -1,6 +1,6 @@
 <?php
 // Include database connection
-include_once '../../assets/conn/db_conn.php';
+include_once '../conn/db_conn.php';
 
 // Check if eligibility_id is provided
 if (!isset($_GET['eligibility_id'])) {

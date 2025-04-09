@@ -1,6 +1,6 @@
 <?php
 // Include database connection
-include_once '../../assets/conn/db_conn.php';
+include_once '../conn/db_conn.php';
 
 // Function to update eligibility record
 function updateEligibilityRecord($eligibilityId, $data) {

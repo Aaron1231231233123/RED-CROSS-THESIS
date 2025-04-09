@@ -1,6 +1,6 @@
 <?php
 // Include database connection
-include_once '../../assets/conn/db_conn.php';
+include_once '../conn/db_conn.php';
 
 // Check if donor_id is provided
 $donorId = isset($_GET['donor_id']) ? $_GET['donor_id'] : null;

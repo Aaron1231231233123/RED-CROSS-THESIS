@@ -11,5 +11,4 @@ if (isset($data['donor_id'])) {
     echo json_encode(['success' => true]);
 } else {
     echo json_encode(['success' => false, 'error' => 'No donor_id provided']);
-}
-?> 
+} 

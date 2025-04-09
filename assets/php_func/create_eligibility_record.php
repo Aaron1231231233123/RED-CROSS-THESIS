@@ -1,6 +1,6 @@
 <?php
 // Include database connection
-include_once '../../assets/conn/db_conn.php';
+include_once '../conn/db_conn.php';
 
 // Set headers
 header('Content-Type: application/json');
@@ -206,5 +206,4 @@ if ($method === 'POST') {
     echo json_encode($result);
 } else {
     echo json_encode(["success" => false, "error" => "Only POST method is allowed"]);
-}
-?> 
+} 

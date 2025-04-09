@@ -3,7 +3,7 @@
 session_start();
 
 // Include database connection
-include_once '../../assets/conn/db_conn.php';
+include_once '../conn/db_conn.php';
 
 // Set header to return JSON
 header('Content-Type: application/json');
@@ -78,5 +78,4 @@ if (isset($data['donor_id']) && !empty($data['donor_id'])) {
         'success' => false,
         'error' => 'No donor ID provided'
     ]);
-}
-?> 
+} 

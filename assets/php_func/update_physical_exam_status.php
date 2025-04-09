@@ -1,6 +1,6 @@
 <?php
 // Include database connection
-include_once '../../assets/conn/db_conn.php';
+include_once '../conn/db_conn.php';
 
 // Set response headers
 header('Content-Type: application/json');
@@ -89,14 +89,13 @@ $result = processPhysicalExam(
 if ($result['success']) {
     // Add redirect information based on the status
     if ($result['status'] === 'approved') {
-        $result['redirect'] = 'dashboard-Inventory-System-list-of-donations.php?status=approved';
+        $result['redirect'] = '../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php?status=approved';
     } else if ($result['status'] === 'declined') {
-        $result['redirect'] = 'dashboard-Inventory-System-list-of-donations.php?status=declined';
+        $result['redirect'] = '../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php?status=declined';
     } else {
-        $result['redirect'] = 'dashboard-Inventory-System-list-of-donations.php?status=pending';
+        $result['redirect'] = '../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php?status=pending';
     }
 }
 
 // Return the result
-echo json_encode($result);
-?> 
+echo json_encode($result); 

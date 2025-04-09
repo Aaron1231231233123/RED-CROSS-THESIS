@@ -1,6 +1,6 @@
 <?php
 // Include database connection
-include_once '../../assets/conn/db_conn.php';
+include_once '../conn/db_conn.php';
 
 echo "<h1>Supabase Connection Test</h1>";
 
@@ -103,5 +103,4 @@ if ($err) {
 
 echo "<h2>Now try this corrected URL:</h2>";
 echo "<p>Go to your dashboard and look at the 'donation_pending.php' file and check the logs to see errors.</p>";
-echo "<p>Then update the file to use the correct table name.</p>";
-?> 
+echo "<p>Then update the file to use the correct table name.</p>"; 

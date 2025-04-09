@@ -1,6 +1,6 @@
 <?php
 // Include database connection
-include_once '../../assets/conn/db_conn.php';
+include_once '../conn/db_conn.php';
 
 // Enable error reporting for debugging
 ini_set('display_errors', 1);
@@ -361,5 +361,4 @@ if ($method === 'POST') {
     echo json_encode($result);
 } else {
     echo json_encode(['success' => false, 'error' => 'Only POST method is allowed']);
-}
-?> 
+} 

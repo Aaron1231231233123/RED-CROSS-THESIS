@@ -306,14 +306,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 // Different redirections based on role
-            if ($_SESSION['role_id'] === 1) {
+                if ($_SESSION['role_id'] === 1) {
                     // Admin (role_id 1) - Direct to blood collection
                     error_log("Admin role: Redirecting to blood collection form");
-                header('Location: ../views/forms/blood-collection-form.php');
+                    header('Location: ../views/forms/blood-collection-form.php');
                 } else {
-                    // Staff (role_id 3) - Back to dashboard
-                    error_log("Staff role: Redirecting to dashboard");
-                    header('Location: ../../public/Dashboards/dashboard-staff-physical-submission.php');
+                    // Staff (role_id 3) - Redirect to the appropriate donor list based on status
+                    error_log("Staff role: Redirecting to appropriate donor list");
+                    
+                    if ($status === 'approved') {
+                        // Redirect to approved donors list
+                        header('Location: ../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php?status=approved&processed=true');
+                    } else if ($status === 'declined') {
+                        // Redirect to declined donors list
+                        header('Location: ../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php?status=declined&processed=true');
+                    } else {
+                        // Redirect to pending donors list
+                        header('Location: ../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php?status=pending&processed=true');
+                    }
                 }
                 exit();
             } else {
