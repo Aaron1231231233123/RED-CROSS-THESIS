@@ -485,7 +485,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
                         
                         <div class="navigation-buttons">
                             <div></div> <!-- Placeholder for alignment -->
-                            <button type="button" class="btn btn-primary btn-navigate" onclick="nextSection(1)">Next &#8594;</button>
+                            <button type="button" class="btn btn-primary btn-navigate" onclick="nextSection(1)">Next &gt;</button>
                         </div>
                     </div>
                     
@@ -528,8 +528,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
                         </div>
                         
                         <div class="navigation-buttons">
-                            <button type="button" class="btn btn-secondary btn-navigate" onclick="prevSection(2)">&#8592; Previous</button>
-                            <button type="button" class="btn btn-primary btn-navigate" onclick="nextSection(2)">Next &#8594;</button>
+                            <button type="button" class="btn btn-secondary btn-navigate" onclick="prevSection(2)">&lt; Previous</button>
+                            <button type="button" class="btn btn-primary btn-navigate" onclick="nextSection(2)">Next &gt;</button>
                         </div>
                     </div>
                     
@@ -571,8 +571,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
                         </div>
                         
                         <div class="navigation-buttons">
-                            <button type="button" class="btn btn-secondary btn-navigate" onclick="prevSection(3)">&#8592; Previous</button>
-                            <button type="button" class="btn btn-primary btn-navigate" onclick="nextSection(3)">Next &#8594;</button>
+                            <button type="button" class="btn btn-secondary btn-navigate" onclick="prevSection(3)">&lt; Previous</button>
+                            <button type="button" class="btn btn-primary btn-navigate" onclick="nextSection(3)">Next &gt;</button>
                         </div>
                     </div>
                     
@@ -609,8 +609,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
                         </div>
                         
                         <div class="navigation-buttons">
-                            <button type="button" class="btn btn-secondary btn-navigate" onclick="prevSection(4)">&#8592; Previous</button>
-                            <button type="button" class="btn btn-primary btn-navigate" onclick="nextSection(4)">Next &#8594;</button>
+                            <button type="button" class="btn btn-secondary btn-navigate" onclick="prevSection(4)">&lt; Previous</button>
+                            <button type="button" class="btn btn-primary btn-navigate" onclick="nextSection(4)">Next &gt;</button>
                         </div>
                     </div>
                     
@@ -631,8 +631,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
                         </div>
                         
                         <div class="navigation-buttons">
-                            <button type="button" class="btn btn-secondary btn-navigate" onclick="prevSection(5)">&#8592; Previous</button>
-                            <button type="submit" class="btn btn-primary btn-navigate" id="submitButton" name="submit_donor_form">Submit &#8594;</button>
+                            <button type="button" class="btn btn-secondary btn-navigate" onclick="prevSection(5)">&lt; Previous</button>
+                            <button type="submit" class="btn btn-primary btn-navigate" id="submitButton" name="submit_donor_form">Submit &gt;</button>
                         </div>
                     </div>
                 </form>

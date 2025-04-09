@@ -525,7 +525,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         <div class="dashboard-home-header bg-light p-3 border-bottom">
             <div class="d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Blood Donor Management System</h4>
-                <button type="button" class="btn btn-danger" id="addWalkInBtn">
+                <button type="button" class="btn btn-danger" onclick="showConfirmationModal()">
                     <i class="fas fa-plus me-2"></i>Register Donor
                 </button>
             </div>
@@ -1029,13 +1029,24 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             });
             const processDonorConfirmationModal = new bootstrap.Modal(document.getElementById('processDonorConfirmationModal'));
             
-            // Add event listeners for buttons
-            const addWalkInBtn = document.getElementById('addWalkInBtn');
-            if (addWalkInBtn) {
-                addWalkInBtn.addEventListener('click', function() {
-                    window.location.href = "../../src/views/forms/donor-form.php";
-                });
-            }
+            // Function to show confirmation modal
+            window.showConfirmationModal = function() {
+                const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+                confirmationModal.show();
+            };
+
+            // Function to handle form submission
+            window.proceedToDonorForm = function() {
+                const confirmationModal = bootstrap.Modal.getInstance(document.getElementById('confirmationModal'));
+                const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+                
+                confirmationModal.hide();
+                loadingModal.show();
+                
+                setTimeout(() => {
+                    window.location.href = '../../src/views/forms/donor-form-modal.php';
+                }, 1500);
+            };
             
             // View buttons
             const viewButtons = document.querySelectorAll('.view-donor');
