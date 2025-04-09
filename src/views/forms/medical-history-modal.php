@@ -3,6 +3,20 @@
 session_start();
 require_once '../../../assets/conn/db_conn.php';
 
+// Clean up abandoned donor form data (older than 30 minutes)
+if (isset($_SESSION['donor_form_data']) && isset($_SESSION['donor_form_timestamp'])) {
+    $currentTime = time();
+    $formSubmitTime = $_SESSION['donor_form_timestamp'];
+    $timeDifference = $currentTime - $formSubmitTime;
+    
+    // If form data is older than 30 minutes, remove it
+    if ($timeDifference > 1800) { // 1800 seconds = 30 minutes
+        error_log("Removing stale donor form data (older than 30 minutes) from medical history page");
+        unset($_SESSION['donor_form_data']);
+        unset($_SESSION['donor_form_timestamp']);
+    }
+}
+
 // Store the referrer URL to use it for the close button
 $referrer = '';
 
@@ -56,11 +70,90 @@ if ($_SESSION['role_id'] === 3 && !isset($_SESSION['donor_id'])) {
     exit();
 }
 
+// Check if we need to insert donor data from the session (redirect from declaration form)
+if (isset($_GET['insert_donor']) && $_GET['insert_donor'] === 'true' && isset($_SESSION['donor_form_data'])) {
+    error_log("Handling insert_donor request. Inserting donor record from session data.");
+    
+    try {
+        // Insert donor record in Supabase
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form');
+        
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($_SESSION['donor_form_data']));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=representation' // Get response data with inserted record
+        ]);
+        
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        
+        // Check for cURL errors
+        if (curl_errno($ch)) {
+            error_log("cURL Error inserting donor: " . curl_error($ch));
+            throw new Exception("Error inserting donor: " . curl_error($ch));
+        }
+        
+        curl_close($ch);
+        
+        if ($httpCode >= 200 && $httpCode < 300) {
+            error_log("Donor added successfully. Response: " . $response);
+            
+            // Parse response to get donor ID
+            $responseData = json_decode($response, true);
+            if (is_array($responseData) && !empty($responseData)) {
+                $donorId = $responseData[0]['donor_id'] ?? null;
+                
+                if ($donorId) {
+                    // Store donor ID in session and remove donor_form_data
+                    $_SESSION['donor_id'] = $donorId;
+                    unset($_SESSION['donor_form_data']);
+                    unset($_SESSION['donor_form_timestamp']);
+                    error_log("Donor ID $donorId stored in session and form data cleared.");
+                    
+                    // Redirect to self without the insert_donor parameter
+                    header('Location: medical-history-modal.php');
+                    exit();
+                } else {
+                    error_log("Failed to extract donor_id from response: " . $response);
+                    throw new Exception("Error processing donor information. No donor_id in response.");
+                }
+            } else {
+                error_log("Invalid response format: " . $response);
+                throw new Exception("Error processing donor information. Invalid response format.");
+            }
+        } else {
+            error_log("Error adding donor. HTTP Code: $httpCode. Response: " . $response);
+            throw new Exception("Error submitting donor form. HTTP Code: $httpCode");
+        }
+    } catch (Exception $e) {
+        error_log("Error in insert_donor process: " . $e->getMessage());
+        $_SESSION['error_message'] = $e->getMessage();
+        
+        // Redirect back to the dashboard
+        $referrer = isset($_SESSION['donor_form_referrer']) ? 
+                   $_SESSION['donor_form_referrer'] : 
+                   '../../public/Dashboards/dashboard-Inventory-System.php';
+        header('Location: ' . $referrer);
+        exit();
+    }
+}
+
 // Fetch donor's sex from the database
 $donorSex = 'male'; // Default to male
 $isFemale = false;
 
-if (isset($_SESSION['donor_id'])) {
+// First check if we have the donor data in session (not yet inserted into database)
+if (isset($_SESSION['donor_form_data']) && isset($_SESSION['donor_form_data']['sex'])) {
+    $donorSex = strtolower($_SESSION['donor_form_data']['sex']);
+    $isFemale = ($donorSex === 'female');
+    error_log("Donor sex from session data: " . $donorSex . ", isFemale: " . ($isFemale ? 'true' : 'false'));
+}
+// If not in session, try to fetch from database using donor_id
+else if (isset($_SESSION['donor_id'])) {
     $donor_id = $_SESSION['donor_id'];
     $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form?donor_id=eq.' . $donor_id);
     
@@ -80,7 +173,7 @@ if (isset($_SESSION['donor_id'])) {
         if (is_array($donorData) && !empty($donorData)) {
             $donorSex = strtolower($donorData[0]['sex'] ?? 'male');
             $isFemale = ($donorSex === 'female');
-            error_log("Donor sex: " . $donorSex . ", isFemale: " . ($isFemale ? 'true' : 'false'));
+            error_log("Donor sex from database: " . $donorSex . ", isFemale: " . ($isFemale ? 'true' : 'false'));
         } else {
             error_log("Failed to parse donor data or empty response");
         }
@@ -95,6 +188,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Debug log the POST data
         error_log("POST data received: " . print_r($_POST, true));
         error_log("Session data before processing: " . print_r($_SESSION, true));
+
+        // Check if we have donor_form_data in session, which means we need to insert the donor record first
+        if (isset($_SESSION['donor_form_data']) && !isset($_SESSION['donor_id'])) {
+            error_log("Found donor_form_data in session. Inserting donor record first.");
+            
+            // Insert donor record in Supabase
+            $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form');
+            
+            curl_setopt($ch, CURLOPT_POST, 1);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($_SESSION['donor_form_data']));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json',
+                'Prefer: return=representation' // Get response data with inserted record
+            ]);
+            
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            
+            // Check for cURL errors
+            if (curl_errno($ch)) {
+                error_log("cURL Error inserting donor: " . curl_error($ch));
+                throw new Exception("Error inserting donor: " . curl_error($ch));
+            }
+            
+            curl_close($ch);
+            
+            if ($httpCode >= 200 && $httpCode < 300) {
+                error_log("Donor added successfully. Response: " . $response);
+                
+                // Parse response to get donor ID
+                $responseData = json_decode($response, true);
+                if (is_array($responseData) && !empty($responseData)) {
+                    $donorId = $responseData[0]['donor_id'] ?? null;
+                    
+                    if ($donorId) {
+                        // Store donor ID in session and remove donor_form_data
+                        $_SESSION['donor_id'] = $donorId;
+                        unset($_SESSION['donor_form_data']);
+                        unset($_SESSION['donor_form_timestamp']);
+                        error_log("Donor ID $donorId stored in session and form data cleared.");
+                    } else {
+                        error_log("Failed to extract donor_id from response: " . $response);
+                        throw new Exception("Error processing donor information. No donor_id in response.");
+                    }
+                } else {
+                    error_log("Invalid response format: " . $response);
+                    throw new Exception("Error processing donor information. Invalid response format.");
+                }
+            } else {
+                error_log("Error adding donor. HTTP Code: $httpCode. Response: " . $response);
+                throw new Exception("Error submitting donor form. HTTP Code: $httpCode");
+            }
+        } else if (!isset($_SESSION['donor_id'])) {
+            throw new Exception("No donor ID or form data found in session.");
+        }
 
         // Prepare the data for insertion
         $medical_history_data = [
@@ -222,9 +373,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['medical_history_id'] = $response_data[0]['medical_history_id'];
                 error_log("Stored medical_history_id in session: " . $_SESSION['medical_history_id']);
                 
-                // Both admin and staff should go to screening form
-                error_log("Redirecting to screening form");
-                header('Location: screening-form.php');
+                // Redirect to declaration form instead of screening form
+                error_log("Redirecting to declaration form");
+                
+                // Make sure the donor_form_referrer is preserved
+                if (isset($_SESSION['donor_form_referrer'])) {
+                    error_log("Preserving referrer URL: " . $_SESSION['donor_form_referrer']);
+                }
+                
+                header('Location: declaration-form-modal.php');
                 exit();
             } else {
                 error_log("Invalid response format or missing medical_history_id: " . print_r($response_data, true));
@@ -512,12 +669,34 @@ if (isset($_SESSION['error_message'])) {
         
         .modal-footer {
             display: flex;
-            justify-content: flex-end;
-            padding: 12px 15px;
-            border-top: 1px solid #f0f0f0;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+        }
+        
+        .footer-left {
+            flex: 1;
+        }
+        
+        .footer-right {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .cancel-button {
             background-color: #fff;
-            border-bottom-left-radius: 8px;
-            border-bottom-right-radius: 8px;
+            color: #dc3545;
+            border: 1px solid #dc3545;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+            font-size: 14px;
+        }
+        
+        .cancel-button:hover {
+            background-color: #f8d7da;
         }
         
         .prev-button,
@@ -528,14 +707,19 @@ if (isset($_SESSION['error_message'])) {
             cursor: pointer;
             font-weight: bold;
             font-size: 15px;
+            z-index: 10;
+            transition: background-color 0.3s ease;
         }
         
         .prev-button {
             background-color: #f5f5f5;
             color: #666;
             border: 1px solid #ddd;
-            margin-right: auto;
-            display: none;
+            margin-right: 10px;
+        }
+        
+        .prev-button:hover {
+            background-color: #e0e0e0;
         }
         
         .next-button,
@@ -543,6 +727,11 @@ if (isset($_SESSION['error_message'])) {
             background-color: #9c0000;
             color: white;
             border: none;
+        }
+        
+        .next-button:hover,
+        .submit-button:hover {
+            background-color: #7e0000;
         }
         
         .form-step {
@@ -573,6 +762,66 @@ if (isset($_SESSION['error_message'])) {
         @keyframes rotateSpinner {
             0% { transform: translate(-50%, -50%) rotate(0deg); }
             100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        /* Styling for required fields */
+        .question-container.error {
+            background-color: rgba(255, 0, 0, 0.05);
+            border-left: 3px solid #ff0000;
+            padding-left: 10px;
+            animation: shake 0.5s ease-in-out;
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+        
+        .question-highlight {
+            color: #ff0000;
+            font-weight: bold;
+        }
+        
+        /* Make the error message more visible */
+        #validationError {
+            background-color: #ffeeee;
+            border: 2px solid #ff0000;
+            color: #ff0000;
+            font-weight: bold;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            text-align: center;
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.2);
+        }
+        
+        /* Add a red asterisk to required fields */
+        .required-field .question-text::after {
+            content: " *";
+            color: #ff0000;
+        }
+
+        /* Add animation for step transitions */
+        .step-transition {
+            animation: fadeTransition 0.3s ease-in-out;
+        }
+
+        @keyframes fadeTransition {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        /* Add shake animation for error messages */
+        .shake {
+            animation: shake 0.5s ease-in-out;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
         }
     </style>
 </head>
@@ -617,13 +866,13 @@ if (isset($_SESSION['error_message'])) {
                         <div class="question-text">Do you feel well and healthy today?</div>
                         <div class="radio-cell">
                             <label class="radio-container">
-                                <input type="radio" name="q1" value="Yes">
+                                <input type="radio" name="q1" value="Yes" required>
                                 <span class="checkmark"></span>
                             </label>
                         </div>
                         <div class="radio-cell">
                             <label class="radio-container">
-                                <input type="radio" name="q1" value="No">
+                                <input type="radio" name="q1" value="No" required>
                                 <span class="checkmark"></span>
                             </label>
                         </div>
@@ -641,13 +890,13 @@ if (isset($_SESSION['error_message'])) {
                         <div class="question-text">Have you ever been refused as a blood donor or told not to donate blood for any reasons?</div>
                         <div class="radio-cell">
                             <label class="radio-container">
-                                <input type="radio" name="q2" value="Yes">
+                                <input type="radio" name="q2" value="Yes" required>
                                 <span class="checkmark"></span>
                             </label>
                         </div>
                         <div class="radio-cell">
                             <label class="radio-container">
-                                <input type="radio" name="q2" value="No">
+                                <input type="radio" name="q2" value="No" required>
                                 <span class="checkmark"></span>
                             </label>
                         </div>
@@ -665,13 +914,13 @@ if (isset($_SESSION['error_message'])) {
                         <div class="question-text">Are you giving blood only because you want to be tested for HIV or the AIDS virus or Hepatitis virus?</div>
                         <div class="radio-cell">
                             <label class="radio-container">
-                                <input type="radio" name="q3" value="Yes">
+                                <input type="radio" name="q3" value="Yes" required>
                                 <span class="checkmark"></span>
                             </label>
                         </div>
                         <div class="radio-cell">
                             <label class="radio-container">
-                                <input type="radio" name="q3" value="No">
+                                <input type="radio" name="q3" value="No" required>
                                 <span class="checkmark"></span>
                             </label>
                         </div>
@@ -688,13 +937,13 @@ if (isset($_SESSION['error_message'])) {
                         <div class="question-text">Are you aware that an HIV/Hepatitis infected person can still transmit the virus despite a negative HIV/Hepatitis test?</div>
                         <div class="radio-cell">
                             <label class="radio-container">
-                                <input type="radio" name="q4" value="Yes">
+                                <input type="radio" name="q4" value="Yes" required>
                                 <span class="checkmark"></span>
                             </label>
                         </div>
                         <div class="radio-cell">
                             <label class="radio-container">
-                                <input type="radio" name="q4" value="No">
+                                <input type="radio" name="q4" value="No" required>
                                 <span class="checkmark"></span>
                             </label>
                         </div>
@@ -1477,13 +1726,13 @@ if (isset($_SESSION['error_message'])) {
                         <div class="question-text">In the past 1 YEAR, did you have a miscarriage or abortion?</div>
                         <div class="radio-cell">
                             <label class="radio-container">
-                                <input type="radio" name="q35" value="Yes">
+                                <input type="radio" name="q35" value="Yes" required>
                                 <span class="checkmark"></span>
                             </label>
                         </div>
                         <div class="radio-cell">
                             <label class="radio-container">
-                                <input type="radio" name="q35" value="No">
+                                <input type="radio" name="q35" value="No" required>
                                 <span class="checkmark"></span>
                             </label>
                         </div>
@@ -1551,8 +1800,15 @@ if (isset($_SESSION['error_message'])) {
         </div>
         
         <div class="modal-footer">
+            <div class="footer-left">
+                <button type="button" class="cancel-button" onclick="confirmCancelRegistration()">
+                    <i class="fas fa-times-circle"></i> Cancel Registration
+                </button>
+            </div>
+            <div class="footer-right">
             <button class="prev-button" id="prevButton">&#8592; Previous</button>
             <button class="next-button" id="nextButton">Next →</button>
+            </div>
         </div>
     </div>
 
@@ -1562,6 +1818,12 @@ if (isset($_SESSION['error_message'])) {
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Add required attribute to all radio buttons
+            const allRadioButtons = document.querySelectorAll('input[type="radio"]');
+            allRadioButtons.forEach(radio => {
+                radio.setAttribute('required', 'required');
+            });
+            
             // Check if the donor is female
             const isFemale = <?php echo $isFemale ? 'true' : 'false'; ?>;
             
@@ -1592,85 +1854,149 @@ if (isset($_SESSION['error_message'])) {
             
             // Function to validate the current step
             function validateCurrentStep() {
-                // Skip validation for step 6 if donor is not female
-                if (currentStep === 6 && !isFemale) {
-                    return true;
-                }
+                logValidationStatus(currentStep);
                 
-                const currentStepElement = document.querySelector(`.form-step[data-step="${currentStep}"]`);
-                if (!currentStepElement) return true;
+                const currentStepQuestions = document.querySelectorAll('.form-step[data-step="' + currentStep + '"] .question-container');
+                let isValid = true;
+                let unansweredCount = 0;
+                let unansweredQuestions = [];
                 
-                // Clear any previous highlights
-                clearQuestionHighlights();
-                
-                // Get all radio buttons in the current step
-                const questionGroups = {};
-                
-                // Find all radio buttons in the current step and group them by name
-                const radioButtons = currentStepElement.querySelectorAll('input[type="radio"]');
-                radioButtons.forEach(radio => {
-                    if (!questionGroups[radio.name]) {
-                        questionGroups[radio.name] = [];
+                // Reset error styles
+                currentStepQuestions.forEach(question => {
+                    question.classList.remove('error');
+                    const questionText = question.querySelector('.question-text');
+                    if (questionText) {
+                        questionText.parentElement.classList.remove('question-highlight');
                     }
-                    questionGroups[radio.name].push(radio);
                 });
                 
-                // Check if each question group has at least one radio button checked
-                let allQuestionsAnswered = true;
-                const unansweredQuestions = [];
-                
-                for (const name in questionGroups) {
-                    const groupChecked = questionGroups[name].some(radio => radio.checked);
-                    if (!groupChecked) {
-                        allQuestionsAnswered = false;
-                        unansweredQuestions.push(name);
-                    }
-                }
-                
-                // Update error message with the number of unanswered questions
-                if (unansweredQuestions.length > 0) {
-                    const questionText = unansweredQuestions.length === 1 ? 'question' : 'questions';
-                    errorMessage.textContent = `Please answer all ${questionText} before proceeding. You have ${unansweredQuestions.length} ${questionText} remaining.`;
+                // Check each question in the current step
+                currentStepQuestions.forEach(question => {
+                    // Only check questions that have input elements
+                    const radios = question.querySelectorAll('input[type="radio"]');
+                    const checkboxes = question.querySelectorAll('input[type="checkbox"]');
+                    const selects = question.querySelectorAll('select');
+                    const textareas = question.querySelectorAll('textarea');
                     
-                    // Highlight unanswered questions
-                    unansweredQuestions.forEach(name => {
-                        const firstRadio = document.querySelector(`input[name="${name}"]`);
-                        if (firstRadio) {
-                            // Find the parent row to highlight
-                            const row = firstRadio.closest('.form-group');
-                            if (row) {
-                                const questionTextElem = row.querySelector('.question-text');
-                                if (questionTextElem) {
-                                    questionTextElem.parentElement.classList.add('question-highlight');
-                                }
+                    // Skip if no inputs in this container
+                    if (radios.length === 0 && checkboxes.length === 0 && selects.length === 0 && textareas.length === 0) return;
+                    
+                    // Check for radio buttons (most common case)
+                    if (radios.length > 0) {
+                        const name = radios[0].name;
+                        const answered = document.querySelector(`input[name="${name}"]:checked`) !== null;
+                        
+                        if (!answered) {
+                            question.classList.add('error');
+                            isValid = false;
+                            unansweredCount++;
+                            
+                            // Get the question number or text for the error message
+                            const questionNumber = question.querySelector('.question-number')?.textContent || '';
+                            if (questionNumber) {
+                                unansweredQuestions.push(`Question ${questionNumber}`);
+                            }
+                            
+                            // Highlight the question
+                            const questionText = question.querySelector('.question-text');
+                            if (questionText) {
+                                questionText.parentElement.classList.add('question-highlight');
                             }
                         }
+                    }
+                });
+                
+                // Update error message with count and specific questions
+                if (!isValid) {
+                    const questionText = unansweredCount === 1 ? 'question' : 'questions';
+                    let errorMsg = `Please answer all ${unansweredCount} ${questionText} before proceeding to the next step.`;
+                    
+                    // Add specific question numbers if available
+                if (unansweredQuestions.length > 0) {
+                        errorMsg += ' Missing: ' + unansweredQuestions.join(', ');
+                    }
+                    
+                    errorMessage.textContent = errorMsg;
+                    errorMessage.style.display = 'block';
+                    
+                    // Show alert with specific information
+                    alert(`Please answer all required ${questionText} before proceeding. Missing: ${unansweredQuestions.join(', ')}`);
+                    
+                    // Scroll to the first unanswered question
+                    const firstUnansweredQuestion = document.querySelector('.form-step[data-step="' + currentStep + '"] .question-container.error');
+                    if (firstUnansweredQuestion) {
+                        firstUnansweredQuestion.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                } else {
+                    errorMessage.style.display = 'none';
+                }
+                
+                return isValid;
+            }
+            
+            // Function to validate all steps for final submission
+            function validateAllSteps() {
+                let allValid = true;
+                let firstInvalidStep = null;
+                
+                // Validate each step
+                for (let step = 1; step <= totalSteps; step++) {
+                    // Skip step 6 validation for non-female donors
+                    if (step === 6 && !isFemale) {
+                        continue;
+                    }
+                    
+                    const stepQuestions = document.querySelectorAll('.form-step[data-step="' + step + '"] .question-container');
+                    let stepValid = true;
+                    
+                    // Check each question in the current step
+                    stepQuestions.forEach(question => {
+                        // Only check questions that have input elements
+                        const radios = question.querySelectorAll('input[type="radio"]');
+                        const checkboxes = question.querySelectorAll('input[type="checkbox"]');
+                        const selects = question.querySelectorAll('select');
+                        const textareas = question.querySelectorAll('textarea');
+                        
+                        // Skip if no inputs in this container
+                        if (radios.length === 0 && checkboxes.length === 0 && selects.length === 0 && textareas.length === 0) return;
+                        
+                        // Check for radio buttons (most common case)
+                        if (radios.length > 0) {
+                            const name = radios[0].name;
+                            const answered = document.querySelector(`input[name="${name}"]:checked`) !== null;
+                            
+                            if (!answered) {
+                                question.classList.add('error');
+                                allValid = false;
+                                
+                                // Track the first invalid step
+                                if (firstInvalidStep === null) {
+                                    firstInvalidStep = step;
+                                }
+                            } else {
+                                question.classList.remove('error');
+                            }
+                        }
+                        
+                        // Add checks for other input types if needed
                     });
                 }
                 
-                return allQuestionsAnswered;
-            }
-            
-            // Function to validate all steps
-            function validateAllSteps() {
-                let allValid = true;
-                const originalStep = currentStep;
-                
-                // Use the actual totalSteps value based on donor's sex
-                const stepsToValidate = isFemale ? 6 : 5;
-                
-                for (let i = 1; i <= stepsToValidate; i++) {
-                    currentStep = i;
-                    const isValid = validateCurrentStep();
-                    if (!isValid) {
-                        allValid = false;
-                        break;
+                // If we found an invalid step, jump to that step
+                if (!allValid && firstInvalidStep !== null && currentStep !== firstInvalidStep) {
+                    currentStep = firstInvalidStep;
+                updateStepDisplay();
+                    
+                    // Show error message
+                    errorMessage.textContent = 'Please answer all questions before submitting.';
+                    errorMessage.style.display = 'block';
+                    
+                    // Scroll to the first unanswered question in this step
+                    const firstUnansweredQuestion = document.querySelector('.form-step[data-step="' + currentStep + '"] .question-container.error');
+                    if (firstUnansweredQuestion) {
+                        firstUnansweredQuestion.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     }
                 }
-                
-                // Restore original step
-                currentStep = originalStep;
-                updateStepDisplay();
                 
                 return allValid;
             }
@@ -1682,6 +2008,18 @@ if (isset($_SESSION['error_message'])) {
                     step.classList.remove('active');
                 });
                 
+                // Check if we need to skip step 6 for non-female donors
+                if (!isFemale && currentStep === 6) {
+                    // Skip to step 5 or submit
+                    if (totalSteps === 5) {
+                        // For non-female donors, go back to step 5 as there's no step 6
+                        currentStep = 5;
+                    } else {
+                        // Alternatively, this could be submission step
+                        currentStep = totalSteps;
+                    }
+                }
+                
                 // Show current step
                 const activeStep = document.querySelector(`.form-step[data-step="${currentStep}"]`);
                 if (activeStep) {
@@ -1691,6 +2029,13 @@ if (isset($_SESSION['error_message'])) {
                 // Update step indicators
                 stepIndicators.forEach(indicator => {
                     const step = parseInt(indicator.getAttribute('data-step'));
+                    
+                    // Hide step 6 indicator for non-female donors
+                    if (step === 6 && !isFemale) {
+                        indicator.style.display = 'none';
+                    } else {
+                        indicator.style.display = '';
+                    }
                     
                     if (step < currentStep) {
                         indicator.classList.add('completed');
@@ -1706,6 +2051,13 @@ if (isset($_SESSION['error_message'])) {
                 
                 // Update step connectors
                 stepConnectors.forEach((connector, index) => {
+                    // Hide connector before step 6 for non-female donors
+                    if (index === 4 && !isFemale) {
+                        connector.style.display = 'none';
+                    } else {
+                        connector.style.display = '';
+                    }
+                    
                     if (index + 1 < currentStep) {
                         connector.classList.add('active');
                     } else {
@@ -1720,7 +2072,7 @@ if (isset($_SESSION['error_message'])) {
                     nextButton.textContent = 'Next →';
                 }
                 
-                // Show/hide previous button
+                // Show/hide previous button based on current step
                 if (currentStep === 1) {
                     prevButton.style.display = 'none';
                 } else {
@@ -1730,6 +2082,9 @@ if (isset($_SESSION['error_message'])) {
                 // Hide error message and clear highlights when changing steps
                 errorMessage.style.display = 'none';
                 clearQuestionHighlights();
+                
+                // For debugging - log the current step and if donor is female
+                console.log('Current step:', currentStep, 'Total steps:', totalSteps, 'Is female:', isFemale);
             }
             
             // Function to go back to previous page
@@ -1771,44 +2126,108 @@ if (isset($_SESSION['error_message'])) {
                 }
             });
             
-            // Handle next button click
-            nextButton.addEventListener('click', function() {
-                // Validate current step
-                if (validateCurrentStep()) {
-                    // If validation passes and not on the last step, go to next step
-                    if (currentStep < totalSteps) {
-                        currentStep++;
-                        updateStepDisplay();
+            // Replace the event listeners for next and previous buttons
+            // Event listener for next button click
+            nextButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                // Check if all radio button groups in the current step are answered
+                const currentStepRadioGroups = {};
+                const currentStepRadios = document.querySelectorAll('.form-step[data-step="' + currentStep + '"] input[type="radio"]');
+                
+                // Get all radio groups in this step
+                currentStepRadios.forEach(radio => {
+                    currentStepRadioGroups[radio.name] = true;
+                });
+                
+                // Check if each radio group has a selected option
+                let allRadiosAnswered = true;
+                const unansweredGroups = [];
+                
+                for (const groupName in currentStepRadioGroups) {
+                    const isAnswered = document.querySelector(`.form-step[data-step="${currentStep}"] input[name="${groupName}"]:checked`) !== null;
+                    if (!isAnswered) {
+                        allRadiosAnswered = false;
+                        unansweredGroups.push(groupName);
+                    }
+                }
+                
+                // If not all radios are answered, show warning
+                if (!allRadiosAnswered) {
+                    // Find question numbers for unanswered radio groups
+                    const unansweredQuestions = [];
+                    unansweredGroups.forEach(groupName => {
+                        const radioElement = document.querySelector(`.form-step[data-step="${currentStep}"] input[name="${groupName}"]`);
+                        if (radioElement) {
+                            const questionContainer = radioElement.closest('.question-container');
+                            if (questionContainer) {
+                                const questionNumber = questionContainer.querySelector('.question-number')?.textContent || groupName;
+                                unansweredQuestions.push(questionNumber);
+                                questionContainer.classList.add('error');
+                                
+                                // Highlight the question text
+                                const questionText = questionContainer.querySelector('.question-text');
+                                if (questionText) {
+                                    questionText.parentElement.classList.add('question-highlight');
+                                }
+                            }
+                        }
+                    });
+                    
+                    // Display an alert instead of error message
+                    alert(`Please answer all questions before proceeding.`);
+                    
+                    // Scroll to first unanswered question
+                    const firstUnansweredQuestion = document.querySelector('.form-step[data-step="' + currentStep + '"] .question-container.error');
+                    if (firstUnansweredQuestion) {
+                        firstUnansweredQuestion.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                    
+                    return; // Stop here and don't proceed to next step
+                }
+                
+                // Original logic after validation is successful
+                if (currentStep === totalSteps) {
+                    if (validateAllSteps()) {
+                        document.getElementById('loadingSpinner').style.display = 'flex';
+                        document.getElementById('medicalHistoryForm').submit();
                     } else {
-                        // On last step, validate all steps before submitting
-                        if (validateAllSteps()) {
-                            // Show loading spinner
-                            loadingSpinner.style.display = 'block';
-                            // Submit the form
-                            form.submit();
+                        alert('Please answer all required questions before submitting.');
+                    }
+                } else {
+                    // All radios are answered, proceed to next step
+                    currentStep++;
+                    
+                    // Skip step 6 for non-female donors
+                    if (currentStep === 6 && !isFemale) {
+                        // If there's no step 6 for non-female donors, go to the next available step or submit
+                        if (totalSteps === 5) {
+                            // If 5 is the max step for non-female, go to submit
+                            currentStep = 5;
                         } else {
-                            // Go to the first invalid step
-                            updateStepDisplay();
-                            // Show error message
-                            errorMessage.style.display = 'block';
-                            errorMessage.textContent = 'Please answer all questions before submitting.';
+                            // Otherwise proceed to the next step after 6
+                            currentStep++;
                         }
                     }
-                    // Hide error message
-                    errorMessage.style.display = 'none';
-                } else {
-                    // Show error message if validation fails
-                    errorMessage.style.display = 'block';
-                    // Scroll to the top of the form to show the error message
-                    form.scrollIntoView({ behavior: 'smooth' });
+                    
+                    updateStepDisplay();
+                    window.scrollTo(0, 0);
                 }
             });
             
-            // Handle previous button click
-            prevButton.addEventListener('click', function() {
+            // Event listener for previous button click
+            prevButton.addEventListener('click', function(e) {
+                e.preventDefault();
                 if (currentStep > 1) {
                     currentStep--;
+                    
+                    // Skip step 6 when going backwards for non-female donors
+                    if (currentStep === 6 && !isFemale) {
+                        currentStep--;
+                    }
+                    
                     updateStepDisplay();
+                    window.scrollTo(0, 0);
                 }
             });
             
@@ -1840,6 +2259,7 @@ if (isset($_SESSION['error_message'])) {
                 // For non-female donors, ensure the female-specific questions are not required
                 if (!isFemale) {
                     // Set default empty values for female-specific fields to avoid validation errors
+                    // Female-specific questions are in step 6 (typically q33-q37)
                     for (let i = 33; i <= 37; i++) {
                         const radioName = 'q' + i;
                         if (!document.querySelector(`input[name="${radioName}"]:checked`)) {
@@ -1854,7 +2274,7 @@ if (isset($_SESSION['error_message'])) {
                             const hiddenRemark = document.createElement('input');
                             hiddenRemark.type = 'hidden';
                             hiddenRemark.name = radioName + '_remarks';
-                            hiddenRemark.value = 'None';
+                            hiddenRemark.value = 'Not applicable (male donor)';
                             form.appendChild(hiddenRemark);
                         }
                     }
@@ -1890,7 +2310,51 @@ if (isset($_SESSION['error_message'])) {
                 }
                 errorMessage.style.display = 'block';
             }
+            
+            // Function to handle cancellation of registration
+            window.confirmCancelRegistration = function() {
+                if (confirm('Are you sure you want to cancel the donor registration? All entered data will be lost.')) {
+                    // Cancel the registration by clearing session data and redirecting
+                    fetch('cancel_registration.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ action: 'cancel' })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            window.location.href = data.redirect_url || '../../public/Dashboards/dashboard-Inventory-System.php';
+                        } else {
+                            alert('Error cancelling registration: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error cancelling registration:', error);
+                        // Fallback redirect
+                        window.location.href = '../../public/Dashboards/dashboard-Inventory-System.php';
+                    });
+                }
+            };
         });
+
+        // Add debugging function to help diagnose validation issues
+        function logValidationStatus(stepNumber) {
+            console.log(`Checking validation for step ${stepNumber}`);
+            const stepQuestions = document.querySelectorAll(`.form-step[data-step="${stepNumber}"] .question-container`);
+            
+            stepQuestions.forEach((question, index) => {
+                const questionNumber = question.querySelector('.question-number')?.textContent || `Question ${index + 1}`;
+                const radios = question.querySelectorAll('input[type="radio"]');
+                
+                if (radios.length > 0) {
+                    const name = radios[0].name;
+                    const answered = document.querySelector(`input[name="${name}"]:checked`) !== null;
+                    console.log(`${questionNumber}: ${answered ? 'Answered' : 'Not answered'} (name: ${name})`);
+                }
+            });
+        }
     </script>
 </body>
 </html> 

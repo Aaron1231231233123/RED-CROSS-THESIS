@@ -21,7 +21,8 @@ if (isset($data['donor_id']) && !empty($data['donor_id'])) {
         $_SESSION['view_mode'] = true;
         error_log("Session updated: donor_id set to {$_SESSION['donor_id']}, view_mode flag set to true");
     } else {
-        $_SESSION['admin_processing'] = true; // Flag to indicate admin is processing
+        // Explicitly set admin_processing flag
+        $_SESSION['admin_processing'] = true; 
         error_log("Session updated: donor_id set to {$_SESSION['donor_id']}, admin_processing flag set to true");
         
         // Call the create_eligibility_record.php to ensure eligibility record is created
