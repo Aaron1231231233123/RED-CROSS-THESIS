@@ -780,8 +780,8 @@ h6 {
 }
 
 .inventory-system-blood-availability {
-    font-size: 2rem;
-    font-weight: 600;
+    font-size: 1.5rem;
+    font-weight: 500;
     color: #333;
     margin-bottom: 0;
 }
@@ -914,7 +914,7 @@ h6 {
             <div class="card inventory-system-stats-card">
                 <div class="card-body inventory-system-stats-body">
                     <div class="inventory-system-stats-container">
-                        <span class="inventory-system-stats-label">Blood Received</span>
+                        <span class="inventory-system-stats-label">Blood Inventory</span>
                         <span class="inventory-system-stats-value"><?php echo $bloodReceivedCount; ?></span>
                     </div>
                 </div>
@@ -924,7 +924,7 @@ h6 {
             <div class="card inventory-system-stats-card">
                 <div class="card-body inventory-system-stats-body">
                     <div class="inventory-system-stats-container">
-                        <span class="inventory-system-stats-label">In Stock</span>
+                        <span class="inventory-system-stats-label">Blood Donors</span>
                         <span class="inventory-system-stats-value"><?php echo $bloodInStockCount; ?></span>
                     </div>
                 </div>
@@ -940,16 +940,16 @@ h6 {
                             <div class="col-md-3">
                                 <div class="card inventory-system-blood-card blood-type-a-pos">
                                     <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type A+</h5>
-                                        <p class="inventory-system-blood-availability"><?php echo $bloodByType['A+'] ?? 0; ?></p>
+                                        <h5 class="inventory-system-blood-title">Blood Type O+</h5>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['O+'] ?? 0; ?></p>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="card inventory-system-blood-card blood-type-a-neg">
                                     <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type A-</h5>
-                                        <p class="inventory-system-blood-availability"><?php echo $bloodByType['A-'] ?? 0; ?></p>
+                                        <h5 class="inventory-system-blood-title">Blood Type A+</h5>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['A+'] ?? 0; ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -957,15 +957,15 @@ h6 {
                                 <div class="card inventory-system-blood-card blood-type-b-pos">
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type B+</h5>
-                                        <p class="inventory-system-blood-availability"><?php echo $bloodByType['B+'] ?? 0; ?></p>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['B+'] ?? 0; ?></p>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="card inventory-system-blood-card blood-type-b-neg">
                                     <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type B-</h5>
-                                        <p class="inventory-system-blood-availability"><?php echo $bloodByType['B-'] ?? 0; ?></p>
+                                        <h5 class="inventory-system-blood-title">Blood Type AB+</h5>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['AB+'] ?? 0; ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -974,24 +974,24 @@ h6 {
                             <div class="col-md-3">
                                 <div class="card inventory-system-blood-card blood-type-o-pos">
                                     <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type O+</h5>
-                                        <p class="inventory-system-blood-availability"><?php echo $bloodByType['O+'] ?? 0; ?></p>
+                                        <h5 class="inventory-system-blood-title">Blood Type O-</h5>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['O-'] ?? 0; ?></p>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="card inventory-system-blood-card blood-type-o-neg">
                                     <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type O-</h5>
-                                        <p class="inventory-system-blood-availability"><?php echo $bloodByType['O-'] ?? 0; ?></p>
+                                        <h5 class="inventory-system-blood-title">Blood Type A-</h5>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['A-'] ?? 0; ?></p>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="card inventory-system-blood-card blood-type-ab-pos">
                                     <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type AB+</h5>
-                                        <p class="inventory-system-blood-availability"><?php echo $bloodByType['AB+'] ?? 0; ?></p>
+                                        <h5 class="inventory-system-blood-title">Blood Type B-</h5>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['B-'] ?? 0; ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -999,7 +999,7 @@ h6 {
                                 <div class="card inventory-system-blood-card blood-type-ab-neg">
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type AB-</h5>
-                                        <p class="inventory-system-blood-availability"><?php echo $bloodByType['AB-'] ?? 0; ?></p>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['AB-'] ?? 0; ?></p>
                                     </div>
                                 </div>
                             </div>
