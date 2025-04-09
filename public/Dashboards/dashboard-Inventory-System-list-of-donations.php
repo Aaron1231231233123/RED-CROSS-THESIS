@@ -49,6 +49,9 @@ if (!is_array($donations)) {
     }
 }
 
+// Data is ordered by created_at.desc in the API query to implement First In, First Out (FIFO) order
+// This ensures newest entries appear at the top of the table on the first page
+
 // Pagination settings
 $itemsPerPage = 10;
 $totalItems = count($donations);
@@ -510,7 +513,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p>You are about to process this donor. This will redirect you to the medical history and physical examination forms.</p>
+                    <p>You are about to process this donor. This will redirect you to the screening form.</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -612,6 +615,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <?php else: ?>
                                 Donor has been processed successfully.
                             <?php endif; ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                        <?php endif; ?>
+
+                        <?php if (isset($_GET['donor_registered']) && $_GET['donor_registered'] === 'true'): ?>
+                        <div class="alert alert-success alert-dismissible fade show">
+                            <i class="fas fa-check-circle me-2"></i>
+                            Donor has been successfully registered and the declaration form has been completed.
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
                         <?php endif; ?>
@@ -866,6 +877,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 setTimeout(function() {
                     window.location.reload();
                 }, 5000);
+            }
+            
+            // Clean URL if donor_registered parameter is present
+            if (urlParams.has('donor_registered')) {
+                // Remove the donor_registered parameter from URL to prevent showing the message on manual refresh
+                const newUrl = window.location.pathname + '?' + urlParams.toString().replace(/&?donor_registered=true/, '');
+                window.history.replaceState({}, document.title, newUrl);
             }
             
             // Global variables for tracking current donor
@@ -1168,16 +1186,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     .then(data => {
                         console.log('Session response:', data);
                         
-                        // Redirect to medical history form regardless of eligibility creation
+                        // Redirect to screening form instead of medical history
                         setTimeout(() => {
-                            window.location.href = `../../src/views/forms/medical-history-modal.php?donor_id=${window.currentDonorId}`;
+                            window.location.href = `../../src/views/forms/screening-form.php?donor_id=${window.currentDonorId}`;
                         }, 1000);
                     })
                     .catch(error => {
                         console.error('Error storing donor ID in session:', error);
                         // Redirect anyway as a fallback
                         setTimeout(() => {
-                            window.location.href = `../../src/views/forms/medical-history-modal.php?donor_id=${window.currentDonorId}`;
+                            window.location.href = `../../src/views/forms/screening-form.php?donor_id=${window.currentDonorId}`;
                         }, 1000);
                     });
                 });
@@ -1214,32 +1232,28 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     let html = `
                     <div class="donor-details-container">
                         <div><strong>Surname:</strong> ${donor.surname || 'N/A'}</div>
-                        <div><strong>Blood Type:</strong> ${eligibility.blood_type || 'Pending'}</div>
+                        <div><strong>Age:</strong> ${donor.age || 'N/A'}</div>
                         
                         <div><strong>First Name:</strong> ${donor.first_name || 'N/A'}</div>
-                        <div><strong>Donation Type:</strong> ${eligibility.donation_type || 'Pending'}</div>
+                        <div><strong>Sex:</strong> ${donor.sex || 'N/A'}</div>
                         
                         <div><strong>Middle Name:</strong> ${donor.middle_name || 'N/A'}</div>
-                        <div><strong>Status:</strong> ${eligibility.status || 'pending'}</div>
+                        <div><strong>Civil Status:</strong> ${donor.civil_status || 'Single'}</div>
                         
                         <div><strong>Birthdate:</strong> ${donor.birthdate || 'N/A'}</div>
                         <div><strong>Donation Date:</strong> ${eligibility.start_date ? new Date(eligibility.start_date).toLocaleDateString() : '4/1/2025'}</div>
                         
-                        <div><strong>Age:</strong> ${donor.age || 'N/A'}</div>
+                        <div><strong>Permanent Address:</strong> ${donor.permanent_address || 'N/A'}</div>
                         ${isApproved ? `<div><strong>Eligibility End Date:</strong> ${eligibility.end_date ? new Date(eligibility.end_date).toLocaleDateString() : 'N/A'}</div>` : ''}
                         
-                        <div><strong>Sex:</strong> ${donor.sex || 'N/A'}</div>
                         ${isApproved ? `<div><strong>Blood Bag Type:</strong> ${eligibility.blood_bag_type || 'Not specified'}</div>` : ''}
-                        
-                        <div><strong>Civil Status:</strong> ${donor.civil_status || 'Single'}</div>
                         ${isApproved ? `<div><strong>Amount Collected:</strong> ${eligibility.amount_collected || 'Not specified'}</div>` : ''}
                         
-                        <div><strong>Permanent Address:</strong> ${donor.permanent_address || 'N/A'}</div>
                         ${isApproved ? `<div><strong>Donor Reaction:</strong> ${eligibility.donor_reaction || 'None'}</div>` : ''}
+                        ${isApproved ? `<div><strong>Management Done:</strong> ${eligibility.management_done || 'None'}</div>` : ''}
                         
                         ${isApproved ? `<div><strong>Office Address:</strong> ${donor.office_address || 'Not specified'}</div>` : ''}
-                        ${isApproved ? `<div><strong>Management Done:</strong> ${eligibility.management_done || 'None'}</div>` : ''}
-                        </div>
+                    </div>
                     
                     <div class="d-flex justify-content-center gap-3 mt-4">
                         ${eligibility.status === 'pending' ? `
@@ -1276,14 +1290,19 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             margin-bottom: 20px;
                         }
                         .donor-details-container > div {
-                            padding: 4px 0;
+                            padding: 8px 0;
+                            border-bottom: 1px solid #eee;
                         }
-                        /* Make odd items on the left and even items on the right (for pending donors) */
+                        /* Ensure the grid maintains even columns */
                         .donor-details-container > div:nth-child(odd) {
                             grid-column: 1;
                         }
                         .donor-details-container > div:nth-child(even) {
                             grid-column: 2;
+                        }
+                        /* Fix for approved donors with extra fields */
+                        .donor-details-container > div:only-child {
+                            grid-column: 1 / span 2;
                         }
                         .modal-body {
                             padding: 20px 25px;

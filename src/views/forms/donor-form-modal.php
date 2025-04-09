@@ -30,6 +30,20 @@ if (!isset($_SESSION['donor_form_referrer'])) {
     $referrer = $_SESSION['donor_form_referrer'];
 }
 
+// Clean up abandoned donor form data (older than 30 minutes)
+if (isset($_SESSION['donor_form_data']) && isset($_SESSION['donor_form_timestamp'])) {
+    $currentTime = time();
+    $formSubmitTime = $_SESSION['donor_form_timestamp'];
+    $timeDifference = $currentTime - $formSubmitTime;
+    
+    // If form data is older than 30 minutes, remove it
+    if ($timeDifference > 1800) { // 1800 seconds = 30 minutes
+        error_log("Removing stale donor form data (older than 30 minutes)");
+        unset($_SESSION['donor_form_data']);
+        unset($_SESSION['donor_form_timestamp']);
+    }
+}
+
 // Include database connection
 try {
     include_once '../../../assets/conn/db_conn.php';
@@ -100,61 +114,32 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
         'doh_nnbnets_barcode' => generateNNBNetBarcode()
     ];
     
-    // Log the data being sent
-    error_log("Sending data to Supabase: " . json_encode($formData));
+    // Log the data being processed
+    error_log("Processing donor form data: " . json_encode($formData));
     
     try {
-        // Insert donor record in Supabase
-        $ch = curl_init("$SUPABASE_URL/rest/v1/donor_form");
-        curl_setopt($ch, CURLOPT_POST, 1);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($formData));
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'apikey: ' . $SUPABASE_API_KEY,
-            'Authorization: Bearer ' . $SUPABASE_API_KEY,
-            'Content-Type: application/json',
-            'Prefer: return=representation' // Get response data with inserted record
-        ]);
-        
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        
-        // Check for cURL errors
-        if (curl_errno($ch)) {
-            error_log("cURL Error: " . curl_error($ch));
+        // Store formData in session instead of inserting into database
+        if (session_status() == PHP_SESSION_NONE) {
+            session_start();
         }
         
-        curl_close($ch);
+        // Store the form data in session
+        $_SESSION['donor_form_data'] = $formData;
+        $_SESSION['donor_form_timestamp'] = time(); // Track when the form was submitted
         
-        if ($httpCode >= 200 && $httpCode < 300) {
-            error_log("Donor added successfully. Response: " . $response);
-            
-            // Make sure the session is started (for consistency)
-            if (session_status() == PHP_SESSION_NONE) {
-                session_start();
-            }
-            
-            // Get the referrer URL for redirection
-            $redirect_url = isset($_SESSION['donor_form_referrer']) ? 
-                            $_SESSION['donor_form_referrer'] : 
-                            '../../public/Dashboards/dashboard-Inventory-System.php';
-            
-            // Show the completion modal before redirect
-            echo '<script>
-                document.addEventListener("DOMContentLoaded", function() {
-                    localStorage.setItem("donorFormSubmitted", "true");
-                    showCompletionModal();
-                });
-            </script>';
-        } else {
-            error_log("Error adding donor. HTTP Code: $httpCode. Response: " . $response);
-            // Add user-facing error message
-            echo '<div class="alert alert-danger mt-3" role="alert">
-                Error submitting form. Please try again or contact support.
-            </div>';
-        }
+        error_log("Donor form data stored in session. Redirecting to medical history form.");
+        
+        // Show loading modal before redirecting to medical history form
+        echo '<script>
+            document.addEventListener("DOMContentLoaded", function() {
+                showLoadingModal();
+                setTimeout(function() {
+                    window.location.href = "medical-history-modal.php";
+                }, 1500);
+            });
+        </script>';
     } catch (Exception $e) {
-        error_log("Exception adding donor: " . $e->getMessage());
+        error_log("Exception handling donor form: " . $e->getMessage());
         // Add user-facing error message
         echo '<div class="alert alert-danger mt-3" role="alert">
             An error occurred: ' . htmlspecialchars($e->getMessage()) . '
@@ -641,11 +626,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
     </div>
 </div>
 
-<!-- Completion Modal -->
-<div class="completion-modal" id="completionModal">
-    <div class="completion-modal-content">
-        <div class="completion-modal-title">You have completed the form</div>
-        <button class="completion-modal-button" onclick="closeCompletionModal()">OK</button>
+<!-- Loading Modal -->
+<div class="modal fade" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background: transparent; border: none; box-shadow: none;">
+            <div class="modal-body text-center">
+                <div class="spinner-border text-danger" style="width: 3rem; height: 3rem;" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3 text-white bg-dark p-2 rounded">Proceeding to Medical History Form...</p>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -794,19 +785,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
         }
     }
     
-    function showCompletionModal(event) {
-        if (event) event.preventDefault();
-        const modal = document.getElementById('completionModal');
-        modal.style.display = 'flex';
-    }
-    
-    function closeCompletionModal() {
-        const modal = document.getElementById('completionModal');
-        modal.style.display = 'none';
-        
-        // Redirect to the dashboard after submission is complete
-        // Skip confirmation since this is after a successful form submission
-        goBackToDashboard(true);
+    function showLoadingModal() {
+        const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+        loadingModal.show();
     }
     
     // Handle form submission

@@ -57,7 +57,7 @@ try {
     // Now fetch eligibility records with status 'approved'
     $curl = curl_init();
     curl_setopt_array($curl, [
-        CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility?status=eq.approved&select=eligibility_id,donor_id,created_at",
+        CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility?status=eq.approved&select=eligibility_id,donor_id,created_at&order=created_at.desc",
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
             "apikey: " . SUPABASE_API_KEY,

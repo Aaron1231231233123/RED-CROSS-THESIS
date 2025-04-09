@@ -42,7 +42,7 @@ try {
     $curl = curl_init();
     
     curl_setopt_array($curl, [
-        CURLOPT_URL => SUPABASE_URL . "/rest/v1/donor_form?limit=100",
+        CURLOPT_URL => SUPABASE_URL . "/rest/v1/donor_form?limit=100&order=submitted_at.desc",
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
             "apikey: " . SUPABASE_API_KEY,

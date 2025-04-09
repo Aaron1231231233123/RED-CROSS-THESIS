@@ -114,7 +114,7 @@ $declinedDonorIds = array_unique($declinedDonorIds);
 $eligibilityData = querySQL(
     'eligibility', 
     'eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status,blood_collection_id',
-    ['collection_successful' => 'eq.true']
+    ['collection_successful' => 'eq.true', 'order' => 'collection_start_time.desc']
 );
 
 if (is_array($eligibilityData) && !empty($eligibilityData)) {

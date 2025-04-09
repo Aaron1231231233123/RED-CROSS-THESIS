@@ -26,16 +26,44 @@ if ($_SESSION['role_id'] === 3) {
         header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
         exit();
     }
-    if (!isset($_SESSION['medical_history_id'])) {
-        error_log("Missing medical_history_id in session for staff");
-        header('Location: medical-history.php');
-        exit();
+    
+    // Check if we are in the admin processing flow from the pending donors list
+    if (isset($_SESSION['admin_processing']) && $_SESSION['admin_processing'] === true) {
+        error_log("Admin processing flow detected - skipping medical history and declaration checks");
+        // We're coming from the pending donors list, so we don't need these checks
+    } else {
+        // Normal flow - check for medical history and declaration form completion
+        if (!isset($_SESSION['medical_history_id'])) {
+            error_log("Missing medical_history_id in session for staff");
+            header('Location: medical-history.php');
+            exit();
+        }
+        
+        // Check if declaration form has been completed
+        if (!isset($_SESSION['declaration_completed'])) {
+            error_log("Declaration form not completed");
+            header('Location: declaration-form-modal.php');
+            exit();
+        }
     }
 } else {
-    // For admin role (role_id 1), set donor_id to 46 if not set
+    // For admin role (role_id 1)
     if (!isset($_SESSION['donor_id'])) {
         $_SESSION['donor_id'] = 46;
         error_log("Set donor_id to 46 for admin role");
+    }
+    
+    // Check if we are in the admin processing flow from the pending donors list
+    if (isset($_SESSION['admin_processing']) && $_SESSION['admin_processing'] === true) {
+        error_log("Admin processing flow detected - skipping medical history and declaration checks");
+        // We're coming from the pending donors list, so we don't need these checks
+    } else {
+        // Check if declaration form has been completed for admin as well
+        if (!isset($_SESSION['declaration_completed']) && isset($_SESSION['medical_history_id'])) {
+            error_log("Declaration form not completed for admin");
+            header('Location: declaration-form-modal.php');
+            exit();
+        }
     }
 }
 
@@ -90,10 +118,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Debug log the raw POST data
         error_log("Raw POST data: " . print_r($_POST, true));
 
+        // Check if we need to create a placeholder medical history record for the admin processing flow
+        if (isset($_SESSION['admin_processing']) && $_SESSION['admin_processing'] === true && !isset($_SESSION['medical_history_id'])) {
+            error_log("Admin processing flow - creating placeholder medical history record");
+            
+            // Create a basic medical history record
+            $medical_history_data = [
+                'donor_id' => $_SESSION['donor_id'],
+                'feels_well' => true,
+                'previously_refused' => false,
+                'testing_purpose_only' => false,
+                'understands_transmission_risk' => true,
+                'status' => 'completed'
+                // Add other required fields with default values as needed
+            ];
+            
+            // Initialize cURL session for Supabase to create medical history record
+            $mh_ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history');
+            
+            // Set the headers
+            $headers = array(
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json',
+                'Prefer: return=representation'
+            );
+            
+            // Set cURL options
+            curl_setopt($mh_ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($mh_ch, CURLOPT_HTTPHEADER, $headers);
+            curl_setopt($mh_ch, CURLOPT_POST, true);
+            curl_setopt($mh_ch, CURLOPT_POSTFIELDS, json_encode($medical_history_data));
+            
+            // Execute the request
+            $mh_response = curl_exec($mh_ch);
+            $mh_http_code = curl_getinfo($mh_ch, CURLINFO_HTTP_CODE);
+            
+            // Debug log
+            error_log("Medical history creation response code: " . $mh_http_code);
+            error_log("Medical history creation response: " . $mh_response);
+            
+            curl_close($mh_ch);
+            
+            if ($mh_http_code === 201) {
+                // Parse the response
+                $mh_response_data = json_decode($mh_response, true);
+                
+                if (is_array($mh_response_data) && isset($mh_response_data[0]['medical_history_id'])) {
+                    $_SESSION['medical_history_id'] = $mh_response_data[0]['medical_history_id'];
+                    error_log("Created placeholder medical history record with ID: " . $_SESSION['medical_history_id']);
+                } else {
+                    throw new Exception("Invalid medical history response format");
+                }
+            } else {
+                throw new Exception("Failed to create medical history record. HTTP Code: " . $mh_http_code);
+            }
+        }
+
         // Prepare the data for insertion
         $screening_data = [
             'donor_form_id' => $_SESSION['donor_id'],
-            'medical_history_id' => $_SESSION['medical_history_id'],
+            'medical_history_id' => $_SESSION['medical_history_id'] ?? null,
             'interviewer_id' => $_SESSION['user_id'],
             'body_weight' => floatval($_POST['body-wt']),
             'specific_gravity' => $_POST['sp-gr'] ?: "",
