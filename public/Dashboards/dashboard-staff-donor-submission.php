@@ -17,10 +17,56 @@ $records_per_page = 15;
 $current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($current_page - 1) * $records_per_page;
 
-// Modify your Supabase query to include pagination
+// Initialize the donors array
+$donors = [];
+
+// Modify your Supabase query to properly filter for unprocessed donors
 $ch = curl_init();
+
+// First, get all donor IDs that have screening forms
+$screening_ch = curl_init();
+curl_setopt_array($screening_ch, [
+    CURLOPT_URL => SUPABASE_URL . '/rest/v1/screening_form?select=donor_form_id',
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ]
+]);
+
+$screening_response = curl_exec($screening_ch);
+$processed_donor_ids = [];
+
+if ($screening_response !== false) {
+    $screening_data = json_decode($screening_response, true);
+    if (is_array($screening_data)) {
+        foreach ($screening_data as $item) {
+            if (isset($item['donor_form_id'])) {
+                $processed_donor_ids[] = $item['donor_form_id'];
+            }
+        }
+    }
+}
+curl_close($screening_ch);
+
+// Debug info
+$debug_screening = [
+    'screening_response' => substr($screening_response, 0, 500) . '...',
+    'processed_donor_ids' => $processed_donor_ids
+];
+error_log("Screening form data: " . json_encode($debug_screening));
+
+// Now get donor forms that are NOT in the processed list
+$query_url = SUPABASE_URL . '/rest/v1/donor_form?select=*&order=submitted_at.desc';
+if (!empty($processed_donor_ids)) {
+    // Convert array to comma-separated string
+    $processed_ids_str = implode(',', $processed_donor_ids);
+    // Add not.in filter
+    $query_url .= '&donor_id=not.in.(' . $processed_ids_str . ')';
+}
+
 curl_setopt_array($ch, [
-    CURLOPT_URL => SUPABASE_URL . '/rest/v1/donor_form?select=*&order=submitted_at.desc',
+    CURLOPT_URL => $query_url,
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_HTTPHEADER => [
         'apikey: ' . SUPABASE_API_KEY,
@@ -29,7 +75,20 @@ curl_setopt_array($ch, [
 ]);
 
 $response = curl_exec($ch);
-$donors = json_decode($response, true) ?: [];
+
+// Log the final query URL and raw response for debugging
+error_log("Final query URL: " . $query_url);
+error_log("Supabase raw response: " . substr($response, 0, 500) . '...');
+
+// Check if the response is valid JSON
+if ($response === false || is_null(json_decode($response, true))) {
+    error_log("Error fetching data from Supabase: " . curl_error($ch));
+    $donors = [];
+} else {
+    $donors = json_decode($response, true) ?: [];
+    error_log("Decoded donors count: " . count($donors));
+}
+
 $total_records = count($donors);
 $total_pages = ceil($total_records / $records_per_page);
 
@@ -39,10 +98,35 @@ $donors = array_slice($donors, $offset, $records_per_page);
 // Close cURL session
 curl_close($ch);
 
+// Process donor approval if a donor_id was passed
+if (isset($_GET['approve_donor'])) {
+    $donor_id = intval($_GET['approve_donor']);
+    $donor_name = $_GET['donor_name'] ?? '';
+    
+    // Store in session
+    $_SESSION['donor_id'] = $donor_id;
+    $_SESSION['donor_name'] = $donor_name;
+    
+    // Log the action
+    error_log("Setting donor_id in session directly: " . $donor_id);
+    error_log("Session after setting: " . print_r($_SESSION, true));
+    
+    // Redirect directly to screening form
+    header("Location: ../../src/views/forms/screening-form.php");
+    exit();
+}
+
 // Add this function to handle donor approval
 function storeDonorIdInSession($donorData) {
-    $_SESSION['donor_id'] = $donorData['id'];
-    $_SESSION['donor_name'] = $donorData['first_name'] . ' ' . $donorData['surname'];
+    if (is_array($donorData)) {
+        error_log("Storing donor data: " . print_r($donorData, true));
+        if (isset($donorData['donor_id'])) {
+            $_SESSION['donor_id'] = $donorData['donor_id'];
+            $_SESSION['donor_name'] = $donorData['first_name'] . ' ' . $donorData['surname'];
+        } else {
+            error_log("Missing donor_id in donor data: " . print_r($donorData, true));
+        }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -484,6 +568,9 @@ select.donor_form_input[disabled] {
             
             <!-- Main Content -->
             <main class="col-md-9 col-lg-10 main-content">
+                <!-- Error Display Area -->
+                <div id="errorDisplay" class="alert alert-danger" style="display: none;"></div>
+                
                 <!-- Latest Donor Submissions -->
                 <div class="container-fluid p-4 custom-margin">
                     <h2 class="mt-1 mb-4">Latest Donor Submissions</h2>
@@ -529,15 +616,28 @@ select.donor_form_input[disabled] {
                                 <?php if($donors && is_array($donors)): ?>
                                     <?php foreach($donors as $donor): ?>
                                         <?php
-                                        // Ensure we have the donor ID in the expected format
-                                        $donorData = array_merge($donor, [
-                                            'donor_id' => $donor['donor_id'] ?? null
-                                        ]);
+                                        // Ensure $donor is an array before merging
+                                        if (is_array($donor)) {
+                                            $donorData = array_merge($donor, [
+                                                'donor_id' => $donor['donor_id'] ?? null
+                                            ]);
+                                        } else {
+                                            error_log("Invalid donor data: " . print_r($donor, true));
+                                            continue;
+                                        }
                                         ?>
                                         <tr data-bs-toggle="modal" 
                                             data-bs-target="#donorDetailsModal" 
                                             data-donor='<?php echo htmlspecialchars(json_encode($donorData, JSON_HEX_APOS | JSON_HEX_QUOT)); ?>'>
-                                            <td><?php echo isset($donor['submitted_at']) ? htmlspecialchars($donor['submitted_at']) : ''; ?></td>
+                                            <td><?php 
+                                                if (isset($donor['submitted_at'])) {
+                                                    $date = new DateTime($donor['submitted_at']);
+                                                    echo $date->format('F d, Y h:i A');
+                                                } else {
+                                                    echo 'N/A';
+                                                    error_log("Missing 'submitted_at' for donor: " . print_r($donor, true));
+                                                }
+                                            ?></td>
                                             <td><?php echo isset($donor['surname']) ? htmlspecialchars($donor['surname']) : ''; ?></td>
                                             <td><?php echo isset($donor['first_name']) ? htmlspecialchars($donor['first_name']) : ''; ?></td>
                                             <td><?php echo isset($donor['birthdate']) ? htmlspecialchars($donor['birthdate']) : ''; ?></td>
@@ -759,6 +859,18 @@ select.donor_form_input[disabled] {
             const searchInput = document.getElementById('searchInput');
             const searchCategory = document.getElementById('searchCategory');
             const donorTableBody = document.getElementById('donorTableBody');
+            const errorDisplay = document.getElementById('errorDisplay');
+            const approveButton = document.getElementById('Approve');
+            
+            // Initialize current donor data at the top scope
+            let currentDonorData = null;
+            
+            // Direct debug of button existence
+            if (approveButton) {
+                console.log("Approve button found:", approveButton);
+            } else {
+                console.error("Approve button NOT found in DOM!");
+            }
             
             // Store the original table rows for reset
             const originalRows = Array.from(donorTableBody.getElementsByTagName('tr'));
@@ -874,150 +986,57 @@ select.donor_form_input[disabled] {
             searchInput.addEventListener('input', debouncedSearch);
             searchCategory.addEventListener('change', debouncedSearch);
 
-            // Handle row click and populate modal
-            document.querySelectorAll('.table-hover tbody tr').forEach(row => {
-                row.addEventListener('click', function() {
-                    const donorData = JSON.parse(this.getAttribute('data-donor'));
-                    
-                    // Update signatures
-                    const donorDeclaration = donorDetailsModal.querySelector('.donor-declaration');
-                    let html = '';
-                    
-                    // Donor Signature Section
-                    html += `
-                        <div class="donor-declaration-row">
-                            <div><strong>Donor's Signature:</strong></div>
-                            ${donorData.donor_signature ? 
-                                `<img src="../../src/views/forms/uploads/${donorData.donor_signature.replace('uploads/', '')}" 
-                                    alt="Donor's Signature" class="donor-declaration-img">` :
-                                `<p>No donor signature available</p>`
-                            }
-                        </div>
-                    `;
-
-                    // Parent/Guardian Section - only show if guardian signature exists
-                    if (donorData.guardian_signature) {
-                        const guardianSignaturePath = donorData.guardian_signature.replace('uploads/', '');
-                        html += `
-                            <div class="donor-declaration-row">
-                                <div><strong>Signature of Parent/Guardian:</strong></div>
-                                <img src="../../src/views/forms/uploads/${guardianSignaturePath}" 
-                                    alt="Parent/Guardian Signature" class="donor-declaration-img">
-                                ${donorData.relationship ? 
-                                    `<div class="relationship-container">
-                                        <strong>Relationship to Blood Donor: </strong>
-                                        <input class="donor-declaration-input" type="text" 
-                                            value="${donorData.relationship}" readonly>
-                                    </div>` : ''
-                                }
-                            </div>
-                        `;
-                    }
-
-                    donorDeclaration.innerHTML = html;
-                    
-                    // Populate all form fields with donor data
-                    donorDetailsModal.querySelector('input[name="prc_donor_number"]').value = donorData.prc_donor_number || '';
-                    donorDetailsModal.querySelector('input[name="doh_nnbnets_barcode"]').value = donorData.doh_nnbnets_barcode || '';
-                    donorDetailsModal.querySelector('input[name="surname"]').value = donorData.surname || '';
-                    donorDetailsModal.querySelector('input[name="first_name"]').value = donorData.first_name || '';
-                    donorDetailsModal.querySelector('input[name="middle_name"]').value = donorData.middle_name || '';
-                    donorDetailsModal.querySelector('input[name="birthdate"]').value = donorData.birthdate || '';
-                    donorDetailsModal.querySelector('input[name="age"]').value = donorData.age || '';
-                    donorDetailsModal.querySelector('select[name="sex"]').value = donorData.sex?.toLowerCase() || '';
-                    donorDetailsModal.querySelector('select[name="civil_status"]').value = donorData.civil_status?.toLowerCase() || '';
-                    donorDetailsModal.querySelector('input[name="permanent_address"]').value = donorData.permanent_address || '';
-                    donorDetailsModal.querySelector('input[name="office_address"]').value = donorData.office_address || '';
-                    donorDetailsModal.querySelector('input[name="nationality"]').value = donorData.nationality || '';
-                    donorDetailsModal.querySelector('input[name="religion"]').value = donorData.religion || '';
-                    donorDetailsModal.querySelector('input[name="education"]').value = donorData.education || '';
-                    donorDetailsModal.querySelector('input[name="occupation"]').value = donorData.occupation || '';
-                    donorDetailsModal.querySelector('input[name="telephone"]').value = donorData.telephone || '';
-                    donorDetailsModal.querySelector('input[name="mobile"]').value = donorData.mobile || '';
-                    donorDetailsModal.querySelector('input[name="email"]').value = donorData.email || '';
-                    donorDetailsModal.querySelector('input[name="id_school"]').value = donorData.id_school || '';
-                    donorDetailsModal.querySelector('input[name="id_company"]').value = donorData.id_company || '';
-                    donorDetailsModal.querySelector('input[name="id_prc"]').value = donorData.id_prc || '';
-                    donorDetailsModal.querySelector('input[name="id_drivers"]').value = donorData.id_drivers || '';
-                    donorDetailsModal.querySelector('input[name="id_sss_gsis_bir"]').value = donorData.id_sss_gsis_bir || '';
-                    donorDetailsModal.querySelector('input[name="id_others"]').value = donorData.id_others || '';
-                });
-            });
-        });
-
-        function toggleMode() {
-            document.body.classList.toggle("light-mode");
-        }
-
-        document.addEventListener('DOMContentLoaded', function() {
-            let currentDonorData = null;
-
-            // Function to handle approve button click
-            function handleApprove(donorData) {
-                console.log('Approving donor:', donorData);
-
-                if (!donorData) {
-                    console.error('No donor data available');
-                    alert('Error: Could not process approval - missing donor data');
-                    return;
-                }
-
-                // Get the donor_id from the data
-                const donorId = donorData.donor_id;
-                if (!donorId) {
-                    console.error('No donor_id found in data:', donorData);
-                    alert('Error: Could not process approval - missing donor ID');
-                    return;
-                }
-
-                // First store the donor ID in session
-                fetch('store_donor_session.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        donor_id: donorId
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        window.location.href = '../../src/views/forms/medical-history-modal.php';
-                    } else {
-                        console.error('Server response:', data);
-                        alert('Error: Could not process approval');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('Error: Could not process approval');
-                });
+            function showError(message) {
+                alert(message);
+                console.error("ERROR: " + message);
             }
 
-            // Table row click handler to store current donor data
+            // Handle row click and populate modal
             document.querySelectorAll('.table-hover tbody tr').forEach(row => {
                 row.addEventListener('click', function() {
                     try {
                         const donorDataStr = this.getAttribute('data-donor');
-                        console.log('Raw donor data:', donorDataStr);
+                        
+                        // Try to parse the donor data
                         currentDonorData = JSON.parse(donorDataStr);
-                        console.log('Parsed donor data:', currentDonorData);
+                        
+                        // Check for donor_id
+                        if (!currentDonorData.donor_id) {
+                            showError('Missing donor_id in parsed data. This will cause issues with approval.');
+                        }
+                        
                     } catch (error) {
-                        console.error('Error parsing donor data:', error);
+                        showError('Error parsing donor data: ' + error.message);
                     }
                 });
             });
 
-            // Add click event listener to the modal's approve button
-            document.getElementById('Approve').addEventListener('click', function() {
-                console.log('Current donor data on approve:', currentDonorData);
-                if (currentDonorData) {
-                    handleApprove(currentDonorData);
-                } else {
-                    alert('Error: No donor selected');
-                }
-            });
+            // Approve button click handler
+            if (approveButton) {
+                approveButton.addEventListener('click', function() {
+                    if (!currentDonorData) {
+                        showError('Error: No donor selected');
+                        return;
+                    }
+                    
+                    // Get the donor_id from the data
+                    const donorId = currentDonorData.donor_id;
+                    if (!donorId) {
+                        showError('Error: Could not process approval - missing donor ID');
+                        return;
+                    }
+                    
+                    // Get donor name if available
+                    let donorName = '';
+                    if (currentDonorData.first_name && currentDonorData.surname) {
+                        donorName = currentDonorData.first_name + ' ' + currentDonorData.surname;
+                    }
+                    
+                    // Direct navigation with parameters
+                    const url = `dashboard-staff-donor-submission.php?approve_donor=${donorId}&donor_name=${encodeURIComponent(donorName)}`;
+                    window.location.href = url;
+                });
+            }
         });
     </script>
 

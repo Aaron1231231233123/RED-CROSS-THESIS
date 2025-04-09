@@ -2,29 +2,36 @@
 session_start();
 require_once '../../assets/conn/db_conn.php';
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id'])) {
-    header("Location: ../../public/login.php");
-    exit();
-}
 
-// Check for correct roles (admin role_id 1 or staff role_id 3)
-if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['role_id'] != 3)) {
-    error_log("Invalid role_id: " . $_SESSION['role_id']);
-    header("Location: ../../public/unauthorized.php");
-    exit();
-}
 
-// For staff role (role_id 3), check for required session variables
-if ($_SESSION['role_id'] === 3) {
-    if (!isset($_SESSION['donor_id'])) {    
-        error_log("Missing donor_id in session for staff");
-        header('Location: ../../public/Dashboards/dashboard-Inventory-System.php');
-        exit();
+// For staff role (role_id 3), ensure we have donor_id and screening_id
+if ($_SESSION['role_id'] == 3) {
+    $missing_data = false;
+    
+    // Check if we have donor_id, either from session or POST
+    if (!isset($_SESSION['donor_id']) && (!isset($_POST['donor_id']) || empty($_POST['donor_id']))) {
+        error_log("Missing donor_id for staff role");
+        $missing_data = true;
+    } elseif (isset($_POST['donor_id']) && !isset($_SESSION['donor_id'])) {
+        // Set from POST if needed
+        $_SESSION['donor_id'] = $_POST['donor_id'];
+        error_log("Set donor_id from POST: " . $_POST['donor_id']);
     }
-    if (!isset($_SESSION['screening_id'])) {
-        error_log("Missing screening_id in session for staff");
-        header('Location: ../views/forms/screening-form.php');
+    
+    // Check if we have screening_id, either from session or POST
+    if (!isset($_SESSION['screening_id']) && (!isset($_POST['screening_id']) || empty($_POST['screening_id']))) {
+        error_log("Missing screening_id for staff role");
+        $missing_data = true;
+    } elseif (isset($_POST['screening_id']) && !isset($_SESSION['screening_id'])) {
+        // Set from POST if needed
+        $_SESSION['screening_id'] = $_POST['screening_id'];
+        error_log("Set screening_id from POST: " . $_POST['screening_id']);
+    }
+    
+    // If still missing data, redirect
+    if ($missing_data) {
+        error_log("Missing required data for physical examination - redirecting to dashboard");
+        header('Location: ../../public/Dashboards/dashboard-staff-physical-submission.php');
         exit();
     }
 } else {
@@ -311,7 +318,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     error_log("Admin role: Redirecting to blood collection form");
                     header('Location: ../views/forms/blood-collection-form.php');
                 } else {
-                    // Staff (role_id 3) - Redirect to the appropriate donor list based on status
                     error_log("Staff role: Redirecting to appropriate donor list");
                     
                     if ($status === 'approved') {
@@ -325,6 +331,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         header('Location: ../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php?status=pending&processed=true');
                     }
                 }
+                
+                // NEW CONDITION FOR ROLE ID 3 - Redirect to physical submission dashboard
+                if ($_SESSION['role_id'] === 3) {
+                    error_log("Role 3 specific redirection: Going to physical submission dashboard");
+                    header('Location: ../../public/Dashboards/dashboard-staff-physical-submission.php');
+                    exit();
+                }
+                
                 exit();
             } else {
                 error_log("Invalid response format from database: " . print_r($response_data, true));

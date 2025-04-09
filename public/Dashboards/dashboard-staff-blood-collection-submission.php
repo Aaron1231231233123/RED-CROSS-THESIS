@@ -11,49 +11,120 @@ $records_per_page = 15;
 $current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($current_page - 1) * $records_per_page;
 
-// Modify your Supabase query to include pagination
-$ch = curl_init();
-curl_setopt_array($ch, [
-    CURLOPT_URL => SUPABASE_URL . '/rest/v1/blood_collection?select=*&order=submitted_at.desc',
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY
-    ]
-]);
+// Start timing for performance measurement
+$start_time = microtime(true);
+error_log("Starting blood collection submission query at " . date('H:i:s'));
 
-$response = curl_exec($ch);
-$collections = json_decode($response, true) ?: [];
-$total_records = count($collections);
-$total_pages = ceil($total_records / $records_per_page);
-
-// Slice the array to get only the records for the current page
-$collections = array_slice($collections, $offset, $records_per_page);
-
-// Close cURL session
-curl_close($ch);
-
-// Get physical examination records with donor information
-$ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=physical_exam_id,donor_id,remarks,blood_bag_type,disapproval_reason,donor_form(surname,first_name)&order=created_at.desc');
-
+// STEP 1: Get all blood collection records to identify physical exams that already have blood collection
+$blood_collection_url = SUPABASE_URL . '/rest/v1/blood_collection?select=physical_exam_id';
+$ch = curl_init($blood_collection_url);
 $headers = array(
     'apikey: ' . SUPABASE_API_KEY,
     'Authorization: Bearer ' . SUPABASE_API_KEY,
     'Accept: application/json'
 );
-
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-
 $response = curl_exec($ch);
-$examinations = json_decode($response, true);
+$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
 
-// Check for JSON decode errors
-if (json_last_error() !== JSON_ERROR_NONE) {
-    $examinations = array();
+// Check for errors in the blood collection query
+if ($http_code !== 200) {
+    error_log("Error fetching blood collections. HTTP code: " . $http_code);
+    error_log("Response: " . $response);
+    $blood_collections = [];
+} else {
+    $blood_collections = json_decode($response, true) ?: [];
 }
 
+// Create a lookup array of physical_exam_ids that already have blood collection
+$collected_physical_exam_ids = [];
+foreach ($blood_collections as $collection) {
+    if (isset($collection['physical_exam_id']) && !empty($collection['physical_exam_id'])) {
+        // Normalize the physical_exam_id to string format for consistent comparison
+        $collected_physical_exam_ids[] = (string)$collection['physical_exam_id'];
+        
+        // Log the type and value for debugging
+        error_log("Blood collection physical_exam_id: " . $collection['physical_exam_id'] . 
+                  " (Type: " . gettype($collection['physical_exam_id']) . ")");
+    }
+}
+
+// Dump the collected physical exam IDs for debugging
+error_log("Physical exam IDs with blood collection: " . implode(", ", $collected_physical_exam_ids));
+error_log("Found " . count($collected_physical_exam_ids) . " physical exams that already have blood collection");
+
+// STEP 2: Get physical examination records with "Accepted" remarks only
+$physical_exam_url = SUPABASE_URL . '/rest/v1/physical_examination?remarks=eq.Accepted&select=physical_exam_id,donor_id,remarks,blood_bag_type,donor_form(surname,first_name)&order=created_at.desc';
+$ch = curl_init($physical_exam_url);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+$response = curl_exec($ch);
+$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
+
+// Check for errors in the physical examination query
+if ($http_code !== 200) {
+    error_log("Error fetching physical examinations. HTTP code: " . $http_code);
+    error_log("Response: " . $response);
+    $physical_exams = [];
+} else {
+    $physical_exams = json_decode($response, true) ?: [];
+}
+
+// Log all physical exam IDs for debugging
+$all_physical_exam_ids = [];
+foreach ($physical_exams as $exam) {
+    if (isset($exam['physical_exam_id'])) {
+        $all_physical_exam_ids[] = $exam['physical_exam_id'];
+    }
+}
+error_log("All physical exam IDs: " . implode(", ", $all_physical_exam_ids));
+error_log("Found " . count($physical_exams) . " physical exams with 'Accepted' status");
+
+// STEP 3: Filter out physical exams that already have blood collection
+$available_exams = [];
+foreach ($physical_exams as $exam) {
+    if (isset($exam['physical_exam_id'])) {
+        // Log the type and value for debugging
+        error_log("Physical exam ID: " . $exam['physical_exam_id'] . 
+                  " (Type: " . gettype($exam['physical_exam_id']) . ")");
+        
+        // Normalize to string for comparison
+        $exam_id_string = (string)$exam['physical_exam_id'];
+        
+        // Check if this physical_exam_id is in the collected list
+        if (!in_array($exam_id_string, $collected_physical_exam_ids)) {
+            $available_exams[] = $exam;
+            error_log("Including exam ID " . $exam['physical_exam_id'] . " (not collected yet)");
+        } else {
+            error_log("Excluding exam ID " . $exam['physical_exam_id'] . " (already has blood collection)");
+        }
+    }
+}
+
+error_log("After filtering, " . count($available_exams) . " physical exams remain available for blood collection");
+
+// STEP 4: Prepare pagination
+$total_records = count($available_exams);
+$total_pages = ceil($total_records / $records_per_page);
+$examinations = array_slice($available_exams, $offset, $records_per_page);
+
+// Log execution time
+$end_time = microtime(true);
+$execution_time = ($end_time - $start_time);
+error_log("Query execution time: " . number_format($execution_time, 4) . " seconds");
+
+// Debug output (remove in production)
+if (isset($_GET['debug']) && $_GET['debug'] === '1') {
+    echo "<pre>";
+    echo "Found " . count($physical_exams) . " 'Accepted' physical exams<br>";
+    echo "Found " . count($collected_physical_exam_ids) . " physical exams with blood collection<br>";
+    echo "Available for collection: " . count($available_exams) . " physical exams<br>";
+    echo "Showing " . count($examinations) . " records on this page<br>";
+    echo "</pre>";
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -447,6 +518,86 @@ curl_close($ch);
                 <div class="container-fluid p-4 custom-margin">
                     <h2 class="mt-1 mb-4">Blood Collection</h2>
                     
+                    <!-- Note about filtered records -->
+                    <div class="alert alert-info">
+                        <strong>Note:</strong> Showing only donors with "Accepted" physical examination status that have not yet had blood collected.
+                    </div>
+                    
+                    <?php if (isset($_GET['debug']) && $_GET['debug'] == '1'): ?>
+                    <div class="alert alert-warning">
+                        <h5>Debug Information:</h5>
+                        <p><strong>Query Execution Time:</strong> <?php echo number_format($execution_time, 4); ?> seconds</p>
+                        <p><strong>Total "Accepted" Physical Exams:</strong> <?php echo count($physical_exams); ?></p>
+                        <p><strong>Total Blood Collections:</strong> <?php echo count($blood_collections); ?></p>
+                        <p><strong>Filtered Out (Already Collected):</strong> <?php echo count($collected_physical_exam_ids); ?></p>
+                        <p><strong>Records Available for Collection:</strong> <?php echo count($available_exams); ?></p>
+                        <p><strong>Records Shown (Current Page):</strong> <?php echo count($examinations); ?></p>
+                        <p><strong>Current Page / Total Pages:</strong> <?php echo $current_page; ?> / <?php echo $total_pages; ?></p>
+                        
+                        <hr>
+                        <h6>Physical Exam IDs with Blood Collection (Excluded):</h6>
+                        <pre><?php 
+                        if (empty($collected_physical_exam_ids)) {
+                            echo "None found";
+                        } else {
+                            echo implode(", ", $collected_physical_exam_ids);
+                        }
+                        ?></pre>
+                        
+                        <h6>Available Physical Exam IDs (Shown in table):</h6>
+                        <pre><?php 
+                        $available_ids = array_column($available_exams, 'physical_exam_id');
+                        if (empty($available_ids)) {
+                            echo "None found";
+                        } else {
+                            echo implode(", ", $available_ids);
+                        }
+                        ?></pre>
+                        
+                        <h6>All Physical Exam IDs with "Accepted" Status:</h6>
+                        <pre><?php 
+                        if (empty($all_physical_exam_ids)) {
+                            echo "None found";
+                        } else {
+                            echo implode(", ", $all_physical_exam_ids);
+                        }
+                        ?></pre>
+                        
+                        <h6>Direct Blood Collection Check:</h6>
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Blood Collection ID</th>
+                                    <th>Physical Exam ID</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            <?php
+                            // Make a direct query to get all blood collections with their physical_exam_id
+                            $direct_query_url = SUPABASE_URL . '/rest/v1/blood_collection?select=blood_collection_id,physical_exam_id';
+                            $ch = curl_init($direct_query_url);
+                            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+                            $response = curl_exec($ch);
+                            $direct_blood_collections = json_decode($response, true) ?: [];
+                            curl_close($ch);
+                            
+                            if (empty($direct_blood_collections)) {
+                                echo "<tr><td colspan='2'>No blood collection records found</td></tr>";
+                            } else {
+                                foreach ($direct_blood_collections as $collection) {
+                                    echo "<tr>";
+                                    echo "<td>" . htmlspecialchars($collection['blood_collection_id'] ?? 'N/A') . "</td>";
+                                    echo "<td>" . htmlspecialchars($collection['physical_exam_id'] ?? 'N/A') . "</td>";
+                                    echo "</tr>";
+                                }
+                            }
+                            ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <?php endif; ?>
+                    
                     <!-- Search Bar -->
                     <div class="row mb-4">
                         <div class="col-12">
@@ -495,10 +646,6 @@ curl_close($ch);
                                     $counter = 1; // Initialize counter
                                     foreach ($examinations as $examination) {
                                         if (!is_array($examination)) continue;
-                                        
-                                        // Skip records that have a disapproval reason
-                                        if (!empty($examination['disapproval_reason'])) continue;
-                                        
                                         ?>
                                         <tr class="clickable-row" data-examination='<?php echo htmlspecialchars(json_encode([
                                             'donor_id' => $examination['donor_id'] ?? '',
@@ -580,6 +727,7 @@ curl_close($ch);
                 document.querySelectorAll(".clickable-row").forEach(row => {
                     row.addEventListener("click", function() {
                         currentCollectionData = JSON.parse(this.dataset.examination);
+                        console.log("Selected physical exam data:", currentCollectionData); // Debug log
                         confirmationDialog.classList.remove("hide");
                         confirmationDialog.classList.add("show");
                         confirmationDialog.style.display = "block";
@@ -623,11 +771,29 @@ curl_close($ch);
                 physicalExamIdInput.type = 'hidden';
                 physicalExamIdInput.name = 'physical_exam_id';
                 physicalExamIdInput.value = currentCollectionData.physical_exam_id;
+                
+                // Add role_id=3 (staff) as hidden input
+                const roleIdInput = document.createElement('input');
+                roleIdInput.type = 'hidden';
+                roleIdInput.name = 'role_id';
+                roleIdInput.value = '3';
+                
+                // Add a flag indicating we're coming from the staff dashboard
+                const fromDashboardInput = document.createElement('input');
+                fromDashboardInput.type = 'hidden';
+                fromDashboardInput.name = 'from_dashboard';
+                fromDashboardInput.value = 'staff_blood_collection';
 
                 form.appendChild(donorIdInput);
                 form.appendChild(physicalExamIdInput);
+                form.appendChild(roleIdInput);
+                form.appendChild(fromDashboardInput);
                 document.body.appendChild(form);
 
+                console.log("Submitting form with donor_id: " + currentCollectionData.donor_id + 
+                          ", physical_exam_id: " + currentCollectionData.physical_exam_id +
+                          ", role_id: 3");
+                
                 setTimeout(() => {
                     loadingSpinner.style.display = "none";
                     form.submit();
@@ -657,11 +823,10 @@ curl_close($ch);
                         );
                     } else {
                         const columnIndex = {
-                            'date': 1,
-                            'surname': 2,
-                            'firstname': 3,
-                            'remarks': 4,
-                            'blood_bag_type': 5
+                            'surname': 1,
+                            'firstname': 2,
+                            'remarks': 3,
+                            'blood_bag_type': 4
                         }[category];
 
                         if (columnIndex !== undefined) {
@@ -679,7 +844,6 @@ curl_close($ch);
                 const category = this.value;
                 let placeholder = 'Search by ';
                 switch(category) {
-                    case 'date': placeholder += 'date...'; break;
                     case 'surname': placeholder += 'surname...'; break;
                     case 'firstname': placeholder += 'first name...'; break;
                     case 'remarks': placeholder += 'physical exam remarks...'; break;

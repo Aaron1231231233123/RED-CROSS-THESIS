@@ -3,35 +3,11 @@ session_start();
 require_once '../../assets/conn/db_conn.php';
 require '../../assets/php_func/user_roles_staff.php';
 
-// Add pagination settings
-$records_per_page = 15;
-$current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$offset = ($current_page - 1) * $records_per_page;
+// Debug logging to help troubleshoot
+error_log("Starting dashboard-staff-physical-submission.php");
 
-// Modify your Supabase query to include pagination and order by creation time
-$ch = curl_init();
-curl_setopt_array($ch, [
-    CURLOPT_URL => SUPABASE_URL . '/rest/v1/physical_exam?select=*&order=created_at.desc',
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY
-    ]
-]);
-
-$response = curl_exec($ch);
-$physicals = json_decode($response, true) ?: [];
-$total_records = count($physicals);
-$total_pages = ceil($total_records / $records_per_page);
-
-// Slice the array to get only the records for the current page
-$physicals = array_slice($physicals, $offset, $records_per_page);
-
-// Close cURL session
-curl_close($ch);
-
-// Get screening records with donor information and check disapproval status
-$ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=screening_id,created_at,blood_type,donation_type,donor_form_id,disapproval_reason,donor_form:donor_form_id(surname,first_name)&order=created_at.desc');
+// 1. First, get all screening records
+$ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=screening_id,created_at,blood_type,donation_type,donor_form_id,disapproval_reason&order=created_at.desc');
 
 $headers = array(
     'apikey: ' . SUPABASE_API_KEY,
@@ -44,30 +20,132 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
 $response = curl_exec($ch);
 $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-// Debug logging
-error_log("Screening Response: " . $response);
-error_log("HTTP Code: " . $http_code);
-
-$screenings = json_decode($response, true);
-
-// Check for JSON decode errors
-if (json_last_error() !== JSON_ERROR_NONE) {
-    error_log("JSON decode error: " . json_last_error_msg());
-    $screenings = array();
-}
-
 curl_close($ch);
 
-// Add visual feedback for debugging
-$debug_info = "";
-if (!$screenings || !is_array($screenings)) {
-    $debug_info = "No data received from database. HTTP Code: " . $http_code;
-} else if (empty($screenings)) {
-    $debug_info = "No records found in database";
-} else {
-    $debug_info = "Records found: " . count($screenings);
+// Debug logging
+error_log("Screening fetch response code: " . $http_code);
+error_log("Screening response sample: " . substr($response, 0, 200) . "...");
+
+$all_screenings = json_decode($response, true) ?: [];
+
+// 2. Get all physical examination records to determine which donor_ids to exclude
+$ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=donor_id');
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+$response = curl_exec($ch);
+$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+
+// Debug logging
+error_log("Physical examination fetch response code: " . $http_code);
+error_log("Physical examination response: " . $response);
+
+$physical_exams = json_decode($response, true) ?: [];
+
+// Create array of donor_ids that already have physical exams
+$existing_physical_exam_donor_ids = [];
+foreach ($physical_exams as $exam) {
+    if (isset($exam['donor_id'])) {
+        $existing_physical_exam_donor_ids[] = $exam['donor_id'];
+        error_log("Found physical examination for donor_id: " . $exam['donor_id']);
+    }
 }
+
+if (empty($existing_physical_exam_donor_ids)) {
+    error_log("WARNING: No physical examination records found with donor_ids. This could be normal if no exams exist yet.");
+}
+
+error_log("Found " . count($existing_physical_exam_donor_ids) . " donors that already have physical exams");
+error_log("Found " . count($all_screenings) . " total screening records before filtering");
+
+// 3. Process and filter the screenings
+$filtered_screenings = [];
+$skipped_count = 0;
+foreach ($all_screenings as $screening) {
+    // Skip if not valid array data
+    if (!is_array($screening)) {
+        error_log("Skipping invalid screening record (not an array)");
+        continue;
+    }
+    
+    // Skip records that have disapproval reasons
+    if (!empty($screening['disapproval_reason'])) {
+        error_log("Skipping screening ID " . ($screening['screening_id'] ?? 'unknown') . " - has disapproval reason: " . $screening['disapproval_reason']);
+        $skipped_count++;
+        continue;
+    }
+    
+    // Skip if donor already has a physical exam - THIS IS THE KEY PART
+    if (isset($screening['donor_form_id']) && in_array($screening['donor_form_id'], $existing_physical_exam_donor_ids)) {
+        error_log("Skipping donor ID " . $screening['donor_form_id'] . " - already has physical exam");
+        $skipped_count++;
+        continue;
+    }
+    
+    // Get donor information for this screening record
+    if (isset($screening['donor_form_id'])) {
+        $donor_id = $screening['donor_form_id'];
+        
+        // Fetch donor data
+        $ch_donor = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select=surname,first_name,middle_name&donor_id=eq.' . $donor_id);
+        curl_setopt($ch_donor, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch_donor, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY
+        ]);
+        
+        $donor_response = curl_exec($ch_donor);
+        curl_close($ch_donor);
+        
+        $donor_data = json_decode($donor_response, true) ?: [];
+        
+        if (!empty($donor_data)) {
+            $screening['donor_form'] = $donor_data[0];
+            error_log("Added donor data for screening " . $screening['screening_id'] . ": " . json_encode($donor_data[0]));
+        } else {
+            error_log("No donor data found for ID " . $donor_id);
+            $screening['donor_form'] = [
+                'surname' => 'Unknown',
+                'first_name' => 'Unknown',
+                'middle_name' => ''
+            ];
+        }
+    }
+    
+    // Add the screening to our filtered list
+    $filtered_screenings[] = $screening;
+}
+
+error_log("Filtered to " . count($filtered_screenings) . " screenings without physical exams");
+error_log("Skipped " . $skipped_count . " screening records that already have physical exams or are disapproved");
+
+// Handle pagination
+$records_per_page = 15;
+$current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$total_records = count($filtered_screenings);
+$total_pages = ceil($total_records / $records_per_page);
+
+// Adjust current page if needed
+if ($current_page < 1) $current_page = 1;
+if ($current_page > $total_pages && $total_pages > 0) $current_page = $total_pages;
+
+// Calculate the offset for this page
+$offset = ($current_page - 1) * $records_per_page;
+
+// Slice the array to get only the records for the current page
+$screenings = array_slice($filtered_screenings, $offset, $records_per_page);
+
+// Debug info message
+$debug_info = "";
+if (empty($filtered_screenings)) {
+    $debug_info = "No pending physical exams found - all screenings have been processed.";
+} else {
+    $debug_info = "Found " . count($filtered_screenings) . " screenings pending physical examination. Skipped " . $skipped_count . " records that already have physical exams.";
+}
+
+// For admin view
+$isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -425,6 +503,15 @@ body {
     border-color: #dee2e6;
 }
 
+/* Debug Info */
+.debug-info {
+    padding: 10px 15px;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    margin-bottom: 15px;
+    font-size: 14px;
+    color: #666;
+}
     </style>
 </head>
 <body>
@@ -471,7 +558,25 @@ body {
             <!-- Main Content -->
             <main class="col-md-9 col-lg-10 main-content">
                 <div class="container-fluid p-4 custom-margin">
-                    <h2 class="mt-1 mb-4">Physical Examinations</h2>
+                    <h2 class="mt-1 mb-4">Physical Examinations - Pending</h2>
+                    
+                    <?php if (!empty($debug_info)): ?>
+                    <div class="debug-info">
+                        <i class="fas fa-info-circle"></i> <?php echo $debug_info; ?>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <?php if ($isAdmin): ?>
+                    <div class="alert alert-info mt-3">
+                        <h5>Admin Statistics:</h5>
+                        <ul>
+                            <li>Total screening records: <?php echo count($all_screenings); ?></li>
+                            <li>Records with physical exams: <?php echo count($existing_physical_exam_donor_ids); ?></li>
+                            <li>Records with disapproval reasons: <?php echo ($skipped_count - count($existing_physical_exam_donor_ids)); ?></li>
+                            <li>Records available for processing: <?php echo count($filtered_screenings); ?></li>
+                        </ul>
+                    </div>
+                    <?php endif; ?>
                     
                     <!-- Search Bar -->
                     <div class="row mb-4">
@@ -513,30 +618,36 @@ body {
                             </thead>
                             <tbody id="screeningTableBody">
                                 <?php 
-                                if (is_array($screenings) && !empty($screenings)) {
-                                    $counter = 1; // Initialize counter
+                                if (!empty($screenings)) {
+                                    $counter = ($current_page - 1) * $records_per_page + 1; // Initialize counter with pagination
                                     foreach ($screenings as $screening) {
-                                        if (!is_array($screening)) continue;
+                                        // Format the full name
+                                        $surname = isset($screening['donor_form']['surname']) ? $screening['donor_form']['surname'] : '';
+                                        $firstName = isset($screening['donor_form']['first_name']) ? $screening['donor_form']['first_name'] : '';
+                                        $middleName = isset($screening['donor_form']['middle_name']) ? $screening['donor_form']['middle_name'] : '';
                                         
-                                        // Skip records that have a disapproval reason
-                                        if (!empty($screening['disapproval_reason'])) continue;
+                                        // Format the date
+                                        $date = isset($screening['created_at']) ? date('Y-m-d', strtotime($screening['created_at'])) : 'Unknown';
                                         
+                                        // Blood type and donation type
+                                        $bloodType = isset($screening['blood_type']) ? $screening['blood_type'] : 'Unknown';
+                                        $donationType = isset($screening['donation_type']) ? $screening['donation_type'] : 'Unknown';
                                         ?>
                                         <tr class="clickable-row" data-screening='<?php echo htmlspecialchars(json_encode([
                                             'screening_id' => $screening['screening_id'] ?? '',
                                             'donor_form_id' => $screening['donor_form_id'] ?? ''
                                         ]), JSON_HEX_APOS | JSON_HEX_QUOT); ?>'>
                                             <td><?php echo $counter++; ?></td>
-                                            <td><?php echo isset($screening['created_at']) ? htmlspecialchars(date('Y-m-d', strtotime($screening['created_at']))) : 'N/A'; ?></td>
-                                            <td><?php echo isset($screening['donor_form']['surname']) ? htmlspecialchars($screening['donor_form']['surname']) : 'N/A'; ?></td>
-                                            <td><?php echo isset($screening['donor_form']['first_name']) ? htmlspecialchars($screening['donor_form']['first_name']) : 'N/A'; ?></td>
-                                            <td><?php echo isset($screening['blood_type']) ? htmlspecialchars($screening['blood_type']) : 'N/A'; ?></td>
-                                            <td><?php echo isset($screening['donation_type']) ? htmlspecialchars($screening['donation_type']) : 'N/A'; ?></td>
+                                            <td><?php echo htmlspecialchars($date); ?></td>
+                                            <td><?php echo htmlspecialchars($surname); ?></td>
+                                            <td><?php echo htmlspecialchars($firstName); ?></td>
+                                            <td><?php echo htmlspecialchars($bloodType); ?></td>
+                                            <td><?php echo htmlspecialchars($donationType); ?></td>
                                         </tr>
                                 <?php 
                                     }
                                 } else {
-                                    echo '<tr><td colspan="6" class="text-center">No records found</td></tr>';
+                                    echo '<tr><td colspan="6" class="text-center">No pending physical exams found</td></tr>';
                                 }
                                 ?>
                             </tbody>
@@ -544,6 +655,7 @@ body {
                     </div>
 
                     <!-- Add Pagination Controls -->
+                    <?php if ($total_pages > 1): ?>
                     <div class="pagination-container">
                         <nav aria-label="Physical exam submissions navigation">
                             <ul class="pagination justify-content-center">
@@ -566,14 +678,15 @@ body {
                             </ul>
                         </nav>
                     </div>
+                    <?php endif; ?>
                 </div>
                 
                 <!-- Confirmation Modal -->
                 <div class="confirmation-modal" id="confirmationDialog">
-                    <div class="modal-headers">Do you want to continue?</div>
+                    <div class="modal-headers">Start physical examination?</div>
                     <div class="modal-actions">
-                        <button class="modal-button cancel-action" id="cancelButton">No</button>
-                        <button class="modal-button confirm-action" id="confirmButton">Yes</button>
+                        <button class="modal-button cancel-action" id="cancelButton">Cancel</button>
+                        <button class="modal-button confirm-action" id="confirmButton">Proceed</button>
                     </div>
                 </div>    
                 
@@ -603,10 +716,16 @@ body {
             function attachRowClickHandlers() {
                 document.querySelectorAll(".clickable-row").forEach(row => {
                     row.addEventListener("click", function() {
-                        currentScreeningData = JSON.parse(this.getAttribute('data-screening'));
-                        confirmationDialog.classList.remove("hide");
-                        confirmationDialog.classList.add("show");
-                        confirmationDialog.style.display = "block";
+                        try {
+                            currentScreeningData = JSON.parse(this.getAttribute('data-screening'));
+                            console.log("Selected screening:", currentScreeningData);
+                            confirmationDialog.classList.remove("hide");
+                            confirmationDialog.classList.add("show");
+                            confirmationDialog.style.display = "block";
+                        } catch (e) {
+                            console.error("Error parsing screening data:", e);
+                            alert("Error selecting this record. Please try again.");
+                        }
                     });
                 });
             }
@@ -626,6 +745,16 @@ body {
             confirmButton.addEventListener("click", function() {
                 closeModal();
                 loadingSpinner.style.display = "block";
+                
+                if (!currentScreeningData || !currentScreeningData.screening_id || !currentScreeningData.donor_form_id) {
+                    console.error("Missing required screening data");
+                    alert("Error: Missing required screening data. Please try again.");
+                    loadingSpinner.style.display = "none";
+                    return;
+                }
+                
+                // Log what we're submitting
+                console.log("Submitting form with screening_id: " + currentScreeningData.screening_id + " and donor_id: " + currentScreeningData.donor_form_id);
                 
                 // Create form and submit
                 const form = document.createElement('form');
@@ -650,7 +779,7 @@ body {
                 setTimeout(() => {
                     loadingSpinner.style.display = "none";
                     form.submit();
-                }, 2000);
+                }, 1000);
             });
 
             // No Button (Closes Modal)
@@ -676,14 +805,14 @@ body {
                         );
                     } else {
                         const columnIndex = {
-                            'date': 0,
-                            'surname': 1,
-                            'firstname': 2,
-                            'blood_type': 3,
-                            'donation_type': 4
+                            'date': 1,
+                            'surname': 2,
+                            'firstname': 3,
+                            'blood_type': 4,
+                            'donation_type': 5
                         }[category];
 
-                        if (columnIndex !== undefined) {
+                        if (columnIndex !== undefined && cells[columnIndex]) {
                             const cellText = cells[columnIndex].textContent.toLowerCase();
                             shouldShow = cellText.includes(searchTerm);
                         }

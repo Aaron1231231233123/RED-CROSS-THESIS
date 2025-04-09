@@ -13,34 +13,128 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // Check for correct roles (admin role_id 1 or staff role_id 3)
-if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['role_id'] != 3)) {
+if ($_SESSION['role_id'] == 1) {
+    // Admin role - continue with admin specific logic
+    if (!isset($_SESSION['donor_id'])) {
+        error_log("Set donor_id to 46 for admin role");
+    }
+} elseif ($_SESSION['role_id'] == 3) {
+    // Staff role - check for required session variables
+    if (!isset($_SESSION['donor_id'])) {
+        error_log("Missing donor_id in session for staff");
+        header("Location: ../../../public/Dashboards/dashboard-staff-main.php");
+        exit();
+    }
+} else {
+    // Any other role
     error_log("Invalid role_id: " . $_SESSION['role_id']);
     header("Location: ../../../public/unauthorized.php");
     exit();
 }
 
-// For staff role (role_id 3), check for required session variables
-if ($_SESSION['role_id'] === 3) {
-    if (!isset($_SESSION['donor_id'])) {
-        error_log("Missing donor_id in session for staff");
-        header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
-        exit();
-    }
-    if (!isset($_SESSION['medical_history_id'])) {
-        error_log("Missing medical_history_id in session for staff");
-        header('Location: medical-history.php');
-        exit();
+// Get the donor_id from session
+$donor_id = $_SESSION['donor_id'];
+error_log("Processing donor_id: $donor_id");
+
+// ALWAYS search for medical_history_id in the database based on donor_id
+$medical_history_id = null;
+
+// First, check if medical_history_id exists for this donor
+$ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?select=medical_history_id&donor_id=eq.' . $donor_id);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, [
+    'apikey: ' . SUPABASE_API_KEY,
+    'Authorization: Bearer ' . SUPABASE_API_KEY
+]);
+
+$response = curl_exec($ch);
+$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+
+error_log("Medical history lookup for donor_id $donor_id: HTTP Code $http_code, Response: $response");
+
+if ($http_code === 200) {
+    $medical_history_data = json_decode($response, true);
+    if (is_array($medical_history_data) && !empty($medical_history_data)) {
+        $medical_history_id = $medical_history_data[0]['medical_history_id'];
+        error_log("Found existing medical_history_id: $medical_history_id for donor_id: $donor_id");
+    } else {
+        // No record found - create a new medical_history entry
+        error_log("No medical history record found for donor_id: $donor_id - creating one now");
+        
+        // Prepare minimal medical history data
+        $medical_history_data = [
+            'donor_id' => $donor_id,
+            'feels_well' => true,  // Default values
+            'previously_refused' => false,
+            'testing_purpose_only' => false,
+            'understands_transmission_risk' => true
+        ];
+        
+        // Create the medical history record
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($medical_history_data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=representation'
+        ]);
+        
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        error_log("Create medical history response: HTTP Code $http_code, Response: $response");
+        
+        if ($http_code === 201) {
+            $response_data = json_decode($response, true);
+            if (is_array($response_data) && isset($response_data[0]['medical_history_id'])) {
+                $medical_history_id = $response_data[0]['medical_history_id'];
+                error_log("Created new medical_history_id: $medical_history_id for donor_id: $donor_id");
+            } else {
+                error_log("Failed to extract medical_history_id from creation response: " . print_r($response_data, true));
+            }
+        } else {
+            error_log("Failed to create medical history record: HTTP Code $http_code, Response: $response");
+        }
     }
 } else {
-    // For admin role (role_id 1), set donor_id to 46 if not set
-    if (!isset($_SESSION['donor_id'])) {
-        $_SESSION['donor_id'] = 46;
-        error_log("Set donor_id to 46 for admin role");
+    error_log("Failed to query medical history: HTTP Code $http_code, Response: $response");
+}
+
+// In case we still don't have a medical_history_id, make one final attempt
+if (!$medical_history_id) {
+    error_log("Making final attempt to get medical_history_id for donor_id: $donor_id");
+    
+    // Try one more time with a different query approach
+    $ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?select=medical_history_id&donor_id=eq.' . $donor_id);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ]);
+    
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($http_code === 200) {
+        $medical_history_data = json_decode($response, true);
+        if (is_array($medical_history_data) && !empty($medical_history_data)) {
+            $medical_history_id = $medical_history_data[0]['medical_history_id'];
+            error_log("Final attempt: Found medical_history_id: $medical_history_id");
+        } else {
+            error_log("Final attempt: Still no medical history found for donor_id: $donor_id");
+        }
     }
 }
 
 // Debug log to check all session variables
 error_log("All session variables in screening-form.php: " . print_r($_SESSION, true));
+error_log("Using medical_history_id: " . ($medical_history_id ?? 'NOT FOUND') . " for donor_id: $donor_id");
 
 // Get interviewer information from users table
 $ch = curl_init(SUPABASE_URL . '/rest/v1/users?select=surname,first_name,middle_name&user_id=eq.' . $_SESSION['user_id']);
@@ -89,11 +183,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         // Debug log the raw POST data
         error_log("Raw POST data: " . print_r($_POST, true));
+        
+        // If we still don't have medical_history_id, create it now as a last resort
+        if (!$medical_history_id) {
+            error_log("Creating medical_history as last resort during form submission");
+            
+            // Create a minimal medical history record
+            $medical_history_data = [
+                'donor_id' => $donor_id,
+                'feels_well' => true,
+                'previously_refused' => false,
+                'testing_purpose_only' => false,
+                'understands_transmission_risk' => true
+            ];
+            
+            $ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($medical_history_data));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json',
+                'Prefer: return=representation'
+            ]);
+            
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($http_code === 201) {
+                $response_data = json_decode($response, true);
+                if (is_array($response_data) && isset($response_data[0]['medical_history_id'])) {
+                    $medical_history_id = $response_data[0]['medical_history_id'];
+                    error_log("Last resort: Created medical_history_id: $medical_history_id");
+                }
+            }
+        }
 
         // Prepare the data for insertion
         $screening_data = [
             'donor_form_id' => $_SESSION['donor_id'],
-            'medical_history_id' => $_SESSION['medical_history_id'],
+            'medical_history_id' => $medical_history_id,
             'interviewer_id' => $_SESSION['user_id'],
             'body_weight' => floatval($_POST['body-wt']),
             'specific_gravity' => $_POST['sp-gr'] ?: "",

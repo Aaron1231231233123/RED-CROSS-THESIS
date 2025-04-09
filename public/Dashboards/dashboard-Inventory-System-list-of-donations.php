@@ -1461,14 +1461,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     <input type="text" class="donor_form_input" name="donor_reaction" value="${eligibility.donor_reaction || ''}">
                                 </div>
                             </div>
-                            
+
                             <div class="donor_form_grid grid-1">
                                 <div>
                                     <label class="donor_form_label">Management Done</label>
                                     <textarea class="donor_form_input" name="management_done" rows="3">${eligibility.management_done || ''}</textarea>
                                 </div>
                             </div>
-                            
+
                             <div class="donor_form_grid grid-1 mt-3">
                                 <div class="text-center">
                                     <button type="submit" class="btn btn-primary">Update Donor Information</button>

@@ -6,6 +6,19 @@ require_once '../../../assets/conn/db_conn.php';
 error_log("Session data in physical-examination-form.php: " . print_r($_SESSION, true));
 error_log("Role ID type: " . gettype($_SESSION['role_id']) . ", Value: " . $_SESSION['role_id']);
 
+// Process POST data from the dashboard form if available
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['screening_id']) && !empty($_POST['screening_id'])) {
+        $_SESSION['screening_id'] = $_POST['screening_id'];
+        error_log("Setting screening_id in session from POST: " . $_POST['screening_id']);
+    }
+    
+    if (isset($_POST['donor_id']) && !empty($_POST['donor_id'])) {
+        $_SESSION['donor_id'] = $_POST['donor_id'];
+        error_log("Setting donor_id in session from POST: " . $_POST['donor_id']);
+    }
+}
+
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../../../public/login.php");
@@ -20,18 +33,19 @@ if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['rol
 }
 
 // For staff role (role_id 3), check for required session variables
-if ($_SESSION['role_id'] === 3) {
+if ($_SESSION['role_id'] == 3) {
     if (!isset($_SESSION['donor_id'])) {
-        error_log("Missing donor_id in session for staff");
-        header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
+        error_log("Missing donor_id in session for staff - redirecting to dashboard");
+        header('Location: ../../../public/Dashboards/dashboard-staff-physical-submission.php');
         exit();
     }
     if (!isset($_SESSION['screening_id'])) {
-        error_log("Missing screening_id in session for staff");
-        header('Location: screening-form.php');
+        error_log("Missing screening_id in session for staff - redirecting to dashboard");
+        header('Location: ../../../public/Dashboards/dashboard-staff-physical-submission.php');
         exit();
     }
-} 
+}
+
 // Debug log to check all session variables
 error_log("All session variables in physical-examination-form.php: " . print_r($_SESSION, true));
 ?>

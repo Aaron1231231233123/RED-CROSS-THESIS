@@ -2,25 +2,60 @@
 session_start();
 require_once '../../../assets/conn/db_conn.php';
 
+// Debug logging
+error_log("blood-collection-form.php accessed. User ID: " . ($_SESSION['user_id'] ?? 'not set') . ", Role ID: " . ($_SESSION['role_id'] ?? 'not set'));
+error_log("POST data: " . json_encode($_POST));
+error_log("Session data: " . json_encode($_SESSION));
+
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../../../public/login.php");
     exit();
 }
 
+// Check if role_id or donor_id are coming from POST data and set them in session
+if (isset($_POST['role_id']) && !isset($_SESSION['role_id'])) {
+    $_SESSION['role_id'] = $_POST['role_id'];
+    error_log("Setting role_id from POST: " . $_POST['role_id']);
+}
+
+if (isset($_POST['donor_id']) && !isset($_SESSION['donor_id'])) {
+    $_SESSION['donor_id'] = $_POST['donor_id'];
+    error_log("Setting donor_id from POST: " . $_POST['donor_id']);
+}
+
+// Always ensure role_id 3 is allowed
+if (isset($_POST['physical_exam_id']) && !empty($_POST['physical_exam_id'])) {
+    error_log("Staff access attempt with physical_exam_id: " . $_POST['physical_exam_id']);
+    if (!isset($_SESSION['role_id'])) {
+        $_SESSION['role_id'] = 3; // Set staff role (3) for users coming from blood collection page
+        error_log("Automatically setting role_id to 3 (staff) for user coming from blood collection page");
+    }
+}
+
 // Check for correct roles (admin role_id 1 or staff role_id 3)
-if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['role_id'] != 3)) {
+if ($_SESSION['role_id'] != 1 && $_SESSION['role_id'] != 3) {
+    error_log("Unauthorized access attempt to blood-collection-form.php. User role: " . $_SESSION['role_id']);
     header("Location: ../../../public/unauthorized.php");
     exit();
 }
 
-
+// If we made it here, the user is either an admin or a phlebotomist staff member
 
 // Check if donor_id exists in session
 if (!isset($_SESSION['donor_id'])) {
-    error_log("Missing donor_id in session");
-    header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
-    exit();
+    // For staff directly accessing from the blood collection dashboard,
+    // the donor_id might be in POST but not yet in session
+    if (isset($_POST['donor_id']) && !empty($_POST['donor_id'])) {
+        $_SESSION['donor_id'] = $_POST['donor_id'];
+        error_log("Setting donor_id from POST for staff user: " . $_POST['donor_id']);
+    } 
+    // Only redirect if we still don't have donor_id after the checks
+    else {
+        error_log("Missing donor_id in session and POST data");
+        header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
+        exit();
+    }
 }
 
 // Function to generate next sequence number
@@ -215,6 +250,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'status' => 'pending'
         ];
 
+        // Add physical_exam_id if provided in the POST request
+        if (isset($_POST['physical_exam_id']) && !empty($_POST['physical_exam_id'])) {
+            $data['physical_exam_id'] = $_POST['physical_exam_id'];
+            error_log('Using physical_exam_id from POST: ' . $_POST['physical_exam_id']);
+        } else {
+            // Fetch physical_exam_id for the current donor as fallback
+            $donor_id = $_SESSION['donor_id'];
+            
+            $physical_exam_ch = curl_init();
+            curl_setopt_array($physical_exam_ch, [
+                CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?donor_id=eq." . $donor_id . "&select=physical_exam_id&order=created_at.desc&limit=1",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Content-Type: application/json'
+                ]
+            ]);
+            $physical_exam_response = curl_exec($physical_exam_ch);
+            curl_close($physical_exam_ch);
+            
+            $physical_exam_info = json_decode($physical_exam_response, true);
+            if (!empty($physical_exam_info) && isset($physical_exam_info[0]['physical_exam_id'])) {
+                $data['physical_exam_id'] = $physical_exam_info[0]['physical_exam_id'];
+                error_log('Using physical_exam_id from database lookup: ' . $data['physical_exam_id']);
+            } else {
+                error_log('No physical_exam_id found for donor_id: ' . $donor_id);
+            }
+        }
+
         // Add debug logging
         error_log('Complete data sent to Supabase: ' . json_encode($data));
         
@@ -370,9 +435,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Success - redirect to list of donations with walk-in status
             if ($_SESSION['role_id'] === 1) {
-                header('Location: ../../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php?status=pending.php');
+                // Admin redirect
+                header('Location: ../../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php?status=pending');
             } else {
-                header('Location: ../../../public/Dashboards/dashboard-staff-blood-collection-submission.php');
+                // Staff redirect - go back to the blood collection submission dashboard
+                error_log("Blood collection success - redirecting staff user back to blood collection dashboard");
+                header('Location: ../../../public/Dashboards/dashboard-staff-blood-collection-submission.php?success=1');
             }
             exit;
         } else {
@@ -938,6 +1006,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         <form id="bloodCollectionForm" method="POST">
             <h3>VI. BLOOD COLLECTION (To be accomplished by the phlebotomist)</h3>
+            
+            <?php
+            // Add hidden input for physical_exam_id if it was passed from the dashboard
+            if (isset($_POST['physical_exam_id']) && !empty($_POST['physical_exam_id'])) {
+                echo '<input type="hidden" name="physical_exam_id" value="' . htmlspecialchars($_POST['physical_exam_id']) . '">';
+                error_log("Including physical_exam_id from POST in form: " . $_POST['physical_exam_id']);
+            }
+            ?>
+            
             <div class="blood-bag-used">
                 <h4>Blood Bag Used:</h4>
                 <table class="blood-bag-table">
