@@ -963,7 +963,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                                     <td class="<?php 
                                                         if ($request['status'] === 'Approved') {
                                                             echo 'text-approved';
-                                                        } elseif ($request['status'] === 'Completed' || $request['status'] === 'Confirmed') {
+                                                        } elseif ($request['status'] === 'Completed' || $request['status'] === '{Confirmed}') {
                                                             echo 'text-success';
                                                         } elseif ($request['status'] === 'Pending') {
                                                             echo 'text-warning';
@@ -983,7 +983,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                                         <button class="btn btn-success pickup-btn" 
                                                                 data-request-id="<?php echo htmlspecialchars($request['request_id']); ?>"
                                                                 onclick="markAsConfirmed(<?php echo htmlspecialchars($request['request_id']); ?>)">
-                                                            <i class="fas fa-check me-1"></i> Confirm
+                                                            <i class="fas fa-check me-1"></i> Print
                                                         </button>
                                                     <?php elseif ($request['status'] === 'Completed'): ?>
                                                         <span class="badge bg-success">Completed</span>
@@ -997,7 +997,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                                             Declined
                                                         </span>
                                                     <?php else: ?>
-                                                        <span class="badge bg-success">Confirmed</span>
+                                                        <span class="badge bg-success">Printed</span>
                                                     <?php endif; ?>
                                                 </td>
                                                 </tr>
