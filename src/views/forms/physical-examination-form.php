@@ -34,20 +34,458 @@ if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['rol
 
 // For staff role (role_id 3), check for required session variables
 if ($_SESSION['role_id'] == 3) {
-    if (!isset($_SESSION['donor_id'])) {
+if (!isset($_SESSION['donor_id'])) {
         error_log("Missing donor_id in session for staff - redirecting to dashboard");
         header('Location: ../../../public/Dashboards/dashboard-staff-physical-submission.php');
-        exit();
-    }
+    exit();
+}
     if (!isset($_SESSION['screening_id'])) {
         error_log("Missing screening_id in session for staff - redirecting to dashboard");
         header('Location: ../../../public/Dashboards/dashboard-staff-physical-submission.php');
-        exit();
+    exit();
     }
 }
 
 // Debug log to check all session variables
 error_log("All session variables in physical-examination-form.php: " . print_r($_SESSION, true));
+
+// Get the donor_id from session
+$donor_id = $_SESSION['donor_id'];
+error_log("Processing donor_id: $donor_id");
+
+// Initialize PDO connection
+try {
+    $host = 'nwakbxwglhxcpunrzstf.supabase.co';
+    $db   = 'postgres';
+    $port = '5432';
+    $user = 'postgres';
+    $pass = 'Red@Cross_2023';
+    $charset = 'utf8mb4';
+
+    $dsn = "pgsql:host=$host;port=$port;dbname=$db;user=$user;password=$pass";
+    $options = [
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES   => false,
+    ];
+    
+    $pdo = new PDO($dsn, $user, $pass, $options);
+    error_log("PDO connection successfully established");
+} catch (\PDOException $e) {
+    error_log("PDO connection error: " . $e->getMessage());
+    // Fallback to using curl if PDO connection fails
+    $pdo = null;
+}
+
+// Check if user is an interviewer (staff with user_staff_role = 'Interviewer')
+$is_interviewer = false;
+$is_physician = false;
+
+if ($_SESSION['role_id'] == 3) {
+    // Get the user's staff role from the database using a direct query
+    $user_id = $_SESSION['user_id'];
+    
+    if ($pdo) {
+        try {
+            // Use direct database query instead of cURL
+            $stmt = $pdo->prepare("SELECT user_staff_roles FROM user_roles WHERE user_id = ?");
+            $stmt->execute([$user_id]);
+            $staff_data = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            error_log("Staff role check result: " . print_r($staff_data, true));
+            
+            if ($staff_data && isset($staff_data['user_staff_roles'])) {
+                $user_staff_role = strtolower($staff_data['user_staff_roles']);
+                
+                // Check for 'interviewer' role (lowercase)
+                $is_interviewer = ($user_staff_role === 'interviewer');
+                
+                // Check for 'physician' role (lowercase)
+                $is_physician = ($user_staff_role === 'physician');
+                
+                error_log("User staff role: " . $staff_data['user_staff_roles']);
+                error_log("Is interviewer: " . ($is_interviewer ? 'true' : 'false'));
+                error_log("Is physician: " . ($is_physician ? 'true' : 'false'));
+            } else {
+                error_log("No user staff roles found for user ID: $user_id");
+                
+                // If we have role_id 3 (staff) but no specific staff role data returned
+                if ($_SESSION['role_id'] == 3) {
+                    // Assume this is a physician as fallback
+                    $is_physician = true;
+                    error_log("No staff role data found for role_id 3, assuming physician");
+                }
+            }
+        } catch (\PDOException $e) {
+            error_log("PDO query error: " . $e->getMessage());
+            // Fallback to cURL if the query fails
+            $pdo = null;
+        }
+    }
+    
+    // Fallback to cURL if PDO is not available or query failed
+    if (!$pdo) {
+        error_log("Using cURL fallback for user role detection");
+        // Initialize cURL
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/user_roles?select=user_staff_roles&user_id=eq.' . $user_id);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY
+        ]);
+
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        error_log("Staff role check response: " . $response);
+        error_log("HTTP code: " . $http_code);
+
+        if ($http_code === 200) {
+            $staff_data = json_decode($response, true);
+            if (is_array($staff_data) && !empty($staff_data)) {
+                $user_staff_roles = strtolower($staff_data[0]['user_staff_roles']);
+                // Check for 'interviewer' role (lowercase)
+                $is_interviewer = ($user_staff_roles === 'interviewer');
+                // Check for 'physician' role (lowercase)
+                $is_physician = ($user_staff_roles === 'physician');
+                
+                error_log("User staff role: " . $staff_data[0]['user_staff_roles']);
+                error_log("Is interviewer: " . ($is_interviewer ? 'true' : 'false'));
+                error_log("Is physician: " . ($is_physician ? 'true' : 'false'));
+            }
+        }
+    }
+}
+
+// For physicians, get the vital signs data from the physical_examination table
+$vitals_data = null;
+if ($is_physician && isset($_SESSION['donor_id'])) {
+    $donor_id = $_SESSION['donor_id'];
+    error_log("Physician: looking up vital signs for donor_id: $donor_id");
+    
+    // Direct query to physical_examination table to get the latest values
+    $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=blood_pressure,pulse_rate,body_temp&donor_id=eq.' . $donor_id . '&order=created_at.desc&limit=1');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY,
+        'Content-Type: application/json'
+    ]);
+    
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    error_log("Physical examination table response code: $http_code");
+    error_log("Physical examination table data: $response");
+    
+    $physical_data = json_decode($response, true);
+    
+    if (is_array($physical_data) && !empty($physical_data)) {
+        $vitals_data = $physical_data[0];
+        error_log("Found vitals data from physical examination table: " . print_r($vitals_data, true));
+    } else {
+        error_log("No vitals data found in physical examination table, checking screening_form");
+        
+        // If no data in physical_examination, check screening_form as fallback
+        $screening_id = isset($_SESSION['screening_id']) ? $_SESSION['screening_id'] : null;
+        if ($screening_id) {
+            $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=blood_pressure,pulse_rate,body_temp&screening_id=eq.' . $screening_id);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json'
+            ]);
+            
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            error_log("Screening form response code: $http_code");
+            error_log("Screening form data: $response");
+            
+            $screening_data = json_decode($response, true);
+            
+            if (is_array($screening_data) && !empty($screening_data)) {
+                $vitals_data = $screening_data[0];
+                error_log("Found vitals data from screening form: " . print_r($vitals_data, true));
+            } else {
+                error_log("No vitals data found in screening form either");
+            }
+        }
+    }
+    
+    // Log what we found
+    if ($vitals_data) {
+        error_log("Final vitals data to be displayed: " . print_r($vitals_data, true));
+    } else {
+        error_log("No vitals data found in any table");
+    }
+}
+
+// Final fallback - check if we have data in the POST request or $_SESSION
+// This would happen if data was sent from the dashboard but not properly saved yet
+if (!$vitals_data || (!$vitals_data['blood_pressure'] && !$vitals_data['pulse_rate'] && !$vitals_data['body_temp'])) {
+    error_log("Attempting to get vital signs from POST or SESSION data");
+    
+    // Initialize vital signs data
+    $vital_signs_from_request = [
+        'blood_pressure' => null,
+        'pulse_rate' => null,
+        'body_temp' => null
+    ];
+    
+    // Check POST data
+    if (isset($_POST['blood_pressure']) && !empty($_POST['blood_pressure'])) {
+        $vital_signs_from_request['blood_pressure'] = $_POST['blood_pressure'];
+        error_log("Found blood_pressure in POST: " . $_POST['blood_pressure']);
+    }
+    
+    if (isset($_POST['pulse_rate']) && !empty($_POST['pulse_rate'])) {
+        $vital_signs_from_request['pulse_rate'] = $_POST['pulse_rate'];
+        error_log("Found pulse_rate in POST: " . $_POST['pulse_rate']);
+    }
+    
+    if (isset($_POST['body_temp']) && !empty($_POST['body_temp'])) {
+        $vital_signs_from_request['body_temp'] = $_POST['body_temp'];
+        error_log("Found body_temp in POST: " . $_POST['body_temp']);
+    }
+    
+    // Check if we found any data
+    if ($vital_signs_from_request['blood_pressure'] || $vital_signs_from_request['pulse_rate'] || $vital_signs_from_request['body_temp']) {
+        $vitals_data = $vital_signs_from_request;
+        error_log("Using vital signs from request data: " . print_r($vitals_data, true));
+    } else {
+        error_log("No vital signs found in request data either");
+    }
+}
+
+// Handle form submission directly in this file
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    try {
+        // Debug log the raw POST data
+        error_log("Raw POST data: " . print_r($_POST, true));
+        
+        // Check if screening_id exists
+        if (!isset($_SESSION['screening_id'])) {
+            throw new Exception("No screening_id found in session");
+        }
+        
+        // Prepare base data for insertion
+        $physical_exam_data = [
+            'donor_id' => intval($_SESSION['donor_id']), // int4
+            'blood_pressure' => strval($_POST['blood_pressure']), // varchar
+            'pulse_rate' => intval($_POST['pulse_rate']), // int4
+            'body_temp' => number_format(floatval($_POST['body_temp']), 1), // numeric with 1 decimal place
+            'gen_appearance' => strval(trim($_POST['gen_appearance'])), // text
+            'skin' => strval(trim($_POST['skin'])), // text
+            'heent' => strval(trim($_POST['heent'])), // text
+            'heart_and_lungs' => strval(trim($_POST['heart_and_lungs'])), // text
+            'remarks' => strval(trim($_POST['remarks'])), // varchar
+            'blood_bag_type' => strval(trim($_POST['blood_bag_type'])) // varchar
+        ];
+
+        // For interviewers, only include Blood Pressure, Pulse Rate, and Body Temperature
+        if ($is_interviewer) {
+            // Add only provided fields
+            if (isset($_POST['blood_pressure']) && !empty($_POST['blood_pressure'])) {
+                $physical_exam_data['blood_pressure'] = $_POST['blood_pressure'];
+            }
+            
+            if (isset($_POST['pulse_rate']) && !empty($_POST['pulse_rate'])) {
+                $physical_exam_data['pulse_rate'] = intval($_POST['pulse_rate']);
+            }
+            
+            if (isset($_POST['body_temp']) && !empty($_POST['body_temp'])) {
+                $physical_exam_data['body_temp'] = floatval($_POST['body_temp']);
+            }
+            
+            // Add default status and blood bag type to satisfy database constraints
+            $physical_exam_data['remarks'] = "Pending";
+            $physical_exam_data['blood_bag_type'] = "Pending"; // Add default value for the constraint
+            
+            error_log("Interviewer submitting data with only vital signs: " . print_r($physical_exam_data, true));
+        } else {
+            // For other roles, include all fields but only if they're provided
+            if (isset($_POST['blood_pressure']) && !empty($_POST['blood_pressure'])) {
+                $physical_exam_data['blood_pressure'] = $_POST['blood_pressure'];
+            }
+            
+            if (isset($_POST['pulse_rate']) && !empty($_POST['pulse_rate'])) {
+                $physical_exam_data['pulse_rate'] = intval($_POST['pulse_rate']);
+            }
+            
+            if (isset($_POST['body_temp']) && !empty($_POST['body_temp'])) {
+                $physical_exam_data['body_temp'] = floatval($_POST['body_temp']);
+            }
+            
+            if (isset($_POST['gen_appearance']) && !empty($_POST['gen_appearance'])) {
+                $physical_exam_data['gen_appearance'] = $_POST['gen_appearance'];
+            }
+            
+            if (isset($_POST['skin']) && !empty($_POST['skin'])) {
+                $physical_exam_data['skin'] = $_POST['skin'];
+            }
+            
+            if (isset($_POST['heent']) && !empty($_POST['heent'])) {
+                $physical_exam_data['heent'] = $_POST['heent'];
+            }
+            
+            if (isset($_POST['heart_and_lungs']) && !empty($_POST['heart_and_lungs'])) {
+                $physical_exam_data['heart_and_lungs'] = $_POST['heart_and_lungs'];
+            }
+            
+            if (isset($_POST['remarks']) && !empty($_POST['remarks'])) {
+                $physical_exam_data['remarks'] = $_POST['remarks'];
+            } else {
+                $physical_exam_data['remarks'] = "Pending";
+            }
+            
+            if (isset($_POST['reason']) && !empty($_POST['reason'])) {
+                $physical_exam_data['recommendation'] = $_POST['reason'];
+            }
+            
+            if (isset($_POST['blood_bag_type']) && !empty($_POST['blood_bag_type'])) {
+                $physical_exam_data['blood_bag_type'] = $_POST['blood_bag_type'];
+            }
+            
+            error_log("Non-interviewer submitting complete data: " . print_r($physical_exam_data, true));
+        }
+        
+        // Debug log the prepared data
+        error_log("Prepared physical exam data: " . print_r($physical_exam_data, true));
+
+        // Determine whether to insert or update based on role
+        $donor_id = intval($_SESSION['donor_id']);
+        $should_check_existing = ($is_physician); // Only physicians should check for existing records to update
+
+        // If we need to check for existing records
+        if ($should_check_existing) {
+            // Check if a record already exists for this donor
+            $existing_record_check = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=physical_exam_id&donor_id=eq.' . $donor_id . '&order=created_at.desc&limit=1');
+            curl_setopt($existing_record_check, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($existing_record_check, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json'
+            ]);
+            
+            $response = curl_exec($existing_record_check);
+            $http_code = curl_getinfo($existing_record_check, CURLINFO_HTTP_CODE);
+            curl_close($existing_record_check);
+            
+            $existing_records = json_decode($response, true);
+            $record_exists = (is_array($existing_records) && !empty($existing_records));
+            
+            if ($record_exists) {
+                $physical_exam_id = $existing_records[0]['physical_exam_id'];
+                error_log("Found existing record ID: $physical_exam_id for donor ID: $donor_id - will UPDATE");
+                
+                // Initialize cURL session for Supabase to UPDATE instead of INSERT
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?physical_exam_id=eq.' . $physical_exam_id);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH'); // Use PATCH to update
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Content-Type: application/json',
+                    'Prefer: return=minimal'
+                ]);
+                
+                // Convert the data to JSON for the request
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($physical_exam_data));
+                
+                // Execute the request
+                $response = curl_exec($ch);
+                $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                
+                // Check if the update was successful
+                if ($http_code >= 200 && $http_code < 300) {
+                    error_log("Successfully updated physical examination record: $http_code");
+                    
+                    // Redirect to appropriate dashboard based on role
+                    if ($is_physician) {
+                        header('Location: ../../../public/Dashboards/dashboard-staff-physical-submission.php?success=1');
+                        exit();
+                    }
+                } else {
+                    // If the update failed, throw an exception
+                    throw new Exception("Failed to update physical examination data. HTTP code: $http_code, Response: $response");
+                }
+            } else {
+                error_log("No existing records found for donor ID: $donor_id - will INSERT");
+                $should_insert = true;
+            }
+        } else {
+            // For admin (role_id 1) and interviewer (role_id 3 + interviewer), always insert
+            error_log("User role requires INSERT (admin or interviewer)");
+            $should_insert = true;
+        }
+
+        // INSERT logic (for admin, interviewer, or physician with no existing record)
+        if ($should_insert ?? true) {
+        // Initialize cURL session for Supabase
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination');
+
+        // Set the headers
+        $headers = array(
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=representation'
+        );
+
+        // Set cURL options
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($physical_exam_data));
+
+        // Execute the request
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        
+        // Debug log
+        error_log("Supabase response code: " . $http_code);
+        error_log("Supabase response: " . $response);
+        
+        curl_close($ch);
+
+        if ($http_code === 201) {
+                // Record saved successfully
+                error_log("Physical examination form submitted successfully");
+                
+                // Redirect based on role
+                if ($_SESSION['role_id'] == 1) {
+                    // Admin redirect
+                    header('Location: ../../../public/Dashboards/dashboard-admin-physical-index.php');
+                        exit();
+                } else if ($_SESSION['role_id'] == 3 && $is_interviewer) {
+                    // Interviewer (role_id 3 + user_staff_roles=Interviewer) - Also redirect to physical examination
+                    error_log("Interviewer role: Redirecting to physical examination form");
+                    header('Location: ../../../public/Dashboards/dashboard-staff-donor-submission.php');
+                    exit();
+                } else {
+                    // Staff redirect
+                    header('Location: ../../../public/Dashboards/dashboard-staff-physical-submission.php');
+                    exit();
+                }
+            } else {
+                throw new Exception("Failed to submit physical examination form. HTTP Code: " . $http_code . ", Response: " . $response);
+            }
+        }
+        
+    } catch (Exception $e) {
+        error_log("Error in physical-examination-form.php: " . $e->getMessage());
+        $_SESSION['error_message'] = "An error occurred: " . $e->getMessage();
+        // Redirect back to the form with an error parameter
+        header("Location: " . $_SERVER['PHP_SELF'] . "?error=1");
+        exit();
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -513,7 +951,23 @@ error_log("All session variables in physical-examination-form.php: " . print_r($
                     ?>
                 </div>
             <?php endif; ?>
-            <form id="physicalExamForm" method="POST" action="../../handlers/physical-examination-handler.php">
+            
+            <?php if ($is_physician): ?>
+            <!-- Special message for physicians -->
+            <div class="physician-notice" style="background-color: #d1ecf1; padding: 15px; margin-bottom: 20px; border-radius: 5px; border-left: 5px solid #0c5460;">
+                <h4 style="color: #0c5460; margin-top: 0;">Physician View</h4>
+                
+                <?php if ($vitals_data && (isset($vitals_data['blood_pressure']) || isset($vitals_data['pulse_rate']) || isset($vitals_data['body_temp']))): ?>
+                    <p style="margin-bottom: 5px;">The vital signs (Blood Pressure, Pulse Rate, and Body Temp) shown below were collected earlier during screening and are displayed for your reference.</p>
+                    <p style="margin-bottom: 0;">Please review these vital signs to help determine if the donor is healthy, and complete all other fields as needed to proceed with the physical examination.</p>
+                <?php else: ?>
+                    <p style="margin-bottom: 5px; color: #721c24;"><strong>Note:</strong> No vital signs data was found for this donor. The interviewer may not have recorded these values yet.</p>
+                    <p style="margin-bottom: 0;">You can either enter the vital signs yourself or ask an interviewer to complete this information.</p>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+            
+            <form id="physicalExamForm" method="POST" action="<?php echo $_SERVER['PHP_SELF']; ?>">
                 <h3>V. PHYSICAL EXAMINATION (To be accomplished by the Blood Bank Physician)</h3>
                 <!-- Add hidden field for donor_id -->
                 <input type="hidden" name="donor_id" value="<?php echo isset($_SESSION['donor_id']) ? htmlspecialchars($_SESSION['donor_id']) : ''; ?>">
@@ -532,13 +986,43 @@ error_log("All session variables in physical-examination-form.php: " . print_r($
                     </thead>
                     <tbody>
                         <tr>
-                            <td><input type="text" name="blood_pressure" placeholder="e.g., 120/80" pattern="[0-9]{2,3}/[0-9]{2,3}" title="Format: systolic/diastolic e.g. 120/80" required></td>
-                            <td><input type="number" name="pulse_rate" placeholder="BPM" min="0" max="300" required></td>
-                            <td><input type="number" name="body_temp" placeholder="°C" step="0.1" min="35" max="42" required></td>
-                            <td><input type="text" name="gen_appearance" placeholder="Enter observation" required></td>
-                            <td><input type="text" name="skin" placeholder="Enter observation" required></td>
-                            <td><input type="text" name="heent" placeholder="Enter observation" required></td>
-                            <td><input type="text" name="heart_and_lungs" placeholder="Enter observation" required></td>
+                            <td>
+                                <?php if ($is_physician && $vitals_data && isset($vitals_data['blood_pressure'])): ?>
+                                    <!-- For physicians: Read-only blood pressure with visual indicator -->
+                                    <div style="font-weight: bold; font-size: 1.2em; color: #0c5460; background-color: #d1ecf1; padding: 8px; border-radius: 4px; border-left: 4px solid #0c5460;">
+                                        <?php echo htmlspecialchars($vitals_data['blood_pressure']); ?>
+                                    </div>
+                                    <input type="hidden" name="blood_pressure" value="<?php echo htmlspecialchars($vitals_data['blood_pressure']); ?>">
+                                <?php else: ?>
+                                    <input type="text" name="blood_pressure" placeholder="e.g., 120/80" pattern="[0-9]{2,3}/[0-9]{2,3}" title="Format: systolic/diastolic e.g. 120/80">
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if ($is_physician && $vitals_data && isset($vitals_data['pulse_rate'])): ?>
+                                    <!-- For physicians: Read-only pulse rate with visual indicator -->
+                                    <div style="font-weight: bold; font-size: 1.2em; color: #0c5460; background-color: #d1ecf1; padding: 8px; border-radius: 4px; border-left: 4px solid #0c5460;">
+                                        <?php echo htmlspecialchars($vitals_data['pulse_rate']); ?> BPM
+                                    </div>
+                                    <input type="hidden" name="pulse_rate" value="<?php echo htmlspecialchars($vitals_data['pulse_rate']); ?>">
+                                <?php else: ?>
+                                    <input type="number" name="pulse_rate" placeholder="BPM" min="0" max="300">
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if ($is_physician && $vitals_data && isset($vitals_data['body_temp'])): ?>
+                                    <!-- For physicians: Read-only body temperature with visual indicator -->
+                                    <div style="font-weight: bold; font-size: 1.2em; color: #0c5460; background-color: #d1ecf1; padding: 8px; border-radius: 4px; border-left: 4px solid #0c5460;">
+                                        <?php echo htmlspecialchars($vitals_data['body_temp']); ?> °C
+                                    </div>
+                                    <input type="hidden" name="body_temp" value="<?php echo htmlspecialchars($vitals_data['body_temp']); ?>">
+                                <?php else: ?>
+                                    <input type="number" name="body_temp" placeholder="°C" step="0.1" min="35" max="42">
+                                <?php endif; ?>
+                            </td>
+                            <td><input type="text" name="gen_appearance" placeholder="Enter observation" <?php echo $is_interviewer ? 'disabled' : ''; ?>></td>
+                            <td><input type="text" name="skin" placeholder="Enter observation" <?php echo $is_interviewer ? 'disabled' : ''; ?>></td>
+                            <td><input type="text" name="heent" placeholder="Enter observation" <?php echo $is_interviewer ? 'disabled' : ''; ?>></td>
+                            <td><input type="text" name="heart_and_lungs" placeholder="Enter observation" <?php echo $is_interviewer ? 'disabled' : ''; ?>></td>
                         </tr>
                     </tbody>
                 </table>
@@ -547,7 +1031,7 @@ error_log("All session variables in physical-examination-form.php: " . print_r($
                     <h4>REMARKS:</h4>
                     <div class="remarks-options">
                         <label class="remarks-option">
-                            <input type="radio" name="remarks" value="Accepted" required> 
+                            <input type="radio" name="remarks" value="Accepted" > 
                             <span class="radio-mark"></span>
                             Accepted
                         </label>
@@ -576,7 +1060,7 @@ error_log("All session variables in physical-examination-form.php: " . print_r($
                     <h4>Blood bag to be used: (mark [√] appropriate box)</h4>
                     <div class="blood-bag-options">
                         <label class="blood-bag-option">
-                            <input type="radio" name="blood_bag_type" value="Single" required> 
+                            <input type="radio" name="blood_bag_type" value="Single" > 
                             <span class="checkmark"></span>
                             Single
                         </label>
@@ -626,30 +1110,77 @@ error_log("All session variables in physical-examination-form.php: " . print_r($
 
         // Form validation function
         function validateForm() {
-            const requiredFields = [
-                'blood_pressure',
-                'pulse_rate',
-                'body_temp',
-                'gen_appearance',
-                'skin',
-                'heent',
-                'heart_and_lungs',
-                'remarks',
-                'blood_bag_type'
-            ];
+            <?php if ($is_interviewer): ?>
+            // Interviewers don't need to validate any fields
+            return true;
+            <?php elseif ($is_physician): ?>
+            // For physicians: all fields are enabled except vitals if they're already available
+            
+            // Only validate vital signs fields that aren't read-only
+            const bpVisible = document.querySelector('input[name="blood_pressure"]:not([type="hidden"])');
+            if (bpVisible && !bpVisible.value.trim()) {
+                alert('Please enter Blood Pressure');
+                bpVisible.focus();
+                return false;
+            }
+            
+            // Check pulse rate if not hidden
+            const prVisible = document.querySelector('input[name="pulse_rate"]:not([type="hidden"])');
+            if (prVisible && (!prVisible.value.trim() || isNaN(prVisible.value))) {
+                alert('Please enter a valid Pulse Rate');
+                prVisible.focus();
+                return false;
+            }
+            
+            // Check body temp if not hidden
+            const btVisible = document.querySelector('input[name="body_temp"]:not([type="hidden"])');
+            if (btVisible && (!btVisible.value.trim() || isNaN(btVisible.value))) {
+                alert('Please enter a valid Body Temperature');
+                btVisible.focus();
+                return false;
+            }
+            
+            // Validate that at least one option is selected for the required radio button groups
+            if (!document.querySelector('input[name="remarks"]:checked')) {
+                alert('Please select a Remarks option');
+                return false;
+            }
+            
+            if (!document.querySelector('input[name="blood_bag_type"]:checked')) {
+                alert('Please select a Blood Bag type');
+                return false;
+            }
+            
+            return true;
+            <?php else: ?>
+            const requiredFields = [];
+            
+            // Only check fields that are required
+            if (document.querySelector('input[name="blood_pressure"]').hasAttribute('required')) {
+                requiredFields.push('blood_pressure');
+            }
+
+            if (document.querySelector('input[name="pulse_rate"]').hasAttribute('required')) {
+                requiredFields.push('pulse_rate');
+            }
+
+            if (document.querySelector('input[name="body_temp"]').hasAttribute('required')) {
+                requiredFields.push('body_temp');
+            }
 
             let isValid = true;
             requiredFields.forEach(field => {
                 const element = document.querySelector(`[name="${field}"]`);
-                if (!element.value) {
+                if (element && !element.value) {
                     element.style.borderColor = '#dc3545';
                     isValid = false;
-                } else {
+                } else if (element) {
                     element.style.borderColor = '#bbb';
                 }
             });
 
             return isValid;
+            <?php endif; ?>
         }
 
         // Open Modal
@@ -685,6 +1216,125 @@ error_log("All session variables in physical-examination-form.php: " . print_r($
         // No Button (Closes Modal)
         cancelButton.addEventListener("click", function() {
             closeModal();
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Restrict fields for interviewers
+            <?php if ($is_interviewer): ?>
+            // Show a notice for interviewers
+            const formHeader = document.querySelector('h3');
+            if (formHeader) {
+                const notice = document.createElement('div');
+                notice.className = 'interviewer-notice';
+                notice.style.backgroundColor = '#FFF3CD';
+                notice.style.color = '#856404';
+                notice.style.padding = '10px';
+                notice.style.borderRadius = '5px';
+                notice.style.marginBottom = '15px';
+                notice.style.border = '1px solid #FFEEBA';
+                notice.innerHTML = '<strong>Notice:</strong> As an Interviewer, you are only required to input the Blood Pressure, Pulse Rate, and Body Temperature fields. Other fields are view-only.';
+                formHeader.parentNode.insertBefore(notice, formHeader.nextSibling);
+            }
+
+            // Enable only Blood Pressure, Pulse Rate, and Body Temperature fields
+            const allowedFields = [
+                'input[name="blood_pressure"]', 
+                'input[name="pulse_rate"]', 
+                'input[name="body_temp"]'
+            ];
+            
+            // Enable allowed fields
+            allowedFields.forEach(selector => {
+                const fields = document.querySelectorAll(selector);
+                fields.forEach(field => {
+                    field.disabled = false;
+                    field.required = true;
+                    field.style.backgroundColor = '#ffffff';
+                    field.style.cursor = 'text';
+                });
+            });
+            
+            // Disable all other input fields
+            const allInputs = document.querySelectorAll('input:not([name="blood_pressure"]):not([name="pulse_rate"]):not([name="body_temp"]), select, textarea, input[type="radio"]');
+            allInputs.forEach(input => {
+                input.disabled = true;
+                input.style.backgroundColor = '#f5f5f5';
+                input.style.cursor = 'not-allowed';
+                if (input.hasAttribute('required')) {
+                    input.removeAttribute('required');
+                }
+            });
+            
+            // Modify form validation for interviewers
+            const form = document.getElementById('physicalExamForm');
+            if (form) {
+                const originalSubmitHandler = form.onsubmit;
+                form.onsubmit = function(e) {
+                    // Check if Blood Pressure, Pulse Rate, and Body Temperature are filled
+                    const bloodPressure = document.querySelector('input[name="blood_pressure"]');
+                    const pulseRate = document.querySelector('input[name="pulse_rate"]');
+                    const bodyTemp = document.querySelector('input[name="body_temp"]');
+                    
+                    if (!bloodPressure.value.trim()) {
+                        alert('Please enter Blood Pressure');
+                        bloodPressure.focus();
+                        return false;
+                    }
+                    
+                    if (!pulseRate.value.trim() || isNaN(pulseRate.value)) {
+                        alert('Please enter a valid Pulse Rate');
+                        pulseRate.focus();
+                        return false;
+                    }
+                    
+                    if (!bodyTemp.value.trim() || isNaN(bodyTemp.value)) {
+                        alert('Please enter a valid Body Temperature');
+                        bodyTemp.focus();
+                        return false;
+                    }
+                    
+                    // If form has original submit handler, call it
+                    if (typeof originalSubmitHandler === 'function') {
+                        return originalSubmitHandler.call(this, e);
+                    }
+                    
+                    return true;
+                };
+            }
+            <?php elseif ($is_physician): ?>
+            // For physicians, make vital fields required only if they're not read-only
+            const vitalFields = ['blood_pressure', 'pulse_rate', 'body_temp'];
+            
+            vitalFields.forEach(fieldName => {
+                // Check if this field is read-only (has hidden input)
+                const hiddenInput = document.querySelector(`input[name="${fieldName}"][type="hidden"]`);
+                const visibleInput = document.querySelector(`input[name="${fieldName}"]:not([type="hidden"])`);
+                
+                if (hiddenInput) {
+                    console.log(`${fieldName} is read-only with value: ${hiddenInput.value}`);
+                } else if (visibleInput) {
+                    console.log(`${fieldName} requires physician input`);
+                    visibleInput.required = true;
+                    visibleInput.style.backgroundColor = '#fffaf0'; // Slight highlight for required fields
+                }
+            });
+            
+            // Make sure other fields are properly enabled and required
+            document.querySelectorAll('input[name="remarks"]').forEach(radio => {
+                radio.required = true;
+            });
+            
+            document.querySelectorAll('input[name="blood_bag_type"]').forEach(radio => {
+                radio.required = true;
+            });
+            
+            // Show a subtle highlight on required fields
+            document.querySelectorAll('input[required], select[required], textarea[required]').forEach(field => {
+                if (field.type !== 'radio' && field.type !== 'checkbox') {
+                    field.style.borderLeft = '3px solid #d9534f';
+                }
+            });
+            <?php endif; ?>
         });
     </script>
 </body>

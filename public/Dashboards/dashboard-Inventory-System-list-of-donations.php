@@ -1253,7 +1253,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         ${isApproved ? `<div><strong>Management Done:</strong> ${eligibility.management_done || 'None'}</div>` : ''}
                         
                         ${isApproved ? `<div><strong>Office Address:</strong> ${donor.office_address || 'Not specified'}</div>` : ''}
-                    </div>
+                        </div>
                     
                     <div class="d-flex justify-content-center gap-3 mt-4">
                         ${eligibility.status === 'pending' ? `

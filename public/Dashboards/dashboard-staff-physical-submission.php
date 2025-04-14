@@ -29,7 +29,7 @@ error_log("Screening response sample: " . substr($response, 0, 200) . "...");
 $all_screenings = json_decode($response, true) ?: [];
 
 // 2. Get all physical examination records to determine which donor_ids to exclude
-$ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=donor_id');
+$ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=donor_id,remarks');
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
@@ -45,22 +45,34 @@ $physical_exams = json_decode($response, true) ?: [];
 
 // Create array of donor_ids that already have physical exams
 $existing_physical_exam_donor_ids = [];
+$pending_physical_exam_donor_ids = [];
+
 foreach ($physical_exams as $exam) {
     if (isset($exam['donor_id'])) {
-        $existing_physical_exam_donor_ids[] = $exam['donor_id'];
-        error_log("Found physical examination for donor_id: " . $exam['donor_id']);
+        // Check if this physical exam has "pending" remarks
+        if (isset($exam['remarks']) && strtolower($exam['remarks']) === 'pending') {
+            // Add to pending list
+            $pending_physical_exam_donor_ids[] = $exam['donor_id'];
+            error_log("Found pending physical examination for donor_id: " . $exam['donor_id']);
+        } else {
+            // Add to regular exclude list for completed exams
+            $existing_physical_exam_donor_ids[] = $exam['donor_id'];
+            error_log("Found completed physical examination for donor_id: " . $exam['donor_id']);
+        }
     }
 }
 
-if (empty($existing_physical_exam_donor_ids)) {
+if (empty($existing_physical_exam_donor_ids) && empty($pending_physical_exam_donor_ids)) {
     error_log("WARNING: No physical examination records found with donor_ids. This could be normal if no exams exist yet.");
 }
 
-error_log("Found " . count($existing_physical_exam_donor_ids) . " donors that already have physical exams");
+error_log("Found " . count($existing_physical_exam_donor_ids) . " donors that have completed physical exams");
+error_log("Found " . count($pending_physical_exam_donor_ids) . " donors that have pending physical exams");
 error_log("Found " . count($all_screenings) . " total screening records before filtering");
 
 // 3. Process and filter the screenings
 $filtered_screenings = [];
+$pending_exam_screenings = [];
 $skipped_count = 0;
 foreach ($all_screenings as $screening) {
     // Skip if not valid array data
@@ -76,16 +88,19 @@ foreach ($all_screenings as $screening) {
         continue;
     }
     
-    // Skip if donor already has a physical exam - THIS IS THE KEY PART
-    if (isset($screening['donor_form_id']) && in_array($screening['donor_form_id'], $existing_physical_exam_donor_ids)) {
-        error_log("Skipping donor ID " . $screening['donor_form_id'] . " - already has physical exam");
-        $skipped_count++;
-        continue;
-    }
-    
     // Get donor information for this screening record
     if (isset($screening['donor_form_id'])) {
         $donor_id = $screening['donor_form_id'];
+        
+        // Determine if this donor has a pending physical exam
+        $has_pending_exam = in_array($donor_id, $pending_physical_exam_donor_ids);
+        
+        // Skip if donor already has a completed physical exam
+        if (in_array($donor_id, $existing_physical_exam_donor_ids)) {
+            error_log("Skipping donor ID " . $donor_id . " - already has completed physical exam");
+            $skipped_count++;
+            continue;
+        }
         
         // Fetch donor data
         $ch_donor = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select=surname,first_name,middle_name&donor_id=eq.' . $donor_id);
@@ -111,10 +126,17 @@ foreach ($all_screenings as $screening) {
                 'middle_name' => ''
             ];
         }
+        
+        // Add status flag to mark records with pending exams
+        $screening['has_pending_exam'] = $has_pending_exam;
+        
+        // Add the screening to the appropriate list
+        if ($has_pending_exam) {
+            $pending_exam_screenings[] = $screening;
+        } else {
+            $filtered_screenings[] = $screening;
+        }
     }
-    
-    // Add the screening to our filtered list
-    $filtered_screenings[] = $screening;
 }
 
 error_log("Filtered to " . count($filtered_screenings) . " screenings without physical exams");
@@ -123,7 +145,14 @@ error_log("Skipped " . $skipped_count . " screening records that already have ph
 // Handle pagination
 $records_per_page = 15;
 $current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$total_records = count($filtered_screenings);
+
+// Always show pending exams - no toggle or parameter needed
+$show_pending = true;
+
+// Select which array to use based on the filter
+$display_screenings = $pending_exam_screenings;
+
+$total_records = count($display_screenings);
 $total_pages = ceil($total_records / $records_per_page);
 
 // Adjust current page if needed
@@ -134,14 +163,14 @@ if ($current_page > $total_pages && $total_pages > 0) $current_page = $total_pag
 $offset = ($current_page - 1) * $records_per_page;
 
 // Slice the array to get only the records for the current page
-$screenings = array_slice($filtered_screenings, $offset, $records_per_page);
+$screenings = array_slice($display_screenings, $offset, $records_per_page);
 
 // Debug info message
 $debug_info = "";
-if (empty($filtered_screenings)) {
-    $debug_info = "No pending physical exams found - all screenings have been processed.";
+if (empty($pending_exam_screenings)) {
+    $debug_info = "No pending physical exams found.";
 } else {
-    $debug_info = "Found " . count($filtered_screenings) . " screenings pending physical examination. Skipped " . $skipped_count . " records that already have physical exams.";
+    $debug_info = "Showing " . count($pending_exam_screenings) . " screenings with pending physical examinations.";
 }
 
 // For admin view
@@ -512,6 +541,22 @@ body {
     font-size: 14px;
     color: #666;
 }
+
+/* Pending Exam Row Styling */
+.pending-exam {
+    background-color: inherit !important; /* Use default background instead of yellow */
+}
+
+.pending-exam:hover {
+    background-color: #e9f5ff !important; /* Use the same hover color as regular rows */
+}
+
+/* Keep the badge styling for other uses */
+.badge {
+    font-size: 0.85em;
+    padding: 0.35em 0.65em;
+    font-weight: 600;
+}
     </style>
 </head>
 <body>
@@ -558,7 +603,7 @@ body {
             <!-- Main Content -->
             <main class="col-md-9 col-lg-10 main-content">
                 <div class="container-fluid p-4 custom-margin">
-                    <h2 class="mt-1 mb-4">Physical Examinations - Pending</h2>
+                    <h2 class="mt-1 mb-4">Pending Physical Examinations</h2>
                     
                     <?php if (!empty($debug_info)): ?>
                     <div class="debug-info">
@@ -632,10 +677,13 @@ body {
                                         // Blood type and donation type
                                         $bloodType = isset($screening['blood_type']) ? $screening['blood_type'] : 'Unknown';
                                         $donationType = isset($screening['donation_type']) ? $screening['donation_type'] : 'Unknown';
+                                        
+                                        // Use the regular clickable-row class instead of pending-exam
                                         ?>
                                         <tr class="clickable-row" data-screening='<?php echo htmlspecialchars(json_encode([
                                             'screening_id' => $screening['screening_id'] ?? '',
-                                            'donor_form_id' => $screening['donor_form_id'] ?? ''
+                                            'donor_form_id' => $screening['donor_form_id'] ?? '',
+                                            'has_pending_exam' => $screening['has_pending_exam'] ?? false
                                         ]), JSON_HEX_APOS | JSON_HEX_QUOT); ?>'>
                                             <td><?php echo $counter++; ?></td>
                                             <td><?php echo htmlspecialchars($date); ?></td>
@@ -683,7 +731,7 @@ body {
                 
                 <!-- Confirmation Modal -->
                 <div class="confirmation-modal" id="confirmationDialog">
-                    <div class="modal-headers">Start physical examination?</div>
+                    <div class="modal-headers">Continue with pending physical examination?</div>
                     <div class="modal-actions">
                         <button class="modal-button cancel-action" id="cancelButton">Cancel</button>
                         <button class="modal-button confirm-action" id="confirmButton">Proceed</button>
@@ -719,6 +767,7 @@ body {
                         try {
                             currentScreeningData = JSON.parse(this.getAttribute('data-screening'));
                             console.log("Selected screening:", currentScreeningData);
+                            
                             confirmationDialog.classList.remove("hide");
                             confirmationDialog.classList.add("show");
                             confirmationDialog.style.display = "block";
@@ -753,32 +802,16 @@ body {
                     return;
                 }
                 
-                // Log what we're submitting
-                console.log("Submitting form with screening_id: " + currentScreeningData.screening_id + " and donor_id: " + currentScreeningData.donor_form_id);
-                
-                // Create form and submit
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = '../../src/views/forms/physical-examination-form.php';
-
-                // Add id and donor_id as hidden inputs
-                const screeningIdInput = document.createElement('input');
-                screeningIdInput.type = 'hidden';
-                screeningIdInput.name = 'screening_id';
-                screeningIdInput.value = currentScreeningData.screening_id;
-
-                const donorIdInput = document.createElement('input');
-                donorIdInput.type = 'hidden';
-                donorIdInput.name = 'donor_id';
-                donorIdInput.value = currentScreeningData.donor_form_id;
-
-                form.appendChild(screeningIdInput);
-                form.appendChild(donorIdInput);
-                document.body.appendChild(form);
-
+                // Use direct redirection instead of form submission
                 setTimeout(() => {
                     loadingSpinner.style.display = "none";
-                    form.submit();
+                    
+                    console.log("Redirecting to screening page");
+                    // Direct navigation using window.location with query parameters
+                    window.location.href = '../../src/views/forms/screening-form.php' + 
+                        '?screening_id=' + encodeURIComponent(currentScreeningData.screening_id) + 
+                        '&donor_id=' + encodeURIComponent(currentScreeningData.donor_form_id) + 
+                        '&t=' + new Date().getTime(); // Add timestamp to prevent caching
                 }, 1000);
             });
 

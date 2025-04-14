@@ -32,7 +32,7 @@ if ($_SESSION['role_id'] == 3) {
     if ($missing_data) {
         error_log("Missing required data for physical examination - redirecting to dashboard");
         header('Location: ../../public/Dashboards/dashboard-staff-physical-submission.php');
-        exit();
+    exit();
     }
 } else {
     // For admin role (role_id 1), set donor_id to 46 if not set
@@ -48,25 +48,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         error_log("POST data received in handler: " . print_r($_POST, true));
         error_log("Session data in handler: " . print_r($_SESSION, true));
 
-        // Validate required fields
-        $required_fields = [
-            'blood_pressure',
-            'pulse_rate',
-            'body_temp',
-            'gen_appearance',
-            'skin',
-            'heent',
-            'heart_and_lungs',
-            'remarks',
-            'blood_bag_type'
-        ];
 
-        foreach ($required_fields as $field) {
-            if (!isset($_POST[$field]) || empty($_POST[$field])) {
-                error_log("Missing required field: " . $field);
-                throw new Exception("Missing required field: " . $field);
-            }
-        }
+
+
 
         // Prepare data for insertion
         $data = [
@@ -82,9 +66,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'blood_bag_type' => strval(trim($_POST['blood_bag_type'])) // varchar
         ];
 
-        // Only add disapproval_reason if remarks is not "Accepted"
+        // Only add disapproval_reason if provided
         if (isset($_POST['reason']) && !empty($_POST['reason'])) {
-            $data['disapproval_reason'] = strval(trim($_POST['reason'])); // text
+            $data['recommendation'] = strval(trim($_POST['reason'])); // Changed from disapproval_reason to recommendation
         }
 
         // Debug log the data being sent
@@ -238,8 +222,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if ($donation_type) $update_data['donation_type'] = $donation_type;
                         
                         // Add disapproval reason if status is declined
-                        if ($status === 'declined' && isset($data['disapproval_reason']) && !empty($data['disapproval_reason'])) {
-                            $update_data['disapproval_reason'] = $data['disapproval_reason'];
+                        if ($status === 'declined' && isset($data['recommendation']) && !empty($data['recommendation'])) {
+                            $update_data['recommendation'] = $data['recommendation'];
                         }
                         
                         $update_ch = curl_init();
@@ -282,8 +266,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if ($donation_type) $new_eligibility_data['donation_type'] = $donation_type;
                         
                         // Add disapproval reason if status is declined
-                        if ($status === 'declined' && isset($data['disapproval_reason']) && !empty($data['disapproval_reason'])) {
-                            $new_eligibility_data['disapproval_reason'] = $data['disapproval_reason'];
+                        if ($status === 'declined' && isset($data['recommendation']) && !empty($data['recommendation'])) {
+                            $new_eligibility_data['recommendation'] = $data['recommendation'];
                         }
                         
                         $create_ch = curl_init();
@@ -313,10 +297,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 // Different redirections based on role
-                if ($_SESSION['role_id'] === 1) {
+            if ($_SESSION['role_id'] === 1) {
                     // Admin (role_id 1) - Direct to blood collection
                     error_log("Admin role: Redirecting to blood collection form");
-                    header('Location: ../views/forms/blood-collection-form.php');
+                header('Location: ../views/forms/blood-collection-form.php');
                 } else {
                     error_log("Staff role: Redirecting to appropriate donor list");
                     

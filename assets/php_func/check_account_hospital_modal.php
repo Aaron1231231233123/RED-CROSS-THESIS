@@ -2,16 +2,30 @@
 // Set timezone to Asia/Manila
 date_default_timezone_set('Asia/Manila');
 
+// Make sure we have an active session
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Debug log
+error_log("Hospital account check - Session: " . json_encode($_SESSION));
+
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
-    header("Location: index.php");
+    error_log("User not logged in - redirecting to login");
+    header("Location: /REDCROSS/public/login.php");
     exit();
 }
 
-// Check for correct role (example for admin dashboard)
+// Convert role_id to integer for proper comparison
+$user_role_id = isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : 0;
+error_log("User role ID: " . $user_role_id . " (Type: " . gettype($user_role_id) . ")");
+
+// Check for hospital role (role_id = 2)
 $required_role = 2; // Hospital Role
-if ($_SESSION['role_id'] !== $required_role) {
-    header("Location: index.php");
+if ($user_role_id !== $required_role) {
+    error_log("Access denied - User role_id: " . $user_role_id . ", Required role: " . $required_role);
+    header("Location: /REDCROSS/public/login.php");
     exit();
 }
 
