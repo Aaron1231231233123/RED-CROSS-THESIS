@@ -501,11 +501,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'interviewer_id' => $_SESSION['user_id'],
             'body_weight' => floatval($_POST['body-wt']),
             'specific_gravity' => $_POST['sp-gr'] ?: "",
-            'hemoglobin' => $_POST['hgb'] ?: "",
-            'hematocrit' => $_POST['hct'] ?: "",
-            'rbc_count' => $_POST['rbc'] ?: "",
-            'wbc_count' => $_POST['wbc'] ?: "",
-            'platelet_count' => intval($_POST['plt-count']),
             'blood_type' => $_POST['blood-type'],
             'donation_type' => $_POST['donation-type'],
             'has_previous_donation' => isset($_POST['history']) && $_POST['history'] === 'yes',
@@ -530,11 +525,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$is_interviewer) {
             $screening_data = array_merge($screening_data, [
                 'specific_gravity' => $_POST['sp-gr'] ?: "",
-                'hemoglobin' => $_POST['hgb'] ?: "",
-                'hematocrit' => $_POST['hct'] ?: "",
-                'rbc_count' => $_POST['rbc'] ?: "",
-                'wbc_count' => $_POST['wbc'] ?: "",
-                'platelet_count' => intval($_POST['plt-count']),
                 'blood_type' => $_POST['blood-type'],
                 'donation_type' => $_POST['donation-type'],
                 'has_previous_donation' => isset($_POST['history']) && $_POST['history'] === 'yes',
@@ -1279,11 +1269,6 @@ select:focus {
                 <tr>
                     <th>BODY WT</th>
                     <th>SP. GR</th>
-                    <th>HGB</th>
-                    <th>HCT</th>
-                    <th>RBC</th>
-                    <th>WBC</th>
-                    <th>PLT Count</th>
                     <th>BLOOD TYPE</th>
                 </tr>
                 <tr>
@@ -1300,11 +1285,6 @@ select:focus {
                         <?php endif; ?>
                     </td>
                     <td><input type="text" name="sp-gr" value="<?php echo isset($_POST['sp-gr']) ? htmlspecialchars($_POST['sp-gr']) : ''; ?>" required></td>
-                    <td><input type="text" name="hgb" value="<?php echo isset($_POST['hgb']) ? htmlspecialchars($_POST['hgb']) : ''; ?>" required></td>
-                    <td><input type="text" name="hct" value="<?php echo isset($_POST['hct']) ? htmlspecialchars($_POST['hct']) : ''; ?>" required></td>
-                    <td><input type="text" name="rbc" value="<?php echo isset($_POST['rbc']) ? htmlspecialchars($_POST['rbc']) : ''; ?>" required></td>
-                    <td><input type="text" name="wbc" value="<?php echo isset($_POST['wbc']) ? htmlspecialchars($_POST['wbc']) : ''; ?>" required></td>
-                    <td><input type="number" name="plt-count" value="<?php echo isset($_POST['plt-count']) ? htmlspecialchars($_POST['plt-count']) : ''; ?>" required></td>
                     <td>
                         <select name="blood-type" required>
                             <option value="" disabled <?php echo !isset($_POST['blood-type']) ? 'selected' : ''; ?>>Select Blood Type</option>
@@ -1591,7 +1571,6 @@ select:focus {
                 // Validate numeric fields
                 const numericFields = {
                     'body-wt': 'Body Weight',
-                    'plt-count': 'Platelet Count',
                     'no-units': 'Number of Units'
                 };
 
@@ -1709,7 +1688,7 @@ select:focus {
             console.log("Interviewer role detected - restricting fields");
             
             // Only disable specific fields in the top section
-            const restrictedFields = document.querySelectorAll('input[name="sp-gr"], input[name="hgb"], input[name="hct"], input[name="rbc"], input[name="wbc"], input[name="plt-count"], select[name="blood-type"]');
+            const restrictedFields = document.querySelectorAll('input[name="sp-gr"], input[name="blood-type"], select[name="blood-type"]');
             
             restrictedFields.forEach(field => {
                 field.disabled = true;
