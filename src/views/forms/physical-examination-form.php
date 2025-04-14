@@ -1074,11 +1074,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <span class="checkmark"></span>
                             Top & Bottom
                         </label>
-                        <label class="blood-bag-option">
-                            <input type="radio" name="blood_bag_type" value="Apheresis"> 
-                            <span class="checkmark"></span>
-                            Apheresis
-                        </label>
                     </div>
                 </div>
                 <div class="submit-section">

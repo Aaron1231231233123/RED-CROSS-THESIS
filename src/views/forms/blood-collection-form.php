@@ -1023,7 +1023,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <th colspan="4">KARMI</th>
                             <th colspan="4">TERUMO</th>
                             <th colspan="2">SPECIAL BAG</th>
-                            <th colspan="4">APHERESIS</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1091,32 +1090,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <label>
                                     <input type="radio" name="blood-bag" value="TRM T&B-SPECIAL BAG">
                                     TRM T&B
-                                </label>
-                            </td>
-                            
-                            <!-- APHERESIS options -->
-                            <td>
-                                <label>
-                                    <input type="radio" name="blood-bag" value="FRES-APHERESIS">
-                                    FRES
-                                </label>
-                            </td>
-                            <td>
-                                <label>
-                                    <input type="radio" name="blood-bag" value="AMI-APHERESIS">
-                                    AMI
-                                </label>
-                            </td>
-                            <td>
-                                <label>
-                                    <input type="radio" name="blood-bag" value="HAE-APHERESIS">
-                                    HAE
-                                </label>
-                            </td>
-                            <td>
-                                <label>
-                                    <input type="radio" name="blood-bag" value="TRI-APHERESIS">
-                                    TRI
                                 </label>
                             </td>
                         </tr>
