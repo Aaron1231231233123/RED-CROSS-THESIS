@@ -1060,9 +1060,9 @@ h6 {
                     }, 1500);
                 }).catch(() => {
                     // If there's an error, continue anyway
-                    setTimeout(() => {
+                setTimeout(() => {
                         window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + encodeURIComponent(currentUrl);
-                    }, 1500);
+                }, 1500);
                 });
             };
         });

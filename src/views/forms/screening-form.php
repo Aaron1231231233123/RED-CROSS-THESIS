@@ -725,21 +725,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } else {
             // INSERT new record (original code)
-            // Initialize cURL session for Supabase
-            $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form');
+        // Initialize cURL session for Supabase
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form');
 
-            // Set the headers
-            $headers = array(
-                'apikey: ' . SUPABASE_API_KEY,
-                'Authorization: Bearer ' . SUPABASE_API_KEY,
-                'Content-Type: application/json',
-                'Prefer: return=representation'
-            );
+        // Set the headers
+        $headers = array(
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=representation'
+        );
 
-            // Set cURL options
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-            curl_setopt($ch, CURLOPT_POST, true);
+        // Set cURL options
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_POST, true);
             
             // Cast donation_type to text explicitly in the JSON
             error_log("JSON data before encoding: " . print_r($screening_data, true));
@@ -752,11 +752,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
 
-            // Execute the request
-            $response = curl_exec($ch);
-            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            
-            // Debug log
+        // Execute the request
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        
+        // Debug log
             error_log("Supabase INSERT response code: " . $http_code);
             error_log("Supabase INSERT response: " . $response);
             
@@ -764,16 +764,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if(curl_errno($ch)) {
                 error_log("cURL error: " . curl_error($ch));
             }
-            
-            curl_close($ch);
+        
+        curl_close($ch);
 
-            if ($http_code === 201) {
-                // Parse the response
-                $response_data = json_decode($response, true);
+        if ($http_code === 201) {
+            // Parse the response
+            $response_data = json_decode($response, true);
                 error_log("Parsed response data: " . print_r($response_data, true));
-                
-                if (is_array($response_data) && isset($response_data[0]['screening_id'])) {
-                    $_SESSION['screening_id'] = $response_data[0]['screening_id'];
+            
+            if (is_array($response_data) && isset($response_data[0]['screening_id'])) {
+                $_SESSION['screening_id'] = $response_data[0]['screening_id'];
                     error_log("SUCCESS: Set screening_id in session: " . $_SESSION['screening_id']);
                     
                     // Different redirections based on role
@@ -794,19 +794,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         exit();
                     } else {
                         // Other staff roles - Return JSON response for AJAX handling
-                        header('Content-Type: application/json');
-                        echo json_encode([
-                            'success' => true,
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'success' => true,
                             'screening_id' => $response_data[0]['screening_id'],
                             'message' => 'Screening form submitted successfully'
-                        ]);
-                        exit();
+                ]);
+                exit();
                     }
-                } else {
+            } else {
                     error_log("ERROR: Invalid response format or missing screening_id");
                     throw new Exception("Invalid response format or missing screening_id: " . $response);
-                }
-            } else {
+            }
+        } else {
                 error_log("ERROR: Failed to submit screening form. HTTP Code: " . $http_code);
                 if ($response) {
                     $decoded_response = json_decode($response, true);
@@ -814,7 +814,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         error_log("Decoded error response: " . print_r($decoded_response, true));
                     }
                 }
-                throw new Exception("Failed to submit screening form. HTTP Code: " . $http_code . ", Response: " . $response);
+            throw new Exception("Failed to submit screening form. HTTP Code: " . $http_code . ", Response: " . $response);
             }
         }
     } catch (Exception $e) {
@@ -1426,22 +1426,22 @@ select:focus {
                 <!-- IN-HOUSE Category -->
                 <div class="donation-category">
                     <div class="category-title">IN-HOUSE</div>
-                    <div class="donation-options">
-                        <label class="donation-option">
+                <div class="donation-options">
+                    <label class="donation-option">
                             <input type="radio" name="donation-type" value="walk-in" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'walk-in') || (isset($donation_type) && $donation_type === 'walk-in') ? 'checked' : (isset($_SESSION['role_id']) && $_SESSION['role_id'] === 1 && empty($donation_type) ? 'checked' : ''); ?> required> 
-                            <span class="checkmark"></span>
-                            WALK-IN/VOLUNTARY
-                        </label>
-                        <label class="donation-option">
+                        <span class="checkmark"></span>
+                        WALK-IN/VOLUNTARY
+                    </label>
+                    <label class="donation-option">
                             <input type="radio" name="donation-type" value="replacement" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'replacement') || (isset($donation_type) && $donation_type === 'replacement') ? 'checked' : ''; ?> required> 
-                            <span class="checkmark"></span>
-                            REPLACEMENT
-                        </label>
-                        <label class="donation-option">
+                        <span class="checkmark"></span>
+                        REPLACEMENT
+                    </label>
+                    <label class="donation-option">
                             <input type="radio" name="donation-type" value="patient-directed" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'patient-directed') || (isset($donation_type) && $donation_type === 'patient-directed') ? 'checked' : ''; ?> required> 
-                            <span class="checkmark"></span>
-                            PATIENT-DIRECTED
-                        </label>
+                        <span class="checkmark"></span>
+                        PATIENT-DIRECTED
+                    </label>
                     </div>
                 </div>
                 
@@ -1449,9 +1449,9 @@ select:focus {
                 <div class="donation-category">
                     <div class="category-title">Mobile Blood Donation</div>
                     <div class="donation-options">
-                        <label class="donation-option">
+                    <label class="donation-option">
                             <input type="radio" name="donation-type" value="mobile-walk-in" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'mobile-walk-in') || (isset($donation_type) && $donation_type === 'mobile-walk-in') ? 'checked' : ''; ?> required> 
-                            <span class="checkmark"></span>
+                        <span class="checkmark"></span>
                             WALK-IN/VOLUNTARY
                         </label>
                         <label class="donation-option">
@@ -1463,7 +1463,7 @@ select:focus {
                             <input type="radio" name="donation-type" value="mobile-patient-directed" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'mobile-patient-directed') || (isset($donation_type) && $donation_type === 'mobile-patient-directed') ? 'checked' : ''; ?> required> 
                             <span class="checkmark"></span>
                             PATIENT-DIRECTED
-                        </label>
+                    </label>
                     </div>
                 </div>
                 
@@ -1559,7 +1559,7 @@ select:focus {
                 </button>
                 <?php else: ?>
                 <!-- Regular submit button for other roles -->
-                <button type="button" class="submit-button" id="triggerModalButton">Submit</button>
+                                <button type="button" class="submit-button" id="triggerModalButton">Submit</button>
                 <?php endif; ?>
             </div>
         </div>
@@ -1583,7 +1583,7 @@ select:focus {
             let cancelButton = document.getElementById("cancelButton");
             let confirmButton = document.getElementById("confirmButton");
             let form = document.getElementById("screeningForm");
-            
+
             <?php if ($is_physician): ?>
             // Special handling for physician workflow
             const physicianProceedButton = document.getElementById("physicianProceedButton");

@@ -8,34 +8,48 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-// Get donor_id from hashed ID
+// Debug log session data
+error_log("Session data in medical-history.php: " . print_r($_SESSION, true));
+error_log("Role ID type: " . gettype($_SESSION['role_id']) . ", Value: " . $_SESSION['role_id']);
+
+// Get donor_id from hashed ID or direct parameter
 if (isset($_GET['hid']) && isset($_SESSION['donor_hashes'][$_GET['hid']])) {
     $donor_id = $_SESSION['donor_hashes'][$_GET['hid']];
+    $_SESSION['donor_id'] = $donor_id;
 } elseif (isset($_GET['donor_id'])) {
-    // Fallback for direct donor_id (keeping backward compatibility)
     $donor_id = $_GET['donor_id'];
+    $_SESSION['donor_id'] = $donor_id;
 } else {
+    error_log("No donor_id found in URL parameters");
     header("Location: ../../../public/unauthorized.php");
     exit();
 }
 
 // Check for correct roles (admin role_id 1 or staff role_id 3)
-if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['role_id'] != 3)) {
+if (!isset($_SESSION['role_id'])) {
+    error_log("Role ID not set in session");
     header("Location: ../../../public/unauthorized.php");
     exit();
 }
 
-// Check if donor_id is passed via URL parameter
-if (isset($_GET['donor_id']) && !empty($_GET['donor_id'])) {
-    $_SESSION['donor_id'] = $_GET['donor_id'];
-    error_log("Set donor_id from URL parameter: " . $_SESSION['donor_id']);
+// Convert role_id to integer for proper comparison
+$role_id = (int)$_SESSION['role_id'];
+error_log("Converted role_id to integer: " . $role_id);
+
+if ($role_id !== 1 && $role_id !== 3) {
+    error_log("Invalid role_id: " . $role_id);
+    header("Location: ../../../public/unauthorized.php");
+    exit();
 }
 
-// Only check donor_id for staff role (role_id 3)
-if ($_SESSION['role_id'] === 3 && !isset($_SESSION['donor_id'])) {
-    error_log("Missing donor_id in session for staff");
-    header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
-    exit();
+// For staff role, ensure we have a valid donor_id
+if ($role_id === 3) {
+    if (!isset($donor_id) || empty($donor_id)) {
+        error_log("Missing or empty donor_id for staff role");
+        header('Location: ../../../public/Dashboards/dashboard-staff-medical-history-submissions.php');
+        exit();
+    }
+    $_SESSION['donor_id'] = $donor_id;
 }
 
 // Fetch existing medical history data if donor_id is set
