@@ -201,7 +201,15 @@ require '../../assets/php_func/user_roles_staff.php';
                             </a>
                         </li>
                     <?php endif; ?>
-                    
+
+                    <?php if ($user_staff_roles === 'reviewer'): ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="dashboard-staff-medical-history-submissions.php">
+                            Donor Medical Interview Submissions
+                            </a>
+                        </li>
+                    <?php endif; ?>
+
                     <?php if ($user_staff_roles === 'physician'): ?>
                         <li class="nav-item">
                             <a class="nav-link" href="dashboard-staff-physical-submission.php">
@@ -236,7 +244,9 @@ require '../../assets/php_func/user_roles_staff.php';
                                     <?php
                                     if ($user_staff_roles === 'interviewer') {
                                         echo 'Blood Bank Interviewer';
-                                    } elseif ($user_staff_roles === 'physician') {
+                                    } elseif ($user_staff_roles === 'reviewer') {
+                                        echo 'Blood Bank Reviewer';
+                                    }elseif ($user_staff_roles === 'physician') {
                                         echo 'Blood Bank Physician';
                                     } elseif ($user_staff_roles === 'phlebotomist') {
                                         echo 'Blood Bank Phlebotomist';
@@ -248,6 +258,8 @@ require '../../assets/php_func/user_roles_staff.php';
                                 <?php
                                 if ($user_staff_roles === 'interviewer') {
                                     echo 'Manage donor interviews and ensure smooth screening process';
+                                }elseif ($user_staff_roles === 'reviewer') {
+                                    echo 'Oversee medical history';
                                 } elseif ($user_staff_roles === 'physician') {
                                     echo 'Oversee medical examinations and donor eligibility';
                                 } elseif ($user_staff_roles === 'phlebotomist') {
@@ -260,7 +272,9 @@ require '../../assets/php_func/user_roles_staff.php';
                             <?php
                             if ($user_staff_roles === 'interviewer') {
                                 echo '<i class="fas fa-comments fa-3x text-primary"></i>';
-                            } elseif ($user_staff_roles === 'physician') {
+                            } elseif ($user_staff_roles === 'reviewer') {
+                                echo '<i class="fas fa-user-md fa-3x text-primary"></i>';
+                            }elseif ($user_staff_roles === 'physician') {
                                 echo '<i class="fas fa-user-md fa-3x text-primary"></i>';
                             } elseif ($user_staff_roles === 'phlebotomist') {
                                 echo '<i class="fas fa-syringe fa-3x text-primary"></i>';

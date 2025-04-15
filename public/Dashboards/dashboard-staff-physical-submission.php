@@ -577,10 +577,18 @@ body {
                             </a>
                         </li>
                     <?php endif; ?>
-                    
+
+                    <?php if ($user_staff_roles === 'reviewer'): ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="dashboard-staff-medical-history-submissions.php">
+                                Donor Medical Interview Submissions
+                            </a>
+                        </li>
+                    <?php endif; ?>
+
                     <?php if ($user_staff_roles === 'physician'): ?>
                         <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-physical-submission.php">
+                            <a class="nav-link" href="dashboard-staff-physical-submission.php">
                                 Physical Exams Submissions
                             </a>
                         </li>

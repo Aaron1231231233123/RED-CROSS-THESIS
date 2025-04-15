@@ -537,12 +537,20 @@ select.donor_form_input[disabled] {
                     
                     <?php if ($user_staff_roles === 'interviewer'): ?>
                         <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-donor-submission.php">
+                            <a class="nav-link" href="dashboard-staff-donor-submission.php">
                                 Donor Interviews Submissions
                             </a>
                         </li>
                     <?php endif; ?>
-                    
+
+                    <?php if ($user_staff_roles === 'reviewer'): ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="dashboard-staff-medical-history-submissions.php">
+                                Donor Medical Interview Submissions
+                            </a>
+                        </li>
+                    <?php endif; ?>
+
                     <?php if ($user_staff_roles === 'physician'): ?>
                         <li class="nav-item">
                             <a class="nav-link" href="dashboard-staff-physical-submission.php">

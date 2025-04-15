@@ -490,7 +490,15 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                             </a>
                         </li>
                     <?php endif; ?>
-                    
+
+                    <?php if ($user_staff_roles === 'reviewer'): ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="dashboard-staff-medical-history-submissions.php">
+                                Donor Medical Interview Submissions
+                            </a>
+                        </li>
+                    <?php endif; ?>
+
                     <?php if ($user_staff_roles === 'physician'): ?>
                         <li class="nav-item">
                             <a class="nav-link" href="dashboard-staff-physical-submission.php">
@@ -501,7 +509,7 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                     
                     <?php if ($user_staff_roles === 'phlebotomist'): ?>
                         <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-blood-collection-submission.php">
+                            <a class="nav-link" href="dashboard-staff-blood-collection-submission.php">
                                 Blood Collection Submissions
                             </a>
                         </li>

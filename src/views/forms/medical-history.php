@@ -8,6 +8,17 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
+// Get donor_id from hashed ID
+if (isset($_GET['hid']) && isset($_SESSION['donor_hashes'][$_GET['hid']])) {
+    $donor_id = $_SESSION['donor_hashes'][$_GET['hid']];
+} elseif (isset($_GET['donor_id'])) {
+    // Fallback for direct donor_id (keeping backward compatibility)
+    $donor_id = $_GET['donor_id'];
+} else {
+    header("Location: ../../../public/unauthorized.php");
+    exit();
+}
+
 // Check for correct roles (admin role_id 1 or staff role_id 3)
 if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['role_id'] != 3)) {
     header("Location: ../../../public/unauthorized.php");
@@ -27,162 +38,184 @@ if ($_SESSION['role_id'] === 3 && !isset($_SESSION['donor_id'])) {
     exit();
 }
 
+// Fetch existing medical history data if donor_id is set
+$medical_history_data = null;
+$donor_sex = null;
 
-
-// Handle form submission
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    try {
-        // Debug log the POST data
-        error_log("POST data received: " . print_r($_POST, true));
-        error_log("Session data before processing: " . print_r($_SESSION, true));
-
-        // Prepare the data for insertion
-        $medical_history_data = [
-            'donor_id' => $_SESSION['donor_id'],
-            'feels_well' => isset($_POST['q1']) && $_POST['q1'] === 'Yes',
-            'feels_well_remarks' => $_POST['q1_remarks'] !== 'None' ? $_POST['q1_remarks'] : null,
-            'previously_refused' => isset($_POST['q2']) && $_POST['q2'] === 'Yes',
-            'previously_refused_remarks' => $_POST['q2_remarks'] !== 'None' ? $_POST['q2_remarks'] : null,
-            'testing_purpose_only' => isset($_POST['q3']) && $_POST['q3'] === 'Yes',
-            'testing_purpose_only_remarks' => $_POST['q3_remarks'] !== 'None' ? $_POST['q3_remarks'] : null,
-            'understands_transmission_risk' => isset($_POST['q4']) && $_POST['q4'] === 'Yes',
-            'understands_transmission_risk_remarks' => $_POST['q4_remarks'] !== 'None' ? $_POST['q4_remarks'] : null,
-            'recent_alcohol_consumption' => isset($_POST['q5']) && $_POST['q5'] === 'Yes',
-            'recent_alcohol_consumption_remarks' => $_POST['q5_remarks'] !== 'None' ? $_POST['q5_remarks'] : null,
-            'recent_aspirin' => isset($_POST['q6']) && $_POST['q6'] === 'Yes',
-            'recent_aspirin_remarks' => $_POST['q6_remarks'] !== 'None' ? $_POST['q6_remarks'] : null,
-            'recent_medication' => isset($_POST['q7']) && $_POST['q7'] === 'Yes',
-            'recent_medication_remarks' => $_POST['q7_remarks'] !== 'None' ? $_POST['q7_remarks'] : null,
-            'recent_donation' => isset($_POST['q8']) && $_POST['q8'] === 'Yes',
-            'recent_donation_remarks' => $_POST['q8_remarks'] !== 'None' ? $_POST['q8_remarks'] : null,
-            'zika_travel' => isset($_POST['q9']) && $_POST['q9'] === 'Yes',
-            'zika_travel_remarks' => $_POST['q9_remarks'] !== 'None' ? $_POST['q9_remarks'] : null,
-            'zika_contact' => isset($_POST['q10']) && $_POST['q10'] === 'Yes',
-            'zika_contact_remarks' => $_POST['q10_remarks'] !== 'None' ? $_POST['q10_remarks'] : null,
-            'zika_sexual_contact' => isset($_POST['q11']) && $_POST['q11'] === 'Yes',
-            'zika_sexual_contact_remarks' => $_POST['q11_remarks'] !== 'None' ? $_POST['q11_remarks'] : null,
-            'blood_transfusion' => isset($_POST['q12']) && $_POST['q12'] === 'Yes',
-            'blood_transfusion_remarks' => $_POST['q12_remarks'] !== 'None' ? $_POST['q12_remarks'] : null,
-            'surgery_dental' => isset($_POST['q13']) && $_POST['q13'] === 'Yes',
-            'surgery_dental_remarks' => $_POST['q13_remarks'] !== 'None' ? $_POST['q13_remarks'] : null,
-            'tattoo_piercing' => isset($_POST['q14']) && $_POST['q14'] === 'Yes',
-            'tattoo_piercing_remarks' => $_POST['q14_remarks'] !== 'None' ? $_POST['q14_remarks'] : null,
-            'risky_sexual_contact' => isset($_POST['q15']) && $_POST['q15'] === 'Yes',
-            'risky_sexual_contact_remarks' => $_POST['q15_remarks'] !== 'None' ? $_POST['q15_remarks'] : null,
-            'unsafe_sex' => isset($_POST['q16']) && $_POST['q16'] === 'Yes',
-            'unsafe_sex_remarks' => $_POST['q16_remarks'] !== 'None' ? $_POST['q16_remarks'] : null,
-            'hepatitis_contact' => isset($_POST['q17']) && $_POST['q17'] === 'Yes',
-            'hepatitis_contact_remarks' => $_POST['q17_remarks'] !== 'None' ? $_POST['q17_remarks'] : null,
-            'imprisonment' => isset($_POST['q18']) && $_POST['q18'] === 'Yes',
-            'imprisonment_remarks' => $_POST['q18_remarks'] !== 'None' ? $_POST['q18_remarks'] : null,
-            'uk_europe_stay' => isset($_POST['q19']) && $_POST['q19'] === 'Yes',
-            'uk_europe_stay_remarks' => $_POST['q19_remarks'] !== 'None' ? $_POST['q19_remarks'] : null,
-            'foreign_travel' => isset($_POST['q20']) && $_POST['q20'] === 'Yes',
-            'foreign_travel_remarks' => $_POST['q20_remarks'] !== 'None' ? $_POST['q20_remarks'] : null,
-            'drug_use' => isset($_POST['q21']) && $_POST['q21'] === 'Yes',
-            'drug_use_remarks' => $_POST['q21_remarks'] !== 'None' ? $_POST['q21_remarks'] : null,
-            'clotting_factor' => isset($_POST['q22']) && $_POST['q22'] === 'Yes',
-            'clotting_factor_remarks' => $_POST['q22_remarks'] !== 'None' ? $_POST['q22_remarks'] : null,
-            'positive_disease_test' => isset($_POST['q23']) && $_POST['q23'] === 'Yes',
-            'positive_disease_test_remarks' => $_POST['q23_remarks'] !== 'None' ? $_POST['q23_remarks'] : null,
-            'malaria_history' => isset($_POST['q24']) && $_POST['q24'] === 'Yes',
-            'malaria_history_remarks' => $_POST['q24_remarks'] !== 'None' ? $_POST['q24_remarks'] : null,
-            'std_history' => isset($_POST['q25']) && $_POST['q25'] === 'Yes',
-            'std_history_remarks' => $_POST['q25_remarks'] !== 'None' ? $_POST['q25_remarks'] : null,
-            'cancer_blood_disease' => isset($_POST['q26']) && $_POST['q26'] === 'Yes',
-            'cancer_blood_disease_remarks' => $_POST['q26_remarks'] !== 'None' ? $_POST['q26_remarks'] : null,
-            'heart_disease' => isset($_POST['q27']) && $_POST['q27'] === 'Yes',
-            'heart_disease_remarks' => $_POST['q27_remarks'] !== 'None' ? $_POST['q27_remarks'] : null,
-            'lung_disease' => isset($_POST['q28']) && $_POST['q28'] === 'Yes',
-            'lung_disease_remarks' => $_POST['q28_remarks'] !== 'None' ? $_POST['q28_remarks'] : null,
-            'kidney_disease' => isset($_POST['q29']) && $_POST['q29'] === 'Yes',
-            'kidney_disease_remarks' => $_POST['q29_remarks'] !== 'None' ? $_POST['q29_remarks'] : null,
-            'chicken_pox' => isset($_POST['q30']) && $_POST['q30'] === 'Yes',
-            'chicken_pox_remarks' => $_POST['q30_remarks'] !== 'None' ? $_POST['q30_remarks'] : null,
-            'chronic_illness' => isset($_POST['q31']) && $_POST['q31'] === 'Yes',
-            'chronic_illness_remarks' => $_POST['q31_remarks'] !== 'None' ? $_POST['q31_remarks'] : null,
-            'recent_fever' => isset($_POST['q32']) && $_POST['q32'] === 'Yes',
-            'recent_fever_remarks' => $_POST['q32_remarks'] !== 'None' ? $_POST['q32_remarks'] : null,
-            'pregnancy_history' => isset($_POST['q33']) && $_POST['q33'] === 'Yes',
-            'pregnancy_history_remarks' => $_POST['q33_remarks'] !== 'None' ? $_POST['q33_remarks'] : null,
-            'last_childbirth' => isset($_POST['q34']) && $_POST['q34'] === 'Yes',
-            'last_childbirth_remarks' => $_POST['q34_remarks'] !== 'None' ? $_POST['q34_remarks'] : null,
-            'recent_miscarriage' => isset($_POST['q35']) && $_POST['q35'] === 'Yes',
-            'recent_miscarriage_remarks' => $_POST['q35_remarks'] !== 'None' ? $_POST['q35_remarks'] : null,
-            'breastfeeding' => isset($_POST['q36']) && $_POST['q36'] === 'Yes',
-            'breastfeeding_remarks' => $_POST['q36_remarks'] !== 'None' ? $_POST['q36_remarks'] : null,
-            'last_menstruation' => isset($_POST['q37']) && $_POST['q37'] === 'Yes',
-            'last_menstruation_remarks' => $_POST['q37_remarks'] !== 'None' ? $_POST['q37_remarks'] : null
-        ];
-
-        // Remove any null values from the data array
-        $medical_history_data = array_filter($medical_history_data, function($value) {
-            return $value !== null;
-        });
-
-        // Debug log
-        error_log("Submitting medical history data: " . print_r($medical_history_data, true));
-
-        // Initialize cURL session for Supabase
-        $ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history');
-
-        // Set the headers
-        $headers = array(
-            'apikey: ' . SUPABASE_API_KEY,
-            'Authorization: Bearer ' . SUPABASE_API_KEY,
-            'Content-Type: application/json',
-            'Prefer: return=representation'
-        );
-
-        // Set cURL options
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($medical_history_data));
-
-        // Execute the request
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        
-        // Debug log
-        error_log("Supabase response code: " . $http_code);
-        error_log("Supabase response: " . $response);
-        
-        curl_close($ch);
-
-        if ($http_code === 201) {
-            // Parse the response to get the medical history ID
-            $response_data = json_decode($response, true);
-            
-            // Debug log the response data
-            error_log("Supabase response data: " . print_r($response_data, true));
-            
-            // Check if we have a valid response array and it contains the medical_history_id
-            if (is_array($response_data) && isset($response_data[0]['medical_history_id'])) {
-                $_SESSION['medical_history_id'] = $response_data[0]['medical_history_id'];
-                error_log("Stored medical_history_id in session: " . $_SESSION['medical_history_id']);
-                
-                // Both admin and staff should go to screening form
-                error_log("Redirecting to screening form");
-                header('Location: screening-form.php');
-                exit();
-            } else {
-                error_log("Invalid response format or missing medical_history_id: " . print_r($response_data, true));
-                throw new Exception("Medical history ID not found in response. Response: " . $response);
-            }
-        } else {
-            throw new Exception("Failed to submit medical history. HTTP Code: " . $http_code . " Response: " . $response);
+if (isset($_SESSION['donor_id'])) {
+    // First fetch donor's sex from donor_form table
+    $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form?donor_id=eq.' . $_SESSION['donor_id'] . '&select=sex');
+    
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ]);
+    
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    
+    curl_close($ch);
+    
+    if ($http_code === 200) {
+        $donor_data = json_decode($response, true);
+        if (!empty($donor_data)) {
+            $donor_sex = strtolower($donor_data[0]['sex']);
+            error_log("Fetched donor sex: " . $donor_sex);
         }
-    } catch (Exception $e) {
-        error_log("Error in medical history form: " . $e->getMessage());
-        $_SESSION['error_message'] = $e->getMessage();
-        header('Location: medical-history.php?error=1');
-        exit();
+    }
+
+    // Then fetch medical history data
+    $ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $_SESSION['donor_id']);
+    
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ]);
+    
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    
+    curl_close($ch);
+    
+    if ($http_code === 200) {
+        $data = json_decode($response, true);
+        if (!empty($data)) {
+            $medical_history_data = $data[0];
+            error_log("Fetched medical history data: " . print_r($medical_history_data, true));
+        }
     }
 }
 
 // Debug log to check all session variables
 error_log("All session variables in medical-history.php: " . print_r($_SESSION, true));
+
+// Handle form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    try {
+        error_log("=== START OF FORM SUBMISSION ===");
+        error_log("Raw POST data: " . print_r($_POST, true));
+        error_log("Action value: " . (isset($_POST['action']) ? $_POST['action'] : 'not set'));
+
+        // Initialize the update data array
+        $medical_history_data = [
+            'donor_id' => $_SESSION['donor_id']
+        ];
+
+        // Check which button was clicked and set the approval status
+        if (isset($_POST['action'])) {
+            $action = $_POST['action'];
+            error_log("Processing action: " . $action);
+            
+            if ($action === 'approve') {
+                $medical_history_data['medical_approval'] = 'Approved';
+                error_log("Setting status to Approved");
+            } elseif ($action === 'decline') {
+                $medical_history_data['medical_approval'] = 'Declined';
+                error_log("Setting status to Declined");
+            } else {
+                error_log("Unknown action value: " . $action);
+            }
+        } else {
+            error_log("No action value found in POST data");
+        }
+
+        // Process all question responses
+        for ($i = 1; $i <= 37; $i++) {
+            if (isset($_POST["q$i"])) {
+                $fieldName = getFieldName($i);
+                if ($fieldName) {
+                    $medical_history_data[$fieldName] = $_POST["q$i"] === 'Yes';
+                    if (isset($_POST["q{$i}_remarks"]) && $_POST["q{$i}_remarks"] !== 'None') {
+                        $medical_history_data[$fieldName . '_remarks'] = $_POST["q{$i}_remarks"];
+                    }
+                }
+            }
+        }
+
+        error_log("Final data to be sent: " . print_r($medical_history_data, true));
+
+        // Update the medical history record
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $_SESSION['donor_id']);
+        
+        $jsonData = json_encode($medical_history_data);
+        error_log("JSON data being sent: " . $jsonData);
+        
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=representation'
+        ]);
+        
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        
+        error_log("Supabase response code: " . $http_code);
+        error_log("Supabase response: " . $response);
+        
+        curl_close($ch);
+
+        if ($http_code >= 200 && $http_code < 300) {
+            error_log("Update successful, redirecting to dashboard");
+            header('Location: ../../../public/Dashboards/dashboard-staff-medical-history-submissions.php');
+                    exit();
+        } else {
+            throw new Exception("Error updating medical history. HTTP Code: $http_code, Response: " . $response);
+        }
+    } catch (Exception $e) {
+        error_log("Error in form submission: " . $e->getMessage());
+        $_SESSION['error_message'] = $e->getMessage();
+    }
+    error_log("=== END OF FORM SUBMISSION ===");
+}
+
+function getFieldName($count) {
+    $fields = [
+        1 => 'feels_well',
+        2 => 'previously_refused',
+        3 => 'testing_purpose_only',
+        4 => 'understands_transmission_risk',
+        5 => 'recent_alcohol_consumption',
+        6 => 'recent_aspirin',
+        7 => 'recent_medication',
+        8 => 'recent_donation',
+        9 => 'zika_travel',
+        10 => 'zika_contact',
+        11 => 'zika_sexual_contact',
+        12 => 'blood_transfusion',
+        13 => 'surgery_dental',
+        14 => 'tattoo_piercing',
+        15 => 'risky_sexual_contact',
+        16 => 'unsafe_sex',
+        17 => 'hepatitis_contact',
+        18 => 'imprisonment',
+        19 => 'uk_europe_stay',
+        20 => 'foreign_travel',
+        21 => 'drug_use',
+        22 => 'clotting_factor',
+        23 => 'positive_disease_test',
+        24 => 'malaria_history',
+        25 => 'std_history',
+        26 => 'cancer_blood_disease',
+        27 => 'heart_disease',
+        28 => 'lung_disease',
+        29 => 'kidney_disease',
+        30 => 'chicken_pox',
+        31 => 'chronic_illness',
+        32 => 'recent_fever',
+        33 => 'pregnancy_history',
+        34 => 'last_childbirth',
+        35 => 'recent_miscarriage',
+        36 => 'breastfeeding',
+        37 => 'last_menstruation'
+    ];
+    return $fields[$count] ?? null;
+}
 
 ?>
 <!DOCTYPE html>
@@ -207,6 +240,7 @@ error_log("All session variables in medical-history.php: " . print_r($_SESSION, 
             background: white;
             border-radius: 8px;
             box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            position: relative;
         }
         .header {
             font-weight: bold;
@@ -372,6 +406,100 @@ error_log("All session variables in medical-history.php: " . print_r($_SESSION, 
             0% { transform: translate(-50%, -50%) rotate(0deg); }
             100% { transform: translate(-50%, -50%) rotate(360deg); }
         }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #218838;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(40, 167, 69, 0.2);
+        }
+
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #c82333;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(220, 53, 69, 0.2);
+        }
+
+        .approval-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .action-buttons-wrapper {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: flex-end;
+            padding: 20px 0;
+            margin-top: 30px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            min-width: 120px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-decline {
+            background-color: #E31837;  /* Red Cross red */
+            color: white;
+            box-shadow: 0 2px 4px rgba(227, 24, 55, 0.2);
+        }
+
+        .btn-decline:hover {
+            background-color: #C41230;  /* Darker Red Cross red */
+            box-shadow: 0 4px 8px rgba(227, 24, 55, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .btn-approve {
+            background-color: #007C2E;  /* Professional green */
+            color: white;
+            box-shadow: 0 2px 4px rgba(0, 124, 46, 0.2);
+        }
+
+        .btn-approve:hover {
+            background-color: #006626;  /* Darker green */
+            box-shadow: 0 4px 8px rgba(0, 124, 46, 0.3);
+            transform: translateY(-1px);
+        }
     </style>
 </head>
 <body>
@@ -385,6 +513,11 @@ error_log("All session variables in medical-history.php: " . print_r($_SESSION, 
         <div class="header">Remarks</div>
         
         <script>
+            // Get the medical history data and donor sex from PHP
+            const medicalHistoryData = <?php echo $medical_history_data ? json_encode($medical_history_data) : 'null'; ?>;
+            const donorSex = <?php echo json_encode(strtolower($donor_sex)); ?>;
+            const isMale = donorSex === 'male';
+            
             const questions = [
                 "Do you feel well and healthy today?",
                 "Have you ever been refused as a blood donor or told not to donate blood for any reasons?",
@@ -493,27 +626,89 @@ error_log("All session variables in medical-history.php: " . print_r($_SESSION, 
             let count = 1;
             questions.forEach(q => {
                 if (q.includes(":")) {
+                    // Skip the female section header for male donors
+                    if (q.includes("FOR FEMALE DONORS ONLY") && isMale) {
+                        return;
+                    }
+                    // Skip rendering the section and its questions for male donors
+                    if (isMale && q.includes("FOR FEMALE DONORS ONLY")) {
+                        return;
+                    }
                     document.write(`<div class='bold'>${q}</div>`);
                 } else {
+                    // Skip female-specific questions (q33-q37) for male donors
+                    if (isMale && count >= 33 && count <= 37) {
+                        count++;
+                        return;
+                    }
+
+                    // Get the field name based on the data structure
+                    const getFieldName = (count) => {
+                        const fields = {
+                            1: 'feels_well',
+                            2: 'previously_refused',
+                            3: 'testing_purpose_only',
+                            4: 'understands_transmission_risk',
+                            5: 'recent_alcohol_consumption',
+                            6: 'recent_aspirin',
+                            7: 'recent_medication',
+                            8: 'recent_donation',
+                            9: 'zika_travel',
+                            10: 'zika_contact',
+                            11: 'zika_sexual_contact',
+                            12: 'blood_transfusion',
+                            13: 'surgery_dental',
+                            14: 'tattoo_piercing',
+                            15: 'risky_sexual_contact',
+                            16: 'unsafe_sex',
+                            17: 'hepatitis_contact',
+                            18: 'imprisonment',
+                            19: 'uk_europe_stay',
+                            20: 'foreign_travel',
+                            21: 'drug_use',
+                            22: 'clotting_factor',
+                            23: 'positive_disease_test',
+                            24: 'malaria_history',
+                            25: 'std_history',
+                            26: 'cancer_blood_disease',
+                            27: 'heart_disease',
+                            28: 'lung_disease',
+                            29: 'kidney_disease',
+                            30: 'chicken_pox',
+                            31: 'chronic_illness',
+                            32: 'recent_fever',
+                            33: 'pregnancy_history',
+                            34: 'last_childbirth',
+                            35: 'recent_miscarriage',
+                            36: 'breastfeeding',
+                            37: 'last_menstruation'
+                        };
+                        return fields[count];
+                    };
+
+                    const fieldName = getFieldName(count);
+                    const value = medicalHistoryData ? medicalHistoryData[fieldName] : null;
+                    const remarks = medicalHistoryData ? medicalHistoryData[fieldName + '_remarks'] : null;
+
                     document.write(`<div class='cell number'>${count}</div>`);
                     document.write(`<div class='cell'>${q}</div>`);
                     document.write(`
                         <div class='cell checkbox'>
                             <label class="blood-bag-option">
-                                <input type='radio' name='q${count}' value='Yes' required>
+                                <input type='radio' name='q${count}' value='Yes' ${value === true ? 'checked' : ''} required>
                                 <span class="checkmark"></span>
                             </label>
                         </div>
                         <div class='cell checkbox'>
                             <label class="blood-bag-option">
-                                <input type='radio' name='q${count}' value='No' required>
+                                <input type='radio' name='q${count}' value='No' ${value === false ? 'checked' : ''} required>
                                 <span class="checkmark"></span>
                             </label>
                         </div>
                         <div class='cell'>
-                            <select class="medical-history-remarks" name='q${count}_remarks'>
+                            <select class="medical-history-remarks" name='q${count}_remarks' required>
                                 ${remarksOptions[count].map(option => 
-                                    `<option value="${option}">${option}</option>`
+                                    `<option value="${option}" ${remarks === option ? 'selected' : ''}>${option}</option>`
                                 ).join('')}
                             </select>
                         </div>
@@ -521,10 +716,24 @@ error_log("All session variables in medical-history.php: " . print_r($_SESSION, 
                     count++;
                 }
             });
+
+            // After all questions are rendered, add the action buttons
+            document.write(`
+                <div class="action-buttons-wrapper">
+                    <div class="action-buttons">
+                        <button type="submit" name="action" value="decline" class="btn btn-decline" onclick="return confirmAction('decline');">
+                            DECLINE
+                        </button>
+                        <button type="submit" name="action" value="approve" class="btn btn-approve" onclick="return confirmAction('approve');">
+                            APPROVE
+                        </button>
+                    </div>
+                </div>
+            `);
         </script>
-        <div class="submit-section">
-            <button type="submit" class="submit-button" id="submitButton">Submit</button>
-        </div>
+            
+        <!-- Add a hidden input to store the action -->
+        <input type="hidden" name="action" id="selectedAction" value="">
     </form>
 
     <!-- Loading Spinner -->
@@ -544,12 +753,49 @@ error_log("All session variables in medical-history.php: " . print_r($_SESSION, 
                     alert("Please fill in all required fields before proceeding.");
                     return;
                 }
-                
+
                 loadingSpinner.style.display = "block";
                 form.submit();
             });
         });
-    </script>
 
+        // Remove any existing submit buttons
+        document.addEventListener('DOMContentLoaded', function() {
+            const submitBtns = document.querySelectorAll('input[type="submit"], button.submit-btn');
+            submitBtns.forEach(btn => {
+                if (btn.parentElement) {
+                    btn.parentElement.remove();
+                }
+            });
+
+            // Hide the female section completely for male donors
+            if (isMale) {
+                const femaleSections = document.querySelectorAll('div.bold');
+                femaleSections.forEach(section => {
+                    if (section.textContent.includes('FOR FEMALE DONORS ONLY')) {
+                        section.style.display = 'none';
+                        let nextElement = section.nextElementSibling;
+                        while (nextElement && !nextElement.classList.contains('bold')) {
+                            nextElement.style.display = 'none';
+                            nextElement = nextElement.nextElementSibling;
+                        }
+                    }
+                });
+            }
+        });
+
+        // Function to handle button clicks
+        function confirmAction(action) {
+            console.log('Button clicked:', action);
+            document.getElementById('selectedAction').value = action;
+            return true;
+        }
+
+        // Add form submission handler
+        document.getElementById('medicalHistoryForm').addEventListener('submit', function(e) {
+            const action = document.getElementById('selectedAction').value;
+            console.log('Form submitting with action:', action);
+        });
+    </script>
 </body>
 </html>
