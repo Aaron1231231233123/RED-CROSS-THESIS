@@ -406,13 +406,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($http_code >= 200 && $http_code < 300) {
                     error_log("Successfully updated physical examination record: $http_code");
                     
-                    // Redirect to blood collection form
-                    if ($is_physician || $_SESSION['role_id'] == 1) {
+                    // Double check role before redirect
+                    error_log("Final role check before redirect:");
+                    error_log("role_id: " . $_SESSION['role_id']);
+                    error_log("is_physician: " . ($is_physician ? 'true' : 'false'));
+                    error_log("is_interviewer: " . ($is_interviewer ? 'true' : 'false'));
+                    
+                    // Redirect based on role
+                    if ($_SESSION['role_id'] == 1) {
+                        // Admin redirect to blood collection
+                        error_log("Redirecting admin to blood collection form");
                         header('Location: blood-collection-form.php');
                         exit();
+                    } else if ($_SESSION['role_id'] == 3) {
+                        if ($is_physician) {
+                            // Physician - redirect to physical submission dashboard
+                            error_log("Redirecting physician to physical submission dashboard");
+                            header('Location: ../../../public/Dashboards/dashboard-staff-physical-submission.php');
+                            exit();
+                        } else if ($is_interviewer) {
+                            // Interviewer - redirect to donor submission dashboard
+                            error_log("Redirecting interviewer to donor submission dashboard");
+                            header('Location: ../../../public/Dashboards/dashboard-staff-donor-submission.php');
+                            exit();
+                        } else {
+                            // Other staff roles - redirect to main dashboard
+                            error_log("Redirecting other staff to main dashboard");
+                            header('Location: ../../../public/Dashboards/dashboard-staff-main.php');
+                            exit();
+                        }
                     } else {
-                        // Other roles redirect to dashboard
-                        header('Location: ../../../public/Dashboards/dashboard-staff-physical-submission.php?success=1');
+                        // Default redirect for other roles
+                        error_log("Redirecting to main dashboard (default)");
+                        header('Location: ../../../public/Dashboards/dashboard-staff-main.php');
                         exit();
                     }
                 } else {
@@ -469,15 +495,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     exit();
                 } else if ($_SESSION['role_id'] == 3 && $is_interviewer) {
                     // Interviewer - redirect to blood collection
-                    header('Location: blood-collection-form.php');
+                    header('Location: ../../../public/Dashboards/dashboard-staff-donor-submission.php');
                     exit();
                 } else if ($_SESSION['role_id'] == 3 && $is_physician) {
                     // Physician - redirect to blood collection
-                    header('Location: blood-collection-form.php');
+                    header('Location: ../../../public/Dashboards/dashboard-staff-physical-submission.php');
                     exit();
                 } else {
                     // Other staff redirect
-                    header('Location: ../../../public/Dashboards/dashboard-staff-physical-submission.php');
+                    header('Location: ../../../public/Dashboards/dashboard-staff-main.php');
                     exit();
                 }
             } else {
