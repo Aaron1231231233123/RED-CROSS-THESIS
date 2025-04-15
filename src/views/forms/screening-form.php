@@ -2,6 +2,54 @@
 session_start();
 require_once '../../../assets/conn/db_conn.php';
 
+// Helper function to ensure donation type is compatible with database enum
+function mapDonationType($donationType) {
+    // List of valid donation types in the database
+    $validTypes = [
+        'in-house', 'walk-in', 'replacement', 'patient-directed', 
+        'mobile', 'mobile-walk-in', 'mobile-replacement', 'mobile-patient-directed'
+    ];
+    
+    // If the donation type is already valid, return it
+    if (in_array($donationType, $validTypes)) {
+        return $donationType;
+    }
+    
+    // Map mobile types to 'mobile' if not explicitly supported
+    if (strpos($donationType, 'mobile') === 0) {
+        // Check if it's one of our new specific mobile types
+        if (in_array($donationType, ['mobile-walk-in', 'mobile-replacement', 'mobile-patient-directed'])) {
+            return $donationType;
+        }
+        return 'mobile'; // Default fallback for any other mobile type
+    }
+    
+    // Default fallback
+    return 'walk-in';
+}
+
+// Special function to format data for Supabase PostgreSQL with user-defined types
+function formatDataForSupabase($data) {
+    if (!isset($data['donation_type'])) {
+        return $data;
+    }
+    
+    // Handle donation_type as a special case - it's a user-defined type in Postgres
+    // Convert it to the format Supabase PostgreSQL expects for user-defined types
+    $donationType = $data['donation_type'];
+    
+    // First, remove it from the array
+    unset($data['donation_type']);
+    
+    // Create a string representation for the enum
+    $data['donation_type'] = $donationType;
+    
+    // Log the transformation
+    error_log("Transformed donation_type for Supabase: " . $donationType);
+    
+    return $data;
+}
+
 // Debug session data
 error_log("Session data in screening-form.php: " . print_r($_SESSION, true));
 error_log("Role ID type: " . gettype($_SESSION['role_id']) . ", Value: " . $_SESSION['role_id']);
@@ -455,7 +503,9 @@ error_log("Final screening_id being used: " . ($screening_id ?? 'null'));
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         // Debug log the raw POST data
+        error_log("====== BEGIN SCREENING FORM SUBMISSION ======");
         error_log("Raw POST data: " . print_r($_POST, true));
+        error_log("Session data: " . print_r($_SESSION, true));
         
         // If we still don't have medical_history_id, create it now as a last resort
         if (!$medical_history_id) {
@@ -485,6 +535,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
             
+            error_log("Medical history creation response code: $http_code");
+            error_log("Medical history creation response: $response");
+            
             if ($http_code === 201) {
                 $response_data = json_decode($response, true);
                 if (is_array($response_data) && isset($response_data[0]['medical_history_id'])) {
@@ -494,6 +547,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        // Log donation type handling
+        error_log("Original donation type from form: " . $_POST['donation-type']);
+        error_log("Mapped donation type for database: " . mapDonationType($_POST['donation-type']));
+        
         // Prepare the base data for insertion
         $screening_data = [
             'donor_form_id' => $_SESSION['donor_id'],
@@ -502,7 +559,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'body_weight' => floatval($_POST['body-wt']),
             'specific_gravity' => $_POST['sp-gr'] ?: "",
             'blood_type' => $_POST['blood-type'],
-            'donation_type' => $_POST['donation-type'],
+            'donation_type' => mapDonationType($_POST['donation-type']),
             'has_previous_donation' => isset($_POST['history']) && $_POST['history'] === 'yes',
             'interview_date' => date('Y-m-d'),
             'red_cross_donations' => isset($_POST['history']) && $_POST['history'] === 'yes' ? intval($_POST['red-cross']) : 0,
@@ -511,13 +568,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'last_hosp_donation_place' => isset($_POST['history']) && $_POST['history'] === 'yes' ? ($_POST['last-hosp-donation-place'] ?: "") : "",
             'last_rc_donation_date' => isset($_POST['history']) && $_POST['history'] === 'yes' && !empty($_POST['last-rc-donation-date']) ? $_POST['last-rc-donation-date'] : '0001-01-01',
             'last_hosp_donation_date' => isset($_POST['history']) && $_POST['history'] === 'yes' && !empty($_POST['last-hosp-donation-date']) ? $_POST['last-hosp-donation-date'] : '0001-01-01',
-            'mobile_location' => $_POST['donation-type'] === 'mobile' ? ($_POST['mobile-place'] ?: "") : "",
-            'mobile_organizer' => $_POST['donation-type'] === 'mobile' ? ($_POST['mobile-organizer'] ?: "") : "",
-            'patient_name' => $_POST['donation-type'] === 'mobile' ? ($_POST['patient-name'] ?: "") : "",
-            'hospital' => $_POST['donation-type'] === 'mobile' ? ($_POST['hospital'] ?: "") : "",
-            'patient_blood_type' => $_POST['donation-type'] === 'mobile' ? ($_POST['blood-type-patient'] ?: "") : "",
-            'component_type' => $_POST['donation-type'] === 'mobile' ? ($_POST['wb-component'] ?: "") : "",
-            'units_needed' => $_POST['donation-type'] === 'mobile' && !empty($_POST['no-units']) ? intval($_POST['no-units']) : 0
+            // Check if donation type starts with 'mobile-' for any mobile type
+            'mobile_location' => strpos($_POST['donation-type'], 'mobile') === 0 ? ($_POST['mobile-place'] ?: "") : "",
+            'mobile_organizer' => strpos($_POST['donation-type'], 'mobile') === 0 ? ($_POST['mobile-organizer'] ?: "") : "",
+            'patient_name' => ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') ? ($_POST['patient-name'] ?: "") : "",
+            'hospital' => ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') ? ($_POST['hospital'] ?: "") : "",
+            'patient_blood_type' => ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') ? ($_POST['blood-type-patient'] ?: "") : "",
+            'component_type' => ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') ? ($_POST['wb-component'] ?: "") : "",
+            'units_needed' => ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') && !empty($_POST['no-units']) ? intval($_POST['no-units']) : 0
         ];
 
         // For interviewers, only include Body WT
@@ -526,7 +584,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $screening_data = array_merge($screening_data, [
                 'specific_gravity' => $_POST['sp-gr'] ?: "",
                 'blood_type' => $_POST['blood-type'],
-                'donation_type' => $_POST['donation-type'],
+                'donation_type' => mapDonationType($_POST['donation-type']),
                 'has_previous_donation' => isset($_POST['history']) && $_POST['history'] === 'yes',
                 'red_cross_donations' => isset($_POST['history']) && $_POST['history'] === 'yes' ? intval($_POST['red-cross']) : 0,
                 'hospital_donations' => isset($_POST['history']) && $_POST['history'] === 'yes' ? intval($_POST['hospital-history']) : 0,
@@ -534,18 +592,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'last_hosp_donation_place' => isset($_POST['history']) && $_POST['history'] === 'yes' ? ($_POST['last-hosp-donation-place'] ?: "") : "",
                 'last_rc_donation_date' => isset($_POST['history']) && $_POST['history'] === 'yes' && !empty($_POST['last-rc-donation-date']) ? $_POST['last-rc-donation-date'] : '0001-01-01',
                 'last_hosp_donation_date' => isset($_POST['history']) && $_POST['history'] === 'yes' && !empty($_POST['last-hosp-donation-date']) ? $_POST['last-hosp-donation-date'] : '0001-01-01',
-                'mobile_location' => isset($_POST['mobile-place']) ? ($_POST['mobile-place'] ?: "") : "",
-                'mobile_organizer' => isset($_POST['mobile-organizer']) ? ($_POST['mobile-organizer'] ?: "") : "",
-                'patient_name' => isset($_POST['patient-name']) ? ($_POST['patient-name'] ?: "") : "",
-                'hospital' => isset($_POST['hospital']) ? ($_POST['hospital'] ?: "") : "",
-                'patient_blood_type' => isset($_POST['blood-type-patient']) ? ($_POST['blood-type-patient'] ?: "") : "",
-                'component_type' => isset($_POST['wb-component']) ? ($_POST['wb-component'] ?: "") : "",
-                'units_needed' => isset($_POST['no-units']) && !empty($_POST['no-units']) ? intval($_POST['no-units']) : 0
+                // Check if donation type starts with 'mobile-' for any mobile type
+                'mobile_location' => isset($_POST['mobile-place']) && strpos($_POST['donation-type'], 'mobile') === 0 ? ($_POST['mobile-place'] ?: "") : "",
+                'mobile_organizer' => isset($_POST['mobile-organizer']) && strpos($_POST['donation-type'], 'mobile') === 0 ? ($_POST['mobile-organizer'] ?: "") : "",
+                'patient_name' => isset($_POST['patient-name']) && ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') ? ($_POST['patient-name'] ?: "") : "",
+                'hospital' => isset($_POST['hospital']) && ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') ? ($_POST['hospital'] ?: "") : "",
+                'patient_blood_type' => isset($_POST['blood-type-patient']) && ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') ? ($_POST['blood-type-patient'] ?: "") : "",
+                'component_type' => isset($_POST['wb-component']) && ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') ? ($_POST['wb-component'] ?: "") : "",
+                'units_needed' => isset($_POST['no-units']) && !empty($_POST['no-units']) && ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') ? intval($_POST['no-units']) : 0
             ]);
         }
 
         // Debug log the prepared data
         error_log("Prepared screening data: " . print_r($screening_data, true));
+        error_log("Donation type submitted: " . $_POST['donation-type']);
+        error_log("Is mobile type: " . (strpos($_POST['donation-type'], 'mobile') === 0 ? 'yes' : 'no'));
+        error_log("Is patient directed: " . (($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') ? 'yes' : 'no'));
 
         // Check if there's an existing screening record to update for this donor
         $should_update = false;
@@ -591,14 +653,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'apikey: ' . SUPABASE_API_KEY,
                 'Authorization: Bearer ' . SUPABASE_API_KEY,
                 'Content-Type: application/json',
-                'Prefer: return=representation'
+                'Prefer: return=representation',
+                'Accept: application/json',
+                'X-PostgreSQL-Identifier-Case-Sensitive: true'
             );
             
             // Set cURL options for PATCH (update)
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($screening_data));
+            
+            // Cast donation_type to text explicitly in the JSON for update
+            error_log("UPDATE: JSON data before encoding: " . print_r($screening_data, true));
+            
+            // Format the data for PostgreSQL with user-defined types
+            $formatted_data = formatDataForSupabase($screening_data);
+            $jsonData = json_encode($formatted_data);
+            
+            error_log("UPDATE: Modified JSON data being sent: " . $jsonData);
+            
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
             
             // Execute the request
             $response = curl_exec($ch);
@@ -607,6 +681,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Debug log
             error_log("Supabase UPDATE response code: " . $http_code);
             error_log("Supabase UPDATE response: " . $response);
+            
+            // Check for cURL errors
+            if(curl_errno($ch)) {
+                error_log("UPDATE cURL error: " . curl_error($ch));
+            }
             
             curl_close($ch);
             
@@ -661,24 +740,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
             curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($screening_data));
+            
+            // Cast donation_type to text explicitly in the JSON
+            error_log("JSON data before encoding: " . print_r($screening_data, true));
+            
+            // Format the data for PostgreSQL with user-defined types
+            $formatted_data = formatDataForSupabase($screening_data);
+            $jsonData = json_encode($formatted_data);
+            
+            error_log("JSON data being sent: " . $jsonData);
+            
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
 
             // Execute the request
             $response = curl_exec($ch);
             $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             
             // Debug log
-            error_log("Supabase response code: " . $http_code);
-            error_log("Supabase response: " . $response);
+            error_log("Supabase INSERT response code: " . $http_code);
+            error_log("Supabase INSERT response: " . $response);
+            
+            // Check for cURL errors
+            if(curl_errno($ch)) {
+                error_log("cURL error: " . curl_error($ch));
+            }
             
             curl_close($ch);
 
             if ($http_code === 201) {
                 // Parse the response
                 $response_data = json_decode($response, true);
+                error_log("Parsed response data: " . print_r($response_data, true));
                 
                 if (is_array($response_data) && isset($response_data[0]['screening_id'])) {
                     $_SESSION['screening_id'] = $response_data[0]['screening_id'];
+                    error_log("SUCCESS: Set screening_id in session: " . $_SESSION['screening_id']);
                     
                     // Different redirections based on role
                     if ($_SESSION['role_id'] == 1) {
@@ -707,9 +803,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         exit();
                     }
                 } else {
-                    throw new Exception("Invalid response format");
+                    error_log("ERROR: Invalid response format or missing screening_id");
+                    throw new Exception("Invalid response format or missing screening_id: " . $response);
                 }
             } else {
+                error_log("ERROR: Failed to submit screening form. HTTP Code: " . $http_code);
+                if ($response) {
+                    $decoded_response = json_decode($response, true);
+                    if (is_array($decoded_response)) {
+                        error_log("Decoded error response: " . print_r($decoded_response, true));
+                    }
+                }
                 throw new Exception("Failed to submit screening form. HTTP Code: " . $http_code . ", Response: " . $response);
             }
         }
@@ -810,16 +914,32 @@ body {
 .screening-form-donation p {
     font-weight: bold;
     color: #721c24;
-    margin-bottom: 10px;
+    margin-bottom: 20px;
     font-size: 18px;
+}
+
+/* Donation Category Styling */
+.donation-category {
+    margin-bottom: 20px;
+}
+
+.category-title {
+    font-weight: bold;
+    font-size: 16px;
+    margin-bottom: 10px;
+    color: #721c24;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #e0e0e0;
 }
 
 /* Donation Type Options */
 .donation-options {
     display: flex;
+    flex-direction: row;
     flex-wrap: wrap;
     gap: 15px;
     margin-bottom: 15px;
+    padding-left: 15px;
 }
 
 .donation-option {
@@ -1302,32 +1422,49 @@ select:focus {
 
             <div class="screening-form-donation">
                 <p>TYPE OF DONATION (Donor's Choice):</p>
-                <div class="donation-options">
-                    <label class="donation-option">
-                        <input type="radio" name="donation-type" value="in-house" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'in-house') || (isset($donation_type) && $donation_type === 'in-house') ? 'checked' : ''; ?> required> 
-                        <span class="checkmark"></span>
-                        IN-HOUSE
-                    </label>
-                    <label class="donation-option">
-                        <input type="radio" name="donation-type" value="walk-in" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'walk-in') || (isset($donation_type) && $donation_type === 'walk-in') ? 'checked' : (isset($_SESSION['role_id']) && $_SESSION['role_id'] === 1 && empty($donation_type) ? 'checked' : ''); ?> required> 
-                        <span class="checkmark"></span>
-                        WALK-IN/VOLUNTARY
-                    </label>
-                    <label class="donation-option">
-                        <input type="radio" name="donation-type" value="replacement" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'replacement') || (isset($donation_type) && $donation_type === 'replacement') ? 'checked' : ''; ?> required> 
-                        <span class="checkmark"></span>
-                        REPLACEMENT
-                    </label>
-                    <label class="donation-option">
-                        <input type="radio" name="donation-type" value="patient-directed" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'patient-directed') || (isset($donation_type) && $donation_type === 'patient-directed') ? 'checked' : ''; ?> required> 
-                        <span class="checkmark"></span>
-                        PATIENT-DIRECTED
-                    </label>
-                    <label class="donation-option">
-                        <input type="radio" name="donation-type" value="mobile" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'mobile') || (isset($donation_type) && $donation_type === 'mobile') ? 'checked' : ''; ?> required> 
-                        <span class="checkmark"></span>
-                        Mobile Blood Donation
-                    </label>
+                
+                <!-- IN-HOUSE Category -->
+                <div class="donation-category">
+                    <div class="category-title">IN-HOUSE</div>
+                    <div class="donation-options">
+                        <label class="donation-option">
+                            <input type="radio" name="donation-type" value="walk-in" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'walk-in') || (isset($donation_type) && $donation_type === 'walk-in') ? 'checked' : (isset($_SESSION['role_id']) && $_SESSION['role_id'] === 1 && empty($donation_type) ? 'checked' : ''); ?> required> 
+                            <span class="checkmark"></span>
+                            WALK-IN/VOLUNTARY
+                        </label>
+                        <label class="donation-option">
+                            <input type="radio" name="donation-type" value="replacement" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'replacement') || (isset($donation_type) && $donation_type === 'replacement') ? 'checked' : ''; ?> required> 
+                            <span class="checkmark"></span>
+                            REPLACEMENT
+                        </label>
+                        <label class="donation-option">
+                            <input type="radio" name="donation-type" value="patient-directed" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'patient-directed') || (isset($donation_type) && $donation_type === 'patient-directed') ? 'checked' : ''; ?> required> 
+                            <span class="checkmark"></span>
+                            PATIENT-DIRECTED
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Mobile Blood Donation Category -->
+                <div class="donation-category">
+                    <div class="category-title">Mobile Blood Donation</div>
+                    <div class="donation-options">
+                        <label class="donation-option">
+                            <input type="radio" name="donation-type" value="mobile-walk-in" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'mobile-walk-in') || (isset($donation_type) && $donation_type === 'mobile-walk-in') ? 'checked' : ''; ?> required> 
+                            <span class="checkmark"></span>
+                            WALK-IN/VOLUNTARY
+                        </label>
+                        <label class="donation-option">
+                            <input type="radio" name="donation-type" value="mobile-replacement" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'mobile-replacement') || (isset($donation_type) && $donation_type === 'mobile-replacement') ? 'checked' : ''; ?> required> 
+                            <span class="checkmark"></span>
+                            REPLACEMENT
+                        </label>
+                        <label class="donation-option">
+                            <input type="radio" name="donation-type" value="mobile-patient-directed" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'mobile-patient-directed') || (isset($donation_type) && $donation_type === 'mobile-patient-directed') ? 'checked' : ''; ?> required> 
+                            <span class="checkmark"></span>
+                            PATIENT-DIRECTED
+                        </label>
+                    </div>
                 </div>
                 
                 <div class="mobile-donation-section" id="mobileDonationSection" style="display: none;">
@@ -1537,19 +1674,22 @@ select:focus {
             
             // Function to update the display of sections based on donation type
             function updateDonationTypeSections(donationType) {
-                if (donationType === 'mobile') {
-                    // Show mobile donation section with only Place and Organizer
+                // Check if it's any of the mobile donation types
+                const isMobile = donationType.startsWith('mobile-');
+                // Check if it's specifically patient-directed or mobile-patient-directed
+                const isPatientDirected = donationType === 'patient-directed' || donationType === 'mobile-patient-directed';
+                
+                // Show/hide mobile donation section
+                if (isMobile) {
                     mobileDonationSection.style.display = 'block';
-                    // Hide patient details table
-                    patientDetailsTable.style.display = 'none';
-                } else if (donationType === 'patient-directed') {
-                    // Show patient details table
-                    patientDetailsTable.style.display = 'table';
-                    // Hide mobile donation section
-                    mobileDonationSection.style.display = 'none';
                 } else {
-                    // Hide both sections for other options
                     mobileDonationSection.style.display = 'none';
+                }
+                
+                // Show/hide patient details table
+                if (isPatientDirected) {
+                    patientDetailsTable.style.display = 'table';
+                } else {
                     patientDetailsTable.style.display = 'none';
                 }
             }

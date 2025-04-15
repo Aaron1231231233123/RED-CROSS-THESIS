@@ -27,6 +27,11 @@ if (!$referrer) {
 // Store the referrer in the session for use when redirecting back
 $_SESSION['declaration_form_referrer'] = $referrer;
 
+// Log all potential donor_id sources for debugging
+error_log("Declaration form - donor_id sources: SESSION=" . ($_SESSION['donor_id'] ?? 'not set') . 
+          ", GET=" . ($_GET['donor_id'] ?? 'not set') . 
+          ", POST=" . ($_POST['donor_id'] ?? 'not set'));
+
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../../../public/login.php");
@@ -39,19 +44,71 @@ if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['rol
     exit();
 }
 
-// Check if we have donor_id
+// Check if we have donor_id in GET or POST parameters and set it in SESSION
+if (isset($_GET['donor_id'])) {
+    $_SESSION['donor_id'] = $_GET['donor_id'];
+    error_log("Declaration form - Setting donor_id from GET: " . $_GET['donor_id']);
+} elseif (isset($_POST['donor_id'])) {
+    $_SESSION['donor_id'] = $_POST['donor_id'];
+    error_log("Declaration form - Setting donor_id from POST: " . $_POST['donor_id']);
+}
+
+// Now check if we have donor_id in session
 if (!isset($_SESSION['donor_id'])) {
     error_log("Missing donor_id in session for declaration form");
-    header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
+    header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php?error=' . urlencode('Missing donor ID'));
     exit();
 }
 
 // Check if medical history is completed
+// If medical_history_id is in GET/POST, save it to session
+if (isset($_GET['medical_history_id'])) {
+    $_SESSION['medical_history_id'] = $_GET['medical_history_id'];
+} elseif (isset($_POST['medical_history_id'])) {
+    $_SESSION['medical_history_id'] = $_POST['medical_history_id'];
+}
+
+// Now check if we have medical_history_id in session
 if (!isset($_SESSION['medical_history_id'])) {
     error_log("Missing medical_history_id in session for declaration form");
-    // Redirect to medical history form with donor_id
-    header('Location: medical-history-modal.php?donor_id=' . $_SESSION['donor_id']);
-    exit();
+    
+    // Try to retrieve medical_history_id from database using donor_id
+    $donor_id = $_SESSION['donor_id'];
+    
+    // Build the URL for retrieving medical history
+    $url = SUPABASE_URL . '/rest/v1/medical_history?select=medical_history_id&donor_id=eq.' . urlencode($donor_id);
+    
+    // Initialize cURL session
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ]);
+    
+    // Execute the request
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    // Process the response
+    if ($http_code === 200) {
+        $data = json_decode($response, true);
+        if (is_array($data) && !empty($data) && isset($data[0]['medical_history_id'])) {
+            $_SESSION['medical_history_id'] = $data[0]['medical_history_id'];
+            error_log("Retrieved medical_history_id from database: " . $_SESSION['medical_history_id']);
+        } else {
+            // Redirect to medical history form with donor_id
+            error_log("No medical_history_id found in database - redirecting to medical history form");
+            header('Location: medical-history-modal.php?donor_id=' . $donor_id);
+            exit();
+        }
+    } else {
+        // Redirect to medical history form with donor_id
+        error_log("Error retrieving medical_history_id (HTTP $http_code) - redirecting to medical history form");
+        header('Location: medical-history-modal.php?donor_id=' . $donor_id);
+        exit();
+    }
 }
 
 // Fetch donor information
@@ -59,6 +116,9 @@ $donor_id = $_SESSION['donor_id'];
 $donorData = null;
 
 try {
+    // Log the donor ID we're fetching
+    error_log("Declaration form - Fetching donor data for ID: " . $donor_id);
+    
     $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form?donor_id=eq.' . $donor_id);
     
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -72,6 +132,8 @@ try {
     
     curl_close($ch);
     
+    error_log("Declaration form - Donor fetch response: HTTP $http_code, Data: " . substr($response, 0, 500));
+    
     if ($http_code === 200) {
         $donorData = json_decode($response, true);
         if (!is_array($donorData) || empty($donorData)) {
@@ -81,9 +143,54 @@ try {
             if (isset($_SESSION['donor_form_data'])) {
                 error_log("Found donor_form_data in session. Inserting donor record.");
                 
-                // Redirect to medical history with a flag to insert the donor
-                header('Location: medical-history-modal.php?insert_donor=true');
-                exit();
+                // Prepare the data for insertion
+                $formData = $_SESSION['donor_form_data'];
+                
+                // Log what we're about to insert
+                error_log("Inserting donor data: " . json_encode($formData));
+                
+                // Initialize cURL for insertion
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form');
+                
+                // Set cURL options
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($formData));
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Content-Type: application/json',
+                    'Prefer: return=representation'
+                ]);
+                
+                // Execute the request
+                $response = curl_exec($ch);
+                $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                
+                curl_close($ch);
+                
+                if ($http_code >= 200 && $http_code < 300) {
+                    // Successfully created donor record
+                    $insertedData = json_decode($response, true);
+                    
+                    if (is_array($insertedData) && !empty($insertedData)) {
+                        // Update donor_id in session with the new one
+                        $_SESSION['donor_id'] = $insertedData[0]['donor_id'];
+                        $donor_id = $_SESSION['donor_id'];
+                        
+                        // Use the inserted data
+                        $donorData = $insertedData;
+                        error_log("Successfully inserted donor record with ID: " . $donor_id);
+                        
+                        // Clear the form data from session
+                        unset($_SESSION['donor_form_data']);
+                        unset($_SESSION['donor_form_timestamp']);
+                    } else {
+                        throw new Exception("Failed to parse inserted donor data.");
+                    }
+                } else {
+                    throw new Exception("Failed to insert donor data. HTTP Code: " . $http_code);
+                }
             } else {
                 // No donor data available - redirect to dashboard
                 error_log("No donor form data available. Redirecting to dashboard.");
@@ -93,6 +200,9 @@ try {
             }
         }
         $donorData = $donorData[0]; // Get the first (and should be only) result
+        
+        // Debug the donor data we retrieved
+        error_log("Declaration form - Retrieved donor data: " . json_encode($donorData));
     } else {
         throw new Exception("Failed to fetch donor data. HTTP Code: " . $http_code);
     }
@@ -121,6 +231,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['print_declaration']))
         // URL has no parameters yet
         $redirect_url .= '?donor_registered=true';
     }
+    
+    // Log successful registration
+    error_log("Donor registration completed successfully for donor ID: " . $donor_id);
+    
+    // Set a flag for registered donor in session
+    $_SESSION['donor_registered'] = true;
+    $_SESSION['donor_registered_id'] = $donor_id;
+    $_SESSION['donor_registered_name'] = $donorData['first_name'] . ' ' . $donorData['surname'];
+    error_log("Declaration form - Donor registration completed for: " . $_SESSION['donor_registered_name'] . " (ID: " . $donor_id . ")");
+    
+    // Now create a temporary cookie to identify this registration success
+    // We'll use this instead of session data to show success message
+    $expiry = time() + 60*5; // 5 minutes
+    setcookie('donor_registered', 'true', $expiry, '/');
+    setcookie('donor_name', $donorData['first_name'] . ' ' . $donorData['surname'], $expiry, '/');
+    
+    // Clear any previous registration data from session to avoid conflicts
+    unset($_SESSION['donor_form_data']);
+    unset($_SESSION['donor_form_timestamp']);
+    unset($_SESSION['donor_id']);
+    unset($_SESSION['medical_history_id']);
+    unset($_SESSION['screening_id']);
     
     // Redirect back to the dashboard
     header('Location: ' . $redirect_url);
@@ -268,21 +400,39 @@ $today = date('F d, Y');
             <div class="donor-info-row">
                 <div class="donor-info-item">
                     <div class="donor-info-label">Donor Name:</div>
-                    <div class="donor-info-value"><?php echo htmlspecialchars($donorData['surname'] . ', ' . $donorData['first_name'] . ' ' . $donorData['middle_name']); ?></div>
+                    <div class="donor-info-value">
+                        <?php 
+                        // Create full name from components with proper validation
+                        $surname = isset($donorData['surname']) ? htmlspecialchars(trim($donorData['surname'])) : '';
+                        $firstName = isset($donorData['first_name']) ? htmlspecialchars(trim($donorData['first_name'])) : '';
+                        $middleName = isset($donorData['middle_name']) ? htmlspecialchars(trim($donorData['middle_name'])) : '';
+                        
+                        // Build the full name with proper formatting
+                        $fullName = $surname;
+                        if (!empty($firstName)) {
+                            $fullName .= ', ' . $firstName;
+                        }
+                        if (!empty($middleName)) {
+                            $fullName .= ' ' . $middleName;
+                        }
+                        
+                        echo $fullName;
+                        ?>
+                    </div>
                 </div>
                 <div class="donor-info-item">
                     <div class="donor-info-label">Age:</div>
-                    <div class="donor-info-value"><?php echo htmlspecialchars($donorData['age']); ?></div>
+                    <div class="donor-info-value"><?php echo isset($donorData['age']) ? htmlspecialchars($donorData['age']) : ''; ?></div>
                 </div>
                 <div class="donor-info-item">
                     <div class="donor-info-label">Sex:</div>
-                    <div class="donor-info-value"><?php echo htmlspecialchars($donorData['sex']); ?></div>
+                    <div class="donor-info-value"><?php echo isset($donorData['sex']) ? htmlspecialchars($donorData['sex']) : ''; ?></div>
                 </div>
             </div>
             <div class="donor-info-row">
                 <div class="donor-info-item">
                     <div class="donor-info-label">Address:</div>
-                    <div class="donor-info-value"><?php echo htmlspecialchars($donorData['permanent_address']); ?></div>
+                    <div class="donor-info-value"><?php echo isset($donorData['permanent_address']) ? htmlspecialchars($donorData['permanent_address']) : ''; ?></div>
                 </div>
             </div>
         </div>
@@ -334,14 +484,27 @@ $today = date('F d, Y');
             window.print();
         }
         
-        function goBack() {
-            window.history.back();
-        }
-        
         function returnToDashboard() {
-            // Get the referrer URL for redirection
-            let redirect_url = '<?php echo $referrer; ?>';
-            window.location.href = redirect_url;
+            // Clean up session data
+            fetch('cancel_registration.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ action: 'cancel_from_declaration' })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Get the referrer URL for redirection
+                let redirect_url = '<?php echo $referrer; ?>';
+                window.location.href = redirect_url;
+            })
+            .catch(error => {
+                console.error('Error cleaning up session:', error);
+                // Fallback redirect
+                let redirect_url = '<?php echo $referrer; ?>';
+                window.location.href = redirect_url;
+            });
         }
     </script>
 </body>

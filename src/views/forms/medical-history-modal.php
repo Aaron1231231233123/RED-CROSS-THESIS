@@ -60,13 +60,18 @@ if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['rol
 // Check if donor_id is passed via URL parameter
 if (isset($_GET['donor_id']) && !empty($_GET['donor_id'])) {
     $_SESSION['donor_id'] = $_GET['donor_id'];
-    error_log("Set donor_id from URL parameter: " . $_SESSION['donor_id']);
+    error_log("Medical history - Set donor_id from URL parameter: " . $_SESSION['donor_id']);
 }
 
+// Debug session data for diagnosis
+error_log("Medical history - Session data: " . json_encode(array_keys($_SESSION)));
+error_log("Medical history - donor_id: " . ($_SESSION['donor_id'] ?? 'not set'));
+error_log("Medical history - donor_form_data: " . (isset($_SESSION['donor_form_data']) ? 'Present (length: ' . strlen(json_encode($_SESSION['donor_form_data'])) . ')' : 'not set'));
+
 // Only check donor_id for staff role (role_id 3)
-if ($_SESSION['role_id'] === 3 && !isset($_SESSION['donor_id'])) {
-    error_log("Missing donor_id in session for staff");
-    header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
+if ($_SESSION['role_id'] === 3 && !isset($_SESSION['donor_id']) && !isset($_SESSION['donor_form_data'])) {
+    error_log("Missing donor_id and donor_form_data in session for staff");
+    header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php?error=' . urlencode('Missing donor information'));
     exit();
 }
 
@@ -186,18 +191,22 @@ else if (isset($_SESSION['donor_id'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         // Debug log the POST data
-        error_log("POST data received: " . print_r($_POST, true));
-        error_log("Session data before processing: " . print_r($_SESSION, true));
+        error_log("Medical history - POST data received: " . print_r($_POST, true));
+        error_log("Medical history - Session data before processing: " . print_r($_SESSION, true));
 
         // Check if we have donor_form_data in session, which means we need to insert the donor record first
         if (isset($_SESSION['donor_form_data']) && !isset($_SESSION['donor_id'])) {
-            error_log("Found donor_form_data in session. Inserting donor record first.");
+            error_log("Medical history - Found donor_form_data in session. Inserting donor record first.");
+            
+            // Get the donor form data from session
+            $donorFormData = $_SESSION['donor_form_data'];
+            error_log("Medical history - Donor data to insert: " . json_encode($donorFormData));
             
             // Insert donor record in Supabase
             $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form');
             
             curl_setopt($ch, CURLOPT_POST, 1);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($_SESSION['donor_form_data']));
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($donorFormData));
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
                 'apikey: ' . SUPABASE_API_KEY,
@@ -211,14 +220,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Check for cURL errors
             if (curl_errno($ch)) {
-                error_log("cURL Error inserting donor: " . curl_error($ch));
+                error_log("Medical history - cURL Error inserting donor: " . curl_error($ch));
                 throw new Exception("Error inserting donor: " . curl_error($ch));
             }
             
             curl_close($ch);
             
             if ($httpCode >= 200 && $httpCode < 300) {
-                error_log("Donor added successfully. Response: " . $response);
+                error_log("Medical history - Donor added successfully. Response: " . $response);
                 
                 // Parse response to get donor ID
                 $responseData = json_decode($response, true);
@@ -228,19 +237,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($donorId) {
                         // Store donor ID in session and remove donor_form_data
                         $_SESSION['donor_id'] = $donorId;
-                        unset($_SESSION['donor_form_data']);
-                        unset($_SESSION['donor_form_timestamp']);
-                        error_log("Donor ID $donorId stored in session and form data cleared.");
+                        error_log("Medical history - New donor_id stored in session: " . $donorId);
+                        
+                        // Keep donor form data for traceability until after medical history is saved
+                        // Will be cleared later after successful submission
                     } else {
-                        error_log("Failed to extract donor_id from response: " . $response);
+                        error_log("Medical history - Failed to extract donor_id from response: " . $response);
                         throw new Exception("Error processing donor information. No donor_id in response.");
                     }
                 } else {
-                    error_log("Invalid response format: " . $response);
+                    error_log("Medical history - Invalid response format: " . $response);
                     throw new Exception("Error processing donor information. Invalid response format.");
                 }
             } else {
-                error_log("Error adding donor. HTTP Code: $httpCode. Response: " . $response);
+                error_log("Medical history - Error adding donor. HTTP Code: $httpCode. Response: " . $response);
                 throw new Exception("Error submitting donor form. HTTP Code: $httpCode");
             }
         } else if (!isset($_SESSION['donor_id'])) {
@@ -362,33 +372,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         curl_close($ch);
 
         if ($http_code === 201) {
-            // Parse the response to get the medical history ID
-            $response_data = json_decode($response, true);
+            $responseData = json_decode($response, true);
             
-            // Debug log the response data
-            error_log("Supabase response data: " . print_r($response_data, true));
-            
-            // Check if we have a valid response array and it contains the medical_history_id
-            if (is_array($response_data) && isset($response_data[0]['medical_history_id'])) {
-                $_SESSION['medical_history_id'] = $response_data[0]['medical_history_id'];
-                error_log("Stored medical_history_id in session: " . $_SESSION['medical_history_id']);
+            if (is_array($responseData) && isset($responseData[0]['medical_history_id'])) {
+                // Store the new medical_history_id in the session
+                $_SESSION['medical_history_id'] = $responseData[0]['medical_history_id'];
                 
-                // Redirect to declaration form instead of screening form
-                error_log("Redirecting to declaration form");
+                // Log success
+                error_log("Medical history data submitted and saved with ID: " . $_SESSION['medical_history_id']);
+                error_log("Proceeding to declaration form with donor_id: " . $_SESSION['donor_id']);
                 
-                // Make sure the donor_form_referrer is preserved
-                if (isset($_SESSION['donor_form_referrer'])) {
-                    error_log("Preserving referrer URL: " . $_SESSION['donor_form_referrer']);
+                // Ensure we're passing along the correct donor_id
+                $donor_id = $_SESSION['donor_id'];
+                
+                // Now it's safe to clear the donor form data from session
+                if (isset($_SESSION['donor_form_data'])) {
+                    error_log("Medical history - Clearing donor_form_data from session after successful submission");
+                    unset($_SESSION['donor_form_data']);
+                    unset($_SESSION['donor_form_timestamp']);
                 }
                 
-                header('Location: declaration-form-modal.php');
+                // Redirect to declaration form with donor_id
+                header('Location: declaration-form-modal.php?donor_id=' . $donor_id);
                 exit();
             } else {
-                error_log("Invalid response format or missing medical_history_id: " . print_r($response_data, true));
-                throw new Exception("Medical history ID not found in response. Response: " . $response);
+                error_log("Failed to extract medical_history_id from response: " . print_r($responseData, true));
+                throw new Exception("Failed to process medical history information.");
             }
         } else {
-            throw new Exception("Failed to submit medical history. HTTP Code: " . $http_code . " Response: " . $response);
+            error_log("API error submitting medical history. HTTP code: " . $http_code . ", Response: " . $response);
+            throw new Exception("API error: HTTP code " . $http_code);
         }
     } catch (Exception $e) {
         error_log("Error in medical history form: " . $e->getMessage());

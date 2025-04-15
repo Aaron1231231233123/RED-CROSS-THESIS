@@ -127,6 +127,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
         $_SESSION['donor_form_data'] = $formData;
         $_SESSION['donor_form_timestamp'] = time(); // Track when the form was submitted
         
+        // Clear any previous donor_id to avoid confusion
+        if (isset($_SESSION['donor_id'])) {
+            error_log("Donor form - Clearing previous donor_id: " . $_SESSION['donor_id']);
+            unset($_SESSION['donor_id']);
+        }
+        
+        // Log donor information for tracking
+        error_log("Donor form - New donor being registered: " . $formData['first_name'] . " " . $formData['surname']);
         error_log("Donor form data stored in session. Redirecting to medical history form.");
         
         // Show loading modal before redirecting to medical history form

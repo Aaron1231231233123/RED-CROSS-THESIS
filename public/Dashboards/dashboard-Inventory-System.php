@@ -1043,9 +1043,27 @@ h6 {
                 confirmationModal.hide();
                 loadingModal.show();
                 
-                setTimeout(() => {
-                    window.location.href = '../../src/views/forms/donor-form-modal.php';
-                }, 1500);
+                // Get current URL to pass as source for later return
+                const currentUrl = window.location.href;
+                
+                // Clean up any previous donor registration session data
+                fetch('../../src/views/forms/clean_session.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: 'clean_before_new_registration' })
+                }).then(() => {
+                    setTimeout(() => {
+                        // Redirect to donor form with current page as source
+                        window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + encodeURIComponent(currentUrl);
+                    }, 1500);
+                }).catch(() => {
+                    // If there's an error, continue anyway
+                    setTimeout(() => {
+                        window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + encodeURIComponent(currentUrl);
+                    }, 1500);
+                });
             };
         });
     </script>

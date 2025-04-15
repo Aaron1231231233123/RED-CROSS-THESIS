@@ -5,16 +5,9 @@ session_start();
 // Set headers for JSON response
 header('Content-Type: application/json');
 
-// Get referrer for redirection
-$redirect_url = isset($_SESSION['donor_form_referrer']) 
-    ? $_SESSION['donor_form_referrer'] 
-    : '../../public/Dashboards/dashboard-Inventory-System.php';
-
 try {
-    // Log the cancellation
-    error_log("Cancelling donor registration process. donor_form_data=" . 
-              (isset($_SESSION['donor_form_data']) ? 'present' : 'absent') . 
-              ", donor_id=" . ($_SESSION['donor_id'] ?? 'not set'));
+    // Log the session cleanup
+    error_log("Cleaning donor registration session data before new registration");
     
     // Clear all registration-related session data
     if (isset($_SESSION['donor_form_data'])) {
@@ -54,8 +47,6 @@ try {
         unset($_SESSION['declaration_completed']);
     }
     
-    // Keep donor_form_referrer for navigation purposes
-    
     // Log the cleaned state
     error_log("Registration session data cleared. Session now contains keys: " . 
              implode(', ', array_keys($_SESSION)));
@@ -63,17 +54,15 @@ try {
     // Return success response
     echo json_encode([
         'success' => true,
-        'message' => 'Registration cancelled successfully',
-        'redirect_url' => $redirect_url
+        'message' => 'Session data cleaned successfully'
     ]);
 } catch (Exception $e) {
-    error_log("Error cancelling registration: " . $e->getMessage());
+    error_log("Error cleaning session data: " . $e->getMessage());
     
     // Return error response
     echo json_encode([
         'success' => false,
-        'error' => 'Failed to cancel registration: ' . $e->getMessage(),
-        'redirect_url' => $redirect_url
+        'error' => 'Failed to clean session data: ' . $e->getMessage()
     ]);
 }
-?> 
+?>

@@ -406,8 +406,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($http_code >= 200 && $http_code < 300) {
                     error_log("Successfully updated physical examination record: $http_code");
                     
-                    // Redirect to appropriate dashboard based on role
-                    if ($is_physician) {
+                    // Redirect to blood collection form
+                    if ($is_physician || $_SESSION['role_id'] == 1) {
+                        header('Location: blood-collection-form.php');
+                        exit();
+                    } else {
+                        // Other roles redirect to dashboard
                         header('Location: ../../../public/Dashboards/dashboard-staff-physical-submission.php?success=1');
                         exit();
                     }
@@ -460,16 +464,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 // Redirect based on role
                 if ($_SESSION['role_id'] == 1) {
-                    // Admin redirect
-                    header('Location: ../../../public/Dashboards/dashboard-admin-physical-index.php');
-                        exit();
+                    // Admin redirect to blood collection
+                    header('Location: blood-collection-form.php');
+                    exit();
                 } else if ($_SESSION['role_id'] == 3 && $is_interviewer) {
-                    // Interviewer (role_id 3 + user_staff_roles=Interviewer) - Also redirect to physical examination
-                    error_log("Interviewer role: Redirecting to physical examination form");
-                    header('Location: ../../../public/Dashboards/dashboard-staff-donor-submission.php');
+                    // Interviewer - redirect to blood collection
+                    header('Location: blood-collection-form.php');
+                    exit();
+                } else if ($_SESSION['role_id'] == 3 && $is_physician) {
+                    // Physician - redirect to blood collection
+                    header('Location: blood-collection-form.php');
                     exit();
                 } else {
-                    // Staff redirect
+                    // Other staff redirect
                     header('Location: ../../../public/Dashboards/dashboard-staff-physical-submission.php');
                     exit();
                 }
