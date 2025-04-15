@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once '../../assets/conn/db_conn.php';
+require_once '../conn/db_conn.php';
 
 // Set response header
 header('Content-Type: application/json');
