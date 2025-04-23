@@ -47,18 +47,40 @@ if (!isset($_SESSION['medical_history_referrer'])) {
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
-    header("Location: ../../../public/login.php");
-    exit();
+    // Instead of redirecting to login, just log that we're proceeding without a user
+    error_log("Medical history - Proceeding without logged in user");
+    $_SESSION['role_id'] = null; // Set role_id to null for non-logged in users
 }
 
 // Check for correct roles (admin role_id 1 or staff role_id 3)
-if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['role_id'] != 3)) {
-    header("Location: ../../../public/unauthorized.php");
-    exit();
+// Only check if user is logged in
+if (isset($_SESSION['user_id'])) {
+    if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['role_id'] != 3)) {
+        // Log the unauthorized access attempt
+        error_log("Medical history - Unauthorized access attempt by user_id: " . $_SESSION['user_id']);
+     
+        exit();
+    }
+}
+
+// Set default role_id if not set
+if (!isset($_SESSION['role_id'])) {
+    $_SESSION['role_id'] = null;
 }
 
 // Check if donor_id is passed via URL parameter
 if (isset($_GET['donor_id']) && !empty($_GET['donor_id'])) {
+    // Hash the donor_id using the same salt as in hash_donor_id.php
+    $salt = "RedCross2024";
+    $hash = hash('sha256', $_GET['donor_id'] . $salt);
+    
+    // Store the mapping in session for verification
+    if (!isset($_SESSION['donor_hashes'])) {
+        $_SESSION['donor_hashes'] = [];
+    }
+    $_SESSION['donor_hashes'][$hash] = $_GET['donor_id'];
+    
+    // Set the donor_id in session
     $_SESSION['donor_id'] = $_GET['donor_id'];
     error_log("Medical history - Set donor_id from URL parameter: " . $_SESSION['donor_id']);
 }
@@ -69,7 +91,7 @@ error_log("Medical history - donor_id: " . ($_SESSION['donor_id'] ?? 'not set'))
 error_log("Medical history - donor_form_data: " . (isset($_SESSION['donor_form_data']) ? 'Present (length: ' . strlen(json_encode($_SESSION['donor_form_data'])) . ')' : 'not set'));
 
 // Only check donor_id for staff role (role_id 3)
-if ($_SESSION['role_id'] === 3 && !isset($_SESSION['donor_id']) && !isset($_SESSION['donor_form_data'])) {
+if (isset($_SESSION['role_id']) && $_SESSION['role_id'] === 3 && !isset($_SESSION['donor_id']) && !isset($_SESSION['donor_form_data'])) {
     error_log("Missing donor_id and donor_form_data in session for staff");
     header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php?error=' . urlencode('Missing donor information'));
     exit();
@@ -380,10 +402,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 // Log success
                 error_log("Medical history data submitted and saved with ID: " . $_SESSION['medical_history_id']);
-                error_log("Proceeding to declaration form with donor_id: " . $_SESSION['donor_id']);
+                error_log("Proceeding to donor form modal with donor_id: " . $_SESSION['donor_id']);
                 
                 // Ensure we're passing along the correct donor_id
                 $donor_id = $_SESSION['donor_id'];
+                
+                // Generate hash for the donor_id
+                $salt = "RedCross2024";
+                $hash = hash('sha256', $donor_id . $salt);
                 
                 // Now it's safe to clear the donor form data from session
                 if (isset($_SESSION['donor_form_data'])) {
@@ -392,8 +418,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     unset($_SESSION['donor_form_timestamp']);
                 }
                 
-                // Redirect to declaration form with donor_id
-                header('Location: declaration-form-modal.php?donor_id=' . $donor_id);
+                // Role-based redirection
+                if (isset($_SESSION['role_id'])) {
+                    if ($_SESSION['role_id'] === 1) { // Admin
+                        // Admin redirection to admin dashboard
+                        header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
+                    } else if ($_SESSION['role_id'] === 3) { // Staff
+                        // Staff redirection to staff dashboard
+                        header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
+                    }
+                } else {
+                    // Default redirection for non-logged in users to donor form modal
+                    header('Location: donor-form-modal.php?' . $hash);
+                }
                 exit();
             } else {
                 error_log("Failed to extract medical_history_id from response: " . print_r($responseData, true));

@@ -366,11 +366,144 @@ curl_close($ch);
         margin-left: 0;
     }
 }
+        /* Enhanced Header styles */
+        .dashboard-home-header {
+            margin-left: 16.66666667%;
+            position: relative;
+            z-index: 999;
+            background: #ffffff;
+            border-bottom: 1px solid #e9ecef;
+            padding: 1.2rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 70px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .header-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: 0;
+        }
+
+        .header-icon {
+            color: #dc3545;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .header-date {
+            color: #6c757d;
+            font-size: 0.95rem;
+            font-weight: normal;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .header-btn {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #dc3545;
+            color: white;
+            border: none;
+            box-shadow: 0 1px 2px rgba(220, 53, 69, 0.15);
+        }
+
+        .header-btn:hover {
+            transform: translateY(-1px);
+            background: #c82333;
+            color: white;
+            box-shadow: 0 3px 5px rgba(220, 53, 69, 0.2);
+        }
+
+        .header-btn i {
+            font-size: 1rem;
+        }
+
+        @media (max-width: 991.98px) {
+            .dashboard-home-header {
+                margin-left: 0;
+                padding: 1rem;
+                flex-wrap: wrap;
+                gap: 1rem;
+            }
+
+            .header-left {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+
+            .header-title {
+                font-size: 1.1rem;
+            }
+
+            .header-date {
+                font-size: 0.9rem;
+            }
+
+            .header-actions {
+                width: 100%;
+                justify-content: flex-end;
+            }
+
+            .header-btn {
+                padding: 0.4rem 0.8rem;
+                font-size: 0.9rem;
+            }
+        }
     </style>
 </head>
-<body>
-    <div class="container-fluid">
-        <div class="row">
+
+<body class="light-mode">
+    <div class="container-fluid p-0">
+        <!-- Enhanced Header -->
+        <div class="dashboard-home-header">
+            <div class="header-left">
+                <h4 class="header-title">
+                    <i class="fas fa-hospital-user header-icon"></i>
+                    Staff Dashboard
+                </h4>
+                <span class="header-date">
+                    <?php echo date('l, F j, Y'); ?>
+                </span>
+            </div>
+            <div class="header-actions">
+                <?php if ($user_staff_roles === 'interviewer'): ?>
+                    <button class="header-btn" onclick="window.location.href='../forms/qr-registration.php'">
+                        <i class="fas fa-qrcode"></i>
+                        QR Registration
+                    </button>
+                <?php endif; ?>
+                <button class="header-btn" onclick="showConfirmationModal()">
+                    <i class="fas fa-user-plus"></i>
+                    Register Donor
+                </button>
+            </div>
+        </div>
+
+        <div class="row g-0">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block sidebar">
                 <h4>Red Cross Staff</h4>
@@ -555,8 +688,62 @@ curl_close($ch);
         </div>
     </div>
 </div>
-            
+
+    <!-- Confirmation Modal -->
+    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 15px; border: none;">
+                <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
+                    <h5 class="modal-title" id="confirmationModalLabel">
+                        <i class="fas fa-user-plus me-2"></i>
+                        Register New Donor
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-4">
+                    <p class="mb-0" style="font-size: 1.1rem;">Are you sure you want to proceed to the donor registration form?</p>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger px-4" onclick="proceedToDonorForm()">Proceed</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Modal -->
+    <div class="modal" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="background: transparent; border: none; box-shadow: none;">
+                <div class="modal-body text-center">
+                    <div class="spinner-border text-danger" style="width: 3.5rem; height: 3.5rem;" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="text-white mt-3 mb-0">Please wait...</p>
+                </div>
+            </div>
+        </div>
+    </div>
     <script>
+        function showConfirmationModal() {
+            const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+            confirmationModal.show();
+        }
+
+        function proceedToDonorForm() {
+            // Hide confirmation modal
+            const confirmationModal = bootstrap.Modal.getInstance(document.getElementById('confirmationModal'));
+            confirmationModal.hide();
+
+            // Show loading modal
+            const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+            loadingModal.show();
+
+            // Redirect after a short delay to show loading animation
+            setTimeout(() => {
+                window.location.href = '../forms/donor-form-modal.php';
+            }, 800);
+        }
         document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('searchInput');
             const searchCategory = document.getElementById('searchCategory');
