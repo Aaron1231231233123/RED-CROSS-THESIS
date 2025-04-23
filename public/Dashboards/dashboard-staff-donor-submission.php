@@ -1233,7 +1233,7 @@ select.donor_form_input[disabled] {
             loadingModal.show();
             
             setTimeout(function() {
-                window.location.href = '../forms/donor-form-modal.php';
+                window.location.href = '../../src/views/forms/donor-form-modal.php';
             }, 800);
         }
     </script>

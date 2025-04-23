@@ -552,7 +552,7 @@ require '../../assets/php_func/user_roles_staff.php';
 
             // Redirect after a short delay to show loading animation
             setTimeout(() => {
-                window.location.href = '../forms/donor-form-modal.php';
+                window.location.href = '../../src/views/forms/donor-form-modal.php';
             }, 800);
         }
     </script>
