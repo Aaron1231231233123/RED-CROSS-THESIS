@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: red-cross-thesis
+    runtime: php
+    buildCommand: composer install  # Install Supabase PHP client
+    startCommand: php -S 0.0.0.0:8080
+    envVars:
+      - key: DB_HOST
+        value: db.nwakbxwglhxcpunrzstf.supabase.co
+      - key: DB_NAME
+        value: postgres
+      - key: DB_USER
+        value: postgres
+      - key: DB_PASSWORD
+        value: redcrossthesis123
+      - key: DB_PORT
+        value: 5432

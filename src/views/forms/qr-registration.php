@@ -1,6 +1,38 @@
 <?php
 session_start();
 require_once '../../../assets/conn/db_conn.php';
+
+// Create logs directory if it doesn't exist
+$logsDir = '../../../assets/logs';
+if (!file_exists($logsDir)) {
+    mkdir($logsDir, 0755, true);
+}
+
+// Define the CSV file path
+$csvFilePath = $logsDir . '/qr_code.csv';
+
+// Create CSV file with headers if it doesn't exist
+if (!file_exists($csvFilePath)) {
+    $file = fopen($csvFilePath, 'w');
+    fputcsv($file, ['reference_id', 'qr_code_image', 'date']);
+    fclose($file);
+}
+
+// Process QR code reference saving
+if(isset($_POST['action']) && $_POST['action'] == 'saveQRReference') {
+    $referenceId = $_POST['referenceId'];
+    $qrCodeImage = $_POST['qrCodeImage'];
+    $date = date('Y-m-d H:i:s');
+    
+    // Append to CSV file
+    $file = fopen($csvFilePath, 'a');
+    fputcsv($file, [$referenceId, $qrCodeImage, $date]);
+    fclose($file);
+    
+    echo json_encode(['success' => true]);
+    exit;
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -302,6 +334,9 @@ require_once '../../../assets/conn/db_conn.php';
                 <button class="generate-btn" onclick="generateNewQR()">
                     Generate New QR Code
                 </button>
+                <div id="error-message" style="color: var(--primary-color); margin-top: 10px; display: none;"></div>
+                <div id="success-message" style="color: green; margin-top: 10px; display: none;">QR Code generated successfully!</div>
+                <a id="download-link" href="#" style="display: none; margin-top: 15px; color: var(--primary-color); text-decoration: underline;">Download QR Code</a>
             </section>
 
             <section class="instructions-section">
@@ -309,9 +344,9 @@ require_once '../../../assets/conn/db_conn.php';
                 <ul class="steps-list">
                     <li>Open your phone's camera or QR scanner app</li>
                     <li>Point your camera at the QR code to scan</li>
-                    <li>Click the link that appears on your screen</li>
+                    <li>Will redirect to the registration form</li>
                     <li>Complete the registration form with accurate information</li>
-                    <li>Submit and wait for staff verification</li>
+                    <li>Submit and wait for your name to be called for verification</li>
                 </ul>
             </section>
         </main>
@@ -323,16 +358,93 @@ require_once '../../../assets/conn/db_conn.php';
     </div>
 
     <script>
+        /**
+         * Generates a new QR code for donor registration
+         * 
+         * Process:
+         * 1. Creates a unique ID for tracking
+         * 2. Generates a QR code using goQR.me API pointing to donor-form-modal.php
+         * 3. Saves the reference ID and QR code URL to a CSV file for logging
+         * 4. Displays the QR code and provides a download option
+         */
         function generateNewQR() {
             const button = document.querySelector('.generate-btn');
+            const qrPlaceholder = document.querySelector('.qr-placeholder');
+            const errorMessage = document.getElementById('error-message');
+            const successMessage = document.getElementById('success-message');
+            const downloadLink = document.getElementById('download-link');
+            
+            // Reset any previous state
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+            downloadLink.style.display = 'none';
             button.parentElement.classList.add('loading');
             
-            // Simulate API call delay (remove this when implementing actual API)
-            setTimeout(() => {
+            // Generate a unique identifier for this QR code
+            const uniqueId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+            
+            // Create registration URL - this should point to your registration form
+            const registrationUrl = window.location.origin + "/src/views/forms/donor-form-modal.php?ref=" + uniqueId;
+            
+            // Generate QR code using goQR.me API
+            const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=230x230&data=${encodeURIComponent(registrationUrl)}`;
+            
+            // Update the QR code image
+            const img = new Image();
+            img.alt = "Registration QR Code";
+            img.onload = function() {
+                qrPlaceholder.innerHTML = '';
+                qrPlaceholder.appendChild(img);
                 button.parentElement.classList.remove('loading');
-                // Here you'll implement the actual QR code generation
-                alert('QR Code generation will be implemented with the API');
-            }, 1500);
+                
+                // Show success message
+                successMessage.style.display = 'block';
+                
+                // Show download link
+                downloadLink.href = qrApiUrl;
+                downloadLink.download = `donor-registration-qr-${uniqueId}.png`;
+                downloadLink.textContent = "Download QR Code";
+                downloadLink.style.display = 'block';
+                
+                // Save the QR reference ID to the database
+                saveQRReference(uniqueId, qrApiUrl);
+            };
+            
+            img.onerror = function() {
+                button.parentElement.classList.remove('loading');
+                errorMessage.textContent = "Failed to generate QR code. Please try again.";
+                errorMessage.style.display = 'block';
+            };
+            
+            img.src = qrApiUrl;
+            
+            // If loading fails or takes too long
+            setTimeout(() => {
+                if (button.parentElement.classList.contains('loading')) {
+                    button.parentElement.classList.remove('loading');
+                    errorMessage.textContent = "QR code generation timed out. Please try again.";
+                    errorMessage.style.display = 'block';
+                }
+            }, 5000);
+        }
+        
+        function saveQRReference(referenceId, qrCodeImage) {
+            fetch(window.location.href, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=saveQRReference&referenceId=${referenceId}&qrCodeImage=${encodeURIComponent(qrCodeImage)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    console.error('Error saving QR reference:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
         }
     </script>
 </body>
