@@ -384,7 +384,7 @@ if(isset($_POST['action']) && $_POST['action'] == 'saveQRReference') {
             const uniqueId = Date.now().toString(36) + Math.random().toString(36).substring(2);
             
             // Create registration URL - this should point to your registration form
-            const registrationUrl = window.location.origin + "/REDCROSS/src/views/forms/donor-form-modal.php";
+            const registrationUrl = window.location.origin + "/redcross/src/views/forms/donor-form-modal.php?ref=" + uniqueId;
             
             // Generate QR code using goQR.me API
             const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=230x230&data=${encodeURIComponent(registrationUrl)}`;
