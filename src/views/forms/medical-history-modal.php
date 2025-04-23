@@ -425,7 +425,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
                     } else if ($_SESSION['role_id'] === 3) { // Staff
                         // Staff redirection to staff dashboard
-                        header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
+                        header('Location: ../../../public/Dashboards/dashboard-staff-main.php');
                     }
                 } else {
                     // Default redirection for non-logged in users to donor form modal
