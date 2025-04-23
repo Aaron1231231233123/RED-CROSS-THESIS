@@ -91,7 +91,7 @@ if ($_SESSION['role_id'] == 3) {
     curl_close($ch);
     
     // Log the response for debugging
-    error_log("Physician role check API response: " . $response);
+    error_log("Role check API response: " . $response);
     error_log("HTTP code: " . $http_code);
     
     if ($http_code === 200) {
@@ -99,7 +99,7 @@ if ($_SESSION['role_id'] == 3) {
         if (is_array($data) && !empty($data)) {
             $user_staff_role = isset($data[0]['user_staff_roles']) ? strtolower($data[0]['user_staff_roles']) : '';
             
-            // Check for specific roles (case-insensitive)
+            // Check for roles (case-insensitive)
             $is_interviewer = ($user_staff_role === 'interviewer');
             $is_physician = ($user_staff_role === 'physician');
             
@@ -123,10 +123,8 @@ if ($_SESSION['role_id'] == 1) {
         error_log("Set donor_id to 46 for admin role");
     }
 } elseif ($_SESSION['role_id'] == 3) {
-    // Staff role - check for required session variables (except for physicians using POST/GET)
-    if (!isset($_SESSION['donor_id']) && 
-        !($is_physician && (isset($_POST['donor_id']) || isset($_GET['donor_id'])))) {
-        
+    // Staff role - check for required session variables
+    if (!isset($_SESSION['donor_id'])) {
         // Check POST and GET for donor_id before redirecting
         if (isset($_POST['donor_id'])) {
             $_SESSION['donor_id'] = $_POST['donor_id'];
@@ -147,19 +145,15 @@ if ($_SESSION['role_id'] == 1) {
     exit();
 }
 
-// Get the donor_id from session or POST for physicians
-// $donor_id = isset($_POST['donor_id']) && $is_physician ? $_POST['donor_id'] : $_SESSION['donor_id'];
-// error_log("Processing donor_id: $donor_id");
-
 // Get the donor_id - more robust approach
-if (isset($_POST['donor_id']) && $is_physician) {
+if (isset($_POST['donor_id'])) {
     $donor_id = $_POST['donor_id'];
     $_SESSION['donor_id'] = $donor_id; // Set it in session for consistency
-    error_log("Using donor_id from POST: $donor_id (physician)");
-} elseif (isset($_GET['donor_id']) && $is_physician) {
+    error_log("Using donor_id from POST: $donor_id");
+} elseif (isset($_GET['donor_id'])) {
     $donor_id = $_GET['donor_id'];
     $_SESSION['donor_id'] = $donor_id; // Set it in session for consistency
-    error_log("Using donor_id from GET: $donor_id (physician)");
+    error_log("Using donor_id from GET: $donor_id");
 } elseif (isset($_SESSION['donor_id'])) {
     $donor_id = $_SESSION['donor_id'];
     error_log("Using donor_id from SESSION: $donor_id");
@@ -208,133 +202,75 @@ if (isset($_POST['donor_id']) && $is_physician) {
 error_log("Final donor_id being used: $donor_id");
 
 // Variables for role-based access
-$body_wt_data = null; // For storing body weight data for physicians
+$body_wt_data = null;
+$donation_type = '';
+$screening_data_for_physician = null;
 
-if ($_SESSION['role_id'] == 3) {
-    // Get the user's staff role from the database
-    $user_id = $_SESSION['user_id'];
-    
-    // Initialize cURL
-    $ch = curl_init(SUPABASE_URL . '/rest/v1/user_roles?select=user_staff_roles&user_id=eq.' . $user_id);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY
-    ]);
-
-    $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    error_log("Staff role check response: " . $response);
-    error_log("HTTP code: " . $http_code);
-
-    if ($http_code === 200) {
-        $staff_data = json_decode($response, true);
-        if (is_array($staff_data) && !empty($staff_data)) {
-            $user_staff_roles = strtolower($staff_data[0]['user_staff_roles']);
-            // Check for 'interviewer' role (lowercase)
-            $is_interviewer = ($user_staff_roles === 'interviewer');
-            // Check for 'physician' role (lowercase)
-            $is_physician = ($user_staff_roles === 'physician');
+if ($_SESSION['role_id'] == 3 && $is_physician) {
+    // Special handling for physicians - Get submitted data to display in read-only mode
+    // If we have a screening_id, use it to get the data
+    if (isset($screening_id) && !empty($screening_id)) {
+        error_log("Physician: looking up submitted data for screening_id: $screening_id");
+        
+        // Get screening data for this screening_id
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=*&screening_id=eq.' . $screening_id);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json'
+        ]);
+        
+        $response = curl_exec($ch);
+        curl_close($ch);
+        
+        $screening_data = json_decode($response, true);
+        
+        // Extract data if it exists
+        if (is_array($screening_data) && !empty($screening_data)) {
+            $screening_data_for_physician = $screening_data[0];
+            $donation_type = isset($screening_data_for_physician['donation_type']) ? $screening_data_for_physician['donation_type'] : '';
             
-            error_log("User staff role: " . $staff_data[0]['user_staff_roles']);
-            error_log("Is interviewer: " . ($is_interviewer ? 'true' : 'false'));
-            error_log("Is physician: " . ($is_physician ? 'true' : 'false'));
-            
-            // Special handling for physicians - Get body weight data from screening record
-            if ($is_physician) {
-                $found_body_wt = false;
-                $donation_type = ''; // Initialize donation type
-                
-                // If we have a screening_id, use it to get the body weight and donation type
-                if (isset($screening_id) && !empty($screening_id)) {
-                    error_log("Physician: looking up body weight and donation type for screening_id: $screening_id");
-                    
-                    // Get screening data for this screening_id
-                    $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=*&screening_id=eq.' . $screening_id);
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                        'apikey: ' . SUPABASE_API_KEY,
-                        'Authorization: Bearer ' . SUPABASE_API_KEY,
-                        'Content-Type: application/json'
-                    ]);
-                    
-                    $response = curl_exec($ch);
-                    curl_close($ch);
-                    
-                    $screening_data = json_decode($response, true);
-                    
-                    // Extract Body WT and donation_type if data exists
-                    if (is_array($screening_data) && !empty($screening_data)) {
-                        $screening_data = $screening_data[0];
-                        
-                        if (isset($screening_data['body_weight'])) {
-                            $body_wt_data = $screening_data['body_weight'];
-                            $found_body_wt = true;
-                            
-                            // Log for debugging
-                            error_log("Physician viewing screening form. Found Body WT from screening_id: " . $body_wt_data);
-                        }
-                        
-                        // Get donation_type
-                        if (isset($screening_data['donation_type'])) {
-                            $donation_type = $screening_data['donation_type'];
-                            error_log("Found donation type from screening_id: " . $donation_type);
-                        }
-                    }
-                }
-                
-                // If we couldn't find body weight from screening_id, try by donor_id
-                if (!$found_body_wt && isset($donor_id) && !empty($donor_id)) {
-                    error_log("Physician: looking up body weight and donation_type for donor_id: $donor_id (fallback)");
-                    
-                    // Get the most recent screening for this donor
-                    $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=*&donor_form_id=eq.' . $donor_id . '&order=created_at.desc&limit=1');
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                        'apikey: ' . SUPABASE_API_KEY,
-                        'Authorization: Bearer ' . SUPABASE_API_KEY,
-                        'Content-Type: application/json'
-                    ]);
-                    
-                    $response = curl_exec($ch);
-                    curl_close($ch);
-                    
-                    $screening_data = json_decode($response, true);
-                    
-                    // Extract Body WT and donation_type if data exists
-                    if (is_array($screening_data) && !empty($screening_data)) {
-                        $screening_data = $screening_data[0];
-                        
-                        if (isset($screening_data['body_weight'])) {
-                            $body_wt_data = $screening_data['body_weight'];
-                            $found_body_wt = true;
-                            
-                            // Set screening_id if we found one
-                            if (isset($screening_data['screening_id'])) {
-                                $screening_id = $screening_data['screening_id'];
-                                $_SESSION['screening_id'] = $screening_id;
-                                error_log("Found screening_id from donor lookup: $screening_id");
-                            }
-                            
-                            // Log for debugging
-                            error_log("Physician viewing screening form. Found Body WT from donor_id fallback: " . $body_wt_data);
-                        }
-                        
-                        // Get donation_type
-                        if (isset($screening_data['donation_type'])) {
-                            $donation_type = $screening_data['donation_type'];
-                            error_log("Found donation type from donor_id fallback: " . $donation_type);
-                        }
-                    }
-                }
-                
-                if (!$found_body_wt) {
-                    error_log("WARNING: Could not find body weight data for physician view");
-                }
-            }
+            error_log("Found screening data for physician view: " . print_r($screening_data_for_physician, true));
         }
+    }
+    
+    // If we couldn't find data from screening_id, try by donor_id
+    if (!$screening_data_for_physician && isset($donor_id) && !empty($donor_id)) {
+        error_log("Physician: looking up submitted data for donor_id: $donor_id (fallback)");
+        
+        // Get the most recent screening for this donor
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=*&donor_form_id=eq.' . $donor_id . '&order=created_at.desc&limit=1');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json'
+        ]);
+        
+        $response = curl_exec($ch);
+        curl_close($ch);
+        
+        $screening_data = json_decode($response, true);
+        
+        // Extract data if it exists
+        if (is_array($screening_data) && !empty($screening_data)) {
+            $screening_data_for_physician = $screening_data[0];
+            $donation_type = isset($screening_data_for_physician['donation_type']) ? $screening_data_for_physician['donation_type'] : '';
+            
+            // Set screening_id if we found one
+            if (isset($screening_data_for_physician['screening_id'])) {
+                $screening_id = $screening_data_for_physician['screening_id'];
+                $_SESSION['screening_id'] = $screening_id;
+                error_log("Found screening_id from donor lookup: $screening_id");
+            }
+            
+            error_log("Found screening data for physician view from donor_id fallback: " . print_r($screening_data_for_physician, true));
+        }
+    }
+    
+    if (!$screening_data_for_physician) {
+        error_log("WARNING: Could not find screening data for physician view");
     }
 }
 
@@ -551,7 +487,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         error_log("Original donation type from form: " . $_POST['donation-type']);
         error_log("Mapped donation type for database: " . mapDonationType($_POST['donation-type']));
         
-        // Prepare the base data for insertion
+        // Prepare the base data for insertion - all fields for all users
         $screening_data = [
             'donor_form_id' => $_SESSION['donor_id'],
             'medical_history_id' => $medical_history_id,
@@ -578,31 +514,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'units_needed' => ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') && !empty($_POST['no-units']) ? intval($_POST['no-units']) : 0
         ];
 
-        // For interviewers, only include Body WT
-        // For all other roles, include all fields
-        if (!$is_interviewer) {
-            $screening_data = array_merge($screening_data, [
-                'specific_gravity' => $_POST['sp-gr'] ?: "",
-                'blood_type' => $_POST['blood-type'],
-                'donation_type' => mapDonationType($_POST['donation-type']),
-                'has_previous_donation' => isset($_POST['history']) && $_POST['history'] === 'yes',
-                'red_cross_donations' => isset($_POST['history']) && $_POST['history'] === 'yes' ? intval($_POST['red-cross']) : 0,
-                'hospital_donations' => isset($_POST['history']) && $_POST['history'] === 'yes' ? intval($_POST['hospital-history']) : 0,
-                'last_rc_donation_place' => isset($_POST['history']) && $_POST['history'] === 'yes' ? ($_POST['last-rc-donation-place'] ?: "") : "",
-                'last_hosp_donation_place' => isset($_POST['history']) && $_POST['history'] === 'yes' ? ($_POST['last-hosp-donation-place'] ?: "") : "",
-                'last_rc_donation_date' => isset($_POST['history']) && $_POST['history'] === 'yes' && !empty($_POST['last-rc-donation-date']) ? $_POST['last-rc-donation-date'] : '0001-01-01',
-                'last_hosp_donation_date' => isset($_POST['history']) && $_POST['history'] === 'yes' && !empty($_POST['last-hosp-donation-date']) ? $_POST['last-hosp-donation-date'] : '0001-01-01',
-                // Check if donation type starts with 'mobile-' for any mobile type
-                'mobile_location' => isset($_POST['mobile-place']) && strpos($_POST['donation-type'], 'mobile') === 0 ? ($_POST['mobile-place'] ?: "") : "",
-                'mobile_organizer' => isset($_POST['mobile-organizer']) && strpos($_POST['donation-type'], 'mobile') === 0 ? ($_POST['mobile-organizer'] ?: "") : "",
-                'patient_name' => isset($_POST['patient-name']) && ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') ? ($_POST['patient-name'] ?: "") : "",
-                'hospital' => isset($_POST['hospital']) && ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') ? ($_POST['hospital'] ?: "") : "",
-                'patient_blood_type' => isset($_POST['blood-type-patient']) && ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') ? ($_POST['blood-type-patient'] ?: "") : "",
-                'component_type' => isset($_POST['wb-component']) && ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') ? ($_POST['wb-component'] ?: "") : "",
-                'units_needed' => isset($_POST['no-units']) && !empty($_POST['no-units']) && ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') ? intval($_POST['no-units']) : 0
-            ]);
-        }
-
         // Debug log the prepared data
         error_log("Prepared screening data: " . print_r($screening_data, true));
         error_log("Donation type submitted: " . $_POST['donation-type']);
@@ -618,8 +529,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $existing_screening_id = $screening_id;
             $should_update = true;
             error_log("Will update existing screening record with ID: $existing_screening_id");
-        } elseif (isset($donor_id) && !empty($donor_id) && $is_physician) {
-            // For physicians, check if there's an existing record for this donor
+        } elseif (isset($donor_id) && !empty($donor_id)) {
+            // Check if there's an existing record for this donor
             $ch_check = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=screening_id&donor_form_id=eq.' . $donor_id . '&order=created_at.desc&limit=1');
             curl_setopt($ch_check, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch_check, CURLOPT_HTTPHEADER, [
@@ -701,12 +612,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     header('Location: physical-examination-form.php');
                     exit();
                 } else if ($_SESSION['role_id'] == 3 && $is_interviewer) {
-                    // Interviewer (role_id 3 + user_staff_roles=Interviewer) - Also redirect to physical examination
-                    error_log("Interviewer role: Redirecting to physical examination form");
-                    header('Location: physical-examination-form.php');
+                    // Interviewer (role_id 3) - Redirect to dashboard
+                    error_log("Interviewer role: Redirecting to staff donor submission dashboard");
+                    header('Location: ../../../public/Dashboards/dashboard-staff-donor-submission.php');
                     exit();
                 } else if ($_SESSION['role_id'] == 3 && $is_physician) {
-                    // Physician (role_id 3 + user_staff_roles=physician) - Redirect to physical examination
+                    // Physician (role_id 3) - Redirect to physical examination form
                     error_log("Physician role: Redirecting to physical examination form");
                     header('Location: physical-examination-form.php');
                     exit();
@@ -783,12 +694,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         header('Location: physical-examination-form.php');
                         exit();
                     } else if ($_SESSION['role_id'] == 3 && $is_interviewer) {
-                        // Interviewer (role_id 3 + user_staff_roles=Interviewer) - Also redirect to physical examination
-                        error_log("Interviewer role: Redirecting to physical examination form");
-                        header('Location: physical-examination-form.php');
+                        // Interviewer (role_id 3) - Redirect to dashboard
+                        error_log("Interviewer role: Redirecting to staff donor submission dashboard");
+                        header('Location: ../../../public/Dashboards/dashboard-staff-donor-submission.php');
                         exit();
                     } else if ($_SESSION['role_id'] == 3 && $is_physician) {
-                        // Physician (role_id 3 + user_staff_roles=physician) - Redirect to physical examination
+                        // Physician (role_id 3) - Redirect to physical examination form
                         error_log("Physician role: Redirecting to physical examination form");
                         header('Location: physical-examination-form.php');
                         exit();
@@ -797,8 +708,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Content-Type: application/json');
                 echo json_encode([
                     'success' => true,
-                            'screening_id' => $response_data[0]['screening_id'],
-                            'message' => 'Screening form submitted successfully'
+                    'screening_id' => $response_data[0]['screening_id'],
+                    'message' => 'Screening form submitted successfully'
                 ]);
                 exit();
                     }
@@ -1377,11 +1288,10 @@ select:focus {
             
             <?php if ($is_physician): ?>
             <!-- Special message for physicians -->
-            <div class="physician-notice" style="background-color: #d1ecf1; padding: 15px; margin-bottom: 20px; border-radius: 5px; border-left: 5px solid #0c5460;">
-                <h4 style="color: #0c5460; margin-top: 0;">Physician View</h4>
-                <p style="margin-bottom: 5px;">You are viewing this form as a physician. The Body Weight data shown below was submitted by the interviewer and is read-only.</p>
-                <p style="margin-bottom: 5px;"><strong>Important:</strong> You must fill out all other required fields before proceeding.</p>
-                <p style="margin-bottom: 0;">After completing the form, click the "Submit and Proceed" button to continue to the physical examination form.</p>
+            <div class="physician-notice" style="background-color: #e8f4f8; padding: 15px; margin-bottom: 20px; border-radius: 5px; border-left: 5px solid #242b31;">
+                <h4 style="color: #242b31; margin-top: 0;">Physician View</h4>
+                <p style="margin-bottom: 5px;">You are viewing this form as a physician. All fields are read-only since this data was submitted by the interviewer.</p>
+                <p style="margin-bottom: 0;">After reviewing the form, click the "Proceed to Physical Examination" button to continue.</p>
             </div>
             <?php endif; ?>
             
@@ -1393,29 +1303,45 @@ select:focus {
                 </tr>
                 <tr>
                     <td>
-                        <?php if ($is_physician && $body_wt_data !== null): ?>
+                        <?php if ($is_physician && $screening_data_for_physician): ?>
                             <!-- For physicians: Display the body weight in read-only format -->
-                            <div style="font-weight: bold; font-size: 1.2em; color: #721c24; background-color: #f8d7da; padding: 8px; border-radius: 4px;">
-                                <?php echo htmlspecialchars($body_wt_data); ?>
+                            <div style="font-weight: bold; font-size: 1.2em; color: #242b31; padding: 8px; border-radius: 4px; background-color: #f5f5f5; border-left: 3px solid #a82020;">
+                                <?php echo htmlspecialchars($screening_data_for_physician['body_weight'] ?? ''); ?>
                             </div>
-                            <input type="hidden" name="body-wt" value="<?php echo htmlspecialchars($body_wt_data); ?>">
+                            <input type="hidden" name="body-wt" value="<?php echo htmlspecialchars($screening_data_for_physician['body_weight'] ?? ''); ?>">
                         <?php else: ?>
-                            <!-- Regular editable field for others -->
+                            <!-- Regular editable field for interviewers -->
                             <input type="number" step="0.01" name="body-wt" value="<?php echo isset($_POST['body-wt']) ? htmlspecialchars($_POST['body-wt']) : ''; ?>" required>
                         <?php endif; ?>
                     </td>
-                    <td><input type="text" name="sp-gr" value="<?php echo isset($_POST['sp-gr']) ? htmlspecialchars($_POST['sp-gr']) : ''; ?>" required></td>
                     <td>
-                        <select name="blood-type" required>
-                            <option value="" disabled <?php echo !isset($_POST['blood-type']) ? 'selected' : ''; ?>>Select Blood Type</option>
-                            <?php
-                            $bloodTypes = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
-                            foreach ($bloodTypes as $type) {
-                                $selected = (isset($_POST['blood-type']) && $_POST['blood-type'] === $type) ? 'selected' : '';
-                                echo "<option value=\"$type\" $selected>$type</option>";
-                            }
-                            ?>
-                        </select>
+                        <?php if ($is_physician && $screening_data_for_physician): ?>
+                            <div style="font-weight: bold; font-size: 1.2em; color: #242b31; padding: 8px; border-radius: 4px; background-color: #f5f5f5; border-left: 3px solid #a82020;">
+                                <?php echo htmlspecialchars($screening_data_for_physician['specific_gravity'] ?? ''); ?>
+                            </div>
+                            <input type="hidden" name="sp-gr" value="<?php echo htmlspecialchars($screening_data_for_physician['specific_gravity'] ?? ''); ?>">
+                        <?php else: ?>
+                            <input type="text" name="sp-gr" value="<?php echo isset($_POST['sp-gr']) ? htmlspecialchars($_POST['sp-gr']) : ''; ?>" required>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if ($is_physician && $screening_data_for_physician): ?>
+                            <div style="font-weight: bold; font-size: 1.2em; color: #242b31; padding: 8px; border-radius: 4px; background-color: #f5f5f5; border-left: 3px solid #a82020;">
+                                <?php echo htmlspecialchars($screening_data_for_physician['blood_type'] ?? ''); ?>
+                            </div>
+                            <input type="hidden" name="blood-type" value="<?php echo htmlspecialchars($screening_data_for_physician['blood_type'] ?? ''); ?>">
+                        <?php else: ?>
+                            <select name="blood-type" required>
+                                <option value="" disabled <?php echo !isset($_POST['blood-type']) ? 'selected' : ''; ?>>Select Blood Type</option>
+                                <?php
+                                $bloodTypes = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+                                foreach ($bloodTypes as $type) {
+                                    $selected = (isset($_POST['blood-type']) && $_POST['blood-type'] === $type) ? 'selected' : '';
+                                    echo "<option value=\"$type\" $selected>$type</option>";
+                                }
+                                ?>
+                            </select>
+                        <?php endif; ?>
                     </td>
                 </tr>
             </table>
@@ -1423,65 +1349,103 @@ select:focus {
             <div class="screening-form-donation">
                 <p>TYPE OF DONATION (Donor's Choice):</p>
                 
-                <!-- IN-HOUSE Category -->
-                <div class="donation-category">
-                    <div class="category-title">IN-HOUSE</div>
-                <div class="donation-options">
-                    <label class="donation-option">
-                            <input type="radio" name="donation-type" value="walk-in" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'walk-in') || (isset($donation_type) && $donation_type === 'walk-in') ? 'checked' : (isset($_SESSION['role_id']) && $_SESSION['role_id'] === 1 && empty($donation_type) ? 'checked' : ''); ?> required> 
-                        <span class="checkmark"></span>
-                        WALK-IN/VOLUNTARY
-                    </label>
-                    <label class="donation-option">
-                            <input type="radio" name="donation-type" value="replacement" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'replacement') || (isset($donation_type) && $donation_type === 'replacement') ? 'checked' : ''; ?> required> 
-                        <span class="checkmark"></span>
-                        REPLACEMENT
-                    </label>
-                    <label class="donation-option">
-                            <input type="radio" name="donation-type" value="patient-directed" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'patient-directed') || (isset($donation_type) && $donation_type === 'patient-directed') ? 'checked' : ''; ?> required> 
-                        <span class="checkmark"></span>
-                        PATIENT-DIRECTED
-                    </label>
+                <?php if ($is_physician && $screening_data_for_physician): ?>
+                    <!-- Read-only display for physicians -->
+                    <div style="font-weight: bold; font-size: 1.2em; color: #242b31; padding: 15px; border-radius: 4px; background-color: #f5f5f5; margin-bottom: 20px; border-left: 3px solid #a82020;">
+                        <?php 
+                        $displayDonationType = htmlspecialchars($screening_data_for_physician['donation_type'] ?? ''); 
+                        echo strtoupper(str_replace('-', ' ', $displayDonationType));
+                        ?>
                     </div>
-                </div>
-                
-                <!-- Mobile Blood Donation Category -->
-                <div class="donation-category">
-                    <div class="category-title">Mobile Blood Donation</div>
-                    <div class="donation-options">
-                    <label class="donation-option">
-                            <input type="radio" name="donation-type" value="mobile-walk-in" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'mobile-walk-in') || (isset($donation_type) && $donation_type === 'mobile-walk-in') ? 'checked' : ''; ?> required> 
-                        <span class="checkmark"></span>
-                            WALK-IN/VOLUNTARY
-                        </label>
-                        <label class="donation-option">
-                            <input type="radio" name="donation-type" value="mobile-replacement" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'mobile-replacement') || (isset($donation_type) && $donation_type === 'mobile-replacement') ? 'checked' : ''; ?> required> 
-                            <span class="checkmark"></span>
-                            REPLACEMENT
-                        </label>
-                        <label class="donation-option">
-                            <input type="radio" name="donation-type" value="mobile-patient-directed" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'mobile-patient-directed') || (isset($donation_type) && $donation_type === 'mobile-patient-directed') ? 'checked' : ''; ?> required> 
-                            <span class="checkmark"></span>
-                            PATIENT-DIRECTED
-                    </label>
+                    <input type="hidden" name="donation-type" value="<?php echo htmlspecialchars($screening_data_for_physician['donation_type'] ?? ''); ?>">
+                    
+                    <?php if (strpos($screening_data_for_physician['donation_type'] ?? '', 'mobile') === 0): ?>
+                        <div style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #e9ecef;">
+                            <p><strong>Mobile Location:</strong> <?php echo htmlspecialchars($screening_data_for_physician['mobile_location'] ?? ''); ?></p>
+                            <p><strong>Mobile Organizer:</strong> <?php echo htmlspecialchars($screening_data_for_physician['mobile_organizer'] ?? ''); ?></p>
+                            
+                            <input type="hidden" name="mobile-place" value="<?php echo htmlspecialchars($screening_data_for_physician['mobile_location'] ?? ''); ?>">
+                            <input type="hidden" name="mobile-organizer" value="<?php echo htmlspecialchars($screening_data_for_physician['mobile_organizer'] ?? ''); ?>">
+                        </div>
+                    <?php endif; ?>
+                    
+                    <?php if ($screening_data_for_physician['donation_type'] === 'patient-directed' || $screening_data_for_physician['donation_type'] === 'mobile-patient-directed'): ?>
+                        <div style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #e9ecef;">
+                            <p><strong>Patient Name:</strong> <?php echo htmlspecialchars($screening_data_for_physician['patient_name'] ?? ''); ?></p>
+                            <p><strong>Hospital:</strong> <?php echo htmlspecialchars($screening_data_for_physician['hospital'] ?? ''); ?></p>
+                            <p><strong>Patient Blood Type:</strong> <?php echo htmlspecialchars($screening_data_for_physician['patient_blood_type'] ?? ''); ?></p>
+                            <p><strong>Component Type:</strong> <?php echo htmlspecialchars($screening_data_for_physician['component_type'] ?? ''); ?></p>
+                            <p><strong>Units Needed:</strong> <?php echo htmlspecialchars($screening_data_for_physician['units_needed'] ?? ''); ?></p>
+                            
+                            <input type="hidden" name="patient-name" value="<?php echo htmlspecialchars($screening_data_for_physician['patient_name'] ?? ''); ?>">
+                            <input type="hidden" name="hospital" value="<?php echo htmlspecialchars($screening_data_for_physician['hospital'] ?? ''); ?>">
+                            <input type="hidden" name="blood-type-patient" value="<?php echo htmlspecialchars($screening_data_for_physician['patient_blood_type'] ?? ''); ?>">
+                            <input type="hidden" name="wb-component" value="<?php echo htmlspecialchars($screening_data_for_physician['component_type'] ?? ''); ?>">
+                            <input type="hidden" name="no-units" value="<?php echo htmlspecialchars($screening_data_for_physician['units_needed'] ?? ''); ?>">
+                        </div>
+                    <?php endif; ?>
+                <?php else: ?>
+                    <!-- Regular editable options for interviewers -->
+                    <!-- IN-HOUSE Category -->
+                    <div class="donation-category">
+                        <div class="category-title">IN-HOUSE</div>
+                        <div class="donation-options">
+                            <label class="donation-option">
+                                <input type="radio" name="donation-type" value="walk-in" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'walk-in') || (isset($donation_type) && $donation_type === 'walk-in') ? 'checked' : (isset($_SESSION['role_id']) && $_SESSION['role_id'] === 1 && empty($donation_type) ? 'checked' : ''); ?> required> 
+                                <span class="checkmark"></span>
+                                WALK-IN/VOLUNTARY
+                            </label>
+                            <label class="donation-option">
+                                <input type="radio" name="donation-type" value="replacement" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'replacement') || (isset($donation_type) && $donation_type === 'replacement') ? 'checked' : ''; ?> required> 
+                                <span class="checkmark"></span>
+                                REPLACEMENT
+                            </label>
+                            <label class="donation-option">
+                                <input type="radio" name="donation-type" value="patient-directed" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'patient-directed') || (isset($donation_type) && $donation_type === 'patient-directed') ? 'checked' : ''; ?> required> 
+                                <span class="checkmark"></span>
+                                PATIENT-DIRECTED
+                            </label>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="mobile-donation-section" id="mobileDonationSection" style="display: none;">
-                    <div class="mobile-donation-fields">
-                        <label>
-                            PLACE: 
-                            <input type="text" name="mobile-place" value="<?php echo isset($_POST['mobile-place']) ? htmlspecialchars($_POST['mobile-place']) : ''; ?>">
-                        </label>
-                        <label>
-                            ORGANIZER: 
-                            <input type="text" name="mobile-organizer" value="<?php echo isset($_POST['mobile-organizer']) ? htmlspecialchars($_POST['mobile-organizer']) : ''; ?>">
-                        </label>
+                    
+                    <!-- Mobile Blood Donation Category -->
+                    <div class="donation-category">
+                        <div class="category-title">Mobile Blood Donation</div>
+                        <div class="donation-options">
+                            <label class="donation-option">
+                                <input type="radio" name="donation-type" value="mobile-walk-in" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'mobile-walk-in') || (isset($donation_type) && $donation_type === 'mobile-walk-in') ? 'checked' : ''; ?> required> 
+                                <span class="checkmark"></span>
+                                WALK-IN/VOLUNTARY
+                            </label>
+                            <label class="donation-option">
+                                <input type="radio" name="donation-type" value="mobile-replacement" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'mobile-replacement') || (isset($donation_type) && $donation_type === 'mobile-replacement') ? 'checked' : ''; ?> required> 
+                                <span class="checkmark"></span>
+                                REPLACEMENT
+                            </label>
+                            <label class="donation-option">
+                                <input type="radio" name="donation-type" value="mobile-patient-directed" <?php echo (isset($_POST['donation-type']) && $_POST['donation-type'] === 'mobile-patient-directed') || (isset($donation_type) && $donation_type === 'mobile-patient-directed') ? 'checked' : ''; ?> required> 
+                                <span class="checkmark"></span>
+                                PATIENT-DIRECTED
+                            </label>
+                        </div>
                     </div>
-                </div>
+                    
+                    <div class="mobile-donation-section" id="mobileDonationSection" style="display: none;">
+                        <div class="mobile-donation-fields">
+                            <label>
+                                PLACE: 
+                                <input type="text" name="mobile-place" value="<?php echo isset($_POST['mobile-place']) ? htmlspecialchars($_POST['mobile-place']) : ''; ?>">
+                            </label>
+                            <label>
+                                ORGANIZER: 
+                                <input type="text" name="mobile-organizer" value="<?php echo isset($_POST['mobile-organizer']) ? htmlspecialchars($_POST['mobile-organizer']) : ''; ?>">
+                            </label>
+                        </div>
+                    </div>
+                <?php endif; ?>
             </div>
             
-
+            <?php if (!$is_physician): ?>
             <table class="screening-form-patient" id="patientDetailsTable" style="display: none;">
                 <tr>
                     <th>Patient Name</th>
@@ -1491,8 +1455,8 @@ select:focus {
                     <th>No. of units</th>
                 </tr>
                 <tr>
-                    <td><input type="text" name="patient-name" value="<?php echo isset($_POST['patient-name']) ? htmlspecialchars($_POST['patient-name']) : ''; ?>" <?php echo $is_physician ? 'readonly' : ''; ?>></td>
-                    <td><input type="text" name="hospital" value="<?php echo isset($_POST['hospital']) ? htmlspecialchars($_POST['hospital']) : ''; ?>" <?php echo $is_physician ? 'readonly' : ''; ?>></td>
+                    <td><input type="text" name="patient-name" value="<?php echo isset($_POST['patient-name']) ? htmlspecialchars($_POST['patient-name']) : ''; ?>"></td>
+                    <td><input type="text" name="hospital" value="<?php echo isset($_POST['hospital']) ? htmlspecialchars($_POST['hospital']) : ''; ?>"></td>
                     <td>
                         <select name="blood-type-patient">
                             <option value="" disabled <?php echo !isset($_POST['blood-type-patient']) ? 'selected' : ''; ?>>Select Blood Type</option>
@@ -1508,35 +1472,91 @@ select:focus {
                     <td><input type="number" name="no-units" value="<?php echo isset($_POST['no-units']) ? htmlspecialchars($_POST['no-units']) : ''; ?>"></td>
                 </tr>
             </table>
+            <?php endif; ?>
 
             <div class="screening-form-history">
                 <p>History of previous donation? (Donor's Opinion)</p>
-                <label><input type="radio" name="history" value="yes" required> YES</label>
-                <label><input type="radio" name="history" value="no" required> NO</label>
+                <?php if ($is_physician && $screening_data_for_physician): ?>
+                    <div style="font-weight: bold; font-size: 1.2em; color: #242b31; padding: 8px; border-radius: 4px; background-color: #f5f5f5; margin-top: 10px; border-left: 3px solid #a82020;">
+                        <?php echo $screening_data_for_physician['has_previous_donation'] ? 'YES' : 'NO'; ?>
+                    </div>
+                    <input type="hidden" name="history" value="<?php echo $screening_data_for_physician['has_previous_donation'] ? 'yes' : 'no'; ?>">
+                <?php else: ?>
+                    <label><input type="radio" name="history" value="yes" required> YES</label>
+                    <label><input type="radio" name="history" value="no" required> NO</label>
+                <?php endif; ?>
             </div>
 
-            <table class="screening-form-history-table">
-                <tr>
-                    <th></th>
-                    <th>Red Cross</th>
-                    <th>Hospital</th>
-                </tr>
-                <tr>
-                    <th>No. of times</th>
-                    <td><input type="number" name="red-cross" min="0" value="<?php echo isset($_POST['red-cross']) ? htmlspecialchars($_POST['red-cross']) : '0'; ?>"></td>
-                    <td><input type="number" name="hospital-history" min="0" value="<?php echo isset($_POST['hospital-history']) ? htmlspecialchars($_POST['hospital-history']) : '0'; ?>"></td>
-                </tr>
-                <tr>
-                    <th>Date of last donation</th>
-                    <td><input type="date" name="last-rc-donation-date" value="<?php echo isset($_POST['last-rc-donation-date']) ? htmlspecialchars($_POST['last-rc-donation-date']) : ''; ?>"></td>
-                    <td><input type="date" name="last-hosp-donation-date" value="<?php echo isset($_POST['last-hosp-donation-date']) ? htmlspecialchars($_POST['last-hosp-donation-date']) : ''; ?>"></td>
-                </tr>
-                <tr>
-                    <th>Place of last donation</th>
-                    <td><input type="text" name="last-rc-donation-place" value="<?php echo isset($_POST['last-rc-donation-place']) ? htmlspecialchars($_POST['last-rc-donation-place']) : ''; ?>"></td>
-                    <td><input type="text" name="last-hosp-donation-place" value="<?php echo isset($_POST['last-hosp-donation-place']) ? htmlspecialchars($_POST['last-hosp-donation-place']) : ''; ?>"></td>
-                </tr>
-            </table>
+            <?php if ($is_physician && $screening_data_for_physician): ?>
+                <!-- Read-only history display for physicians -->
+                <div style="margin-top: 15px; padding: 15px; background-color: #f8f9fa; border-radius: 4px; border: 1px solid #e9ecef;">
+                    <h3 style="margin-top: 0; color: #242b31; border-bottom: 2px solid #a82020; padding-bottom: 8px;">Donation History</h3>
+                    
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                        <tr>
+                            <th style="padding: 8px; background-color: #242b31; color: white; text-align: left; border: 1px solid #ddd;"></th>
+                            <th style="padding: 8px; background-color: #a82020; color: white; text-align: center; border: 1px solid #ddd;">Red Cross</th>
+                            <th style="padding: 8px; background-color: #a82020; color: white; text-align: center; border: 1px solid #ddd;">Hospital</th>
+                        </tr>
+                        <tr>
+                            <th style="padding: 8px; text-align: left; border: 1px solid #ddd; background-color: #f5f5f5;">No. of times</th>
+                            <td style="padding: 8px; text-align: center; border: 1px solid #ddd;"><?php echo htmlspecialchars($screening_data_for_physician['red_cross_donations'] ?? '0'); ?></td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid #ddd;"><?php echo htmlspecialchars($screening_data_for_physician['hospital_donations'] ?? '0'); ?></td>
+                        </tr>
+                        <tr>
+                            <th style="padding: 8px; text-align: left; border: 1px solid #ddd; background-color: #f5f5f5;">Date of last donation</th>
+                            <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">
+                                <?php 
+                                $lastRcDate = $screening_data_for_physician['last_rc_donation_date'] ?? '';
+                                echo ($lastRcDate && $lastRcDate !== '0001-01-01') ? date('Y-m-d', strtotime($lastRcDate)) : '-'; 
+                                ?>
+                            </td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">
+                                <?php 
+                                $lastHospDate = $screening_data_for_physician['last_hosp_donation_date'] ?? '';
+                                echo ($lastHospDate && $lastHospDate !== '0001-01-01') ? date('Y-m-d', strtotime($lastHospDate)) : '-'; 
+                                ?>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th style="padding: 8px; text-align: left; border: 1px solid #ddd; background-color: #f5f5f5;">Place of last donation</th>
+                            <td style="padding: 8px; text-align: center; border: 1px solid #ddd;"><?php echo htmlspecialchars($screening_data_for_physician['last_rc_donation_place'] ?? '-'); ?></td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid #ddd;"><?php echo htmlspecialchars($screening_data_for_physician['last_hosp_donation_place'] ?? '-'); ?></td>
+                        </tr>
+                    </table>
+                    
+                    <input type="hidden" name="red-cross" value="<?php echo htmlspecialchars($screening_data_for_physician['red_cross_donations'] ?? '0'); ?>">
+                    <input type="hidden" name="hospital-history" value="<?php echo htmlspecialchars($screening_data_for_physician['hospital_donations'] ?? '0'); ?>">
+                    <input type="hidden" name="last-rc-donation-date" value="<?php echo htmlspecialchars($screening_data_for_physician['last_rc_donation_date'] ?? ''); ?>">
+                    <input type="hidden" name="last-hosp-donation-date" value="<?php echo htmlspecialchars($screening_data_for_physician['last_hosp_donation_date'] ?? ''); ?>">
+                    <input type="hidden" name="last-rc-donation-place" value="<?php echo htmlspecialchars($screening_data_for_physician['last_rc_donation_place'] ?? ''); ?>">
+                    <input type="hidden" name="last-hosp-donation-place" value="<?php echo htmlspecialchars($screening_data_for_physician['last_hosp_donation_place'] ?? ''); ?>">
+                </div>
+            <?php else: ?>
+                <!-- Regular editable history table for interviewers -->
+                <table class="screening-form-history-table">
+                    <tr>
+                        <th></th>
+                        <th>Red Cross</th>
+                        <th>Hospital</th>
+                    </tr>
+                    <tr>
+                        <th>No. of times</th>
+                        <td><input type="number" name="red-cross" min="0" value="<?php echo isset($_POST['red-cross']) ? htmlspecialchars($_POST['red-cross']) : '0'; ?>"></td>
+                        <td><input type="number" name="hospital-history" min="0" value="<?php echo isset($_POST['hospital-history']) ? htmlspecialchars($_POST['hospital-history']) : '0'; ?>"></td>
+                    </tr>
+                    <tr>
+                        <th>Date of last donation</th>
+                        <td><input type="date" name="last-rc-donation-date" value="<?php echo isset($_POST['last-rc-donation-date']) ? htmlspecialchars($_POST['last-rc-donation-date']) : ''; ?>"></td>
+                        <td><input type="date" name="last-hosp-donation-date" value="<?php echo isset($_POST['last-hosp-donation-date']) ? htmlspecialchars($_POST['last-hosp-donation-date']) : ''; ?>"></td>
+                    </tr>
+                    <tr>
+                        <th>Place of last donation</th>
+                        <td><input type="text" name="last-rc-donation-place" value="<?php echo isset($_POST['last-rc-donation-place']) ? htmlspecialchars($_POST['last-rc-donation-place']) : ''; ?>"></td>
+                        <td><input type="text" name="last-hosp-donation-place" value="<?php echo isset($_POST['last-hosp-donation-place']) ? htmlspecialchars($_POST['last-hosp-donation-place']) : ''; ?>"></td>
+                    </tr>
+                </table>
+            <?php endif; ?>
 
             <div class="screening-form-footer">
                 <label>INTERVIEWER (print name & sign): <input type="text" name="interviewer" value="<?php echo htmlspecialchars($interviewer_name); ?>" readonly></label>
@@ -1546,24 +1566,25 @@ select:focus {
             
             <?php if ($is_physician): ?>
             <!-- Additional note for physicians -->
-            <div style="margin: 20px 0; padding: 10px; background-color: #fff3cd; border-left: 5px solid #856404; border-radius: 5px;">
-                <p style="color: #856404; margin: 0;"><strong>Note:</strong> As a physician, you can edit all fields except body weight. Please complete this form with the necessary information and then click the button below to proceed to the physical examination form.</p>
+            <div style="margin: 20px 0; padding: 10px; background-color: #f8f8f8; border-left: 5px solid #242b31; border-radius: 5px;">
+                <p style="color: #242b31; margin: 0;"><strong>Note:</strong> As a physician, you can view but not edit this form. After reviewing, please proceed to the physical examination.</p>
             </div>
             <?php endif; ?>
             
             <div class="submit-section">
                 <?php if ($is_physician): ?>
                 <!-- For physicians: Provide a direct button to the physical examination form -->
-                <button type="button" class="submit-button" id="physicianProceedButton" style="background-color: #0c5460;">
-                    Submit and Proceed to Physical Examination
+                <button type="button" class="submit-button" id="physicianProceedButton" style="background-color: #242b31;">
+                    Proceed to Physical Examination
                 </button>
                 <?php else: ?>
                 <!-- Regular submit button for other roles -->
-                                <button type="button" class="submit-button" id="triggerModalButton">Submit</button>
+                <button type="button" class="submit-button" id="triggerModalButton">Submit</button>
                 <?php endif; ?>
             </div>
         </div>
     </form>
+
     <!-- Existing Confirmation Modal -->
     <div class="confirmation-modal" id="confirmationDialog">
         <div class="modal-header">Do you want to continue?</div>
@@ -1589,12 +1610,6 @@ select:focus {
             const physicianProceedButton = document.getElementById("physicianProceedButton");
             if (physicianProceedButton) {
                 physicianProceedButton.addEventListener("click", function() {
-                    // Validate form fields first
-                    if (!form.checkValidity()) {
-                        alert("Please fill in all required fields before proceeding.");
-                        return;
-                    }
-                    
                     loadingSpinner.style.display = "block";
                     
                     // Get current URL parameters
@@ -1621,28 +1636,21 @@ select:focus {
                         formData.append('donor_id', donorId);
                     }
                     
-                    // Submit form
-                    console.log("Submitting form...");
-                    form.submit();
+                    // Submit form - for physicians, we're just passing the data through without validation
+                    console.log("Physician proceeding to physical examination form...");
+                    
+                    // Redirect to physical examination form
+                    window.location.href = 'physical-examination-form.php' + (screeningId ? '?screening_id=' + screeningId : '');
                 });
             }
             <?php else: ?>
-            // Open Submit Modal
+            // Open Submit Modal for interviewers and other roles
             triggerModalButton.addEventListener("click", function() {
-                <?php if ($is_interviewer): ?>
-                // For interviewers, only validate Body WT
-                const bodyWt = document.querySelector('input[name="body-wt"]');
-                if (!bodyWt.value || isNaN(bodyWt.value) || parseFloat(bodyWt.value) <= 0) {
-                    alert("Please enter a valid Body Weight value.");
-                    return;
-                }
-                <?php else: ?>
-                // For other roles, validate all required fields
+                // Validate all required fields
                 if (!form.checkValidity()) {
                     alert("Please fill in all required fields before proceeding.");
                     return;
                 }
-                <?php endif; ?>
 
                 confirmationDialog.classList.remove("hide");
                 confirmationDialog.classList.add("show");
@@ -1661,7 +1669,9 @@ select:focus {
                 }, 300);
             }
 
+            <?php if (!$is_physician): ?>
             // Add radio button change handler for mobile donation section and patient details
+            // (Only needed for interviewers who can edit the form)
             const donationTypeRadios = document.querySelectorAll('input[name="donation-type"]');
             const mobileDonationSection = document.getElementById('mobileDonationSection');
             const patientDetailsTable = document.getElementById('patientDetailsTable');
@@ -1705,6 +1715,7 @@ select:focus {
             updateDonationTypeSections('<?php echo $donation_type; ?>');
             console.log("Initializing sections based on donation type from database: <?php echo $donation_type; ?>");
             <?php endif; ?>
+            <?php endif; ?>
 
             // Handle Submit Confirmation
             confirmButton.addEventListener("click", function() {
@@ -1745,7 +1756,13 @@ select:focus {
                         if (text.trim() === '') {
                             // Empty response - likely a redirect
                             console.log("Empty response, assuming redirect");
+                            <?php if ($is_interviewer): ?>
+                            // Redirect interviewers to dashboard
+                            window.location.href = "../../../public/Dashboards/dashboard-staff-donor-submission.php";
+                            <?php else: ?>
+                            // Redirect others to physical examination form
                             window.location.href = 'physical-examination-form.php';
+                            <?php endif; ?>
                             return null;
                         }
 
@@ -1755,15 +1772,24 @@ select:focus {
                         } else {
                             // Not valid JSON - could be HTML or redirect
                             console.log("Response is not valid JSON:", text.substring(0, 100));
+                            <?php if ($is_interviewer): ?>
+                            console.log("Redirecting interviewer to dashboard");
+                            window.location.href = "../../../public/Dashboards/dashboard-staff-donor-submission.php";
+                            <?php else: ?>
                             console.log("Redirecting to physical examination form");
                             window.location.href = 'physical-examination-form.php';
+                            <?php endif; ?>
                             return null;
                         }
                     } catch (e) {
                         console.error("JSON parse error:", e);
                         console.log("First 100 chars of response:", text.substring(0, 100));
                         // Redirect on parsing error
+                        <?php if ($is_interviewer): ?>
+                        window.location.href = "../../../public/Dashboards/dashboard-staff-donor-submission.php";
+                        <?php else: ?>
                         window.location.href = 'physical-examination-form.php';
+                        <?php endif; ?>
                         return null;
                     }
                 })
@@ -1789,7 +1815,8 @@ select:focus {
             // Cancel Submit
             cancelButton.addEventListener("click", closeModal);
 
-            // Add handler for donation history radio buttons
+            <?php if (!$is_physician): ?>
+            // Add handler for donation history radio buttons - only for interviewers
             const historyRadios = document.querySelectorAll('input[name="history"]');
             const historyTable = document.querySelector('.screening-form-history-table');
 
@@ -1821,31 +1848,6 @@ select:focus {
             const selectedHistory = document.querySelector('input[name="history"]:checked');
             if (selectedHistory) {
                 selectedHistory.dispatchEvent(new Event('change'));
-            }
-
-            // Restrict only certain fields for interviewers
-            <?php if ($is_interviewer): ?>
-            console.log("Interviewer role detected - restricting fields");
-            
-            // Only disable specific fields in the top section
-            const restrictedFields = document.querySelectorAll('input[name="sp-gr"], input[name="blood-type"], select[name="blood-type"]');
-            
-            restrictedFields.forEach(field => {
-                field.disabled = true;
-                field.style.backgroundColor = '#f5f5f5';
-                field.style.cursor = 'not-allowed';
-                if (field.hasAttribute('required')) {
-                    field.removeAttribute('required');
-                }
-            });
-            
-            // Make sure Body WT is enabled
-            const bodyWeight = document.querySelector('input[name="body-wt"]');
-            if (bodyWeight) {
-                bodyWeight.disabled = false;
-                bodyWeight.style.backgroundColor = '#ffffff';
-                bodyWeight.style.cursor = 'text';
-                bodyWeight.required = true;
             }
             <?php endif; ?>
         });

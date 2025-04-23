@@ -150,7 +150,7 @@ $current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $show_pending = true;
 
 // Select which array to use based on the filter
-$display_screenings = $pending_exam_screenings;
+$display_screenings = $filtered_screenings;
 
 $total_records = count($display_screenings);
 $total_pages = ceil($total_records / $records_per_page);
@@ -167,10 +167,10 @@ $screenings = array_slice($display_screenings, $offset, $records_per_page);
 
 // Debug info message
 $debug_info = "";
-if (empty($pending_exam_screenings)) {
-    $debug_info = "No pending physical exams found.";
+if (empty($filtered_screenings)) {
+    $debug_info = "No records without physical examinations found.";
 } else {
-    $debug_info = "Showing " . count($pending_exam_screenings) . " screenings with pending physical examinations.";
+    $debug_info = "Showing " . count($filtered_screenings) . " screenings that require physical examinations.";
 }
 
 // For admin view
@@ -744,13 +744,18 @@ body {
             <!-- Main Content -->
             <main class="col-md-9 col-lg-10 main-content">
                 <div class="container-fluid p-4 custom-margin">
-                    <h2 class="mt-1 mb-4">Pending Physical Examinations</h2>
+                    <h2 class="mt-1 mb-4">Physical Examinations Queue</h2>
                     
                     <?php if (!empty($debug_info)): ?>
-                    <div class="debug-info">
-                        <i class="fas fa-info-circle"></i> <?php echo $debug_info; ?>
-                    </div>
+                        <div class="alert alert-info">
+                            <pre><?php echo $debug_info; ?></pre>
+                        </div>
                     <?php endif; ?>
+
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        This page displays all physical examination submissions ready for review. Click on a donor's record to view their detailed physical examination data. You can approve submissions that meet requirements or reject those that don't. Use the action buttons to process each submission.
+                    </div>
                     
                     <?php if ($isAdmin): ?>
                     <div class="alert alert-info mt-3">
