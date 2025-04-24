@@ -746,17 +746,6 @@ body {
                 <div class="container-fluid p-4 custom-margin">
                     <h2 class="mt-1 mb-4">Physical Examinations Queue</h2>
                     
-                    <?php if (!empty($debug_info)): ?>
-                        <div class="alert alert-info">
-                            <pre><?php echo $debug_info; ?></pre>
-                        </div>
-                    <?php endif; ?>
-
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>
-                        This page displays all physical examination submissions ready for review. Click on a donor's record to view their detailed physical examination data. You can approve submissions that meet requirements or reject those that don't. Use the action buttons to process each submission.
-                    </div>
-                    
                     <?php if ($isAdmin): ?>
                     <div class="alert alert-info mt-3">
                         <h5>Admin Statistics:</h5>
@@ -1010,7 +999,7 @@ body {
                     
                     console.log("Redirecting to screening page");
                     // Direct navigation using window.location with query parameters
-                    window.location.href = '../../src/views/forms/screening-form.php' + 
+                    window.location.href = '../../src/views/forms/medical-history.php' + 
                         '?screening_id=' + encodeURIComponent(currentScreeningData.screening_id) + 
                         '&donor_id=' + encodeURIComponent(currentScreeningData.donor_form_id) + 
                         '&t=' + new Date().getTime(); // Add timestamp to prevent caching

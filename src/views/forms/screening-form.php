@@ -73,46 +73,78 @@ if ($_SESSION['role_id'] == 3) {
     // Get the user's staff role from the database directly
     $user_id = $_SESSION['user_id'];
     
-    // Prepare the API URL to fetch the user's role
-    $url = SUPABASE_URL . "/rest/v1/user_roles?select=user_staff_roles&user_id=eq." . urlencode($user_id);
+    // First check session variables to avoid unnecessary API calls
+    $user_staff_role = '';
+    if (isset($_SESSION['user_staff_role'])) {
+        $user_staff_role = strtolower($_SESSION['user_staff_role']);
+    } elseif (isset($_SESSION['user_staff_roles'])) {
+        $user_staff_role = strtolower($_SESSION['user_staff_roles']);
+    } elseif (isset($_SESSION['staff_role'])) {
+        $user_staff_role = strtolower($_SESSION['staff_role']);
+    }
     
-    // Initialize cURL session
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY,
-        'Content-Type: application/json'
-    ]);
+    error_log("Role from session variables: " . $user_staff_role);
     
-    // Execute the request
-    $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
+    // Check for roles based on session (case-insensitive)
+    if (!empty($user_staff_role)) {
+        $is_interviewer = ($user_staff_role === 'interviewer');
+        $is_physician = ($user_staff_role === 'physician');
+    }
     
-    // Log the response for debugging
-    error_log("Role check API response: " . $response);
-    error_log("HTTP code: " . $http_code);
-    
-    if ($http_code === 200) {
-        $data = json_decode($response, true);
-        if (is_array($data) && !empty($data)) {
-            $user_staff_role = isset($data[0]['user_staff_roles']) ? strtolower($data[0]['user_staff_roles']) : '';
-            
-            // Check for roles (case-insensitive)
-            $is_interviewer = ($user_staff_role === 'interviewer');
-            $is_physician = ($user_staff_role === 'physician');
-            
-            // Log the detected role
-            error_log("User staff role: " . $user_staff_role);
-            error_log("Is interviewer: " . ($is_interviewer ? 'true' : 'false'));
-            error_log("Is physician: " . ($is_physician ? 'true' : 'false'));
-            
-            // Store in session for use in other parts of the application
-            $_SESSION['is_interviewer'] = $is_interviewer;
-            $_SESSION['is_physician'] = $is_physician;
-            $_SESSION['user_staff_roles'] = $data[0]['user_staff_roles'];
+    // If role not determined from session, try database lookup
+    if (!$is_interviewer && !$is_physician) {
+        // Prepare the API URL to fetch the user's role
+        $url = SUPABASE_URL . "/rest/v1/user_roles?select=user_staff_roles&user_id=eq." . urlencode($user_id);
+        
+        // Initialize cURL session
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json'
+        ]);
+        
+        // Execute the request
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        // Log the response for debugging
+        error_log("Role check API response: " . $response);
+        error_log("HTTP code: " . $http_code);
+        
+        if ($http_code === 200) {
+            $data = json_decode($response, true);
+            if (is_array($data) && !empty($data)) {
+                $user_staff_role = isset($data[0]['user_staff_roles']) ? strtolower($data[0]['user_staff_roles']) : '';
+                
+                // Check for roles (case-insensitive)
+                $is_interviewer = ($user_staff_role === 'interviewer');
+                $is_physician = ($user_staff_role === 'physician');
+                
+                // Log the detected role
+                error_log("User staff role from DB: " . $user_staff_role);
+                error_log("Is interviewer: " . ($is_interviewer ? 'true' : 'false'));
+                error_log("Is physician: " . ($is_physician ? 'true' : 'false'));
+                
+                // Store in session for use in other parts of the application
+                $_SESSION['is_interviewer'] = $is_interviewer;
+                $_SESSION['is_physician'] = $is_physician;
+                $_SESSION['user_staff_roles'] = $data[0]['user_staff_roles'];
+                $_SESSION['user_staff_role'] = $data[0]['user_staff_roles'];
+                $_SESSION['staff_role'] = $data[0]['user_staff_roles'];
+            }
         }
+    } else {
+        // If we already know the role from session, log it
+        error_log("Using role from session: " . $user_staff_role);
+        error_log("Is interviewer: " . ($is_interviewer ? 'true' : 'false'));
+        error_log("Is physician: " . ($is_physician ? 'true' : 'false'));
+        
+        // Store flags in session for consistency
+        $_SESSION['is_interviewer'] = $is_interviewer;
+        $_SESSION['is_physician'] = $is_physician;
     }
 }
 
@@ -996,8 +1028,9 @@ body {
 }
 /* Submit Button Section */
 .submit-section {
-    text-align: right;
     margin-top: 20px;
+    display: flex;
+    justify-content: space-between; /* This will push elements to the edges */
 }
 
 .submit-button {
@@ -1020,143 +1053,126 @@ body {
 .submit-button:active {
     transform: translateY(0);
 }
- /* Submit Button Section */
- .submit-section {
-            text-align: right;
-            margin-top: 20px;
-        }
 
-        .submit-button {
-            background-color: #d9534f;
-            color: white;
-            font-weight: bold;
-            padding: 12px 22px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: background-color 0.3s ease, transform 0.2s ease;
-            font-size: 15px;
-        }
+.back-button {
+    order: -1; /* Place the back button before the submit button */
+}
 
-        .submit-button:hover {
-            background-color: #c9302c;
-            transform: translateY(-2px);
-        }
+.action-buttons {
+    display: flex;
+    gap: 10px;
+}
 
-        .submit-button:active {
-            transform: translateY(0);
-        }
+/* Loader Animation -- Modal Design */
+.loading-spinner {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 8px solid #ddd;
+    border-top: 8px solid #a82020;
+    animation: rotateSpinner 1s linear infinite;
+    display: none;
+    z-index: 10000;
+    transform: translate(-50%, -50%);
+}
 
-        /* Loader Animation -- Modal Design */
-        .loading-spinner {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            border: 8px solid #ddd;
-            border-top: 8px solid #a82020;
-            animation: rotateSpinner 1s linear infinite;
-            display: none;
-            z-index: 10000;
-            transform: translate(-50%, -50%);
-        }
+@keyframes rotateSpinner {
+    0% { transform: translate(-50%, -50%) rotate(0deg); }
+    100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
 
-        @keyframes rotateSpinner {
-            0% { transform: translate(-50%, -50%) rotate(0deg); }
-            100% { transform: translate(-50%, -50%) rotate(360deg); }
-        }
+/* Confirmation Modal */
+.confirmation-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 25px;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+    text-align: center;
+    z-index: 9999;
+    border-radius: 10px;
+    width: 300px;
+    display: none;
+    opacity: 0;
+}
 
-        /* Confirmation Modal */
-        .confirmation-modal {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 25px;
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
-            text-align: center;
-            z-index: 9999;
-            border-radius: 10px;
-            width: 300px;
-            display: none;
-            opacity: 0;
-        }
+/* Fade-in and Fade-out Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -55%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
 
-        /* Fade-in and Fade-out Animations */
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translate(-50%, -55%);
-            }
-            to {
-                opacity: 1;
-                transform: translate(-50%, -50%);
-            }
-        }
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+    to {
+        opacity: 0;
+        transform: translate(-50%, -55%);
+    }
+}
 
-        @keyframes fadeOut {
-            from {
-                opacity: 1;
-                transform: translate(-50%, -50%);
-            }
-            to {
-                opacity: 0;
-                transform: translate(-50%, -55%);
-            }
-        }
+.confirmation-modal.show {
+    display: block;
+    animation: fadeIn 0.3s ease-in-out forwards;
+}
 
-        .confirmation-modal.show {
-            display: block;
-            animation: fadeIn 0.3s ease-in-out forwards;
-        }
+.confirmation-modal.hide {
+    animation: fadeOut 0.3s ease-in-out forwards;
+}
 
-        .confirmation-modal.hide {
-            animation: fadeOut 0.3s ease-in-out forwards;
-        }
+.modal-header {
+    font-size: 18px;
+    font-weight: bold;
+    color: #d50000;
+    margin-bottom: 15px;
+}
 
-        .modal-header {
-            font-size: 18px;
-            font-weight: bold;
-            color: #d50000;
-            margin-bottom: 15px;
-        }
+.modal-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+}
 
-        .modal-actions {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 20px;
-        }
+.modal-button {
+    width: 45%;
+    padding: 10px;
+    font-size: 16px;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+}
 
-        .modal-button {
-            width: 45%;
-            padding: 10px;
-            font-size: 16px;
-            font-weight: bold;
-            border: none;
-            cursor: pointer;
-            border-radius: 5px;
-        }
+.cancel-action {
+    background: #aaa;
+    color: white;
+}
 
-        .cancel-action {
-            background: #aaa;
-            color: white;
-        }
+.cancel-action:hover {
+    background: #888;
+}
 
-        .cancel-action:hover {
-            background: #888;
-        }
+.confirm-action {
+    background: #c9302c;
+    color: white;
+}
 
-        .confirm-action {
-            background: #c9302c;
-            color: white;
-        }
-
-        .confirm-action:hover {
-            background: #691b19;
-        }
+.confirm-action:hover {
+    background: #691b19;
+}
 /* Responsive Adjustments */
 @media (max-width: 600px) {
     .donation-options {
@@ -1572,15 +1588,23 @@ select:focus {
             <?php endif; ?>
             
             <div class="submit-section">
-                <?php if ($is_physician): ?>
-                <!-- For physicians: Provide a direct button to the physical examination form -->
-                <button type="button" class="submit-button" id="physicianProceedButton" style="background-color: #242b31;">
-                    Proceed to Physical Examination
+                <!-- Back button (always on the left) -->
+                <button type="button" class="submit-button back-button" id="backButton" style="background-color: #6c757d;">
+                    Go Back
                 </button>
-                <?php else: ?>
-                <!-- Regular submit button for other roles -->
-                <button type="button" class="submit-button" id="triggerModalButton">Submit</button>
-                <?php endif; ?>
+                
+                <!-- Action buttons (on the right) -->
+                <div class="action-buttons">
+                    <?php if ($is_physician): ?>
+                    <!-- For physicians: Provide proceed button -->
+                    <button type="button" class="submit-button" id="physicianProceedButton" style="background-color: #242b31;">
+                        Proceed to Physical Examination
+                    </button>
+                    <?php else: ?>
+                    <!-- Regular submit button for other roles -->
+                    <button type="button" class="submit-button" id="triggerModalButton">Submit</button>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </form>
@@ -1604,6 +1628,40 @@ select:focus {
             let cancelButton = document.getElementById("cancelButton");
             let confirmButton = document.getElementById("confirmButton");
             let form = document.getElementById("screeningForm");
+            let backButton = document.getElementById("backButton");
+
+            // Handle back button click - redirect to medical history form
+            if (backButton) {
+                backButton.addEventListener("click", function() {
+                    // Get donor_id from URL or form
+                    let donorId = null;
+                    
+                    // First check URL parameters
+                    const urlParams = new URLSearchParams(window.location.search);
+                    donorId = urlParams.get('donor_id');
+                    
+                    // If not in URL, check if there's a hidden input in the form
+                    if (!donorId) {
+                        const donorIdInput = document.querySelector('input[name="donor_id"]');
+                        if (donorIdInput) {
+                            donorId = donorIdInput.value;
+                        }
+                    }
+                    
+                    console.log("Going back to medical history with donor_id:", donorId);
+                    
+                    // Show loading spinner
+                    loadingSpinner.style.display = "block";
+                    
+                    // Redirect to medical history with donor_id if available
+                    if (donorId) {
+                        window.location.href = 'medical-history.php?donor_id=' + donorId;
+                    } else {
+                        // If no donor_id is found, just go back to medical history
+                        window.location.href = 'medical-history.php';
+                    }
+                });
+            }
 
             <?php if ($is_physician): ?>
             // Special handling for physician workflow

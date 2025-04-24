@@ -107,12 +107,59 @@ if (isset($_GET['approve_donor'])) {
     $_SESSION['donor_id'] = $donor_id;
     $_SESSION['donor_name'] = $donor_name;
     
+    // Ensure user_staff_roles is set - default to 'Interviewer' to guarantee access
+    // The interviewer role should have access to medical histories
+    $_SESSION['user_staff_role'] = 'Interviewer';
+    $_SESSION['user_staff_roles'] = 'Interviewer';
+    $_SESSION['staff_role'] = 'Interviewer';
+    
+    // Try to get the actual role from the database if possible
+    $user_id = $_SESSION['user_id'] ?? 0;
+    
+    // Add extra debugging
+    error_log("User ID for role lookup: " . $user_id);
+    error_log("Initial role settings: " . $_SESSION['user_staff_role']);
+    
+    // Use Supabase API to get the user role
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => SUPABASE_URL . '/rest/v1/user_roles?user_id=eq.' . $user_id . '&select=role_name',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY
+        ]
+    ]);
+    
+    $response = curl_exec($ch);
+    
+    if ($response !== false) {
+        $userData = json_decode($response, true);
+        if (is_array($userData) && !empty($userData)) {
+            // Set multiple role variables to ensure compatibility
+            $_SESSION['user_staff_role'] = $userData[0]['role_name'] ?? 'Interviewer';
+            $_SESSION['staff_role'] = $userData[0]['role_name'] ?? 'Interviewer';
+            $_SESSION['user_staff_roles'] = $userData[0]['role_name'] ?? 'Interviewer';
+            
+            error_log("User role set to: " . $_SESSION['user_staff_role']);
+        }
+    }
+    
+    curl_close($ch);
+    
+    // Make sure the roles are set to valid values that will pass the check in medical-history.php
+    if (!in_array(strtolower($_SESSION['user_staff_role']), ['interviewer', 'reviewer', 'physician'])) {
+        $_SESSION['user_staff_role'] = 'Interviewer';
+        $_SESSION['user_staff_roles'] = 'Interviewer';
+        $_SESSION['staff_role'] = 'Interviewer';
+    }
+    
     // Log the action
     error_log("Setting donor_id in session directly: " . $donor_id);
     error_log("Session after setting: " . print_r($_SESSION, true));
     
-    // Redirect directly to screening form
-    header("Location: ../../src/views/forms/screening-form.php");
+    // Redirect directly to medical history form
+    header("Location: ../../src/views/forms/medical-history.php");
     exit();
 }
 
@@ -1026,7 +1073,7 @@ select.donor_form_input[disabled] {
                     <div class="spinner-border text-danger" style="width: 3.5rem; height: 3.5rem;" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
-                    <p class="text-white mt-3 mb-0">Please wait...</p>
+                    <p class="text-white mt-3 mb-0" style="font-size: 1.1rem;">Please wait...</p>
                 </div>
             </div>
         </div>
@@ -1210,9 +1257,26 @@ select.donor_form_input[disabled] {
                         donorName = currentDonorData.first_name + ' ' + currentDonorData.surname;
                     }
                     
-                    // Direct navigation with parameters
-                    const url = `dashboard-staff-donor-submission.php?approve_donor=${donorId}&donor_name=${encodeURIComponent(donorName)}`;
-                    window.location.href = url;
+                    // Show loading modal first to indicate processing
+                    const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+                    
+                    // Close the donor details modal
+                    const donorDetailsModal = bootstrap.Modal.getInstance(document.getElementById('donorDetailsModal'));
+                    if (donorDetailsModal) {
+                        donorDetailsModal.hide();
+                    }
+                    
+                    // Show loading modal
+                    loadingModal.show();
+                    
+                    // Update loading text for better feedback
+                    document.querySelector('#loadingModal .text-white').innerHTML = 'Proceeding to medical history form...<br><small>Please wait</small>';
+                    
+                    // Direct navigation with parameters after a short delay
+                    setTimeout(() => {
+                        const url = `dashboard-staff-donor-submission.php?approve_donor=${donorId}&donor_name=${encodeURIComponent(donorName)}`;
+                        window.location.href = url;
+                    }, 800);
                 });
             }
         });

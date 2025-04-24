@@ -19,8 +19,11 @@ if (isset($_GET['hid']) && isset($_SESSION['donor_hashes'][$_GET['hid']])) {
 } elseif (isset($_GET['donor_id'])) {
     $donor_id = $_GET['donor_id'];
     $_SESSION['donor_id'] = $donor_id;
+} elseif (isset($_SESSION['donor_id'])) {
+    $donor_id = $_SESSION['donor_id'];
+    error_log("Using donor_id from session: " . $donor_id);
 } else {
-    error_log("No donor_id found in URL parameters");
+    error_log("No donor_id found in URL parameters or session");
     header("Location: ../../../public/unauthorized.php");
     exit();
 }
@@ -44,6 +47,92 @@ if ($role_id !== 1 && $role_id !== 3) {
 
 // For staff role, ensure we have a valid donor_id
 if ($role_id === 3) {
+    // Check for valid staff role - make sure to check all possible session variables
+    $has_valid_role = false;
+    $staff_role = '';
+    
+    // Log all role-related session variables for debugging
+    error_log("user_staff_role: " . ($_SESSION['user_staff_role'] ?? 'not set'));
+    error_log("user_staff_roles: " . ($_SESSION['user_staff_roles'] ?? 'not set'));
+    error_log("staff_role: " . ($_SESSION['staff_role'] ?? 'not set'));
+    
+    // Check different session variables where the role might be stored
+    if (isset($_SESSION['user_staff_role'])) {
+        $staff_role = strtolower($_SESSION['user_staff_role']);
+    } elseif (isset($_SESSION['user_staff_roles'])) {
+        $staff_role = strtolower($_SESSION['user_staff_roles']);
+    } elseif (isset($_SESSION['staff_role'])) {
+        $staff_role = strtolower($_SESSION['staff_role']);
+    }
+    
+    // Valid staff roles for this page (lowercase for case-insensitive comparison)
+    $valid_roles = ['reviewer', 'interviewer', 'physician'];
+    
+    error_log("Staff role value (before validation): " . $staff_role);
+    
+    // If role is still empty or invalid, try to get it from the database
+    if (empty($staff_role) || !in_array($staff_role, $valid_roles)) {
+        error_log("Role not found in session or invalid - attempting to retrieve from database");
+        $user_id = $_SESSION['user_id'];
+        
+        // Query database for user role
+        $ch = curl_init(SUPABASE_URL . "/rest/v1/user_roles?select=user_staff_roles&user_id=eq." . urlencode($user_id));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json'
+        ]);
+        
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        error_log("Role lookup API response: " . $response);
+        error_log("HTTP code: " . $http_code);
+        
+        if ($http_code === 200) {
+            $data = json_decode($response, true);
+            if (is_array($data) && !empty($data)) {
+                $db_role = isset($data[0]['user_staff_roles']) ? strtolower($data[0]['user_staff_roles']) : '';
+                error_log("Role from database: " . $db_role);
+                
+                // If valid role found in database, use it
+                if (in_array($db_role, $valid_roles)) {
+                    $staff_role = $db_role;
+                    // Update all session role variables for consistency
+                    $_SESSION['user_staff_role'] = $data[0]['user_staff_roles'];
+                    $_SESSION['user_staff_roles'] = $data[0]['user_staff_roles'];
+                    $_SESSION['staff_role'] = $data[0]['user_staff_roles'];
+                    error_log("Updated session with role from database: " . $staff_role);
+                }
+            }
+        }
+    }
+    
+    // Check if we now have a valid role
+    if (in_array($staff_role, $valid_roles)) {
+        $has_valid_role = true;
+        error_log("Valid staff role found: " . $staff_role);
+    }
+    
+    // If still not valid, but we need to support interviewers redirected from donor submission, set default
+    if (!$has_valid_role && isset($_SESSION['donor_id']) && !empty($_SESSION['donor_id'])) {
+        $_SESSION['user_staff_role'] = 'Interviewer';
+        $_SESSION['user_staff_roles'] = 'Interviewer';
+        $_SESSION['staff_role'] = 'Interviewer';
+        $staff_role = 'interviewer';
+        $has_valid_role = true;
+        error_log("Applied default Interviewer role for donor processing");
+    }
+    
+    // Final check - if still invalid, redirect
+    if (!$has_valid_role) {
+        error_log("Invalid staff role for medical history: " . $staff_role);
+        header("Location: ../../../public/unauthorized.php");
+        exit();
+    }
+    
     if (!isset($donor_id) || empty($donor_id)) {
         error_log("Missing or empty donor_id for staff role");
         header('Location: ../../../public/Dashboards/dashboard-staff-medical-history-submissions.php');
@@ -128,6 +217,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($action === 'decline') {
                 $medical_history_data['medical_approval'] = 'Declined';
                 error_log("Setting status to Declined");
+            } elseif ($action === 'next') {
+                // For interviewer/physician using the "NEXT" button
+                $medical_history_data['medical_approval'] = 'Approved';
+                error_log("Setting status to Approved (via NEXT button)");
             } else {
                 error_log("Unknown action value: " . $action);
             }
@@ -175,9 +268,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         curl_close($ch);
 
         if ($http_code >= 200 && $http_code < 300) {
-            error_log("Update successful, redirecting to dashboard");
-            header('Location: ../../../public/Dashboards/dashboard-staff-medical-history-submissions.php');
-                    exit();
+            error_log("Update successful, handling redirect based on user role");
+            
+            // Get user role - check multiple session variables and normalize to lowercase
+            $user_role = '';
+            
+            // Debug all role-related session variables
+            error_log("SESSION after submission: " . print_r($_SESSION, true));
+            error_log("POST data for submission: " . print_r($_POST, true));
+            
+            // Check all possible role session variables
+            if (isset($_SESSION['user_staff_role'])) {
+                $user_role = strtolower($_SESSION['user_staff_role']);
+            } elseif (isset($_SESSION['user_staff_roles'])) {
+                $user_role = strtolower($_SESSION['user_staff_roles']);
+            } elseif (isset($_SESSION['staff_role'])) {
+                $user_role = strtolower($_SESSION['staff_role']);
+            }
+            
+            error_log("User role determined for redirection: '" . $user_role . "'");
+            
+            // Get action
+            $action = $_POST['action'] ?? '';
+            error_log("Action chosen: '" . $action . "'");
+            
+            // Determine where to redirect based on role and action
+            if ($action === 'next' && ($user_role === 'interviewer' || $user_role === 'physician')) {
+                // Interviewer or Physician clicking NEXT should go to screening form
+                error_log("Redirecting to screening form (role: $user_role, action: $action)");
+                header('Location: screening-form.php');
+                exit();
+            } elseif ($action === 'approve' || $action === 'decline') {
+                // Reviewers or any approve/decline action should go back to dashboard
+                error_log("Redirecting to dashboard (role: $user_role, action: $action)");
+                header('Location: ../../../public/Dashboards/dashboard-staff-medical-history-submissions.php');
+                exit();
+            } else {
+                // Default fallback - if we can't determine the right place, go to the dashboard
+                error_log("No clear redirection path - defaulting to dashboard (role: $user_role, action: $action)");
+                header('Location: ../../../public/Dashboards/dashboard-staff-main.php');
+                exit();
+            }
         } else {
             throw new Exception("Error updating medical history. HTTP Code: $http_code, Response: " . $response);
         }
@@ -532,6 +663,24 @@ function getFieldName($count) {
             const donorSex = <?php echo json_encode(strtolower($donor_sex)); ?>;
             const isMale = donorSex === 'male';
             
+            // Get user role to determine field attributes
+            <?php
+            $user_role = '';
+            if (isset($_SESSION['user_staff_role'])) {
+                $user_role = strtolower($_SESSION['user_staff_role']);
+            } elseif (isset($_SESSION['user_staff_roles'])) {
+                $user_role = strtolower($_SESSION['user_staff_roles']);
+            } elseif (isset($_SESSION['staff_role'])) {
+                $user_role = strtolower($_SESSION['staff_role']);
+            }
+            ?>
+            const userRole = "<?php echo $user_role; ?>";
+            console.log("User role for form generation:", userRole);
+            
+            // Only make fields required for reviewers (who can edit)
+            const isReviewer = userRole === 'reviewer';
+            const requiredAttr = isReviewer ? 'required' : '';
+            
             const questions = [
                 "Do you feel well and healthy today?",
                 "Have you ever been refused as a blood donor or told not to donate blood for any reasons?",
@@ -709,18 +858,18 @@ function getFieldName($count) {
                     document.write(`
                         <div class='cell checkbox'>
                             <label class="blood-bag-option">
-                                <input type='radio' name='q${count}' value='Yes' ${value === true ? 'checked' : ''} required>
+                                <input type='radio' name='q${count}' value='Yes' ${value === true ? 'checked' : ''} ${requiredAttr}>
                                 <span class="checkmark"></span>
                             </label>
                         </div>
                         <div class='cell checkbox'>
                             <label class="blood-bag-option">
-                                <input type='radio' name='q${count}' value='No' ${value === false ? 'checked' : ''} required>
+                                <input type='radio' name='q${count}' value='No' ${value === false ? 'checked' : ''} ${requiredAttr}>
                                 <span class="checkmark"></span>
                             </label>
                         </div>
                         <div class='cell'>
-                            <select class="medical-history-remarks" name='q${count}_remarks' required>
+                            <select class="medical-history-remarks" name='q${count}_remarks' ${requiredAttr}>
                                 ${remarksOptions[count].map(option => 
                                     `<option value="${option}" ${remarks === option ? 'selected' : ''}>${option}</option>`
                                 ).join('')}
@@ -735,12 +884,33 @@ function getFieldName($count) {
             document.write(`
                 <div class="action-buttons-wrapper">
                     <div class="action-buttons">
-                        <button type="submit" name="action" value="decline" class="btn btn-decline" onclick="return confirmAction('decline');">
-                            DECLINE
-                        </button>
-                        <button type="submit" name="action" value="approve" class="btn btn-approve" onclick="return confirmAction('approve');">
-                            APPROVE
-                        </button>
+                        <?php 
+                        // Check user role to determine button text and functionality
+                        $user_role = '';
+                        
+                        // Check all possible session variables for role
+                        if (isset($_SESSION['user_staff_role'])) {
+                            $user_role = strtolower($_SESSION['user_staff_role']);
+                        } elseif (isset($_SESSION['user_staff_roles'])) {
+                            $user_role = strtolower($_SESSION['user_staff_roles']);
+                        } elseif (isset($_SESSION['staff_role'])) {
+                            $user_role = strtolower($_SESSION['staff_role']);
+                        }
+                        
+                        error_log("UI Button generation - user role detected: '" . $user_role . "'");
+                        
+                        if ($user_role === 'reviewer') {
+                            // Only reviewer gets both approve and decline buttons
+                            echo '<button type="submit" name="action" value="decline" class="btn btn-decline" onclick="return confirmAction(\'decline\');">DECLINE</button>';
+                            echo '<button type="submit" name="action" value="approve" class="btn btn-approve" onclick="return confirmAction(\'approve\');">APPROVE</button>';
+                        } else if ($user_role === 'interviewer' || $user_role === 'physician') {
+                            // Interviewers and physicians only get NEXT button
+                            echo '<button type="submit" name="action" value="next" class="btn btn-approve" onclick="return confirmAction(\'next\');">NEXT</button>';
+                        } else {
+                            // Default fallback - only approve button
+                            echo '<button type="submit" name="action" value="approve" class="btn btn-approve" onclick="return confirmAction(\'approve\');">APPROVE</button>';
+                        }
+                        ?>
                     </div>
                 </div>
             `);
@@ -758,17 +928,80 @@ function getFieldName($count) {
             let loadingSpinner = document.getElementById("loadingSpinner");
             let submitButton = document.getElementById("submitButton");
             let form = document.getElementById("medicalHistoryForm");
+            
+            // Determine user role to handle form field access
+            <?php
+            $user_role = '';
+            if (isset($_SESSION['user_staff_role'])) {
+                $user_role = strtolower($_SESSION['user_staff_role']);
+            } elseif (isset($_SESSION['user_staff_roles'])) {
+                $user_role = strtolower($_SESSION['user_staff_roles']);
+            } elseif (isset($_SESSION['staff_role'])) {
+                $user_role = strtolower($_SESSION['staff_role']);
+            }
+            ?>
+            
+            const userRole = "<?php echo $user_role; ?>";
+            console.log("User role for field access control:", userRole);
+            
+            // Make form fields read-only for interviewers and physicians
+            if (userRole === 'interviewer' || userRole === 'physician') {
+                // Make radio buttons and remarks read-only
+                const radioButtons = document.querySelectorAll('input[type="radio"]');
+                const selectFields = document.querySelectorAll('select.medical-history-remarks');
+                
+                // Disable radio buttons
+                radioButtons.forEach(radio => {
+                    radio.disabled = true;
+                });
+                
+                // Disable select fields
+                selectFields.forEach(select => {
+                    select.disabled = true;
+                });
+                
+                console.log("Form fields set to read-only for role:", userRole);
+            }
 
             // Handle direct form submission
             form.addEventListener("submit", function(e) {
                 e.preventDefault();
                 
-                if (!form.checkValidity()) {
+                // Only validate the form for reviewers (who can edit)
+                if (userRole === 'reviewer' && !form.checkValidity()) {
                     alert("Please fill in all required fields before proceeding.");
                     return;
                 }
 
+                // If it's an interviewer or physician, we'll just submit the form as is
                 loadingSpinner.style.display = "block";
+                
+                // For interviewers and physicians, ensure all radio buttons have values
+                if (userRole === 'interviewer' || userRole === 'physician') {
+                    // Get all pairs of radio buttons by question number
+                    for (let i = 1; i <= 37; i++) {
+                        const yesRadio = document.querySelector(`input[name="q${i}"][value="Yes"]`);
+                        const noRadio = document.querySelector(`input[name="q${i}"][value="No"]`);
+                        
+                        // If both exist and neither is checked, check one based on existing data
+                        if (yesRadio && noRadio && !yesRadio.checked && !noRadio.checked) {
+                            // Default to No if we don't have data
+                            noRadio.checked = true;
+                            
+                            // Try to get field name from our mapping
+                            const fieldName = getFieldName(i);
+                            if (fieldName && medicalHistoryData && medicalHistoryData[fieldName] !== undefined) {
+                                // Use the value from the data
+                                if (medicalHistoryData[fieldName] === true) {
+                                    yesRadio.checked = true;
+                                } else {
+                                    noRadio.checked = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                
                 form.submit();
             });
         });
@@ -800,9 +1033,21 @@ function getFieldName($count) {
 
         // Function to handle button clicks
         function confirmAction(action) {
-            console.log('Button clicked:', action);
-            document.getElementById('selectedAction').value = action;
-            return true;
+            let message = '';
+            if (action === 'approve') {
+                message = 'Are you sure you want to approve this donor?';
+            } else if (action === 'decline') {
+                message = 'Are you sure you want to decline this donor?';
+            } else if (action === 'next') {
+                message = 'Do you want to proceed to the next step?';
+            }
+            
+            if (confirm(message)) {
+                document.getElementById('selectedAction').value = action;
+                document.getElementById('loadingSpinner').style.display = 'block';
+                return true;
+            }
+            return false;
         }
 
         // Add form submission handler
