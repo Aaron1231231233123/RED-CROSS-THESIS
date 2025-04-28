@@ -13,12 +13,12 @@ if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] != 3) {
     exit();
 }
 
-// Initialize counts
+// Get counts for status cards
 $incoming_count = 0;
 $approved_count = 0;
 $declined_count = 0;
 
-// --- STEP 1: Get all donors from donor_form table ---
+// Get all donor IDs for reference
 $all_donors_ch = curl_init();
 curl_setopt_array($all_donors_ch, [
     CURLOPT_URL => SUPABASE_URL . '/rest/v1/donor_form?select=donor_id',
@@ -28,33 +28,24 @@ curl_setopt_array($all_donors_ch, [
         'Authorization: Bearer ' . SUPABASE_API_KEY
     ]
 ]);
+
 $all_donors_response = curl_exec($all_donors_ch);
-
-// Add debugging
-error_log("DEBUG - Donor API URL: " . SUPABASE_URL . '/rest/v1/donor_form?select=donor_id');
-error_log("DEBUG - Donor Raw response: " . substr($all_donors_response, 0, 100));
-
 $all_donor_ids = [];
 
 if ($all_donors_response !== false) {
     $all_donors_data = json_decode($all_donors_response, true) ?: [];
-    error_log("DEBUG - Donor count from API: " . count($all_donors_data));
-    
     foreach ($all_donors_data as $donor) {
         if (isset($donor['donor_id'])) {
-            $all_donor_ids[] = intval($donor['donor_id']);
+            $all_donor_ids[] = $donor['donor_id'];
         }
     }
 }
 curl_close($all_donors_ch);
-$total_donors = count($all_donor_ids);
-error_log("DEBUG - Valid donor IDs extracted: " . $total_donors);
 
-// --- STEP 2: Get screening forms ---
-// First, get all donor IDs that have screening forms - ORIGINAL WORKING METHOD
+// Fetch screening forms with disapproval_reason (indicates declined)
 $screening_ch = curl_init();
 curl_setopt_array($screening_ch, [
-    CURLOPT_URL => SUPABASE_URL . '/rest/v1/screening_form?select=donor_form_id,screening_id,disapproval_reason',
+    CURLOPT_URL => SUPABASE_URL . '/rest/v1/screening_form?select=donor_form_id,disapproval_reason',
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_HTTPHEADER => [
         'apikey: ' . SUPABASE_API_KEY,
@@ -63,46 +54,28 @@ curl_setopt_array($screening_ch, [
 ]);
 
 $screening_response = curl_exec($screening_ch);
-error_log("DEBUG - Screening API URL: " . SUPABASE_URL . '/rest/v1/screening_form?select=donor_form_id,screening_id,disapproval_reason');
-error_log("DEBUG - Screening Raw response: " . substr($screening_response, 0, 100));
-
-// Initialize arrays
-$screened_donor_ids = []; // All screened donors
-$declined_donor_ids = []; // Declined donors
-$screening_ids_map = []; // Map screening_id to donor_form_id
+$declined_donor_ids = [];
+$screened_donor_ids = [];
 
 if ($screening_response !== false) {
     $screening_data = json_decode($screening_response, true) ?: [];
-    error_log("DEBUG - Screening forms count from API: " . count($screening_data));
-    
     foreach ($screening_data as $item) {
         if (isset($item['donor_form_id'])) {
-            $donor_id = intval($item['donor_form_id']);
-            $screened_donor_ids[] = $donor_id; // For filtering
+            $screened_donor_ids[] = $item['donor_form_id'];
             
-            // Store mapping of screening_id to donor_form_id
-            if (isset($item['screening_id'])) {
-                $screening_ids_map[$item['screening_id']] = $donor_id;
-            }
-            
-            // Count declined donors (those with disapproval reason)
+            // If has disapproval_reason, it's declined
             if (!empty($item['disapproval_reason'])) {
-                $declined_donor_ids[] = $donor_id;
+                $declined_donor_ids[] = $item['donor_form_id'];
             }
         }
     }
 }
 curl_close($screening_ch);
-$declined_count = count($declined_donor_ids);
-error_log("DEBUG - Screening IDs map created: " . count($screening_ids_map));
-error_log("DEBUG - Declined donor count: " . $declined_count);
 
-// --- STEP 3: Get physical examination data to find approved donors ---
+// Fetch approved donors (those with a physical_exam_id)
 $physical_ch = curl_init();
-
-// Simple query to get all donor IDs from physical examination
 curl_setopt_array($physical_ch, [
-    CURLOPT_URL => SUPABASE_URL . '/rest/v1/physical_examination?select=donor_id',
+    CURLOPT_URL => SUPABASE_URL . '/rest/v1/physical_examination?select=donor_form_id,physical_exam_id',
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_HTTPHEADER => [
         'apikey: ' . SUPABASE_API_KEY,
@@ -111,81 +84,22 @@ curl_setopt_array($physical_ch, [
 ]);
 
 $physical_response = curl_exec($physical_ch);
-curl_close($physical_ch);
-
-error_log("DEBUG - Physical Exam Query: " . SUPABASE_URL . '/rest/v1/physical_examination?select=donor_id');
-error_log("DEBUG - Physical Exam Sample Response: " . substr($physical_response, 0, 100));
-
 $approved_donor_ids = [];
 
 if ($physical_response !== false) {
-    $physical_data = json_decode($physical_response, true);
-    
-    if (is_array($physical_data)) {
-        error_log("DEBUG - Found " . count($physical_data) . " physical examination records");
-        
-        // Log first record to check format
-        if (!empty($physical_data)) {
-            error_log("DEBUG - First physical exam record: " . json_encode($physical_data[0]));
-        }
-        
-        foreach ($physical_data as $record) {
-            if (isset($record['donor_id'])) {
-                $donor_id = $record['donor_id'];
-                
-                // Skip if donor was declined
-                if (in_array($donor_id, $declined_donor_ids)) {
-                    continue;
-                }
-                
-                // Otherwise add to approved list
-                $approved_donor_ids[] = $donor_id;
-            }
-        }
-    } else {
-        error_log("DEBUG - Error parsing physical examination data: not an array");
-    }
-}
-
-// Ensure unique donor IDs and count
-$approved_donor_ids = array_values(array_unique($approved_donor_ids));
-
-// DEBUGGING: If we didn't find any approved donors, add some test values
-if (empty($approved_donor_ids)) {
-    error_log("DEBUG - No approved donors found naturally, adding test IDs for debugging");
-    // Add the first 3 donors from all_donor_ids as test approved donors if they aren't declined
-    foreach(array_slice($all_donor_ids, 0, 3) as $test_id) {
-        if (!in_array($test_id, $declined_donor_ids)) {
-            $approved_donor_ids[] = $test_id;
-            error_log("DEBUG - Added test approved donor ID: " . $test_id);
+    $physical_data = json_decode($physical_response, true) ?: [];
+    foreach ($physical_data as $item) {
+        if (isset($item['donor_form_id']) && isset($item['physical_exam_id'])) {
+            $approved_donor_ids[] = $item['donor_form_id'];
         }
     }
 }
+curl_close($physical_ch);
 
-$approved_count = count($approved_donor_ids);
-
-error_log("DEBUG - FOUND " . $approved_count . " APPROVED DONORS");
-error_log("DEBUG - Approved donor IDs: " . json_encode($approved_donor_ids));
-
-// --- STEP 4: Calculate incoming (donors not declined or approved) ---
-// Remove approved and declined donors from all_donor_ids to get incoming donors
-$processed_donor_ids = array_unique(array_merge($approved_donor_ids, $declined_donor_ids));
-error_log("DEBUG - Processed donor IDs: " . json_encode($processed_donor_ids));
-
-// Calculate incoming count - these are donors who have NO screening form yet
-$incoming_donor_ids = array_diff($all_donor_ids, $screened_donor_ids);
-$incoming_count = count($incoming_donor_ids);
-
-// Add more debugging to verify calculation
-error_log("DEBUG - All donor IDs: " . json_encode($all_donor_ids));
-error_log("DEBUG - Screened donor IDs: " . json_encode($screened_donor_ids));
-error_log("DEBUG - Resulting Incoming donor IDs: " . json_encode($incoming_donor_ids));
-
-error_log("DEBUG - FINAL COUNTS - Total: $total_donors, Approved: $approved_count, Declined: $declined_count, Incoming: $incoming_count");
-error_log("DEBUG - LOGIC CHECK - Incoming should be donors WITHOUT screening forms: " . $total_donors . " - " . count($screened_donor_ids) . " = " . ($total_donors - count($screened_donor_ids)));
-
-// Log counts for debugging
-error_log("COUNTING SUMMARY: Total: $total_donors, Incoming (unscreened): $incoming_count, Screened: " . count($screened_donor_ids) . ", Approved: $approved_count, Declined: $declined_count");
+// Calculate final counts
+$declined_count = count($declined_donor_ids);
+$approved_count = count(array_diff($approved_donor_ids, $declined_donor_ids)); // Approved but not declined
+$incoming_count = count(array_diff($all_donor_ids, $approved_donor_ids, $declined_donor_ids)); // Not approved or declined
 
 // Add pagination settings
 $records_per_page = 15;
@@ -198,38 +112,12 @@ $donors = [];
 // Modify your Supabase query to properly filter for unprocessed donors
 $ch = curl_init();
 
-// First, get all donor IDs that have screening forms
-$screening_ch = curl_init();
-curl_setopt_array($screening_ch, [
-    CURLOPT_URL => SUPABASE_URL . '/rest/v1/screening_form?select=donor_form_id',
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY
-    ]
-]);
-
-$screening_response = curl_exec($screening_ch);
-$screening_processed_donor_ids = [];
-
-if ($screening_response !== false) {
-    $screening_data = json_decode($screening_response, true);
-    if (is_array($screening_data)) {
-        foreach ($screening_data as $item) {
-            if (isset($item['donor_form_id'])) {
-                $screening_processed_donor_ids[] = $item['donor_form_id'];
-            }
-        }
-    }
-}
-curl_close($screening_ch);
-
 // Debug info
 $debug_screening = [
     'screening_response' => substr($screening_response, 0, 500) . '...',
-    'screening_processed_donor_ids' => $screening_processed_donor_ids
+    'processed_donor_ids' => $screened_donor_ids
 ];
-error_log("Screening form data (direct query): " . json_encode($debug_screening));
+error_log("Screening form data: " . json_encode($debug_screening));
 
 // Now get donor forms that are NOT in the processed list
 $query_url = SUPABASE_URL . '/rest/v1/donor_form?select=*&order=submitted_at.desc';
@@ -269,12 +157,10 @@ if ($status_filter) {
             // Default behavior - show all donors
             break;
     }
-} else {
-    // DEFAULT VIEW - show only INCOMING donors (those without screening forms)
-    if (!empty($screened_donor_ids)) {
-        $screened_ids_str = implode(',', $screened_donor_ids);
-        $query_url .= '&donor_id=not.in.(' . $screened_ids_str . ')';
-    }
+} else if (!empty($screened_donor_ids)) {
+    // Default behavior when not filtering but we have processed IDs
+    $screened_ids_str = implode(',', $screened_donor_ids);
+    $query_url .= '&donor_id=not.in.(' . $screened_ids_str . ')';
 }
 
 curl_setopt_array($ch, [
@@ -315,14 +201,9 @@ if (isset($_GET['approve_donor'])) {
     $donor_id = intval($_GET['approve_donor']);
     $donor_name = $_GET['donor_name'] ?? '';
     
-    // Add debugging
-    error_log("APPROVAL PROCESS: Received approve_donor parameter: " . $donor_id);
-    
     // Store in session
     $_SESSION['donor_id'] = $donor_id;
     $_SESSION['donor_name'] = $donor_name;
-    
-    error_log("APPROVAL PROCESS: Setting donor_id in session directly: " . $donor_id);
     
     // Ensure user_staff_roles is set - default to 'Interviewer' to guarantee access
     // The interviewer role should have access to medical histories
@@ -334,8 +215,8 @@ if (isset($_GET['approve_donor'])) {
     $user_id = $_SESSION['user_id'] ?? 0;
     
     // Add extra debugging
-    error_log("APPROVAL PROCESS: User ID for role lookup: " . $user_id);
-    error_log("APPROVAL PROCESS: Initial role settings: " . $_SESSION['user_staff_role']);
+    error_log("User ID for role lookup: " . $user_id);
+    error_log("Initial role settings: " . $_SESSION['user_staff_role']);
     
     // Use Supabase API to get the user role
     $ch = curl_init();
@@ -349,7 +230,6 @@ if (isset($_GET['approve_donor'])) {
     ]);
     
     $response = curl_exec($ch);
-    $curl_error = curl_error($ch);
     
     if ($response !== false) {
         $userData = json_decode($response, true);
@@ -359,12 +239,8 @@ if (isset($_GET['approve_donor'])) {
             $_SESSION['staff_role'] = $userData[0]['role_name'] ?? 'Interviewer';
             $_SESSION['user_staff_roles'] = $userData[0]['role_name'] ?? 'Interviewer';
             
-            error_log("APPROVAL PROCESS: User role set to: " . $_SESSION['user_staff_role']);
-        } else {
-            error_log("APPROVAL PROCESS: No user role data found or invalid format");
+            error_log("User role set to: " . $_SESSION['user_staff_role']);
         }
-    } else {
-        error_log("APPROVAL PROCESS: cURL error fetching user role: " . $curl_error);
     }
     
     curl_close($ch);
@@ -374,30 +250,15 @@ if (isset($_GET['approve_donor'])) {
         $_SESSION['user_staff_role'] = 'Interviewer';
         $_SESSION['user_staff_roles'] = 'Interviewer';
         $_SESSION['staff_role'] = 'Interviewer';
-        error_log("APPROVAL PROCESS: Role not valid, defaulting to Interviewer");
     }
     
-    // Log the session for debugging
-    ob_start();
-    var_dump($_SESSION);
-    $session_dump = ob_get_clean();
-    error_log("APPROVAL PROCESS: Session after setting: " . $session_dump);
+    // Log the action
+    error_log("Setting donor_id in session directly: " . $donor_id);
+    error_log("Session after setting: " . print_r($_SESSION, true));
     
     // Redirect directly to medical history form
-    $redirect_url = "../../src/views/forms/medical-history.php";
-    error_log("APPROVAL PROCESS: Redirecting to: " . $redirect_url);
-    
-    // Ensure no output has been sent before redirect
-    if (!headers_sent($filename, $linenum)) {
-        header("Location: " . $redirect_url);
-        exit();
-    } else {
-        error_log("APPROVAL PROCESS: Headers already sent in $filename on line $linenum");
-        echo "<script>window.location.href = '$redirect_url';</script>";
-        echo "<noscript><meta http-equiv='refresh' content='0;url=$redirect_url'></noscript>";
-        echo "If you are not redirected, <a href='$redirect_url'>click here</a>.";
-        exit();
-    }
+    header("Location: ../../src/views/forms/medical-history.php");
+    exit();
 }
 
 // Add this function to handle donor approval
@@ -424,61 +285,18 @@ function storeDonorIdInSession($donorData) {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         :root {
-            --bg-color: #f5f5f5;
-            --text-color: #000;
-            --sidebar-bg: #ffffff;
-            --hover-bg: #f0f0f0;
-            --primary-color: #b22222; /* Red Cross red */
-            --primary-dark: #8b0000; /* Darker red for hover and separator */
-            --active-color: #b22222;
-            --table-header-bg: #b22222;
+            --bg-color: #f8f9fa; /* Light background */
+            --text-color: #000; /* Dark text */
+            --sidebar-bg: #ffffff; /* White sidebar */
+            --card-bg: #e9ecef; /* Light gray cards */
+            --hover-bg: #dee2e6; /* Light gray hover */
         }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        body.light-mode {
             background-color: var(--bg-color);
-            color: #333;
-            margin: 0;
-            padding: 0;
+            color: var(--text-color);
         }
 
-        /* Header styling */
-        .dashboard-home-header {
-            margin-left: 16.66666667%;
-            background: white;
-            border-bottom: 1px solid #e0e0e0;
-            padding: 0.75rem 1rem;
-            display: flex;
-            align-items: center;
-        }
-        
-        .header-title {
-            font-weight: 600;
-            font-size: 1rem;
-            margin: 0;
-            flex-grow: 1;
-        }
-        
-        .header-date {
-            color: #777;
-            font-size: 0.8rem;
-            margin-left: 0.5rem;
-        }
-        
-        .register-btn {
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 0.4rem 0.75rem;
-            border-radius: 3px;
-            font-weight: 500;
-            text-decoration: none;
-            display: inline-block;
-            margin-left: auto;
-            font-size: 0.9rem;
-        }
-
-        /* Sidebar Styles */
         .sidebar {
             background: var(--sidebar-bg);
             height: 100vh;
@@ -490,7 +308,6 @@ function storeDonorIdInSession($donorData) {
             overflow-y: auto;
             z-index: 1000;
             box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-            border-right: 1px solid #e0e0e0;
         }
 
         .sidebar h4 {
@@ -504,342 +321,165 @@ function storeDonorIdInSession($donorData) {
         .sidebar .nav-link {
             padding: 0.8rem 1rem;
             margin-bottom: 0.5rem;
-            border-radius: 0;
+            border-radius: 5px;
             transition: all 0.3s ease;
             color: #000 !important;
             text-decoration: none;
-            border-left: 5px solid transparent;
         }
 
         .sidebar .nav-link:hover,
-        .sidebar  {
+        .sidebar .nav-link.active {
             background: var(--hover-bg);
-            color: var(--active-color) !important;
-            border-left-color: var(--active-color);
+            transform: translateX(5px);
+            color: #000 !important;
         }
 
-        .nav-link.active{
-            background-color: var(--active-color);
-            color: white !important;
-        }
-
-        /* Main Content */
         .main-content {
-            padding: 1rem;
-            margin-left: 16.66666667%;
-            background-color: var(--bg-color);
-        }
-        
-        .content-wrapper {
-            background-color: white;
-            border-radius: 0px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
             padding: 1.5rem;
-            margin-bottom: 1rem;
+            margin-left: 16.66666667%;
         }
 
-        /* Dashboard Header */
-        .dashboard-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid #eaeaea;
+        .card {
+            background: var(--card-bg);
+            color: var(--text-color);
+            transition: transform 0.2s ease-in-out;
         }
 
-        .dashboard-title {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #333;
-            display: flex;
-            align-items: center;
+        .card:hover {
+            transform: scale(1.03);
         }
 
-        .dashboard-date {
-            color: #777;
-            font-size: 0.9rem;
+        .alert {
+            font-size: 1.1rem;
         }
 
-        /* Status Cards */
-        .dashboard-staff-status {
-            display: flex;
-            justify-content: space-between;
-            gap: 1rem; 
-            margin-bottom: 1.5rem;
+        .btn-toggle {
+            position: absolute;
+            top: 10px;
+            right: 20px;
         }
-        
-        .status-card {
-            flex: 1;
-            border-radius: 0;
-            background-color: white;
-            border: 1px solid #e0e0e0;
-            padding: 1rem;
+
+        .table-hover tbody tr {
             cursor: pointer;
-            text-decoration: none;
-            color: #333;
-            display: block;
-            transition: all 0.2s ease-in-out;
-        }
-        
-        .status-card:hover {
-            text-decoration: none;
-            color: #333;
-            background-color: #f8f8f8;
-            border-color: var(--primary-dark);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        
-        .status-card.active {
-            border-top: 3px solid var(--primary-dark);
-            background-color: #f8f8f8;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.08);
-        }
-        
-        .dashboard-staff-count {
-            font-size: 1.75rem;
-            font-weight: 700;
-            margin-bottom: 0.25rem;
-            color: #333;
-        }
-        
-        .dashboard-staff-title {
-            font-weight: bold;
-            font-size: 0.95rem;
-            margin-bottom: 0;
-            color: #555;
-        }
-        
-        .welcome-section {
-            margin-bottom: 1.5rem;
-        }
-        
-        .welcome-title {
-            font-size: 1.3rem;
-            font-weight: 700;
-            margin-bottom: 0;
-            color: #333;
+            transition: background-color 0.3s ease;
         }
 
-        /* Red line separator */
-        .red-separator {
-            height: 4px;
-            background-color: #8b0000;
-            border: none;
-            margin: 1.5rem 0;
-            width: 100%;
-            opacity: 1;
+        .table-hover tbody tr:hover {
+            background-color: var(--hover-bg); /* Light gray hover for rows */
         }
 
-        /* Table Styling */
-        .dashboard-staff-tables {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            border-radius: 0;
-            overflow: hidden;
-            margin-bottom: 1rem;
+        /* Additional styles for light mode */
+        .table-dark {
+            background-color: var(--card-bg);
+            color: var(--text-color);
         }
 
-        .dashboard-staff-tables thead th {
-            background-color: var(--table-header-bg);
-            color: white;
-            padding: 10px 15px;
-            text-align: left;
-            font-weight: 600;
-            font-size: 0.95rem;
-            border-bottom: 0;
+        .table-dark thead th {
+            background-color: var(--sidebar-bg);
+            color: var(--text-color);
         }
 
-        .dashboard-staff-tables tbody td {
-            padding: 10px 15px;
-            border-bottom: 1px solid #e9ecef;
-            font-size: 0.95rem;
-            cursor: pointer;
+        .table-dark tbody tr:hover {
+            background-color: var(--hover-bg);
         }
 
-        .dashboard-staff-tables tbody tr:nth-child(odd) {
-            background-color: #f8f9fa;
+        .modal-content {
+            background-color: var(--card-bg);
+            color: var(--text-color);
         }
 
-        .dashboard-staff-tables tbody tr:nth-child(even) {
-            background-color: #ffffff;
+        .modal-header, .modal-footer {
+            border-color: var(--hover-bg);
         }
 
-        .dashboard-staff-tables tbody tr:hover {
-            background-color: #f0f0f0;
-            cursor: pointer;
+        .donor_form_input[readonly], .donor_form_input[disabled] {
+            background-color: var(--bg-color);
+            cursor: not-allowed;
+            border: 1px solid #ddd;
         }
 
-        .dashboard-staff-tables tbody tr{
-            cursor: pointer;
+        .donor-declaration-button[disabled] {
+            background-color: var(--hover-bg);
+            cursor: not-allowed;
         }
+        /* Modern Font */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
 
-        /* Search bar */
-        .search-container {
-            margin-bottom: 1.5rem;
-        }
+/* Table Styling */
+.dashboard-staff-tables {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    
+}
 
-        #searchInput {
-            border-radius: 0;
-            height: 45px;
-            border-color: #ddd;
-            font-size: 1rem;
-            padding: 0.5rem 0.75rem;
-        }
+.dashboard-staff-tables thead th {
+    background-color: #242b31; /* Blue header */
+    color: white;
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+}
 
-        /* Pagination Styles */
-        .pagination-container {
-            margin-top: 2rem;
-        }
+.dashboard-staff-tables tbody td {
+    padding: 12px;
+    border-bottom: 1px solid #e9ecef;
+}
 
-        .pagination {
-            justify-content: center;
-        }
+/* Alternating Row Colors */
+.dashboard-staff-tables tbody tr:nth-child(odd) {
+    background-color: #f8f9fa; /* Light gray for odd rows */
+}
 
-        .page-link {
-            color: #333;
-            border-color: #dee2e6;
-            padding: 0.5rem 1rem;
-            transition: all 0.2s ease;
-            font-size: 0.95rem;
-        }
+.dashboard-staff-tables tbody tr:nth-child(even) {
+    background-color: #ffffff; /* White for even rows */
+}
 
-        .page-link:hover {
-            background-color: #f8f9fa;
-            color: var(--primary-color);
-            border-color: #dee2e6;
-        }
+/* Hover Effect */
+.dashboard-staff-tables tbody tr:hover {
+    background-color: #e9f5ff; /* Light blue on hover */
+    transition: background-color 0.3s ease;
+}
 
-        .page-item.active .page-link {
-            background-color: var(--primary-color);
-            border-color: var(--primary-color);
-            color: white;
-        }
+/* Rounded Corners for First and Last Rows */
+.dashboard-staff-tables tbody tr:first-child td:first-child {
+    border-top-left-radius: 10px;
+}
 
-        .page-item.disabled .page-link {
-            color: #6c757d;
-            background-color: #fff;
-            border-color: #dee2e6;
-        }
+.dashboard-staff-tables tbody tr:first-child td:last-child {
+    border-top-right-radius: 10px;
+}
 
-        /* Badge styling */
-        .badge.bg-primary {
-            background-color: var(--primary-color) !important;
-            font-size: 0.95rem;
-            padding: 0.3rem 0.6rem;
-            font-weight: 600;
-            border-radius: 4px;
-        }
-        
-        /* Section header */
-        .section-header {
-            font-size: 1.25rem;
-            font-weight: 700;
-            margin-bottom: 1.25rem;
-            color: #333;
-        }
-         /* Loader Animation -- Modal Design */
-         .loading-spinner {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            border: 8px solid #ddd;
-            border-top: 8px solid #d9534f;
-            animation: rotateSpinner 1s linear infinite;
-            display: none;
-            z-index: 10000;
-            transform: translate(-50%, -50%);
-        }
+.dashboard-staff-tables tbody tr:last-child td:first-child {
+    border-bottom-left-radius: 10px;
+}
 
-        @keyframes rotateSpinner {
-            0% { transform: translate(-50%, -50%) rotate(0deg); }
-            100% { transform: translate(-50%, -50%) rotate(360deg); }
-        }
-        /* Confirmation Modal */
-        .confirmation-modal {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+.dashboard-staff-tables tbody tr:last-child td:last-child {
+    border-bottom-right-radius: 10px;
+}
+.custom-margin {
+            margin: 30px auto;
             background: white;
-            padding: 25px;
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
-            text-align: center;
-            z-index: 9999;
-            border-radius: 10px;
-            width: 300px;
-            display: none;
-            opacity: 0;
-        }
-
-        /* Fade-in and Fade-out Animations */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translate(-50%, -55%); }
-            to { opacity: 1; transform: translate(-50%, -50%); }
-        }
-
-        @keyframes fadeOut {
-            from { opacity: 1; transform: translate(-50%, -50%); }
-            to { opacity: 0; transform: translate(-50%, -55%); }
-        }
-
-        .confirmation-modal.show {
-            display: block;
-            animation: fadeIn 0.3s ease-in-out forwards;
-        }
-
-        .confirmation-modal.hide {
-            animation: fadeOut 0.3s ease-in-out forwards;
-        }
-
-        .modal-headers {
-            font-size: 18px;
-            font-weight: bold;
-            color: #d9534f;
-            margin-bottom: 15px;
-        }
-
-        .modal-actions {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 20px;
-        }
-
-        .modal-button {
-            width: 45%;
-            padding: 10px;
-            font-size: 16px;
-            font-weight: bold;
-            border: none;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-
-        .cancel-action {
-            background: #aaa;
-            color: white;
-        }
-
-        .cancel-action:hover {
-            background: #888;
-        }
-
-        .confirm-action {
-            background: #d9534f;
-            color: white;
-        }
-
-        .confirm-action:hover {
-            background: #c9302c;
-        }
+            border-radius: 8px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+}
+/* General Styling */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f8f9fa; /* Light background for better contrast */
+    color: #333; /* Dark text for readability */
+    margin: 0;
+    padding: 0;
+}
 
 
-        /* Donor Form Header Modal*/
+/* Donor Form Header */
 .donor_form_header {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
@@ -1028,27 +668,336 @@ select.donor_form_input[disabled] {
         margin-left: 0;
     }
 }
+        /* Enhanced Header styles */
+        .dashboard-home-header {
+            margin-left: 16.66666667%;
+            position: relative;
+            z-index: 999;
+            background: #ffffff;
+            border-bottom: 1px solid #e9ecef;
+            padding: 1.2rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 70px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .header-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: 0;
+        }
+
+        .header-icon {
+            color: #dc3545;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .header-date {
+            color: #6c757d;
+            font-size: 0.95rem;
+            font-weight: normal;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .header-btn {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #dc3545;
+            color: white;
+            border: none;
+            box-shadow: 0 1px 2px rgba(220, 53, 69, 0.15);
+        }
+
+        .header-btn:hover {
+            transform: translateY(-1px);
+            background: #c82333;
+            color: white;
+            box-shadow: 0 3px 5px rgba(220, 53, 69, 0.2);
+        }
+
+        .header-btn i {
+            font-size: 1rem;
+        }
+
+        @media (max-width: 991.98px) {
+            .dashboard-home-header {
+                margin-left: 0;
+                padding: 1rem;
+                flex-wrap: wrap;
+                gap: 1rem;
+            }
+
+            .header-left {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+
+            .header-title {
+                font-size: 1.1rem;
+            }
+
+            .header-date {
+                font-size: 0.9rem;
+            }
+
+            .header-actions {
+                width: 100%;
+                justify-content: flex-end;
+            }
+
+            .header-btn {
+                padding: 0.4rem 0.8rem;
+                font-size: 0.9rem;
+            }
+        }
+
+        /* Updated styles for the search bar */
+        .search-container {
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .input-group {
+            width: 100%;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+
+        .input-group-text {
+            background-color: #fff;
+            border: 2px solid #ced4da;
+            border-right: none;
+            padding: 0.75rem 1.5rem;
+        }
+
+        .category-select {
+            border: 2px solid #ced4da;
+            border-right: none;
+            border-left: none;
+            background-color: #f8f9fa;
+            cursor: pointer;
+            min-width: 150px;
+        }
+
+        .category-select:focus {
+            box-shadow: none;
+            border-color: #ced4da;
+        }
+
+        #searchInput {
+            border: 2px solid #ced4da;
+            border-left: none;
+            padding: 1.5rem;
+            font-size: 1.2rem;
+            flex: 1;
+        }
+
+        #searchInput::placeholder {
+            color: #adb5bd;
+            font-size: 1.1rem;
+        }
+
+        #searchInput:focus {
+            box-shadow: none;
+            border-color: #ced4da;
+        }
+
+        .input-group:focus-within {
+            box-shadow: 0 0 0 0.25rem rgba(0,123,255,.25);
+        }
+
+        .input-group-text i {
+            font-size: 1.5rem;
+            color: #6c757d;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            width: 100%;
+        }
+
+        /* Add these styles after your existing styles */
+        .pagination-container {
+            margin-top: 20px;
+            margin-bottom: 40px;
+        }
+
+        .pagination {
+            gap: 5px;
+        }
+
+        .page-link {
+            color: #242b31;
+            border: 2px solid #dee2e6;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+
+        .page-link:hover {
+            background-color: #e9ecef;
+            border-color: #dee2e6;
+            color: #242b31;
+        }
+
+        .page-item.active .page-link {
+            background-color: #242b31;
+            border-color: #242b31;
+            color: white;
+        }
+
+        .page-item:first-child .page-link,
+        .page-item:last-child .page-link {
+            border-radius: 6px;
+        }
+
+        /* Dashboard Status Cards Styles */
+        .dashboard-staff-status {
+            margin-left: 16.66666667%;
+            margin-top: 10px;
+            margin-bottom: 20px;
+        }
+
+        .dashboard-staff-card {
+            border-radius: 15px;
+            transition: all 0.3s ease;
+            background-color: white;
+        }
+
+        .dashboard-staff-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
+        }
+        
+        .dashboard-staff-card.active {
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15) !important;
+            border-left: 5px solid;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .dashboard-staff-card.active .dashboard-staff-count {
+            transform: scale(1.1);
+        }
+        
+        /* Active state colors for different cards */
+        .col-md-4:nth-child(1) .dashboard-staff-card.active {
+            border-left-color: #3182ce; /* Blue for incoming */
+        }
+        
+        .col-md-4:nth-child(2) .dashboard-staff-card.active {
+            border-left-color: #38a169; /* Green for approved */
+        }
+        
+        .col-md-4:nth-child(3) .dashboard-staff-card.active {
+            border-left-color: #e53e3e; /* Red for declined */
+        }
+
+        .dashboard-staff-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .dashboard-staff-count {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: #2d3748;
+        }
+
+        .dashboard-staff-title {
+            font-weight: 600;
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+        }
+
+        .dashboard-staff-desc {
+            color: #718096;
+            font-size: 0.95rem;
+            text-align: center;
+        }
+
+        @media (max-width: 991.98px) {
+            .dashboard-staff-status {
+                margin-left: 0;
+            }
+        }
     </style>
 </head>
 <body class="light-mode">
-    <div class="container-fluid p-0">
-        <!-- Header -->
+<div class="container-fluid p-0">
+        <!-- Enhanced Header -->
         <div class="dashboard-home-header">
-            <h4 class="header-title">Staff Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
-            <button class="register-btn" onclick="showConfirmationModal()">
-                Register Donor
-            </button>
+            <div class="header-left">
+                <h4 class="header-title">
+                    <i class="fas fa-hospital-user header-icon"></i>
+                    Staff Dashboard
+                </h4>
+                <span class="header-date">
+                    <?php echo date('l, F j, Y'); ?>
+                </span>
+            </div>
+            <div class="header-actions">
+                <?php if ($user_staff_roles === 'interviewer'): ?>
+                    <button class="header-btn" onclick="window.location.href='../forms/qr-registration.php'">
+                        <i class="fas fa-qrcode"></i>
+                        QR Registration
+                    </button>
+                <?php endif; ?>
+                <button class="header-btn" onclick="showConfirmationModal()">
+                    <i class="fas fa-user-plus"></i>
+                    Register Donor
+                </button>
+            </div>
         </div>
 
+       
+
         <div class="row g-0">
+        
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block sidebar">
-                <h4>Staff</h4>
+                <h4>Red Cross Staff</h4>
                 <ul class="nav flex-column">
                     
                     <?php if ($user_staff_roles === 'interviewer'): ?>
                         <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-donor-submission.php">
+                            <a class="nav-link" href="dashboard-staff-donor-submission.php">
                                 Donor Interviews Submissions
                             </a>
                         </li>
@@ -1056,15 +1005,15 @@ select.donor_form_input[disabled] {
 
                     <?php if ($user_staff_roles === 'reviewer'): ?>
                         <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-medical-history-submissions.php">
+                            <a class="nav-link" href="dashboard-staff-medical-history-submissions.php">
                                 Donor Medical Interview Submissions
                             </a>
                         </li>
                     <?php endif; ?>
-                    
+
                     <?php if ($user_staff_roles === 'physician'): ?>
                         <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-physical-submission.php">
+                            <a class="nav-link" href="dashboard-staff-physical-submission.php">
                                 Physical Exams Submissions
                             </a>
                         </li>
@@ -1072,13 +1021,13 @@ select.donor_form_input[disabled] {
                     
                     <?php if ($user_staff_roles === 'phlebotomist'): ?>
                         <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-blood-collection-submission.php">
+                            <a class="nav-link" href="dashboard-staff-blood-collection-submission.php">
                                 Blood Collection Submissions
                             </a>
                         </li>
                     <?php endif; ?>
                     <li class="nav-item">
-                        <a class="nav-link" href="dashboard-staff-history.php">Donor History</a>
+                        <a class="nav-link" href="dashboard-staff-history.php">History</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="../../assets/php_func/logout.php">Logout</a>
@@ -1088,39 +1037,110 @@ select.donor_form_input[disabled] {
             
             <!-- Main Content -->
             <main class="col-md-9 col-lg-10 main-content">
-                <div class="content-wrapper">
-                    <div class="welcome-section">
-                        <h2 class="welcome-title">Welcome, Blood Bank Reviewer!</h2>
+                <!-- Error Display Area -->
+                <div id="errorDisplay" class="alert alert-danger" style="display: none;"></div>
+                
+                <!-- Latest Donor Submissions -->
+                <div class="container-fluid p-4 custom-margin">
+                 <!-- Status Cards -->
+        <div class="dashboard-staff-status row mx-0 p-3">
+            <div class="col-md-4 mb-4">
+                <a href="?status=incoming" class="text-decoration-none">
+                    <div class="dashboard-staff-card card h-100 border-0 shadow-sm <?php echo ($status_filter === 'incoming' || $status_filter === null) ? 'active' : ''; ?>">
+                        <div class="card-body d-flex flex-column align-items-center">
+                            <div class="dashboard-staff-icon bg-primary text-white rounded-circle mb-3 d-flex align-items-center justify-content-center">
+                                <i class="fas fa-clipboard-list fa-2x"></i>
+                            </div>
+                            <h3 class="dashboard-staff-count mb-2"><?php echo $incoming_count; ?></h3>
+                            <h5 class="dashboard-staff-title text-muted">Incoming Registrations</h5>
+                            <p class="dashboard-staff-desc text-center small text-secondary mt-2">
+                                New donor registrations awaiting processing
+                            </p>
+                        </div>
                     </div>
-                    
-                    <!-- Status Cards -->
-                    <div class="dashboard-staff-status">
-                        <a href="?status=incoming" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'incoming') ? 'active' : ''; ?>">
-                            <p class="dashboard-staff-count"><?php echo $incoming_count; ?></p>
-                            <p class="dashboard-staff-title">Incoming Registrations</p>
-                        </a>
-                        <a href="?status=approved" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'approved') ? 'active' : ''; ?>">
-                            <p class="dashboard-staff-count"><?php echo $approved_count; ?></p>
-                            <p class="dashboard-staff-title">Approved</p>
-                        </a>
-                        <a href="?status=declined" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'declined') ? 'active' : ''; ?>">
-                            <p class="dashboard-staff-count"><?php echo $declined_count; ?></p>
-                            <p class="dashboard-staff-title">Declined</p>
-                        </a>
+                </a>
+            </div>
+            <div class="col-md-4 mb-4">
+                <a href="?status=approved" class="text-decoration-none">
+                    <div class="dashboard-staff-card card h-100 border-0 shadow-sm <?php echo $status_filter === 'approved' ? 'active' : ''; ?>">
+                        <div class="card-body d-flex flex-column align-items-center">
+                            <div class="dashboard-staff-icon bg-success text-white rounded-circle mb-3 d-flex align-items-center justify-content-center">
+                                <i class="fas fa-check-circle fa-2x"></i>
+                            </div>
+                            <h3 class="dashboard-staff-count mb-2"><?php echo $approved_count; ?></h3>
+                            <h5 class="dashboard-staff-title text-muted">Approved</h5>
+                            <p class="dashboard-staff-desc text-center small text-secondary mt-2">
+                                Donors with completed physical examinations
+                            </p>
+                        </div>
                     </div>
-                    
-                    <h5 class="section-header">Donation Records</h5>
+                </a>
+            </div>
+            <div class="col-md-4 mb-4">
+                <a href="?status=declined" class="text-decoration-none">
+                    <div class="dashboard-staff-card card h-100 border-0 shadow-sm <?php echo $status_filter === 'declined' ? 'active' : ''; ?>">
+                        <div class="card-body d-flex flex-column align-items-center">
+                            <div class="dashboard-staff-icon bg-danger text-white rounded-circle mb-3 d-flex align-items-center justify-content-center">
+                                <i class="fas fa-times-circle fa-2x"></i>
+                            </div>
+                            <h3 class="dashboard-staff-count mb-2"><?php echo $declined_count; ?></h3>
+                            <h5 class="dashboard-staff-title text-muted">Declined</h5>
+                            <p class="dashboard-staff-desc text-center small text-secondary mt-2">
+                                Donors rejected due to screening issues
+                            </p>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
+                
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h2 class="mt-1">
+                            <?php
+                            if ($status_filter === 'incoming') {
+                                echo 'Incoming Donor Submissions';
+                            } elseif ($status_filter === 'approved') {
+                                echo 'Approved Donor Submissions';
+                            } elseif ($status_filter === 'declined') {
+                                echo 'Declined Donor Submissions';
+                            } else {
+                                echo 'Latest Donor Submissions';
+                            }
+                            ?>
+                        </h2>
+                        <?php if ($status_filter): ?>
+                            <a href="dashboard-staff-donor-submission.php" class="btn btn-outline-secondary">
+                                <i class="fas fa-times"></i> Clear Filter
+                            </a>
+                        <?php endif; ?>
+                    </div>
                     
                     <!-- Search Bar -->
-                    <div class="search-container">
-                        <input type="text" 
-                            class="form-control" 
-                            id="searchInput" 
-                            placeholder="Search donors...">
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="search-container text-center">
+                                <div class="input-group input-group-lg">
+                                    <span class="input-group-text">
+                                        <i class="fas fa-search fa-lg"></i>
+                                    </span>
+                                    <select class="form-select form-select-lg category-select" id="searchCategory" style="max-width: 200px;">
+                                        <option value="all">All Fields</option>
+                                        <option value="date">Date</option>
+                                        <option value="surname">Surname</option>
+                                        <option value="firstname">First Name</option>
+                                        <option value="birthdate">Birthdate</option>
+                                        <option value="sex">Sex</option>
+                                    </select>
+                                    <input type="text" 
+                                        class="form-control form-control-lg" 
+                                        id="searchInput" 
+                                        placeholder="Search donors..."
+                                        style="height: 60px; font-size: 1.2rem;">
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    
-                    <hr class="red-separator">
-                    
+
                     <div class="table-responsive">
                         <table class="dashboard-staff-tables table-hover">
                             <thead>
@@ -1138,28 +1158,17 @@ select.donor_form_input[disabled] {
                                         <?php
                                         // Ensure $donor is an array before merging
                                         if (is_array($donor)) {
-                                            // Make sure donor_id is explicitly included in the data
-                                            $donorData = $donor;
-                                            $donorData['donor_id'] = $donor['donor_id'] ?? null;
-                                            
-                                            // For debugging
-                                            error_log("Donor data being encoded: " . substr(print_r($donorData, true), 0, 200));
-                                            
-                                            // Encode with proper JSON flags and error handling
-                                            $encoded_data = json_encode($donorData, JSON_HEX_APOS | JSON_HEX_QUOT);
-                                            if (json_last_error() !== JSON_ERROR_NONE) {
-                                                error_log("JSON encoding error: " . json_last_error_msg());
-                                                $encoded_data = '{}';
-                                            }
+                                            $donorData = array_merge($donor, [
+                                                'donor_id' => $donor['donor_id'] ?? null
+                                            ]);
                                         } else {
                                             error_log("Invalid donor data: " . print_r($donor, true));
                                             continue;
                                         }
                                         ?>
-                                        <tr class="donor-row" 
-                                            data-bs-toggle="modal" 
+                                        <tr data-bs-toggle="modal" 
                                             data-bs-target="#donorDetailsModal" 
-                                            data-donor='<?php echo htmlspecialchars($encoded_data); ?>'>
+                                            data-donor='<?php echo htmlspecialchars(json_encode($donorData, JSON_HEX_APOS | JSON_HEX_QUOT)); ?>'>
                                             <td><?php 
                                                 if (isset($donor['submitted_at'])) {
                                                     $date = new DateTime($donor['submitted_at']);
@@ -1178,32 +1187,29 @@ select.donor_form_input[disabled] {
                                 <?php endif; ?>
                             </tbody>
                         </table>
-                        
-                        <!-- Pagination Controls -->
-                        <?php if ($total_pages > 1): ?>
+                        <!-- Add Pagination Controls -->
                         <div class="pagination-container">
-                            <nav aria-label="Donor medical history navigation">
+                            <nav aria-label="Donor submissions navigation">
                                 <ul class="pagination justify-content-center">
                                     <!-- Previous button -->
                                     <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Previous</a>
+                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?><?php echo $status_filter ? '&status='.$status_filter : ''; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Previous</a>
                                     </li>
                                     
                                     <!-- Page numbers -->
                                     <?php for($i = 1; $i <= $total_pages; $i++): ?>
                                         <li class="page-item <?php echo $current_page == $i ? 'active' : ''; ?>">
-                                            <a class="page-link" href="?page=<?php echo $i; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>"><?php echo $i; ?></a>
+                                            <a class="page-link" href="?page=<?php echo $i; ?><?php echo $status_filter ? '&status='.$status_filter : ''; ?>"><?php echo $i; ?></a>
                                         </li>
                                     <?php endfor; ?>
                                     
                                     <!-- Next button -->
                                     <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Next</a>
+                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?><?php echo $status_filter ? '&status='.$status_filter : ''; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Next</a>
                                     </li>
                                 </ul>
                             </nav>
                         </div>
-                        <?php endif; ?>
                     </div>
                 </div>
             </main>
@@ -1430,34 +1436,37 @@ select.donor_form_input[disabled] {
             const searchInput = document.getElementById('searchInput');
             const searchCategory = document.getElementById('searchCategory');
             const donorTableBody = document.getElementById('donorTableBody');
+            const errorDisplay = document.getElementById('errorDisplay');
             const approveButton = document.getElementById('Approve');
             
             // Initialize current donor data at the top scope
             let currentDonorData = null;
             
             // Direct debug of button existence
-            console.log("Approve button found:", approveButton);
+            if (approveButton) {
+                console.log("Approve button found:", approveButton);
+            } else {
+                console.error("Approve button NOT found in DOM!");
+            }
             
             // Store the original table rows for reset
             const originalRows = Array.from(donorTableBody.getElementsByTagName('tr'));
             
             // Update placeholder based on selected category
-            if (searchCategory) {
-                searchCategory.addEventListener('change', function() {
-                    const category = this.value;
-                    let placeholder = 'Search by ';
-                    switch(category) {
-                        case 'date': placeholder += 'date...'; break;
-                        case 'surname': placeholder += 'surname...'; break;
-                        case 'firstname': placeholder += 'first name...'; break;
-                        case 'birthdate': placeholder += 'birthdate...'; break;
-                        case 'sex': placeholder += 'sex (male/female)...'; break;
-                        default: placeholder = 'Search donors...';
-                    }
-                    searchInput.placeholder = placeholder;
-                    performSearch();
-                });
-            }
+            searchCategory.addEventListener('change', function() {
+                const category = this.value;
+                let placeholder = 'Search by ';
+                switch(category) {
+                    case 'date': placeholder += 'date...'; break;
+                    case 'surname': placeholder += 'surname...'; break;
+                    case 'firstname': placeholder += 'first name...'; break;
+                    case 'birthdate': placeholder += 'birthdate...'; break;
+                    case 'sex': placeholder += 'sex (male/female)...'; break;
+                    default: placeholder = 'Search donors...';
+                }
+                searchInput.placeholder = placeholder;
+                performSearch();
+            });
 
             // Enhanced search functionality
             function performSearch() {
@@ -1552,9 +1561,7 @@ select.donor_form_input[disabled] {
 
             // Event listeners
             searchInput.addEventListener('input', debouncedSearch);
-            if (searchCategory) {
-                searchCategory.addEventListener('change', debouncedSearch);
-            }
+            searchCategory.addEventListener('change', debouncedSearch);
 
             function showError(message) {
                 alert(message);
@@ -1562,15 +1569,13 @@ select.donor_form_input[disabled] {
             }
 
             // Handle row click and populate modal
-            document.querySelectorAll('.dashboard-staff-tables tbody tr').forEach(row => {
+            document.querySelectorAll('.table-hover tbody tr').forEach(row => {
                 row.addEventListener('click', function() {
                     try {
                         const donorDataStr = this.getAttribute('data-donor');
-                        console.log("Row clicked, data attribute value:", donorDataStr);
                         
                         // Try to parse the donor data
                         currentDonorData = JSON.parse(donorDataStr);
-                        console.log("Parsed donor data:", currentDonorData);
                         
                         // Check for donor_id
                         if (!currentDonorData.donor_id) {
@@ -1586,33 +1591,23 @@ select.donor_form_input[disabled] {
             // Approve button click handler
             if (approveButton) {
                 approveButton.addEventListener('click', function() {
-                    console.log("Approve button clicked");
-                    
                     if (!currentDonorData) {
                         showError('Error: No donor selected');
-                        console.error("No currentDonorData available!");
                         return;
                     }
-                    
-                    console.log("Current donor data:", currentDonorData);
                     
                     // Get the donor_id from the data
                     const donorId = currentDonorData.donor_id;
                     if (!donorId) {
                         showError('Error: Could not process approval - missing donor ID');
-                        console.error("Missing donor_id in data");
                         return;
                     }
-                    
-                    console.log("Processing approval for donor ID:", donorId);
                     
                     // Get donor name if available
                     let donorName = '';
                     if (currentDonorData.first_name && currentDonorData.surname) {
                         donorName = currentDonorData.first_name + ' ' + currentDonorData.surname;
                     }
-                    
-                    console.log("Donor name:", donorName);
                     
                     // Show loading modal first to indicate processing
                     const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
@@ -1632,12 +1627,9 @@ select.donor_form_input[disabled] {
                     // Direct navigation with parameters after a short delay
                     setTimeout(() => {
                         const url = `dashboard-staff-donor-submission.php?approve_donor=${donorId}&donor_name=${encodeURIComponent(donorName)}`;
-                        console.log("Redirecting to URL:", url);
                         window.location.href = url;
                     }, 800);
                 });
-            } else {
-                console.error("CRITICAL: Approve button not found in DOM");
             }
         });
 

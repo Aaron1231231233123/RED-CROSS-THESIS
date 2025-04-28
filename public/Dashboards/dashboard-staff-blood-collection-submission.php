@@ -16,7 +16,7 @@ $start_time = microtime(true);
 error_log("Starting blood collection submission query at " . date('H:i:s'));
 
 // STEP 1: Get all blood collection records to identify physical exams that already have blood collection
-$blood_collection_url = SUPABASE_URL . '/rest/v1/blood_collection?select=physical_exam_id';
+$blood_collection_url = SUPABASE_URL . '/rest/v1/blood_collection?select=physical_exam_id,is_successful';
 $ch = curl_init($blood_collection_url);
 $headers = array(
     'apikey: ' . SUPABASE_API_KEY,
@@ -40,10 +40,22 @@ if ($http_code !== 200) {
 
 // Create a lookup array of physical_exam_ids that already have blood collection
 $collected_physical_exam_ids = [];
+$approved_collections = [];
+$declined_collections = [];
+
 foreach ($blood_collections as $collection) {
     if (isset($collection['physical_exam_id']) && !empty($collection['physical_exam_id'])) {
         // Normalize the physical_exam_id to string format for consistent comparison
         $collected_physical_exam_ids[] = (string)$collection['physical_exam_id'];
+        
+        // Track approved and declined collections based on is_successful
+        if (isset($collection['is_successful'])) {
+            if ($collection['is_successful'] === true) {
+                $approved_collections[] = (string)$collection['physical_exam_id'];
+            } else {
+                $declined_collections[] = (string)$collection['physical_exam_id'];
+            }
+        }
         
         // Log the type and value for debugging
         error_log("Blood collection physical_exam_id: " . $collection['physical_exam_id'] . 
@@ -54,6 +66,7 @@ foreach ($blood_collections as $collection) {
 // Dump the collected physical exam IDs for debugging
 error_log("Physical exam IDs with blood collection: " . implode(", ", $collected_physical_exam_ids));
 error_log("Found " . count($collected_physical_exam_ids) . " physical exams that already have blood collection");
+error_log("Approved collections: " . count($approved_collections) . ", Declined collections: " . count($declined_collections));
 
 // STEP 2: Get physical examination records with "Accepted" remarks only
 $physical_exam_url = SUPABASE_URL . '/rest/v1/physical_examination?remarks=eq.Accepted&select=physical_exam_id,donor_id,remarks,blood_bag_type,donor_form(surname,first_name)&order=created_at.desc';
@@ -106,10 +119,78 @@ foreach ($physical_exams as $exam) {
 
 error_log("After filtering, " . count($available_exams) . " physical exams remain available for blood collection");
 
+// Calculate incoming count (available exams that haven't been collected yet)
+$incoming_count = count($available_exams);
+$approved_count = count($approved_collections);
+$declined_count = count($declined_collections);
+
+error_log("Final counts - Incoming: $incoming_count, Approved: $approved_count, Declined: $declined_count");
+
+// Handle status filtering
+$status_filter = isset($_GET['status']) ? $_GET['status'] : 'incoming';
+
+// Initialize filtered screenings based on status
+switch ($status_filter) {
+    case 'approved':
+        // Get physical exam IDs with approved blood collection
+        $display_exams = [];
+        
+        // Get the full details of approved blood collections
+        $approved_url = SUPABASE_URL . '/rest/v1/blood_collection?is_successful=eq.true&select=blood_collection_id,physical_exam_id,physical_examination(donor_id,remarks,blood_bag_type,donor_form(surname,first_name))';
+        $ch = curl_init($approved_url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        $response = curl_exec($ch);
+        curl_close($ch);
+        
+        $approved_data = json_decode($response, true) ?: [];
+        error_log("Fetched " . count($approved_data) . " approved blood collections");
+        
+        // Format the data to match our expected structure
+        foreach ($approved_data as $item) {
+            if (isset($item['physical_examination']) && !empty($item['physical_examination'])) {
+                $exam = $item['physical_examination'];
+                $exam['physical_exam_id'] = $item['physical_exam_id'];
+                $display_exams[] = $exam;
+            }
+        }
+        break;
+        
+    case 'declined':
+        // Get physical exam IDs with declined blood collection
+        $display_exams = [];
+        
+        // Get the full details of declined blood collections
+        $declined_url = SUPABASE_URL . '/rest/v1/blood_collection?is_successful=eq.false&select=blood_collection_id,physical_exam_id,physical_examination(donor_id,remarks,blood_bag_type,donor_form(surname,first_name))';
+        $ch = curl_init($declined_url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        $response = curl_exec($ch);
+        curl_close($ch);
+        
+        $declined_data = json_decode($response, true) ?: [];
+        error_log("Fetched " . count($declined_data) . " declined blood collections");
+        
+        // Format the data to match our expected structure
+        foreach ($declined_data as $item) {
+            if (isset($item['physical_examination']) && !empty($item['physical_examination'])) {
+                $exam = $item['physical_examination'];
+                $exam['physical_exam_id'] = $item['physical_exam_id'];
+                $display_exams[] = $exam;
+            }
+        }
+        break;
+        
+    case 'incoming':
+    default:
+        $display_exams = $available_exams;
+        break;
+}
+
 // STEP 4: Prepare pagination
-$total_records = count($available_exams);
+$total_records = count($display_exams);
 $total_pages = ceil($total_records / $records_per_page);
-$examinations = array_slice($available_exams, $offset, $records_per_page);
+$examinations = array_slice($display_exams, $offset, $records_per_page);
 
 // Log execution time
 $end_time = microtime(true);
@@ -135,20 +216,61 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
         :root {
-            --bg-color: #f8f9fa;
+            --bg-color: #f5f5f5;
             --text-color: #000;
             --sidebar-bg: #ffffff;
-            --hover-bg: #dee2e6;
+            --hover-bg: #f0f0f0;
+            --primary-color: #b22222; /* Red Cross red */
+            --primary-dark: #8b0000; /* Darker red for hover and separator */
+            --active-color: #b22222;
+            --table-header-bg: #b22222;
         }
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f8f9fa;
+            background-color: var(--bg-color);
             color: #333;
             margin: 0;
             padding: 0;
+        }
+
+        /* Header styling */
+        .dashboard-home-header {
+            margin-left: 16.66666667%;
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 0.75rem 1rem;
+            display: flex;
+            align-items: center;
+        }
+        
+        .header-title {
+            font-weight: 600;
+            font-size: 1rem;
+            margin: 0;
+            flex-grow: 1;
+        }
+        
+        .header-date {
+            color: #777;
+            font-size: 0.8rem;
+            margin-left: 0.5rem;
+        }
+        
+        .register-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.4rem 0.75rem;
+            border-radius: 3px;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-block;
+            margin-left: auto;
+            font-size: 0.9rem;
         }
 
         /* Sidebar Styles */
@@ -163,6 +285,7 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
             overflow-y: auto;
             z-index: 1000;
             box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            border-right: 1px solid #e0e0e0;
         }
 
         .sidebar h4 {
@@ -176,45 +299,132 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
         .sidebar .nav-link {
             padding: 0.8rem 1rem;
             margin-bottom: 0.5rem;
-            border-radius: 5px;
+            border-radius: 0;
             transition: all 0.3s ease;
             color: #000 !important;
             text-decoration: none;
+            border-left: 5px solid transparent;
         }
 
         .sidebar .nav-link:hover,
-        .sidebar .nav-link.active {
+        .sidebar  {
             background: var(--hover-bg);
-            transform: translateX(5px);
-            color: #000 !important;
+            color: var(--active-color) !important;
+            border-left-color: var(--active-color);
+        }
+
+        .nav-link.active{
+            background-color: var(--active-color);
+            color: white !important;
         }
 
         /* Main Content */
         .main-content {
-            padding: 1.5rem;
+            padding: 1rem;
             margin-left: 16.66666667%;
+            background-color: var(--bg-color);
+        }
+        
+        .content-wrapper {
+            background-color: white;
+            border-radius: 0px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
         }
 
-        /* Responsive Design */
-        @media (max-width: 991.98px) {
-            .sidebar {
-                position: static;
-                width: 100%;
-                height: auto;
-            }
-            .main-content {
-                margin-left: 0;
-            }
+        /* Dashboard Header */
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #eaeaea;
         }
 
-        .card {
-            background: var(--card-bg);
-            color: var(--text-color);
-            transition: transform 0.2s ease-in-out;
+        .dashboard-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #333;
+            display: flex;
+            align-items: center;
         }
 
-        .card:hover {
-            transform: scale(1.03);
+        .dashboard-date {
+            color: #777;
+            font-size: 0.9rem;
+        }
+
+        /* Status Cards */
+        .dashboard-staff-status {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem; 
+            margin-bottom: 1.5rem;
+        }
+        
+        .status-card {
+            flex: 1;
+            border-radius: 0;
+            background-color: white;
+            border: 1px solid #e0e0e0;
+            padding: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            color: #333;
+            display: block;
+            transition: all 0.2s ease-in-out;
+        }
+        
+        .status-card:hover {
+            text-decoration: none;
+            color: #333;
+            background-color: #f8f8f8;
+            border-color: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .status-card.active {
+            border-top: 3px solid var(--primary-dark);
+            background-color: #f8f8f8;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+        }
+        
+        .dashboard-staff-count {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+            color: #333;
+        }
+        
+        .dashboard-staff-title {
+            font-weight: bold;
+            font-size: 0.95rem;
+            margin-bottom: 0;
+            color: #555;
+        }
+        
+        .welcome-section {
+            margin-bottom: 1.5rem;
+        }
+        
+        .welcome-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 0;
+            color: #333;
+        }
+
+        /* Red line separator */
+        .red-separator {
+            height: 4px;
+            background-color: #8b0000;
+            border: none;
+            margin: 1.5rem 0;
+            width: 100%;
+            opacity: 1;
         }
 
         /* Table Styling */
@@ -222,81 +432,109 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
             width: 100%;
             border-collapse: separate;
             border-spacing: 0;
-            border-radius: 10px;
+            border-radius: 0;
             overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            
+            margin-bottom: 1rem;
         }
 
         .dashboard-staff-tables thead th {
-            background-color: #242b31; /* Blue header */
+            background-color: var(--table-header-bg);
             color: white;
-            padding: 12px;
+            padding: 10px 15px;
             text-align: left;
             font-weight: 600;
+            font-size: 0.95rem;
+            border-bottom: 0;
         }
 
         .dashboard-staff-tables tbody td {
-            padding: 12px;
+            padding: 10px 15px;
             border-bottom: 1px solid #e9ecef;
+            font-size: 0.95rem;
         }
 
-        /* Alternating Row Colors */
         .dashboard-staff-tables tbody tr:nth-child(odd) {
-            background-color: #f8f9fa; /* Light gray for odd rows */
+            background-color: #f8f9fa;
         }
 
         .dashboard-staff-tables tbody tr:nth-child(even) {
-            background-color: #ffffff; /* White for even rows */
+            background-color: #ffffff;
         }
 
-        /* Hover Effect */
         .dashboard-staff-tables tbody tr:hover {
-            background-color: #e9f5ff; /* Light blue on hover */
-            transition: background-color 0.3s ease;
+            background-color: #f0f0f0;
         }
 
-        .custom-margin {
-                    margin: 30px auto;
-                    background: white;
-                    border-radius: 8px;
-                    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-                    width: 100%;
+        .dashboard-staff-tables tbody tr{
+            cursor: pointer;
         }
 
-        /* Donor Form Header */
-        .donor_form_header {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            align-items: center;
-            text-align: center;
-            margin-bottom: 20px;
-            color: #b22222; /* Red color for emphasis */
+        /* Search bar */
+        .search-container {
+            margin-bottom: 1.5rem;
         }
 
-        .donor_form_header h2 {
-            margin: 0;
-            font-size: 24px;
-            font-weight: bold;
+        #searchInput {
+            border-radius: 0;
+            height: 45px;
+            border-color: #ddd;
+            font-size: 1rem;
+            padding: 0.5rem 0.75rem;
         }
 
-        .grid-3 {
-            grid-template-columns: repeat(3, 1fr);
+        /* Pagination Styles */
+        .pagination-container {
+            margin-top: 2rem;
         }
 
-        .grid-4 {
-            grid-template-columns: repeat(4, 1fr);
+        .pagination {
+            justify-content: center;
         }
 
-        .grid-1 {
-            grid-template-columns: 1fr;
+        .page-link {
+            color: #333;
+            border-color: #dee2e6;
+            padding: 0.5rem 1rem;
+            transition: all 0.2s ease;
+            font-size: 0.95rem;
         }
 
-        .grid-6 {
-            grid-template-columns: repeat(6, 1fr);
+        .page-link:hover {
+            background-color: #f8f9fa;
+            color: var(--primary-color);
+            border-color: #dee2e6;
         }
-        /* Loader Animation -- Modal Design */
-        .loading-spinner {
+
+        .page-item.active .page-link {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            color: white;
+        }
+
+        .page-item.disabled .page-link {
+            color: #6c757d;
+            background-color: #fff;
+            border-color: #dee2e6;
+        }
+
+        /* Badge styling */
+        .badge.bg-primary {
+            background-color: var(--primary-color) !important;
+            font-size: 0.95rem;
+            padding: 0.3rem 0.6rem;
+            font-weight: 600;
+            border-radius: 4px;
+        }
+        
+        /* Section header */
+        .section-header {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 1.25rem;
+            color: #333;
+        }
+         /* Loader Animation -- Modal Design */
+         .loading-spinner {
             position: fixed;
             top: 50%;
             left: 50%;
@@ -315,7 +553,6 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
             0% { transform: translate(-50%, -50%) rotate(0deg); }
             100% { transform: translate(-50%, -50%) rotate(360deg); }
         }
-
         /* Confirmation Modal */
         .confirmation-modal {
             position: fixed;
@@ -393,231 +630,27 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
         .confirm-action:hover {
             background: #c9302c;
         }
-
-        /* Clickable Table Row */
-        .clickable-row {
-            cursor: pointer;
-        }
-
-        .clickable-row:hover {
-            background-color: #f5f5f5;
-        }
-
-        /* Search Bar Styling */
-        .search-container {
-            width: 100%;
-            margin: 0 auto;
-        }
-
-        .input-group {
-            width: 100%;
-            box-shadow: 0 3px 6px rgba(0,0,0,0.1);
-            border-radius: 8px;
-            margin-bottom: 2rem;
-        }
-
-        .input-group-text {
-            background-color: #fff;
-            border: 2px solid #ced4da;
-            border-right: none;
-            padding: 0.75rem 1.5rem;
-        }
-
-        .category-select {
-            border: 2px solid #ced4da;
-            border-right: none;
-            border-left: none;
-            background-color: #f8f9fa;
-            cursor: pointer;
-            min-width: 150px;
-        }
-
-        #searchInput {
-            border: 2px solid #ced4da;
-            border-left: none;
-            padding: 1.5rem;
-            font-size: 1.2rem;
-            flex: 1;
-        }
-
-        /* Pagination Styles */
-        .pagination-container {
-            margin-top: 1.5rem;
-        }
-
-        .pagination {
-            justify-content: center;
-        }
-
-        .page-link {
-            color: #000;
-            border-color: #000;
-            padding: 0.5rem 1rem;
-        }
-
-        .page-link:hover {
-            background-color: #000;
-            color: #fff;
-            border-color: #000;
-        }
-
-        .page-item.active .page-link {
-            background-color: #000;
-            border-color: #000;
-        }
-
-        .page-item.disabled .page-link {
-            color: #6c757d;
-            border-color: #dee2e6;
-        }
-        /* Enhanced Header styles */
-        .dashboard-home-header {
-            margin-left: 16.66666667%;
-            position: relative;
-            z-index: 999;
-            background: #ffffff;
-            border-bottom: 1px solid #e9ecef;
-            padding: 1.2rem 2rem;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            min-height: 70px;
-        }
-
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 1.5rem;
-        }
-
-        .header-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: #2c3e50;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin: 0;
-        }
-
-        .header-icon {
-            color: #dc3545;
-            font-size: 1.5rem;
-            display: flex;
-            align-items: center;
-        }
-
-        .header-date {
-            color: #6c757d;
-            font-size: 0.95rem;
-            font-weight: normal;
-        }
-
-        .header-actions {
-            display: flex;
-            gap: 0.75rem;
-            align-items: center;
-        }
-
-        .header-btn {
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            font-weight: 500;
-            font-size: 0.95rem;
-            transition: all 0.2s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: #dc3545;
-            color: white;
-            border: none;
-            box-shadow: 0 1px 2px rgba(220, 53, 69, 0.15);
-        }
-
-        .header-btn:hover {
-            transform: translateY(-1px);
-            background: #c82333;
-            color: white;
-            box-shadow: 0 3px 5px rgba(220, 53, 69, 0.2);
-        }
-
-        .header-btn i {
-            font-size: 1rem;
-        }
-
-        @media (max-width: 991.98px) {
-            .dashboard-home-header {
-                margin-left: 0;
-                padding: 1rem;
-                flex-wrap: wrap;
-                gap: 1rem;
-            }
-
-            .header-left {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 0.5rem;
-            }
-
-            .header-title {
-                font-size: 1.1rem;
-            }
-
-            .header-date {
-                font-size: 0.9rem;
-            }
-
-            .header-actions {
-                width: 100%;
-                justify-content: flex-end;
-            }
-
-            .header-btn {
-                padding: 0.4rem 0.8rem;
-                font-size: 0.9rem;
-            }
-        }
     </style>
 </head>
 <body class="light-mode">
     <div class="container-fluid p-0">
-        <!-- Enhanced Header -->
+        <!-- Header -->
         <div class="dashboard-home-header">
-            <div class="header-left">
-                <h4 class="header-title">
-                    <i class="fas fa-hospital-user header-icon"></i>
-                    Staff Dashboard
-                </h4>
-                <span class="header-date">
-                    <?php echo date('l, F j, Y'); ?>
-                </span>
-            </div>
-            <div class="header-actions">
-                <?php if ($user_staff_roles === 'interviewer'): ?>
-                    <button class="header-btn" onclick="window.location.href='../forms/qr-registration.php'">
-                        <i class="fas fa-qrcode"></i>
-                        QR Registration
-                    </button>
-                <?php endif; ?>
-                <button class="header-btn" onclick="showConfirmationModal()">
-                    <i class="fas fa-user-plus"></i>
-                    Register Donor
-                </button>
-            </div>
+            <h4 class="header-title">Staff Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
+            <button class="register-btn" onclick="showConfirmationModal()">
+                Register Donor
+            </button>
         </div>
 
         <div class="row g-0">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block sidebar">
-                <h4>Red Cross Staff</h4>
+                <h4>Staff</h4>
                 <ul class="nav flex-column">
-                    <li class="nav-item">
-                        <a class="nav-link" href="dashboard-staff-main.php">Dashboard</a>
-                    </li>
                     
                     <?php if ($user_staff_roles === 'interviewer'): ?>
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-staff-donor-submission.php">
+                            <a class="nav-link active" href="dashboard-staff-donor-submission.php">
                                 Donor Interviews Submissions
                             </a>
                         </li>
@@ -625,15 +658,15 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
 
                     <?php if ($user_staff_roles === 'reviewer'): ?>
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-staff-medical-history-submissions.php">
+                            <a class="nav-link active" href="dashboard-staff-medical-history-submissions.php">
                                 Donor Medical Interview Submissions
                             </a>
                         </li>
                     <?php endif; ?>
-
+                    
                     <?php if ($user_staff_roles === 'physician'): ?>
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-staff-physical-submission.php">
+                            <a class="nav-link active" href="dashboard-staff-physical-submission.php">
                                 Physical Exams Submissions
                             </a>
                         </li>
@@ -641,12 +674,14 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                     
                     <?php if ($user_staff_roles === 'phlebotomist'): ?>
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-staff-blood-collection-submission.php">
+                            <a class="nav-link active" href="dashboard-staff-blood-collection-submission.php">
                                 Blood Collection Submissions
                             </a>
                         </li>
                     <?php endif; ?>
-                    
+                    <li class="nav-item">
+                        <a class="nav-link" href="dashboard-staff-history.php">Donor History</a>
+                    </li>
                     <li class="nav-item">
                         <a class="nav-link" href="../../assets/php_func/logout.php">Logout</a>
                     </li>
@@ -655,114 +690,40 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
             
             <!-- Main Content -->
             <main class="col-md-9 col-lg-10 main-content">
-                <div class="container-fluid p-4 custom-margin">
-                    <h2 class="mt-1 mb-4">Blood Collection</h2>
-                    
-                    <!-- Note about filtered records -->
-                    <div class="alert alert-info">
-                        <strong>Note:</strong> Showing only donors with "Accepted" physical examination status that have not yet had blood collected.
+                <div class="content-wrapper">
+                    <div class="welcome-section">
+                        <h2 class="welcome-title">Welcome, Blood Bank Reviewer!</h2>
                     </div>
                     
-                    <?php if (isset($_GET['debug']) && $_GET['debug'] == '1'): ?>
-                    <div class="alert alert-warning">
-                        <h5>Debug Information:</h5>
-                        <p><strong>Query Execution Time:</strong> <?php echo number_format($execution_time, 4); ?> seconds</p>
-                        <p><strong>Total "Accepted" Physical Exams:</strong> <?php echo count($physical_exams); ?></p>
-                        <p><strong>Total Blood Collections:</strong> <?php echo count($blood_collections); ?></p>
-                        <p><strong>Filtered Out (Already Collected):</strong> <?php echo count($collected_physical_exam_ids); ?></p>
-                        <p><strong>Records Available for Collection:</strong> <?php echo count($available_exams); ?></p>
-                        <p><strong>Records Shown (Current Page):</strong> <?php echo count($examinations); ?></p>
-                        <p><strong>Current Page / Total Pages:</strong> <?php echo $current_page; ?> / <?php echo $total_pages; ?></p>
-                        
-                        <hr>
-                        <h6>Physical Exam IDs with Blood Collection (Excluded):</h6>
-                        <pre><?php 
-                        if (empty($collected_physical_exam_ids)) {
-                            echo "None found";
-                        } else {
-                            echo implode(", ", $collected_physical_exam_ids);
-                        }
-                        ?></pre>
-                        
-                        <h6>Available Physical Exam IDs (Shown in table):</h6>
-                        <pre><?php 
-                        $available_ids = array_column($available_exams, 'physical_exam_id');
-                        if (empty($available_ids)) {
-                            echo "None found";
-                        } else {
-                            echo implode(", ", $available_ids);
-                        }
-                        ?></pre>
-                        
-                        <h6>All Physical Exam IDs with "Accepted" Status:</h6>
-                        <pre><?php 
-                        if (empty($all_physical_exam_ids)) {
-                            echo "None found";
-                        } else {
-                            echo implode(", ", $all_physical_exam_ids);
-                        }
-                        ?></pre>
-                        
-                        <h6>Direct Blood Collection Check:</h6>
-                        <table class="table table-sm table-bordered">
-                            <thead>
-                                <tr>
-                                    <th>Blood Collection ID</th>
-                                    <th>Physical Exam ID</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            <?php
-                            // Make a direct query to get all blood collections with their physical_exam_id
-                            $direct_query_url = SUPABASE_URL . '/rest/v1/blood_collection?select=blood_collection_id,physical_exam_id';
-                            $ch = curl_init($direct_query_url);
-                            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-                            $response = curl_exec($ch);
-                            $direct_blood_collections = json_decode($response, true) ?: [];
-                            curl_close($ch);
-                            
-                            if (empty($direct_blood_collections)) {
-                                echo "<tr><td colspan='2'>No blood collection records found</td></tr>";
-                            } else {
-                                foreach ($direct_blood_collections as $collection) {
-                                    echo "<tr>";
-                                    echo "<td>" . htmlspecialchars($collection['blood_collection_id'] ?? 'N/A') . "</td>";
-                                    echo "<td>" . htmlspecialchars($collection['physical_exam_id'] ?? 'N/A') . "</td>";
-                                    echo "</tr>";
-                                }
-                            }
-                            ?>
-                            </tbody>
-                        </table>
+                    <!-- Status Cards -->
+                    <div class="dashboard-staff-status">
+                        <a href="?status=incoming" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'incoming') ? 'active' : ''; ?>">
+                            <p class="dashboard-staff-count"><?php echo $incoming_count; ?></p>
+                            <p class="dashboard-staff-title">Incoming Registrations</p>
+                        </a>
+                        <a href="?status=approved" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'approved') ? 'active' : ''; ?>">
+                            <p class="dashboard-staff-count"><?php echo $approved_count; ?></p>
+                            <p class="dashboard-staff-title">Approved</p>
+                        </a>
+                        <a href="?status=declined" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'declined') ? 'active' : ''; ?>">
+                            <p class="dashboard-staff-count"><?php echo $declined_count; ?></p>
+                            <p class="dashboard-staff-title">Declined</p>
+                        </a>
                     </div>
-                    <?php endif; ?>
+                    
+                    <h5 class="section-header">Donation Records</h5>
                     
                     <!-- Search Bar -->
-                    <div class="row mb-4">
-                        <div class="col-12">
-                            <div class="search-container text-center">
-                                <div class="input-group input-group-lg">
-                                    <span class="input-group-text">
-                                        <i class="fas fa-search fa-lg"></i>
-                                    </span>
-                                    <select class="form-select form-select-lg category-select" id="searchCategory" style="max-width: 200px;">
-                                        <option value="all">All Fields</option>
-                                        <option value="surname">Surname</option>
-                                        <option value="firstname">First Name</option>
-                                        <option value="remarks">Physical Exam Remarks</option>
-                                        <option value="blood_bag_type">Blood Bag Type</option>
-                                    </select>
-                                    <input type="text" 
-                                        class="form-control form-control-lg" 
-                                        id="searchInput" 
-                                        placeholder="Search records..."
-                                        style="height: 60px; font-size: 1.2rem;">
-                                </div>
-                            </div>
-                        </div>
+                    <div class="search-container">
+                        <input type="text" 
+                            class="form-control" 
+                            id="searchInput" 
+                            placeholder="Search donors...">
                     </div>
-
+                    
+                    <hr class="red-separator">
+                    
+                   
                     <div class="table-responsive">
                         <?php if (!empty($debug_info)): ?>
                             <div class="alert alert-info">
@@ -805,33 +766,34 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                                 ?>
                             </tbody>
                         </table>
-
-                        <!-- Add Pagination Controls -->
+                        
+                        <!-- Pagination Controls -->
+                        <?php if ($total_pages > 1): ?>
                         <div class="pagination-container">
-                            <nav aria-label="Blood collection submissions navigation">
+                            <nav aria-label="Donor medical history navigation">
                                 <ul class="pagination justify-content-center">
                                     <!-- Previous button -->
                                     <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Previous</a>
+                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Previous</a>
                                     </li>
                                     
                                     <!-- Page numbers -->
                                     <?php for($i = 1; $i <= $total_pages; $i++): ?>
                                         <li class="page-item <?php echo $current_page == $i ? 'active' : ''; ?>">
-                                            <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                            <a class="page-link" href="?page=<?php echo $i; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>"><?php echo $i; ?></a>
                                         </li>
                                     <?php endfor; ?>
                                     
                                     <!-- Next button -->
                                     <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Next</a>
+                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Next</a>
                                     </li>
                                 </ul>
                             </nav>
                         </div>
+                        <?php endif; ?>
                     </div>
                 </div>
-
 
 <!-- Confirmation Modal -->
 <div class="confirmation-modal" id="confirmationDialog">

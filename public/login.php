@@ -57,7 +57,37 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     header("Location: Dashboards/dashboard-hospital-main.php");
                     break;
                 case 3:
-                    header("Location: Dashboards/dashboard-staff-main.php");
+                    // For staff roles, fetch the specific staff role to determine correct redirection
+                    $staff_role_query = "user_roles?user_id=eq." . $user['user_id'] . "&select=user_staff_roles";
+                    $staff_roles = supabaseRequest($staff_role_query, "GET");
+                    
+                    if (!empty($staff_roles) && isset($staff_roles[0]['user_staff_roles'])) {
+                        $user_staff_role = strtolower(trim($staff_roles[0]['user_staff_roles']));
+                        error_log("Staff Role: " . $user_staff_role); // Debug log
+                        
+                        // Redirect based on staff role
+                        switch ($user_staff_role) {
+                            case 'reviewer':
+                                header("Location: Dashboards/dashboard-staff-medical-history-submissions.php");
+                                break;
+                            case 'interviewer':
+                                header("Location: Dashboards/dashboard-staff-donor-submission.php");
+                                break;
+                            case 'physician':
+                                header("Location: Dashboards/dashboard-staff-physical-submission.php");
+                                break;
+                            case 'phlebotomist':
+                                header("Location: Dashboards/dashboard-staff-blood-collection-submission.php");
+                                break;
+                            default:
+                                // Default staff dashboard if role is unrecognized
+                                header("Location: Dashboards/dashboard-staff-donor-submission.php");
+                                break;
+                        }
+                    } else {
+                        // Default staff dashboard if no specific role found
+                        header("Location: Dashboards/dashboard-staff-donor-submission.php");
+                    }
                     break;
                 default:
                     error_log("Invalid role ID: " . $_SESSION['role_id']); // Debug log
@@ -133,7 +163,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
 
        /* Cross Symbol */
-       .medical-cross {
+        .medical-cross {
             width: 150px;
             height: 150px;
             position: relative;

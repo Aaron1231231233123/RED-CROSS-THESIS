@@ -60,6 +60,7 @@ curl_setopt_array($ch, [
 ]);
 
 $response = curl_exec($ch);
+curl_close($ch);
 
 // Log the final query URL and raw response for debugging
 error_log("Final query URL: " . $query_url);
@@ -72,48 +73,154 @@ if ($response === false || is_null(json_decode($response, true))) {
 } else {
     $donors = json_decode($response, true) ?: [];
     error_log("Decoded donors count: " . count($donors));
+}
+
+// Fetch medical history records to calculate status counts
+$medical_history_url = SUPABASE_URL . '/rest/v1/medical_history?select=medical_history_id,donor_id,medical_approval';
+$ch = curl_init($medical_history_url);
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ]
+]);
+$response = curl_exec($ch);
+curl_close($ch);
+
+// Initialize counters
+$incoming_count = 0;
+$approved_count = 0;
+$declined_count = 0;
+
+// Arrays to store donor IDs by status
+$donor_with_medical_history = [];
+$donor_with_approved_medical_history = [];
+$donor_with_declined_medical_history = [];
+
+if ($response === false || is_null(json_decode($response, true))) {
+    error_log("Error fetching medical history data from Supabase");
+} else {
+    $medical_histories = json_decode($response, true) ?: [];
+    error_log("Decoded medical histories count: " . count($medical_histories));
     
-    // Group donors by unique identity (surname, first_name, middle_name, birthdate)
-    $donorGroups = [];
-    foreach ($donors as $donor) {
-        $key = ($donor['surname'] ?? '') . '|' . 
-               ($donor['first_name'] ?? '') . '|' . 
-               ($donor['middle_name'] ?? '') . '|' . 
-               ($donor['birthdate'] ?? '');
-        
-        if (!isset($donorGroups[$key])) {
-            $donorGroups[$key] = [
-                'info' => $donor,
-                'count' => 1,
-                'latest_submission' => $donor['submitted_at'] ?? null
-            ];
-        } else {
-            $donorGroups[$key]['count']++;
-            
-            // Keep track of the latest submission
-            if (isset($donor['submitted_at']) && 
-                (!isset($donorGroups[$key]['latest_submission']) || 
-                $donor['submitted_at'] > $donorGroups[$key]['latest_submission'])) {
-                $donorGroups[$key]['latest_submission'] = $donor['submitted_at'];
-                $donorGroups[$key]['info'] = $donor;
+    // Process medical histories to get counts
+    $incoming_with_null_approval = [];
+
+    foreach ($medical_histories as $history) {
+        if (isset($history['donor_id'])) {
+            if (isset($history['medical_approval'])) {
+                if ($history['medical_approval'] === 'Approved') {
+                    $approved_count++;
+                    $donor_with_approved_medical_history[] = $history['donor_id'];
+                    $donor_with_medical_history[] = $history['donor_id'];
+                } else if ($history['medical_approval'] === null) {
+                    // If medical_approval is null, treat it as incoming
+                    $incoming_with_null_approval[] = $history['donor_id'];
+                } else {
+                    $declined_count++;
+                    $donor_with_declined_medical_history[] = $history['donor_id'];
+                    $donor_with_medical_history[] = $history['donor_id'];
+                }
+            } else {
+                // If medical_approval field is missing, also treat as incoming
+                $incoming_with_null_approval[] = $history['donor_id'];
             }
         }
     }
     
-    // Convert back to array for pagination
-    $donors = [];
-    foreach ($donorGroups as $group) {
-        $donor = $group['info'];
-        $donor['donation_count'] = $group['count'];
-        $donor['latest_submission'] = $group['latest_submission'];
-        $donors[] = $donor;
-    }
+    // Remove duplicates
+    $donor_with_medical_history = array_unique($donor_with_medical_history);
+    $donor_with_approved_medical_history = array_unique($donor_with_approved_medical_history);
+    $donor_with_declined_medical_history = array_unique($donor_with_declined_medical_history);
+    $incoming_with_null_approval = array_unique($incoming_with_null_approval);
     
-    // Sort by latest submission date (newest first)
-    usort($donors, function($a, $b) {
-        return $b['latest_submission'] <=> $a['latest_submission'];
-    });
+    // Calculate incoming count (donors without any medical history or with null approval)
+    $all_donor_ids = array_column($donors, 'donor_id');
+    $processed_donors = array_merge($donor_with_approved_medical_history, $donor_with_declined_medical_history);
+    $incoming_donors = array_diff($all_donor_ids, $processed_donors);
+    $incoming_count = count($incoming_donors);
+    
+    // Update counters to reflect unique donors
+    $approved_count = count($donor_with_approved_medical_history);
+    $declined_count = count($donor_with_declined_medical_history);
+    
+    // Log the detailed counts for debugging
+    error_log("Medical History Counts - Total donors: " . count($all_donor_ids));
+    error_log("Medical History Counts - Approved: $approved_count, Declined: $declined_count, Incoming: $incoming_count");
+    error_log("Medical History Counts - Donors with null approval: " . count($incoming_with_null_approval));
+    error_log("Medical History Counts - Processed donors: " . count($processed_donors));
+    error_log("Incoming count: $incoming_count, Approved count: $approved_count, Declined count: $declined_count");
 }
+
+// Handle status filtering
+$status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
+
+// Filter donors based on status if needed
+$filtered_donors = [];
+if ($status_filter === 'incoming') {
+    foreach ($donors as $donor) {
+        if (in_array($donor['donor_id'], $incoming_donors)) {
+            $filtered_donors[] = $donor;
+        }
+    }
+    $donors = $filtered_donors;
+} elseif ($status_filter === 'approved') {
+    foreach ($donors as $donor) {
+        if (in_array($donor['donor_id'], $donor_with_approved_medical_history)) {
+            $filtered_donors[] = $donor;
+        }
+    }
+    $donors = $filtered_donors;
+} elseif ($status_filter === 'declined') {
+    foreach ($donors as $donor) {
+        if (in_array($donor['donor_id'], $donor_with_declined_medical_history)) {
+            $filtered_donors[] = $donor;
+        }
+    }
+    $donors = $filtered_donors;
+}
+
+// Group donors by unique identity (surname, first_name, middle_name, birthdate)
+$donorGroups = [];
+foreach ($donors as $donor) {
+    $key = ($donor['surname'] ?? '') . '|' . 
+           ($donor['first_name'] ?? '') . '|' . 
+           ($donor['middle_name'] ?? '') . '|' . 
+           ($donor['birthdate'] ?? '');
+    
+    if (!isset($donorGroups[$key])) {
+        $donorGroups[$key] = [
+            'info' => $donor,
+            'count' => 1,
+            'latest_submission' => $donor['submitted_at'] ?? null
+        ];
+    } else {
+        $donorGroups[$key]['count']++;
+        
+        // Keep track of the latest submission
+        if (isset($donor['submitted_at']) && 
+            (!isset($donorGroups[$key]['latest_submission']) || 
+            $donor['submitted_at'] > $donorGroups[$key]['latest_submission'])) {
+            $donorGroups[$key]['latest_submission'] = $donor['submitted_at'];
+            $donorGroups[$key]['info'] = $donor;
+        }
+    }
+}
+
+// Convert back to array for pagination
+$donors = [];
+foreach ($donorGroups as $group) {
+    $donor = $group['info'];
+    $donor['donation_count'] = $group['count'];
+    $donor['latest_submission'] = $group['latest_submission'];
+    $donors[] = $donor;
+}
+
+// Sort by latest submission date (newest first)
+usort($donors, function($a, $b) {
+    return $b['latest_submission'] <=> $a['latest_submission'];
+});
 
 $total_records = count($donors);
 $total_pages = ceil($total_records / $records_per_page);
@@ -124,9 +231,6 @@ if ($current_page > $total_pages && $total_pages > 0) $current_page = $total_pag
 
 // Slice the array to get only the records for the current page
 $donors = array_slice($donors, $offset, $records_per_page);
-
-// Close cURL session
-curl_close($ch);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -137,20 +241,61 @@ curl_close($ch);
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
-               :root {
-            --bg-color: #f8f9fa;
+        :root {
+            --bg-color: #f5f5f5;
             --text-color: #000;
             --sidebar-bg: #ffffff;
-            --hover-bg: #dee2e6;
+            --hover-bg: #f0f0f0;
+            --primary-color: #b22222; /* Red Cross red */
+            --primary-dark: #8b0000; /* Darker red for hover and separator */
+            --active-color: #b22222;
+            --table-header-bg: #b22222;
         }
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f8f9fa;
+            background-color: var(--bg-color);
             color: #333;
             margin: 0;
             padding: 0;
+        }
+
+        /* Header styling */
+        .dashboard-home-header {
+            margin-left: 16.66666667%;
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 0.75rem 1rem;
+            display: flex;
+            align-items: center;
+        }
+        
+        .header-title {
+            font-weight: 600;
+            font-size: 1rem;
+            margin: 0;
+            flex-grow: 1;
+        }
+        
+        .header-date {
+            color: #777;
+            font-size: 0.8rem;
+            margin-left: 0.5rem;
+        }
+        
+        .register-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.4rem 0.75rem;
+            border-radius: 3px;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-block;
+            margin-left: auto;
+            font-size: 0.9rem;
         }
 
         /* Sidebar Styles */
@@ -165,6 +310,7 @@ curl_close($ch);
             overflow-y: auto;
             z-index: 1000;
             box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            border-right: 1px solid #e0e0e0;
         }
 
         .sidebar h4 {
@@ -178,120 +324,192 @@ curl_close($ch);
         .sidebar .nav-link {
             padding: 0.8rem 1rem;
             margin-bottom: 0.5rem;
-            border-radius: 5px;
+            border-radius: 0;
             transition: all 0.3s ease;
             color: #000 !important;
             text-decoration: none;
+            border-left: 5px solid transparent;
         }
 
         .sidebar .nav-link:hover,
-        .sidebar .nav-link.active {
+        .sidebar  {
             background: var(--hover-bg);
-            transform: translateX(5px);
-            color: #000 !important;
+            color: var(--active-color) !important;
+            border-left-color: var(--active-color);
+        }
+
+        .nav-link.active{
+            background-color: var(--active-color);
+            color: white !important;
         }
 
         /* Main Content */
         .main-content {
-            padding: 1.5rem;
+            padding: 1rem;
             margin-left: 16.66666667%;
-}
-
-/* Table Styling */
-.dashboard-staff-tables {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    border-radius: 10px;
-    overflow: hidden;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.dashboard-staff-tables thead th {
-            background-color: #242b31;
-    color: white;
-    padding: 12px;
-    text-align: left;
-    font-weight: 600;
-}
-
-.dashboard-staff-tables tbody td {
-    padding: 12px;
-    border-bottom: 1px solid #e9ecef;
-}
-
-.dashboard-staff-tables tbody tr:nth-child(odd) {
-            background-color: #f8f9fa;
-}
-
-.dashboard-staff-tables tbody tr:nth-child(even) {
-            background-color: #ffffff;
-}
-
-.dashboard-staff-tables tbody tr:hover {
-            background-color: #e9f5ff;
-    transition: background-color 0.3s ease;
-}
-
-        .dashboard-staff-tables tbody tr.clickable-row {
-            cursor: pointer;
-            transition: all 0.2s ease;
+            background-color: var(--bg-color);
+        }
+        
+        .content-wrapper {
+            background-color: white;
+            border-radius: 0px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
         }
 
-        .dashboard-staff-tables tbody tr.clickable-row:hover {
-            background-color: #cfe2ff;
+        /* Dashboard Header */
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #eaeaea;
+        }
+
+        .dashboard-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #333;
+            display: flex;
+            align-items: center;
+        }
+
+        .dashboard-date {
+            color: #777;
+            font-size: 0.9rem;
+        }
+
+        /* Status Cards */
+        .dashboard-staff-status {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem; 
+            margin-bottom: 1.5rem;
+        }
+        
+        .status-card {
+            flex: 1;
+            border-radius: 0;
+            background-color: white;
+            border: 1px solid #e0e0e0;
+            padding: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            color: #333;
+            display: block;
+            transition: all 0.2s ease-in-out;
+        }
+        
+        .status-card:hover {
+            text-decoration: none;
+            color: #333;
+            background-color: #f8f8f8;
+            border-color: var(--primary-dark);
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
+        
+        .status-card.active {
+            border-top: 3px solid var(--primary-dark);
+            background-color: #f8f8f8;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+        }
+        
+        .dashboard-staff-count {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+            color: #333;
+        }
+        
+        .dashboard-staff-title {
+            font-weight: bold;
+            font-size: 0.95rem;
+            margin-bottom: 0;
+            color: #555;
+        }
+        
+        .welcome-section {
+            margin-bottom: 1.5rem;
+        }
+        
+        .welcome-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 0;
+            color: #333;
+        }
 
-.custom-margin {
-            margin: 30px auto;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        /* Red line separator */
+        .red-separator {
+            height: 4px;
+            background-color: #8b0000;
+            border: none;
+            margin: 1.5rem 0;
             width: 100%;
-}
+            opacity: 1;
+        }
 
-        /* Search Bar Styling */
-        .search-container {
+        /* Table Styling */
+        .dashboard-staff-tables {
             width: 100%;
-            margin: 0 auto;
+            border-collapse: separate;
+            border-spacing: 0;
+            border-radius: 0;
+            overflow: hidden;
+            margin-bottom: 1rem;
         }
 
-        .input-group {
-    width: 100%;
-            box-shadow: 0 3px 6px rgba(0,0,0,0.1);
-            border-radius: 8px;
-            margin-bottom: 2rem;
+        .dashboard-staff-tables thead th {
+            background-color: var(--table-header-bg);
+            color: white;
+            padding: 10px 15px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.95rem;
+            border-bottom: 0;
         }
 
-        .input-group-text {
-            background-color: #fff;
-            border: 2px solid #ced4da;
-            border-right: none;
-            padding: 0.75rem 1.5rem;
+        .dashboard-staff-tables tbody td {
+            padding: 10px 15px;
+            border-bottom: 1px solid #e9ecef;
+            font-size: 0.95rem;
         }
 
-        .category-select {
-            border: 2px solid #ced4da;
-            border-right: none;
-            border-left: none;
+        .dashboard-staff-tables tbody tr:nth-child(odd) {
             background-color: #f8f9fa;
+        }
+
+        .dashboard-staff-tables tbody tr:nth-child(even) {
+            background-color: #ffffff;
+        }
+
+        .dashboard-staff-tables tbody tr:hover {
+            background-color: #f0f0f0;
+        }
+
+        .dashboard-staff-tables tbody tr{
             cursor: pointer;
-            min-width: 150px;
+        }
+
+        /* Search bar */
+        .search-container {
+            margin-bottom: 1.5rem;
         }
 
         #searchInput {
-            border: 2px solid #ced4da;
-            border-left: none;
-            padding: 1.5rem;
-            font-size: 1.2rem;
-            flex: 1;
+            border-radius: 0;
+            height: 45px;
+            border-color: #ddd;
+            font-size: 1rem;
+            padding: 0.5rem 0.75rem;
         }
 
         /* Pagination Styles */
         .pagination-container {
-            margin-top: 1.5rem;
+            margin-top: 2rem;
         }
 
         .pagination {
@@ -299,218 +517,65 @@ curl_close($ch);
         }
 
         .page-link {
-            color: #000;
-            border-color: #000;
+            color: #333;
+            border-color: #dee2e6;
             padding: 0.5rem 1rem;
+            transition: all 0.2s ease;
+            font-size: 0.95rem;
         }
 
         .page-link:hover {
-            background-color: #000;
-            color: #fff;
-            border-color: #000;
+            background-color: #f8f9fa;
+            color: var(--primary-color);
+            border-color: #dee2e6;
         }
 
         .page-item.active .page-link {
-            background-color: #000;
-            border-color: #000;
-        }
-
-        /* Confirmation Modal */
-        .modal-content {
-            border-radius: 10px;
-            border: none;
-        }
-
-        .modal-header {
-            background-color: #242b31;
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
             color: white;
-            border-radius: 10px 10px 0 0;
         }
 
-        .modal-footer {
-            border-top: none;
-            padding: 1rem;
-        }
-
-        .btn-primary {
-            background-color: #242b31;
-            border: none;
-        }
-
-        .btn-primary:hover {
-            background-color: #3a4852;
-}
-
-/* Donation count badge styling */
-.badge.bg-primary {
-    font-size: 0.9rem;
-    padding: 0.4rem 0.6rem;
-    font-weight: 600;
-    border-radius: 50px;
-}
-
-.donation-count-large {
-    font-size: 1.2rem;
-    padding: 0.5rem 0.8rem;
-    margin-left: 0.5rem;
-}
-
-/* Responsive adjustments */
-@media (max-width: 991.98px) {
-    .sidebar {
-        position: static;
-        width: 100%;
-        height: auto;
-    }
-    .main-content {
-        margin-left: 0;
-    }
-}
-        /* Enhanced Header styles */
-        .dashboard-home-header {
-            margin-left: 16.66666667%;
-            position: relative;
-            z-index: 999;
-            background: #ffffff;
-            border-bottom: 1px solid #e9ecef;
-            padding: 1.2rem 2rem;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            min-height: 70px;
-        }
-
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 1.5rem;
-        }
-
-        .header-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: #2c3e50;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin: 0;
-        }
-
-        .header-icon {
-            color: #dc3545;
-            font-size: 1.5rem;
-            display: flex;
-            align-items: center;
-        }
-
-        .header-date {
+        .page-item.disabled .page-link {
             color: #6c757d;
+            background-color: #fff;
+            border-color: #dee2e6;
+        }
+
+        /* Badge styling */
+        .badge.bg-primary {
+            background-color: var(--primary-color) !important;
             font-size: 0.95rem;
-            font-weight: normal;
+            padding: 0.3rem 0.6rem;
+            font-weight: 600;
+            border-radius: 4px;
         }
-
-        .header-actions {
-            display: flex;
-            gap: 0.75rem;
-            align-items: center;
-        }
-
-        .header-btn {
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            font-weight: 500;
-            font-size: 0.95rem;
-            transition: all 0.2s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: #dc3545;
-            color: white;
-            border: none;
-            box-shadow: 0 1px 2px rgba(220, 53, 69, 0.15);
-        }
-
-        .header-btn:hover {
-            transform: translateY(-1px);
-            background: #c82333;
-            color: white;
-            box-shadow: 0 3px 5px rgba(220, 53, 69, 0.2);
-        }
-
-        .header-btn i {
-            font-size: 1rem;
-        }
-
-        @media (max-width: 991.98px) {
-            .dashboard-home-header {
-                margin-left: 0;
-                padding: 1rem;
-                flex-wrap: wrap;
-                gap: 1rem;
-            }
-
-            .header-left {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 0.5rem;
-            }
-
-            .header-title {
-                font-size: 1.1rem;
-            }
-
-            .header-date {
-                font-size: 0.9rem;
-            }
-
-            .header-actions {
-                width: 100%;
-                justify-content: flex-end;
-            }
-
-            .header-btn {
-                padding: 0.4rem 0.8rem;
-                font-size: 0.9rem;
-            }
+        
+        /* Section header */
+        .section-header {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 1.25rem;
+            color: #333;
         }
     </style>
 </head>
 
 <body class="light-mode">
     <div class="container-fluid p-0">
-        <!-- Enhanced Header -->
+        <!-- Header -->
         <div class="dashboard-home-header">
-            <div class="header-left">
-                <h4 class="header-title">
-                    <i class="fas fa-hospital-user header-icon"></i>
-                    Staff Dashboard
-                </h4>
-                <span class="header-date">
-                    <?php echo date('l, F j, Y'); ?>
-                </span>
-            </div>
-            <div class="header-actions">
-                <?php if ($user_staff_roles === 'interviewer'): ?>
-                    <button class="header-btn" onclick="window.location.href='../forms/qr-registration.php'">
-                        <i class="fas fa-qrcode"></i>
-                        QR Registration
-                    </button>
-                <?php endif; ?>
-                <button class="header-btn" onclick="showConfirmationModal()">
-                    <i class="fas fa-user-plus"></i>
-                    Register Donor
-                </button>
-            </div>
+            <h4 class="header-title">Staff Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
+            <button class="register-btn" onclick="showConfirmationModal()">
+                Register Donor
+            </button>
         </div>
 
         <div class="row g-0">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block sidebar">
-                <h4>Red Cross Staff</h4>
+                <h4>Staff</h4>
                 <ul class="nav flex-column">
-                    <li class="nav-item">
-                        <a class="nav-link" href="dashboard-staff-main.php">Dashboard</a>
-                    </li>
                     
                     <?php if ($user_staff_roles === 'interviewer'): ?>
                         <li class="nav-item">
@@ -522,7 +587,7 @@ curl_close($ch);
 
                     <?php if ($user_staff_roles === 'reviewer'): ?>
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-staff-medical-history-submissions.php">
+                            <a class="nav-link active" href="dashboard-staff-medical-history-submissions.php">
                                 Donor Medical Interview Submissions
                             </a>
                         </li>
@@ -543,7 +608,9 @@ curl_close($ch);
                             </a>
                         </li>
                     <?php endif; ?>
-
+                    <li class="nav-item">
+                        <a class="nav-link" href="dashboard-staff-history.php">Donor History</a>
+                    </li>
                     <li class="nav-item">
                         <a class="nav-link" href="../../assets/php_func/logout.php">Logout</a>
                     </li>
@@ -552,34 +619,39 @@ curl_close($ch);
             
             <!-- Main Content -->
             <main class="col-md-9 col-lg-10 main-content">
-                <!-- Donor Medical History List -->
-                <div class="container-fluid p-4 custom-margin">
-                    <h2 class="mt-1 mb-4">Donor Medical History & Donation Records</h2>
+                <div class="content-wrapper">
+                    <div class="welcome-section">
+                        <h2 class="welcome-title">Welcome, Blood Bank Reviewer!</h2>
+                    </div>
+                    
+                    <!-- Status Cards -->
+                    <div class="dashboard-staff-status">
+                        <a href="?status=incoming" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'incoming') ? 'active' : ''; ?>">
+                            <p class="dashboard-staff-count"><?php echo $incoming_count; ?></p>
+                            <p class="dashboard-staff-title">Incoming Registrations</p>
+                        </a>
+                        <a href="?status=approved" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'approved') ? 'active' : ''; ?>">
+                            <p class="dashboard-staff-count"><?php echo $approved_count; ?></p>
+                            <p class="dashboard-staff-title">Approved</p>
+                        </a>
+                        <a href="?status=declined" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'declined') ? 'active' : ''; ?>">
+                            <p class="dashboard-staff-count"><?php echo $declined_count; ?></p>
+                            <p class="dashboard-staff-title">Declined</p>
+                        </a>
+                    </div>
+                    
+                    <h5 class="section-header">Donation Records</h5>
                     
                     <!-- Search Bar -->
-                    <div class="row mb-4">
-                        <div class="col-12">
-                            <div class="search-container text-center">
-                                <div class="input-group input-group-lg">
-                                    <span class="input-group-text">
-                                        <i class="fas fa-search fa-lg"></i>
-                                    </span>
-                                    <select class="form-select form-select-lg category-select" id="searchCategory" style="max-width: 200px;">
-                                        <option value="all">All Fields</option>
-                                        <option value="surname">Surname</option>
-                                        <option value="firstname">First Name</option>
-                                        <option value="age">Age</option>
-                                    </select>
-                                    <input type="text" 
-                                        class="form-control form-control-lg" 
-                                        id="searchInput" 
-                                        placeholder="Search donors..."
-                                        style="height: 60px; font-size: 1.2rem;">
-                                </div>
-                            </div>
-                        </div>
+                    <div class="search-container">
+                        <input type="text" 
+                            class="form-control" 
+                            id="searchInput" 
+                            placeholder="Search donors...">
                     </div>
-
+                    
+                    <hr class="red-separator">
+                    
                     <div class="table-responsive">
                         <table class="dashboard-staff-tables table-hover">
                             <thead>
@@ -590,7 +662,7 @@ curl_close($ch);
                                     <th>First Name</th>
                                     <th>Middle Name</th>
                                     <th>Age</th>
-                                    <th>Total Donations</th>
+                                    <th>Total</th>
                                 </tr>
                             </thead>
                             <tbody id="donorTableBody">
@@ -628,19 +700,19 @@ curl_close($ch);
                                 <ul class="pagination justify-content-center">
                                     <!-- Previous button -->
                                     <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Previous</a>
+                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Previous</a>
                                     </li>
                                     
                                     <!-- Page numbers -->
                                     <?php for($i = 1; $i <= $total_pages; $i++): ?>
                                         <li class="page-item <?php echo $current_page == $i ? 'active' : ''; ?>">
-                                            <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                            <a class="page-link" href="?page=<?php echo $i; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>"><?php echo $i; ?></a>
                                         </li>
                                     <?php endfor; ?>
                                     
                                     <!-- Next button -->
                                     <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Next</a>
+                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Next</a>
                                     </li>
                                 </ul>
                             </nav>
@@ -651,7 +723,7 @@ curl_close($ch);
             </main>
         </div>
     </div>
-    
+    </div>
     <!-- Deferral Status Modal -->
     <div class="modal fade" id="deferralStatusModal" tabindex="-1" aria-labelledby="deferralStatusModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
