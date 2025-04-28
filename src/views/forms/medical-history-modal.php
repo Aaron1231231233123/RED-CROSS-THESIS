@@ -424,8 +424,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // Admin redirection to admin dashboard
                         header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
                     } else if ($_SESSION['role_id'] === 3) { // Staff
-                        // Staff redirection to staff dashboard
-                        header('Location: ../../../public/Dashboards/dashboard-staff-main.php');
+                        // Determine the appropriate dashboard based on user role
+                        $userStaffRole = isset($_SESSION['user_staff_roles']) ? strtolower($_SESSION['user_staff_roles']) : '';
+                        error_log("REDIRECT: Staff role detected: " . $userStaffRole);
+                        
+                        // Redirect based on user role
+                        switch ($userStaffRole) {
+                            case 'reviewer':
+                                header('Location: ../../../public/Dashboards/dashboard-staff-medical-history-submissions.php');
+                                break;
+                            case 'interviewer':
+                                header('Location: ../../../public/Dashboards/dashboard-staff-donor-submission.php');
+                                break;
+                            case 'physician':
+                                header('Location: ../../../public/Dashboards/dashboard-staff-physical-submission.php');
+                                break;
+                            case 'phlebotomist':
+                                header('Location: ../../../public/Dashboards/dashboard-staff-blood-collection-submission.php');
+                                break;
+                            default:
+                                // Default staff dashboard fallback
+                                header('Location: ../../../public/Dashboards/dashboard-staff-donor-submission.php');
+                                break;
+                        }
                     }
                 } else {
                     // Default redirection for non-logged in users to donor form modal
@@ -2141,8 +2162,16 @@ if (isset($_SESSION['error_message'])) {
             function goBackToDashboard(skipConfirmation = false) {
                 // First check if the user has entered data
                 if (!skipConfirmation) {
-                    const radioButtons = document.querySelectorAll('input[type="radio"]:checked');
-                    let hasData = radioButtons.length > 0;
+                    const formInputs = document.querySelectorAll('input[type="text"], input[type="date"], input[type="email"], select, textarea');
+                    let hasData = false;
+                    
+                    formInputs.forEach(input => {
+                        if ((input.type === 'text' || input.type === 'date' || input.type === 'email' || input.tagName === 'TEXTAREA') && input.value.trim() !== '') {
+                            hasData = true;
+                        } else if (input.tagName === 'SELECT' && input.selectedIndex > 0) {
+                            hasData = true;
+                        }
+                    });
                     
                     if (hasData) {
                         const confirmLeave = confirm('You have unsaved data. Are you sure you want to leave this page?');
@@ -2152,16 +2181,45 @@ if (isset($_SESSION['error_message'])) {
                     }
                 }
                 
-                // If we get here, either there's no data or user confirmed leaving
-                let referrerUrl = "<?php echo $referrer; ?>";
+                // Determine the dashboard URL based on user role
+                const userRole = "<?php echo isset($_SESSION['user_staff_roles']) ? strtolower($_SESSION['user_staff_roles']) : ''; ?>";
+                console.log("User role for redirect:", userRole);
                 
-                // Check if referrer is valid, otherwise go to default dashboard
-                if (referrerUrl && (referrerUrl.includes('Dashboard') || referrerUrl.includes('dashboard'))) {
-                    window.location.href = referrerUrl;
-                } else {
-                    // Default fallback
-                    window.location.href = "../../public/Dashboards/dashboard-Inventory-System.php";
+                let dashboardUrl = "";
+                
+                // Redirect based on user role
+                switch (userRole) {
+                    case 'reviewer':
+                        dashboardUrl = "../../public/Dashboards/dashboard-staff-medical-history-submissions.php";
+                        break;
+                    case 'interviewer':
+                        dashboardUrl = "../../public/Dashboards/dashboard-staff-donor-submission.php";
+                        break;
+                    case 'physician':
+                        dashboardUrl = "../../public/Dashboards/dashboard-staff-physical-submission.php";
+                        break;
+                    case 'phlebotomist':
+                        dashboardUrl = "../../public/Dashboards/dashboard-staff-blood-collection-submission.php";
+                        break;
+                    default:
+                        // Check if we have a stored referrer as fallback
+                        let referrerUrl = "<?php echo $referrer; ?>";
+                        if (typeof(Storage) !== "undefined" && localStorage.getItem("medicalHistoryReferrer")) {
+                            referrerUrl = localStorage.getItem("medicalHistoryReferrer");
+                        }
+                        
+                        // Check if referrer is valid
+                        if (referrerUrl && (referrerUrl.includes('Dashboard') || referrerUrl.includes('dashboard'))) {
+                            dashboardUrl = referrerUrl;
+                        } else {
+                            // Default fallback if no specific role or referrer
+                            dashboardUrl = "../../public/Dashboards/dashboard-staff-donor-submission.php";
+                        }
+                        break;
                 }
+                
+                console.log("Redirecting to:", dashboardUrl);
+                window.location.href = dashboardUrl;
             }
             
             // Handle close button click

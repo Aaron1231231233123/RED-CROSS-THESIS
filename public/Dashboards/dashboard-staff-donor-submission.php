@@ -1590,7 +1590,7 @@ select.donor_form_input[disabled] {
                     
                     if (!currentDonorData) {
                         showError('Error: No donor selected');
-                        console.error("No currentDonorData available!");
+                        console.error("No donor data available. Cannot proceed.");
                         return;
                     }
                     
@@ -1604,40 +1604,47 @@ select.donor_form_input[disabled] {
                         return;
                     }
                     
-                    console.log("Processing approval for donor ID:", donorId);
-                    
                     // Get donor name if available
                     let donorName = '';
                     if (currentDonorData.first_name && currentDonorData.surname) {
                         donorName = currentDonorData.first_name + ' ' + currentDonorData.surname;
                     }
                     
-                    console.log("Donor name:", donorName);
+                    console.log("Processing approval for donor ID:", donorId, "Name:", donorName);
                     
-                    // Show loading modal first to indicate processing
-                    const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+                    // Create a form and submit it programmatically
+                    // This is more reliable than using window.location.href
+                    const form = document.createElement('form');
+                    form.method = 'GET';
+                    form.action = 'dashboard-staff-donor-submission.php';
                     
-                    // Close the donor details modal
-                    const donorDetailsModal = bootstrap.Modal.getInstance(document.getElementById('donorDetailsModal'));
-                    if (donorDetailsModal) {
-                        donorDetailsModal.hide();
+                    // Add the approve_donor parameter
+                    const donorInput = document.createElement('input');
+                    donorInput.type = 'hidden';
+                    donorInput.name = 'approve_donor';
+                    donorInput.value = donorId;
+                    form.appendChild(donorInput);
+                    
+                    // Add the donor_name parameter
+                    const nameInput = document.createElement('input');
+                    nameInput.type = 'hidden';
+                    nameInput.name = 'donor_name';
+                    nameInput.value = donorName;
+                    form.appendChild(nameInput);
+                    
+                    // Close modal before submitting
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('donorDetailsModal'));
+                    if (modal) {
+                        modal.hide();
                     }
                     
-                    // Show loading modal
-                    loadingModal.show();
-                    
-                    // Update loading text for better feedback
-                    document.querySelector('#loadingModal .text-white').innerHTML = 'Proceeding to medical history form...<br><small>Please wait</small>';
-                    
-                    // Direct navigation with parameters after a short delay
-                    setTimeout(() => {
-                        const url = `dashboard-staff-donor-submission.php?approve_donor=${donorId}&donor_name=${encodeURIComponent(donorName)}`;
-                        console.log("Redirecting to URL:", url);
-                        window.location.href = url;
-                    }, 800);
+                    // Add form to the body and submit it
+                    document.body.appendChild(form);
+                    console.log("Submitting form with donor ID:", donorId);
+                    form.submit();
                 });
             } else {
-                console.error("CRITICAL: Approve button not found in DOM");
+                console.error("ERROR: Approve button not found in the DOM!");
             }
         });
 

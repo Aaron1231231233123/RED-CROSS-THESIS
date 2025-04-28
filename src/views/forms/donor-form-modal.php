@@ -886,21 +886,39 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
             }
         }
         
-        // If we get here, either there's no data or user confirmed leaving
-        let referrerUrl = "<?php echo $referrer; ?>";
+        // Determine the dashboard URL based on user role
+        const userRole = "<?php echo isset($_SESSION['user_staff_roles']) ? strtolower($_SESSION['user_staff_roles']) : ''; ?>";
+        console.log("User role for redirect:", userRole);
         
-        // Check if we have a stored referrer in localStorage
-        if (typeof(Storage) !== "undefined" && localStorage.getItem("donorFormReferrer")) {
-            referrerUrl = localStorage.getItem("donorFormReferrer");
+        let dashboardUrl = "";
+        
+        // Redirect based on user role
+        switch (userRole) {
+            case 'reviewer':
+                dashboardUrl = "../../public/Dashboards/dashboard-staff-medical-history-submissions.php";
+                break;
+            case 'interviewer':
+                dashboardUrl = "../../public/Dashboards/dashboard-staff-donor-submission.php";
+                break;
+            case 'physician':
+                dashboardUrl = "../../public/Dashboards/dashboard-staff-physical-submission.php";
+                break;
+            case 'phlebotomist':
+                dashboardUrl = "../../public/Dashboards/dashboard-staff-blood-collection-submission.php";
+                break;
+            default:
+                // Check if we have a stored referrer as fallback
+                if (typeof(Storage) !== "undefined" && localStorage.getItem("donorFormReferrer")) {
+                    dashboardUrl = localStorage.getItem("donorFormReferrer");
+                } else {
+                    // Default fallback if no specific role or referrer
+                    dashboardUrl = "../../public/Dashboards/dashboard-staff-donor-submission.php";
+                }
+                break;
         }
         
-        // Check if referrer is valid, otherwise go to default dashboard
-        if (referrerUrl && (referrerUrl.includes('Dashboard') || referrerUrl.includes('dashboard'))) {
-            window.location.href = referrerUrl;
-        } else {
-            // Default fallback
-            window.location.href = "../../public/Dashboards/dashboard-Inventory-System.php";
-        }
+        console.log("Redirecting to:", dashboardUrl);
+        window.location.href = dashboardUrl;
     }
     
     // Auto-calculate age on page load if birthdate already exists
