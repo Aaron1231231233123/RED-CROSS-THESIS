@@ -649,6 +649,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             <th>Age</th>
                                             <th>Sex</th>
                                             <th>Date Submitted</th>
+                                            <th>Channel/Gateway</th>
                                             <th>Actions</th>
                                         <?php elseif ($status === 'declined'): ?>
                                             <th>Surname</th>
@@ -686,6 +687,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                     <td><?php echo htmlspecialchars($donation['age'] ?? calculateAge($donation['birthdate'])); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['sex'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['date_submitted'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($donation['registration_source'] ?? 'PRC System'); ?></td>
                                                 <?php elseif ($status === 'declined'): ?>
                                                     <td><?php echo htmlspecialchars($donation['surname'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['first_name'] ?? ''); ?></td>

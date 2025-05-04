@@ -111,7 +111,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
         'email' => $_POST['email'] ?? '',
         // Generate unique donor number and barcode
         'prc_donor_number' => generateDonorNumber(),
-        'doh_nnbnets_barcode' => generateNNBNetBarcode()
+        'doh_nnbnets_barcode' => generateNNBNetBarcode(),
+        // Add registration channel
+        'registration_channel' => 'PRC_SYSTEM' // Default to PRC system since this is the PRC system form
     ];
     
     // Log the data being processed
