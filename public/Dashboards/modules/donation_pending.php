@@ -110,7 +110,8 @@ try {
                             'birthdate' => $donor['birthdate'] ?? '',
                             'sex' => $donor['sex'] ?? '',
                             'date_submitted' => $dateSubmitted,
-                            'eligibility_id' => 'pending_' . ($donor['donor_id'] ?? '0')
+                            'eligibility_id' => 'pending_' . ($donor['donor_id'] ?? '0'),
+                            'registration_source' => $donor['registration_channel'] ?? 'PRC System' // Default to PRC System if not specified
                         ];
                     }
                 }
