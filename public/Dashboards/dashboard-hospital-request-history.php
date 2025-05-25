@@ -470,6 +470,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 // Fetch blood requests for the current user
 $blood_requests = fetchBloodRequests($_SESSION['user_id']);
 
+// Sort the blood requests to match the desired order
+usort($blood_requests, function($a, $b) {
+    // Priority: Approved/Accepted first
+    if (($a['status'] === 'Approved' || $a['status'] === 'Accepted') && 
+        ($b['status'] !== 'Approved' && $b['status'] !== 'Accepted')) {
+        return -1;
+    }
+    if (($a['status'] !== 'Approved' && $a['status'] !== 'Accepted') && 
+        ($b['status'] === 'Approved' || $b['status'] === 'Accepted')) {
+        return 1;
+    }
+    
+    // Priority: Pending second
+    if ($a['status'] === 'Pending' && $b['status'] !== 'Pending' && 
+        $b['status'] !== 'Approved' && $b['status'] !== 'Accepted') {
+        return -1;
+    }
+    if ($a['status'] !== 'Pending' && $a['status'] !== 'Approved' && 
+        $a['status'] !== 'Accepted' && $b['status'] === 'Pending') {
+        return 1;
+    }
+    
+    // Priority: Declined last
+    if ($a['status'] === 'Declined' && $b['status'] !== 'Declined') {
+        return 1;
+    }
+    if ($a['status'] !== 'Declined' && $b['status'] === 'Declined') {
+        return -1;
+    }
+    
+    // For same status, sort by date (newest first)
+    return strtotime($b['requested_on']) - strtotime($a['requested_on']);
+});
+
 // Calculate summary statistics
 $total_units = 0;
 $total_picked_up = 0;
@@ -837,12 +871,12 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                             </a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link active" href="dashboard-hospital-history.php">
-                                <i class="fas fa-print me-2""></i>Print Requests
+                        <a class="nav-link" href="dashboard-hospital-history.php">
+                                <i class="fas fa-print me-2"></i>Print Requests
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-hospital-request-history.php">
+                            <a class="nav-link active" href="dashboard-hospital-request-history.php">
                                 <i class="fas fa-history me-2"></i>Request History
                             </a>
                         </li>
@@ -859,23 +893,91 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
             <!-- Main Content -->
                 <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                     <div class="container-fluid p-4 custom-margin">
-                        <h2 class="card-title mb-3">Print Requests</h2>
+                            <h2 class="card-title mb-3">Request History</h2>
                             
-                            <!-- Search Bar -->
-                            <div class="search-box mb-4">
-                                <div class="input-group">
-                                    <span class="input-group-text bg-white">
-                                        <i class="fas fa-search text-muted"></i>
-                                    </span>
-                                    <input type="text" 
-                                        class="form-control border-start-0" 
-                                        id="requestSearchBar" 
-                                        placeholder="Search by patient name...">
+
+                                            <!-- Add search bar -->
+                                            <div class="search-box mb-4">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-end-0">
+                                    <i class="fas fa-search text-muted"></i>
+                                </span>
+                                <input type="text" id="requestSearchBar" class="form-control border-start-0 ps-0" 
+                                       placeholder="Search by patient name..." 
+                                       style="background-color: #ffffff; color: #333333;">
+                            </div>
+                        </div>
+                            <!-- Add Sort Dropdown -->
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div></div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <label for="sortDropdown" class="form-label mb-0">Sort by:</label>
+                                    <select id="sortDropdown" class="form-select" style="width: 180px;">
+                                        <option value="status">Status</option>
+                                        <option value="requested_on">Requested Date</option>
+                                        <option value="last_updated">Last Updated</option>
+                                        <option value="blood_type">Blood Type</option>
+                                        <option value="quantity">Quantity</option>
+                                    </select>
                                 </div>
                             </div>
-
+                            <!-- Summary Cards - now 6 in a single row -->
+                            <div class="row mb-4 g-3">
+                                <div class="col-md-2">
+                                    <div class="card h-100">
+                                        <div class="card-body">
+                                            <h5 class="card-title">Total Units Requested</h5>
+                                            <p class="card-text fs-3"><?php echo $total_units; ?> Units</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="card h-100">
+                                        <div class="card-body">
+                                            <h5 class="card-title">Most Requested Blood Type</h5>
+                                            <p class="card-text fs-3"><?php echo $most_requested_type; ?></p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="card h-100">
+                                        <div class="card-body">
+                                            <h5 class="card-title">Total Requests</h5>
+                                            <p class="card-text fs-3"><?php echo count($blood_requests); ?></p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="card h-100">
+                                        <div class="card-body">
+                                            <h5 class="card-title">Total Units Picked-Up</h5>
+                                            <p class="card-text fs-3"><?php echo $total_picked_up; ?> Units</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="card h-100">
+                                        <div class="card-body">
+                                            <h5 class="card-title">Total Printed</h5>
+                                            <p class="card-text fs-3 mb-0">
+                                                <?php echo array_reduce($blood_requests, function($carry, $r) { return $carry + (in_array($r['status'], ['Printed','Completed','Confirmed']) ? 1 : 0); }, 0); ?>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="card h-100">
+                                        <div class="card-body">
+                                            <h5 class="card-title">Total Declined</h5>
+                                            <p class="card-text fs-3 mb-0">
+                                                <?php echo array_reduce($blood_requests, function($carry, $r) { return $carry + ($r['status'] === 'Declined' ? 1 : 0); }, 0); ?>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                                 <!-- Table for Request History -->
-                                <table class="table table-bordered table-hover">
+                                <table class="table table-bordered table-hover table-striped">
                                     <thead class="table-dark">
                                         <tr>
                                             <th>Request ID</th>
@@ -887,18 +989,20 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                             <th>Status</th>
                                             <th>Physician</th>
                                             <th>Requested On</th>
-                                            <th>Last Updated</th>
-                                            <th>Action</th>
+                                            <th>Printed On</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
+                                    <tbody id="requestTable">
                                         <?php if (empty($blood_requests)): ?>
                                         <tr>
-                                            <td colspan="11" class="text-center">No blood requests found.</td>
+                                        <td colspan="12" class="text-center">No blood requests found.</td>
                                         </tr>
                                         <?php else: ?>
                                             <?php foreach ($blood_requests as $request): ?>
-                                                <?php if ($request['status'] === 'Approved' || $request['status'] === 'Accepted'): ?>
+                                                <?php
+                                                    $isPrinted = isset($request['printed']) ? $request['printed'] : ($request['status'] === 'Printed');
+                                                    $status = $request['status'];
+                                                ?>
                                                 <tr>
                                                     <td><?php echo htmlspecialchars($request['request_id']); ?></td>
                                                     <td><?php echo htmlspecialchars($request['patient_name']); ?></td>
@@ -906,21 +1010,31 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                                     <td><?php echo htmlspecialchars($request['patient_gender']); ?></td>
                                                     <td><?php echo htmlspecialchars($request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-')); ?></td>
                                                     <td><?php echo htmlspecialchars($request['units_requested'] . ' Units'); ?></td>
-                                                    <td class="text-approved">
-                                                        <?php echo htmlspecialchars($request['status']); ?>
+                                                    <td>
+                                                        <?php if ($status === 'Approved' || $status === 'Accepted'): ?>
+                                                            <span class="badge bg-primary">Approved</span>
+                                                        <?php elseif ($status === 'Completed' || $status === 'Confirmed'): ?>
+                                                            <span class="badge bg-info text-dark">Printed</span>
+                                                        <?php elseif ($status === 'Pending'): ?>
+                                                            <span class="badge bg-warning text-dark">Pending</span>
+                                                        <?php elseif ($status === 'Declined'): ?>
+                                                            <span class="badge bg-danger decline-reason-badge" style="cursor:pointer;" data-request-id="<?php echo htmlspecialchars($request['request_id']); ?>" data-bs-toggle="modal" data-bs-target="#declineReasonModal" onclick="showDeclineReason(<?php echo htmlspecialchars($request['request_id']); ?>, '<?php echo htmlspecialchars(addslashes($request['decline_reason'] ?? 'No reason provided')); ?>')">Declined</span>
+                                                        <?php elseif ($status === 'Printed'): ?>
+                                                            <span class="badge bg-info text-dark">Printed</span>
+                                                        <?php else: ?>
+                                                            <span class="badge bg-secondary">No Action</span>
+                                                        <?php endif; ?>
                                                     </td>
                                                     <td><?php echo htmlspecialchars($request['physician_name']); ?></td>
                                                     <td><?php echo date('Y-m-d', strtotime($request['requested_on'])); ?></td>
-                                                    <td><?php echo $request['last_updated'] ? date('Y-m-d', strtotime($request['last_updated'])) : '-'; ?></td>
                                                     <td>
-                                                        <button class="btn btn-success pickup-btn" 
-                                                                data-request-id="<?php echo htmlspecialchars($request['request_id']); ?>"
-                                                                onclick="markAsConfirmed(<?php echo htmlspecialchars($request['request_id']); ?>)">
-                                                            <i class="fas fa-print me-1"></i> Print
-                                                        </button>
+                                                        <?php if (in_array($status, ['Printed','Completed','Confirmed'])): ?>
+                                                            <?php echo $request['last_updated'] ? date('Y-m-d', strtotime($request['last_updated'])) : '-'; ?>
+                                                        <?php else: ?>
+                                                            -
+                                                        <?php endif; ?>
                                                     </td>
                                                 </tr>
-                                                <?php endif; ?>
                                             <?php endforeach; ?>
                                         <?php endif; ?>
                                     </tbody>
@@ -1123,9 +1237,27 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-primary" id="confirmDeductionBtn">OK</button>
-            </div>
-        </div>
+      </div>
     </div>
+  </div>
+</div>
+
+<!-- Add Status Log Modal -->
+<div class="modal fade" id="statusLogModal" tabindex="-1" aria-labelledby="statusLogModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-secondary text-white">
+        <h5 class="modal-title" id="statusLogModalLabel">Status Change Log</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="statusLogModalBody">
+        <!-- Status log will be loaded here -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
 </div>
 
     <!-- Bootstrap 5.3 JS and Popper -->
@@ -1204,93 +1336,93 @@ function showConfirmDeductionModal(onConfirm) {
 // Replace alert() and confirm() in markAsConfirmed
 function markAsConfirmed(requestId) {
     showConfirmDeductionModal(function() {
-    // Find and update the button state
-    const button = document.querySelector(`button[data-request-id="${requestId}"]`);
-    if (!button) return;
+        // Find and update the button state
+        const button = document.querySelector(`button[data-request-id="${requestId}"]`);
+        if (!button) return;
 
-    // Store original button content and disable it
-    const originalContent = button.innerHTML;
-    button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...`;
-    button.disabled = true;
+        // Store original button content and disable it
+        const originalContent = button.innerHTML;
+        button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...`;
+        button.disabled = true;
 
-    // Create form data
-    const formData = new FormData();
-    formData.append('action', 'confirm');
-    formData.append('request_id', requestId);
+        // Create form data
+        const formData = new FormData();
+        formData.append('action', 'confirm');
+        formData.append('request_id', requestId);
 
-    // Make the request
-    fetch(window.location.href, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Show detailed success message
-            const modalContent = `
-                <div class="modal" tabindex="-1">
-                    <div class="modal-dialog">
-                        <div class="modal-content">
-                            <div class="modal-header bg-success text-white">
-                                <h5 class="modal-title">Request Confirmed Successfully</h5>
-                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body">
-                                <h6>Request has been confirmed and units have been deducted from inventory.</h6>
-                                <p class="mb-0 mt-3"><strong>Details:</strong></p>
-                                <pre class="bg-light p-3 mt-2 rounded">${data.detailed_message}</pre>
-                                <div class="mt-3 mb-2"><strong>Units Deducted:</strong></div>
-                                <ul class="list-group">
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        ${data.blood_type}
-                                        <span class="badge bg-danger rounded-pill">${data.units_deducted} units</span>
-                                    </li>
-                                </ul>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                <button type="button" class="btn btn-success" id="printRequestBtn" data-request-id="${data.request_id}">Print</button>
+        // Make the request
+        fetch(window.location.href, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Show detailed success message
+                const modalContent = `
+                    <div class="modal" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header bg-success text-white">
+                                    <h5 class="modal-title">Request Confirmed Successfully</h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <h6>Request has been confirmed and units have been deducted from inventory.</h6>
+                                    <p class="mb-0 mt-3"><strong>Details:</strong></p>
+                                    <pre class="bg-light p-3 mt-2 rounded">${data.detailed_message}</pre>
+                                    <div class="mt-3 mb-2"><strong>Units Deducted:</strong></div>
+                                    <ul class="list-group">
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            ${data.blood_type}
+                                            <span class="badge bg-danger rounded-pill">${data.units_deducted} units</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    <button type="button" class="btn btn-success" id="printRequestBtn" data-request-id="${data.request_id}">Print</button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            `;
-            // Create and show the modal
-            const modalContainer = document.createElement('div');
-            modalContainer.innerHTML = modalContent;
-            document.body.appendChild(modalContainer);
-            const modal = new bootstrap.Modal(modalContainer.querySelector('.modal'));
-            modal.show();
-            // Update the button
-            button.innerHTML = 'Confirmed <i class="bi bi-check-circle-fill"></i>';
-            button.classList.remove('btn-success');
-            button.classList.add('btn-secondary');
-            button.disabled = true;
-            // Listen for modal hidden event to clean up
-            modalContainer.querySelector('.modal').addEventListener('hidden.bs.modal', function() {
-                document.body.removeChild(modalContainer);
-                window.location.reload(); // Reload after modal is closed
-            });
-            // After creating and showing the modal
-            const printBtn = modalContainer.querySelector('#printRequestBtn');
-            if (printBtn) {
-                printBtn.addEventListener('click', function() {
-                    // Redirect to print page with request ID
-                    window.location.href = `print-blood-request.php?request_id=${data.request_id}`;
+                `;
+                // Create and show the modal
+                const modalContainer = document.createElement('div');
+                modalContainer.innerHTML = modalContent;
+                document.body.appendChild(modalContainer);
+                const modal = new bootstrap.Modal(modalContainer.querySelector('.modal'));
+                modal.show();
+                // Update the button
+                button.innerHTML = 'Confirmed <i class="bi bi-check-circle-fill"></i>';
+                button.classList.remove('btn-success');
+                button.classList.add('btn-secondary');
+                button.disabled = true;
+                // Listen for modal hidden event to clean up
+                modalContainer.querySelector('.modal').addEventListener('hidden.bs.modal', function() {
+                    document.body.removeChild(modalContainer);
+                    window.location.reload(); // Reload after modal is closed
                 });
-            }
-        } else {
+                // After creating and showing the modal
+                const printBtn = modalContainer.querySelector('#printRequestBtn');
+                if (printBtn) {
+                    printBtn.addEventListener('click', function() {
+                        // Redirect to print page with request ID
+                        window.location.href = `print-blood-request.php?request_id=${data.request_id}`;
+                    });
+                }
+            } else {
                 // Show error message in modal
                 showInsufficientInventoryModal(data.message);
+                button.innerHTML = originalContent;
+                button.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showInsufficientInventoryModal('An error occurred. Please try again.');
             button.innerHTML = originalContent;
             button.disabled = false;
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-            showInsufficientInventoryModal('An error occurred. Please try again.');
-        button.innerHTML = originalContent;
-        button.disabled = false;
         });
     });
 }
@@ -1574,35 +1706,62 @@ function sortTableByStatus() {
     const rows = Array.from(table.getElementsByTagName('tr'));
     
     // Sort function that puts rows in order: 
-    // 1. Approved/Accepted (with button) first
-    // 2. Pending
-    // 3. Confirmed (badged)
-    // 4. Declined at the very end
+    // 1. Declined
+    // 2. Printed
+    // 3. Pending
     rows.sort((a, b) => {
         const statusA = a.querySelector('td:nth-child(7)')?.textContent.trim();
         const statusB = b.querySelector('td:nth-child(7)')?.textContent.trim();
-        const hasButtonA = a.querySelector('button.pickup-btn') !== null;
-        const hasButtonB = b.querySelector('button.pickup-btn') !== null;
         
         if (!statusA || !statusB) return 0;
         
-        // Priority: buttons first (Approved/Accepted)
-        if (hasButtonA && !hasButtonB) return -1;
-        if (!hasButtonA && hasButtonB) return 1;
-        
-        // If neither has buttons, check status
-        if (statusA === 'Declined' && statusB !== 'Declined') return 1; // Declined last
-        if (statusA !== 'Declined' && statusB === 'Declined') return -1;
-        
-        if (statusA === 'Confirmed' && statusB === 'Pending') return 1; // Pending before Confirmed
-        if (statusA === 'Pending' && statusB === 'Confirmed') return -1;
-        
-        return 0;
+        const order = ['Declined', 'Printed', 'Pending', 'Approved', 'No Action'];
+        return order.indexOf(statusA) - order.indexOf(statusB);
     });
     
     // Re-append rows in new order
     rows.forEach(row => table.appendChild(row));
 }
-     </script>
+
+// Sorting logic for dropdown
+const sortDropdown = document.getElementById('sortDropdown');
+sortDropdown.addEventListener('change', function() {
+    const value = this.value;
+    const table = document.getElementById('requestTable');
+    const rows = Array.from(table.getElementsByTagName('tr'));
+    rows.sort((a, b) => {
+        if (value === 'status') {
+            const statusA = a.querySelector('td:nth-child(7)')?.textContent.trim();
+            const statusB = b.querySelector('td:nth-child(7)')?.textContent.trim();
+            const order = ['Declined', 'Printed', 'Pending', 'Approved', 'No Action'];
+            return order.indexOf(statusA) - order.indexOf(statusB);
+        } else if (value === 'requested_on') {
+            return new Date(b.querySelector('td:nth-child(9)').textContent) - new Date(a.querySelector('td:nth-child(9)').textContent);
+        } else if (value === 'last_updated') {
+            return new Date(b.querySelector('td:nth-child(10)').textContent) - new Date(a.querySelector('td:nth-child(10)').textContent);
+        } else if (value === 'blood_type') {
+            return a.querySelector('td:nth-child(5)').textContent.localeCompare(b.querySelector('td:nth-child(5)').textContent);
+        } else if (value === 'quantity') {
+            return parseInt(b.querySelector('td:nth-child(6)').textContent) - parseInt(a.querySelector('td:nth-child(6)').textContent);
+        }
+        return 0;
+    });
+    rows.forEach(row => table.appendChild(row));
+});
+
+// Add JS function to show status log
+function showStatusLog(requestId) {
+    // For demo, just show a static log. In production, fetch from server or build from data.
+    let logHtml = '<ul class="list-group">';
+    // You can replace this with an AJAX call to fetch real logs per requestId
+    logHtml += '<li class="list-group-item">2024-05-01: Request Created</li>';
+    logHtml += '<li class="list-group-item">2024-05-02: Status changed to Pending</li>';
+    logHtml += '<li class="list-group-item">2024-05-03: Status changed to Printed</li>';
+    logHtml += '</ul>';
+    document.getElementById('statusLogModalBody').innerHTML = logHtml;
+    var modal = new bootstrap.Modal(document.getElementById('statusLogModal'));
+    modal.show();
+}
+</script>
 </body>
 </html>

@@ -2,6 +2,139 @@
 session_start();
 require_once '../../assets/conn/db_conn.php';
 require_once '../../assets/php_func/check_account_hospital_modal.php';
+
+// Function to query Supabase
+function querySQL($table, $select = "*", $filters = null) {
+    $ch = curl_init();
+    
+    $headers = [
+        'Content-Type: application/json',
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY,
+        'Prefer: return=representation'
+    ];
+    
+    $url = SUPABASE_URL . '/rest/v1/' . $table . '?select=' . urlencode($select);
+    
+    if ($filters) {
+        foreach ($filters as $key => $value) {
+            $url .= '&' . $key . '=' . urlencode($value);
+        }
+    }
+    
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    
+    $response = curl_exec($ch);
+    $error = curl_error($ch);
+    
+    curl_close($ch);
+    
+    if ($error) {
+        return ['error' => $error];
+    }
+    
+    return json_decode($response, true);
+}
+
+// Get blood inventory data
+$bloodInventory = [];
+$declinedDonorIds = [];
+
+// Query physical examination for non-accepted remarks
+$physicalExamQuery = curl_init();
+curl_setopt_array($physicalExamQuery, [
+    CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?remarks=neq.Accepted&select=donor_id,donor_form_id,remarks",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        "apikey: " . SUPABASE_API_KEY,
+        "Authorization: Bearer " . SUPABASE_API_KEY,
+        "Content-Type: application/json"
+    ],
+]);
+
+$physicalExamResponse = curl_exec($physicalExamQuery);
+curl_close($physicalExamQuery);
+
+if ($physicalExamResponse) {
+    $physicalExamRecords = json_decode($physicalExamResponse, true);
+    if (is_array($physicalExamRecords)) {
+        foreach ($physicalExamRecords as $record) {
+            if (!empty($record['donor_id'])) {
+                $declinedDonorIds[] = $record['donor_id'];
+            }
+            if (!empty($record['donor_form_id'])) {
+                $declinedDonorIds[] = $record['donor_form_id'];
+            }
+        }
+    }
+}
+
+$declinedDonorIds = array_unique($declinedDonorIds);
+
+// Query eligibility table for valid blood units
+$eligibilityData = querySQL(
+    'eligibility', 
+    'eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status,blood_collection_id',
+    ['collection_successful' => 'eq.true']
+);
+
+// Initialize blood type counts
+$bloodByType = [
+    'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
+    'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
+];
+
+$today = new DateTime();
+
+if (is_array($eligibilityData) && !empty($eligibilityData)) {
+    foreach ($eligibilityData as $item) {
+        // Skip if donor is in declined list
+        if (in_array($item['donor_id'], $declinedDonorIds)) {
+            continue;
+        }
+        
+        // Get blood collection data
+        if (!empty($item['blood_collection_id'])) {
+            $bloodCollectionData = querySQL('blood_collection', '*', ['blood_collection_id' => 'eq.' . $item['blood_collection_id']]);
+            $bloodCollectionData = isset($bloodCollectionData[0]) ? $bloodCollectionData[0] : null;
+        } else {
+            continue;
+        }
+        
+        // Calculate expiration date
+        $collectionDate = new DateTime($item['collection_start_time']);
+        $expirationDate = clone $collectionDate;
+        $expirationDate->modify('+35 days');
+        
+        // Only count if not expired and has amount taken
+        if ($today <= $expirationDate && 
+            $bloodCollectionData && 
+            isset($bloodCollectionData['amount_taken']) && 
+            is_numeric($bloodCollectionData['amount_taken']) && 
+            $bloodCollectionData['amount_taken'] > 0) {
+            
+            $bloodType = $item['blood_type'];
+            if (isset($bloodByType[$bloodType])) {
+                $bloodByType[$bloodType] += floatval($bloodCollectionData['amount_taken']);
+            }
+        }
+    }
+}
+
+// Convert to integers
+foreach ($bloodByType as $type => $count) {
+    $bloodByType[$type] = (int)$count;
+}
+
+// Get critical blood types (less than 30 units)
+$criticalTypes = [];
+foreach ($bloodByType as $type => $count) {
+    if ($count < 30) {
+        $criticalTypes[] = $type;
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -264,47 +397,246 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
     color: var(--redcross-red) !important;
             font-weight: bold;
 }
-        .sticky-alerts {
-            position: fixed;
-            top: 80px;
-            right: 20px;
-            z-index: 1000;
-            width: 350px;
-        }
-        .blood-alert {
-            margin-bottom: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            animation: slideIn 0.5s ease-out;
-        }
-        @keyframes slideIn {
+        /* Animation keyframes for sliding */
+        @keyframes slideInRight {
             from {
-                transform: translateX(100%);
                 opacity: 0;
+                transform: translateX(30px);
             }
             to {
-                transform: translateX(0);
                 opacity: 1;
+                transform: translateX(0);
             }
         }
-        /* Loading Spinner - Minimal Addition */
-        .btn-loading {
+
+        @keyframes slideOutRight {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(30px);
+            }
+        }
+
+        .notifications-toggle {
+            position: fixed;
+            top: 85px;
+            right: 32px;
+            transform: none;
+            background: #fff;
+            color: #941022;
+            border: none;
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            box-shadow: 0 4px 16px rgba(148,16,34,0.12), 0 1.5px 4px rgba(0,0,0,0.04);
+            z-index: 999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            animation: slideInRight 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .notifications-toggle:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(148,16,34,0.2);
+        }
+
+        .notifications-toggle.hide-anim {
+            animation: slideOutRight 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
+        .sticky-alerts {
+            position: fixed;
+            top: 150px;
+            right: 32px;
+            z-index: 1000;
+            width: 370px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .sticky-alerts.hidden {
+            animation: slideOutRight 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
+        .sticky-alerts:not(.hidden) {
+            animation: slideInRight 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
+        .blood-alert {
             position: relative;
-            pointer-events: none;
+            margin: 0;
+            box-shadow: 0 4px 16px rgba(148,16,34,0.08), 0 1.5px 4px rgba(0,0,0,0.04);
+            border-radius: 14px;
+            border-left: 6px solid #941022;
+            background: #fff6f7;
+            padding: 20px 24px 20px 20px;
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            color: #941022;
+            cursor: pointer;
+            min-width: 320px;
+            max-width: 370px;
+            transition: all 0.3s ease;
+            animation: slideInRight 0.3s ease;
         }
-        
-        .btn-loading .spinner-border {
+
+        .blood-alert.fade-out {
+            animation: slideOutRight 0.3s ease forwards;
+        }
+
+        .blood-alert[data-notif-id="pending"] {
+            background: #fffbe6;
+            color: #b38b00;
+            border-left: 6px solid #b38b00;
+        }
+        .blood-alert[data-notif-id="event"] {
+            background: #f0f8ff;
+            color: #0d6efd;
+            border-left: 6px solid #0d6efd;
+        }
+        .blood-alert .notif-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4em;
+            background: #fff;
+            box-shadow: 0 1px 4px rgba(148,16,34,0.08);
+            margin-right: 6px;
+        }
+        .blood-alert[data-notif-id="pending"] .notif-icon {
+            background: #fffbe6;
+            color: #b38b00;
+        }
+        .blood-alert[data-notif-id="event"] .notif-icon {
+            background: #f0f8ff;
+            color: #0d6efd;
+        }
+        .blood-alert .notif-content {
+            flex: 1;
+        }
+        .blood-alert .notif-title {
+            font-weight: 700;
+            font-size: 1.08em;
+            margin-bottom: 2px;
+        }
+        .blood-alert .notif-close {
             position: absolute;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            width: 1rem;
-            height: 1rem;
-            display: inline-block;
+            top: 10px;
+            right: 14px;
+            font-size: 1.1em;
+            color: #aaa;
+            background: none;
+            border: none;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .blood-alert .notif-close:hover {
+            color: #941022;
+        }
+        .blood-alert.fade-out {
+                opacity: 0;
+            transform: translateX(60px);
+        }
+        @keyframes fadeInSlide {
+            from { opacity: 0; transform: translateX(60px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .notifications-toggle .badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #dc3545;
+            color: #fff;
+            border: 2px solid #fff;
+            font-size: 0.95em;
+            font-weight: 700;
+            padding: 3px 7px;
+            border-radius: 12px;
+            box-shadow: 0 1px 4px rgba(220,53,69,0.12);
+            animation: pulseBadge 1.2s infinite;
+        }
+        @keyframes pulseBadge {
+            0% { box-shadow: 0 0 0 0 #dc354580; }
+            70% { box-shadow: 0 0 0 8px #dc354500; }
+            100% { box-shadow: 0 0 0 0 #dc354500; }
+        }
+        .notification-container {
+            position: fixed;
+            top: 32px;
+            right: 32px;
+            z-index: 1001;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            width: 370px;
+            max-width: 100vw;
+        }
+        .sticky-alerts {
+            margin-top: 0;
+            transition: margin-top 0.4s cubic-bezier(.4,1.4,.6,1), opacity 0.5s, transform 0.5s;
+        }
+        .sticky-alerts.bell-visible {
+            margin-top: 0; /* Remove margin adjustment since we're using fixed positioning */
+        }
+        .sticky-alerts.bell-hidden {
+            top: 85px; /* Move up when bell is hidden */
+        }
+        .notifications-toggle.show {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0) scale(1);
+            margin-bottom: 16px;
+        }
+        .notifications-toggle.hide-anim {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(-30px) scale(0.95);
+        }
+        .blood-alert {
+            transition: opacity 0.5s, transform 0.5s, margin 0.4s cubic-bezier(.4,1.4,.6,1);
+        }
+        .blood-alert.fade-out {
+            opacity: 0;
+            transform: translateX(60px) scale(0.95);
+            margin-bottom: -60px;
+        }
+
+        .notifications-toggle i {
+            font-size: 1.6em;
+        }
+
+        .notifications-toggle .fa-bell {
+            font-size: 1.6em;
+        }
+
+        /* Add this to your existing styles */
+        <style>
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         
-        .btn-loading .btn-text {
-            opacity: 0;
+        .blood-inventory-title {
+            color: #941022;
+            font-weight: bold;
+            margin-bottom: 20px;
+            font-size: 1.2em;
         }
+        </style>
     </style>
     <!-- Add this before the closing </head> tag -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
@@ -329,7 +661,7 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                     
                     <ul class="nav flex-column">
                         <li class="nav-item">
-                            <a class="nav-link active" href="#">
+                            <a class="nav-link active" href="dashboard-hospital-main.php">
                                 <i class="fas fa-home me-2"></i>Home
                             </a>
                         </li>
@@ -339,7 +671,12 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-hospital-history.php">
+                        <a class="nav-link" href="dashboard-hospital-history.php">
+                                <i class="fas fa-print me-2"></i>Print Requests
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="dashboard-hospital-request-history.php">
                                 <i class="fas fa-history me-2"></i>Request History
                             </a>
                         </li>
@@ -356,71 +693,390 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                 <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                     
                     <div class="container-fluid p-4 custom-margin">
-                    <h3 class="card-title mb-3">Progress Tracker</h3>
-                    <div class="modal-body mt-4">
-
-                    <!-- Progress Tracker -->
-                    <div class="progress-tracker">
-                        <div class="progress-steps">
-                            <div class="progress-line">
-                                <div class="progress-line-fill" style="width: 75%;"></div>
+                        <!-- Enhanced Total Blood Inventory Overview -->
+                        <div class="card mb-4 total-overview-card">
+                            <div class="card-body">
+                                <?php
+                                $totalUnits = array_sum($bloodByType);
+                                $maxCapacity = 800;
+                                $totalPercentage = min(($totalUnits / $maxCapacity) * 100, 100);
+                                $statusClass = $totalPercentage < 30 ? 'critical' : 
+                                             ($totalPercentage < 50 ? 'warning' : 'healthy');
+                                $statusText = $totalPercentage < 30 ? 'CRITICAL LOW' : 
+                                            ($totalPercentage < 50 ? 'WARNING' : 'HEALTHY');
+                                ?>
+                                
+                                <div class="inventory-header d-flex justify-content-between align-items-start mb-4">
+                                    <div class="title-section">
+                                        <h5 class="inventory-title mb-2">Blood Bank Inventory Status</h5>
+                                        <div class="inventory-percentage d-flex align-items-center">
+                                            <div class="percentage-display">
+                                                <span class="h2 mb-0 fw-bold <?php echo $statusClass; ?>-text"><?php echo round($totalPercentage); ?>%</span>
+                                                <span class="text-muted ms-2">Capacity</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="status-indicator">
+                                        <div class="status-badge status-<?php echo $statusClass; ?>">
+                                            <i class="fas <?php echo $totalPercentage < 30 ? 'fa-exclamation-triangle' : 'fa-check-circle'; ?>"></i>
+                                            <span><?php echo $statusText; ?></span>
+                                        </div>
+                                    </div>
                             </div>
                             
-                            <div class="step completed">
-                                <div class="step-icon">
-                                    <i class="fas fa-file-medical"></i>
+                                <div class="inventory-progress-wrapper">
+                                    <div class="inventory-progress position-relative mb-4">
+                                        <div class="progress-track">
+                                            <div class="progress-fill bg-<?php echo $statusClass; ?>" 
+                                                 style="width: <?php echo $totalPercentage; ?>%">
                                 </div>
-                                <div class="step-label">Request Submitted</div>
-                                <div class="step-time">10:30 AM</div>
                             </div>
 
-                            <div class="step completed">
-                                <div class="step-icon">
-                                    <i class="fas fa-vial"></i>
+                                        <!-- Threshold Indicators -->
+                                        <div class="threshold-indicators">
+                                            <div class="threshold critical" style="left: 30%">
+                                                <div class="threshold-line"></div>
+                                                <span class="threshold-label">30%</span>
                                 </div>
-                                <div class="step-label">Processing</div>
-                                <div class="step-time">10:45 AM</div>
+                                            <div class="threshold warning" style="left: 50%">
+                                                <div class="threshold-line"></div>
+                                                <span class="threshold-label">50%</span>
+                                            </div>
+                                        </div>
                             </div>
 
-                            <div class="step completed">
-                                <div class="step-icon">
-                                    <i class="fas fa-clipboard-check"></i>
+                                    <!-- Quick Stats Grid -->
+                                    <div class="inventory-stats-grid">
+                                        <div class="stat-box <?php echo count($criticalTypes) > 0 ? 'critical' : 'normal'; ?>">
+                                            <div class="stat-icon-wrapper">
+                                                <i class="fas <?php echo count($criticalTypes) > 0 ? 'fa-exclamation-circle' : 'fa-check-circle'; ?>"></i>
                                 </div>
-                                <div class="step-label">Request Approved</div>
-                                <div class="step-time">11:00 AM</div>
+                                            <div class="stat-info">
+                                                <?php if (count($criticalTypes) > 0): ?>
+                                                    <div class="stat-number"><?php echo count($criticalTypes); ?></div>
+                                                    <div class="stat-label">Critical Types</div>
+                                                <?php else: ?>
+                                                    <div class="stat-number">Normal</div>
+                                                    <div class="stat-label">All Blood Types</div>
+                                                <?php endif; ?>
+                                            </div>
                             </div>
 
-                            <div class="step active">
-                                <div class="step-icon">
-                                    <i class="fas fa-truck"></i>
+                                        <div class="stat-box">
+                                            <div class="stat-icon-wrapper">
+                                                <i class="fas fa-clock"></i>
                                 </div>
-                                <div class="step-label">In Transit</div>
-                                <div class="step-time">In Progress</div>
+                                            <div class="stat-info">
+                                                <div class="stat-number"><?php echo date('h:i A'); ?></div>
+                                                <div class="stat-label">Current Time</div>
+                                            </div>
                             </div>
 
-                            <div class="step">
-                                <div class="step-icon">
-                                    <i class="fas fa-check-circle"></i>
+                                        <div class="stat-box">
+                                            <div class="stat-icon-wrapper">
+                                                <i class="fas fa-chart-line"></i>
                                 </div>
-                                <div class="step-label">Delivered</div>
-                                <div class="step-time">--:--</div>
+                                            <div class="stat-info">
+                                                <div class="stat-number"><?php echo round($totalPercentage); ?>%</div>
+                                                <div class="stat-label">Current Level</div>
                             </div>
                         </div>
                     </div>
 
-                    <script>
-                        // Update progress line
-                        document.addEventListener('DOMContentLoaded', () => {
-                            // Update progress line (75% to 100% during delivery)
-                            let progress = 75;
-                            setInterval(() => {
-                                if (progress < 100) {
-                                    progress += 0.05;
-                                    document.querySelector('.progress-line-fill').style.width = `${progress}%`;
-                                }
-                            }, 1000);
-                        });
-                    </script>
+                                    <?php if (count($criticalTypes) > 0): ?>
+                                    <div class="critical-alert-banner">
+                                        <div class="alert-icon">
+                                            <i class="fas fa-exclamation-circle"></i>
+                                        </div>
+                                        <div class="alert-content">
+                                            <h6 class="alert-title mb-1">Critical Alert</h6>
+                                            <p class="alert-message mb-0">
+                                                <?php echo implode(', ', $criticalTypes); ?> blood types require immediate attention!
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+
+                        <style>
+                        /* Enhanced Blood Inventory Status Styles */
+                        .total-overview-card {
+                            background: #fff;
+                            border: none;
+                            border-radius: 15px;
+                            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+                        }
+
+                        .inventory-header {
+                            padding-bottom: 1rem;
+                            border-bottom: 1px solid rgba(0,0,0,0.08);
+                        }
+
+                        .inventory-title {
+                            color: #2c3e50;
+                            font-size: 1.5rem;
+                            font-weight: 600;
+                            margin: 0;
+                        }
+
+                        .percentage-display {
+                            margin-top: 1rem;
+                        }
+
+                        .percentage-display .h2 {
+                            font-size: 2.5rem;
+                            font-weight: 700;
+                        }
+
+                        .critical-text { color: #dc2626; }
+                        .warning-text { color: #d97706; }
+                        .healthy-text { color: #16a34a; }
+
+                        .status-badge {
+                            padding: 10px 20px;
+                            border-radius: 30px;
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                            font-weight: 600;
+                            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                        }
+
+                        .status-badge i {
+                            font-size: 1.2rem;
+                        }
+
+                        .status-critical {
+                            background: #fee2e2;
+                            color: #dc2626;
+                            animation: pulse 2s infinite;
+                        }
+
+                        .status-warning {
+                            background: #fef3c7;
+                            color: #d97706;
+                        }
+
+                        .status-healthy {
+                            background: #dcfce7;
+                            color: #16a34a;
+                        }
+
+                        .inventory-progress-wrapper {
+                            margin: 2rem 0;
+                        }
+
+                        .progress-track {
+                            height: 35px;
+                            background: #f1f5f9;
+                            border-radius: 17.5px;
+                            position: relative;
+                            overflow: hidden;
+                            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+                        }
+
+                        .progress-fill {
+                            height: 100%;
+                            border-radius: 17.5px;
+                            position: relative;
+                            transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+                        }
+
+                        .threshold-indicators {
+                            position: absolute;
+                            top: 0;
+                            left: 0;
+                            width: 100%;
+                            height: 100%;
+                            pointer-events: none;
+                        }
+
+                        .threshold {
+                            position: absolute;
+                            height: 100%;
+                        }
+
+                        .threshold-line {
+                            position: absolute;
+                            top: -10px;
+                            left: 50%;
+                            height: calc(100% + 20px);
+                            width: 2px;
+                            background: rgba(0,0,0,0.2);
+                        }
+
+                        .threshold-label {
+                            position: absolute;
+                            top: -30px;
+                            left: 50%;
+                            transform: translateX(-50%);
+                            font-size: 1rem;
+                            font-weight: 600;
+                            color: #64748b;
+                            background: white;
+                            padding: 4px 12px;
+                            border-radius: 20px;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        }
+
+                        .inventory-stats-grid {
+                            display: grid;
+                            grid-template-columns: repeat(3, 1fr);
+                            gap: 1rem;
+                            margin: 2rem 0;
+                        }
+
+                        .stat-box {
+                            display: flex;
+                            align-items: center;
+                            gap: 1rem;
+                            padding: 1.5rem;
+                            background: #ffffff;
+                            border-radius: 12px;
+                            transition: all 0.2s ease;
+                            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+                        }
+
+                        .stat-box.critical {
+                            background: #fff2f2;
+                            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.08);
+                        }
+
+                        .stat-box.normal {
+                            background: #f0fdf4;
+                            box-shadow: 0 4px 12px rgba(22, 163, 74, 0.08);
+                        }
+
+                        .stat-box:hover {
+                            transform: translateY(-2px);
+                            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+                        }
+
+                        .stat-box.critical:hover {
+                            box-shadow: 0 8px 16px rgba(220, 38, 38, 0.12);
+                        }
+
+                        .stat-box.normal:hover {
+                            box-shadow: 0 8px 16px rgba(22, 163, 74, 0.12);
+                        }
+
+                        .stat-icon-wrapper {
+                            width: 40px;
+                            height: 40px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            border-radius: 50%;
+                            background: white;
+                            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+                        }
+
+                        .stat-box.critical .stat-icon-wrapper {
+                            color: #dc2626;
+                            box-shadow: 0 2px 8px rgba(220, 38, 38, 0.15);
+                        }
+
+                        .stat-box.normal .stat-icon-wrapper {
+                            color: #16a34a;
+                            box-shadow: 0 2px 8px rgba(22, 163, 74, 0.15);
+                        }
+
+                        .stat-box .fas {
+                            font-size: 1.2rem;
+                            color: #941022;
+                        }
+
+                        .stat-box.critical .fas {
+                            color: #dc2626;
+                        }
+
+                        .stat-box.normal .fas {
+                            color: #16a34a;
+                        }
+
+                        .stat-info {
+                            flex: 1;
+                        }
+
+                        .stat-number {
+                            font-size: 1.75rem;
+                            font-weight: 700;
+                            color: #1e293b;
+                            line-height: 1;
+                            margin-bottom: 0.25rem;
+                        }
+
+                        .stat-box.critical .stat-number {
+                            color: #dc2626;
+                        }
+
+                        .stat-box.normal .stat-number {
+                            color: #16a34a;
+                        }
+
+                        .stat-label {
+                            font-size: 0.875rem;
+                            color: #64748b;
+                            font-weight: 500;
+                        }
+
+                        .critical-alert-banner {
+                            margin-top: 2rem;
+                            padding: 1.25rem;
+                            background: #fee2e2;
+                            border-left: 4px solid #dc2626;
+                            border-radius: 8px;
+                            display: flex;
+                            align-items: center;
+                            gap: 1rem;
+                        }
+
+                        .alert-icon {
+                            font-size: 1.5rem;
+                            color: #dc2626;
+                        }
+
+                        .alert-title {
+                            color: #dc2626;
+                            font-weight: 600;
+                        }
+
+                        .alert-message {
+                            color: #991b1b;
+                        }
+
+                        @keyframes pulse {
+                            0% { transform: scale(1); }
+                            50% { transform: scale(1.02); }
+                            100% { transform: scale(1); }
+                        }
+
+                        /* Responsive adjustments */
+                        @media (max-width: 992px) {
+                            .inventory-stats-grid {
+                                grid-template-columns: repeat(3, 1fr);
+                                gap: 1rem;
+                            }
+                        }
+
+                        @media (max-width: 768px) {
+                            .inventory-stats-grid {
+                                grid-template-columns: repeat(2, 1fr);
+                            }
+                        }
+
+                        @media (max-width: 576px) {
+                            .inventory-stats-grid {
+                                grid-template-columns: 1fr;
+                            }
+                            
+                            .stat-box {
+                                padding: 1.25rem;
+                            }
+                        }
+                        </style>
 
                         <?php
                         // Function to fetch pending requests
@@ -459,36 +1115,215 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                         }
                         ?>
 
-                        <div class="sticky-alerts">
+                        <!-- Notification container: bell above notifications, left-aligned -->
+                        <div class="notification-container" style="position:fixed;top:32px;right:32px;z-index:1001;display:flex;flex-direction:column;align-items:flex-start;width:370px;max-width:100vw;">
+                            <button class="notifications-toggle" id="notificationsToggle">
+                                <i class="fas fa-bell"></i>
+                                <span class="badge rounded-pill" id="notifBadge" style="display:none;">0</span>
+                            </button>
+                            <div class="sticky-alerts bell-hidden" id="stickyAlerts">
                             <!-- Blood shortage alert -->
-                            <div class="blood-alert alert alert-danger" role="alert">
-                                <i class="fas fa-exclamation-triangle me-2"></i>
-                                Blood shortage for O- type! Immediate donations needed.
+                                <?php if (!empty($criticalTypes)): ?>
+                                <div class="blood-alert alert" role="alert" data-notif-id="critical">
+                                    <span class="notif-icon" style="background:#fff6f7;color:#941022;"><i class="fas fa-exclamation-triangle"></i></span>
+                                    <div class="notif-content">
+                                        <div class="notif-title">Critical Blood Shortage</div>
+                                        <div><?php echo implode(', ', $criticalTypes); ?> levels are critically low!</div>
                             </div>
-
+                                    <button class="notif-close" title="Dismiss" aria-label="Dismiss">&times;</button>
+                                </div>
+                                <?php endif; ?>
                             <!-- Consolidated pending requests alert -->
                             <?php if (!empty($pending_requests)): ?>
-                                <div class="blood-alert alert alert-warning" role="alert">
-                                    <i class="fas fa-clock me-2"></i>
-                                    <strong>Pending Requests (<?php echo count($pending_requests); ?>)</strong>
+                                    <div class="blood-alert alert" role="alert" data-notif-id="pending">
+                                        <span class="notif-icon"><i class="fas fa-clock"></i></span>
+                                        <div class="notif-content">
+                                            <div class="notif-title">Pending Requests</div>
+                                            <div>You have <?php echo count($pending_requests); ?> pending blood request(s)</div>
+                                        </div>
+                                        <button class="notif-close" title="Dismiss" aria-label="Dismiss">&times;</button>
                                 </div>
                             <?php endif; ?>
-
                             <!-- Donation drive alert -->
-                            <div class="blood-alert alert alert-info" role="alert">
-                                <i class="fas fa-calendar me-2"></i>
-                                New donation drive scheduled for March 20.
+                                <div class="blood-alert alert" role="alert" data-notif-id="event">
+                                    <span class="notif-icon"><i class="fas fa-calendar"></i></span>
+                                    <div class="notif-content">
+                                        <div class="notif-title">Upcoming Event</div>
+                                        <div>New donation drive scheduled for March 20</div>
+                                    </div>
+                                    <button class="notif-close" title="Dismiss" aria-label="Dismiss">&times;</button>
+                                </div>
                             </div>
                         </div>
+
+                        <script>
+                        document.addEventListener('DOMContentLoaded', function() {
+                            const stickyAlerts = document.getElementById('stickyAlerts');
+                            const notificationsToggle = document.getElementById('notificationsToggle');
+                            const notifBadge = document.getElementById('notifBadge');
+                            let dismissedNotifs = [];
+                            let autoHideTimeout;
+
+                            function getAlerts() {
+                                return Array.from(document.querySelectorAll('.blood-alert'));
+                            }
+
+                            // Show notifications, hide bell
+                            function showNotifications() {
+                                stickyAlerts.classList.remove('hidden');
+                                notificationsToggle.classList.remove('show');
+                                notificationsToggle.classList.add('hide-anim');
+                                setTimeout(() => {
+                                    notificationsToggle.style.display = 'none';
+                                    notificationsToggle.classList.remove('hide-anim');
+                                }, 400);
+                                notifBadge.style.display = 'none';
+                                dismissedNotifs = [];
+                                getAlerts().forEach(alert => {
+                                    alert.style.display = '';
+                                    alert.classList.remove('fade-out');
+                                });
+                                stickyAlerts.classList.remove('bell-visible');
+                                stickyAlerts.classList.add('bell-hidden');
+                                clearTimeout(autoHideTimeout);
+                                autoHideTimeout = setTimeout(autoHideNotification, 5000);
+                            }
+
+                            // Hide notifications, show bell if any dismissed
+                            function hideNotifications() {
+                                stickyAlerts.classList.add('hidden');
+                                if (dismissedNotifs.length > 0) {
+                                    notificationsToggle.style.display = 'flex';
+                                    setTimeout(() => {
+                                        notificationsToggle.classList.add('show');
+                                    }, 10);
+                                    notifBadge.textContent = dismissedNotifs.length;
+                                    notifBadge.style.display = 'inline-block';
+                                    stickyAlerts.classList.remove('bell-hidden');
+                                    stickyAlerts.classList.add('bell-visible');
+                                } else {
+                                    notificationsToggle.classList.remove('show');
+                                    notifBadge.style.display = 'none';
+                                    stickyAlerts.classList.remove('bell-visible');
+                                    stickyAlerts.classList.add('bell-hidden');
+                                }
+                            }
+
+                            // Auto-hide a notification after timeout and count it in the bell
+                            function autoHideNotification() {
+                                // Find the first visible alert
+                                const alert = getAlerts().find(a => a.style.display !== 'none');
+                                if (alert) {
+                                    const notifId = alert.getAttribute('data-notif-id');
+                                    alert.classList.add('fade-out');
+                                    setTimeout(() => {
+                                        alert.style.display = 'none';
+                                        if (!dismissedNotifs.includes(notifId)) {
+                                            dismissedNotifs.push(notifId);
+                                        }
+                                        if (getAlerts().every(a => a.style.display === 'none')) {
+                                            hideNotifications();
+                                        } else {
+                                            notificationsToggle.style.display = 'flex';
+                                            setTimeout(() => {
+                                                notificationsToggle.classList.add('show');
+                                            }, 10);
+                                            notifBadge.textContent = dismissedNotifs.length;
+                                            notifBadge.style.display = 'inline-block';
+                                            stickyAlerts.classList.remove('bell-hidden');
+                                            stickyAlerts.classList.add('bell-visible');
+                                        }
+                                        // If there are still visible alerts, set another timeout
+                                        if (getAlerts().some(a => a.style.display !== 'none')) {
+                                            autoHideTimeout = setTimeout(autoHideNotification, 5000);
+                                        }
+                                    }, 500);
+                                }
+                            }
+
+                            notificationsToggle.addEventListener('click', function() {
+                                if (dismissedNotifs.length > 0) {
+                                    dismissedNotifs.forEach(id => {
+                                        const alert = document.querySelector('.blood-alert[data-notif-id="' + id + '"]');
+                                        if (alert) {
+                                            alert.style.display = '';
+                                            alert.classList.remove('fade-out');
+                                        }
+                                    });
+                                    dismissedNotifs = [];
+                                }
+                                showNotifications();
+                            });
+
+                            // Dismiss individual alerts (track which are dismissed)
+                            getAlerts().forEach(alert => {
+                                // Dismiss on close button
+                                alert.querySelector('.notif-close').addEventListener('click', function(e) {
+                                    e.stopPropagation();
+                                    const notifId = alert.getAttribute('data-notif-id');
+                                    alert.classList.add('fade-out');
+                                    setTimeout(() => {
+                                        alert.style.display = 'none';
+                                        if (!dismissedNotifs.includes(notifId)) {
+                                            dismissedNotifs.push(notifId);
+                                        }
+                                        if (getAlerts().every(a => a.style.display === 'none')) {
+                                            hideNotifications();
+                                        } else {
+                                            notificationsToggle.style.display = 'flex';
+                                            setTimeout(() => {
+                                                notificationsToggle.classList.add('show');
+                                            }, 10);
+                                            notifBadge.textContent = dismissedNotifs.length;
+                                            notifBadge.style.display = 'inline-block';
+                                            stickyAlerts.classList.remove('bell-hidden');
+                                            stickyAlerts.classList.add('bell-visible');
+                                        }
+                                    }, 500);
+                                });
+                                // Dismiss on card click (except close button)
+                                alert.addEventListener('click', function(e) {
+                                    if (e.target.classList.contains('notif-close')) return;
+                                    const notifId = alert.getAttribute('data-notif-id');
+                                    alert.classList.add('fade-out');
+                                    setTimeout(() => {
+                                        alert.style.display = 'none';
+                                        if (!dismissedNotifs.includes(notifId)) {
+                                            dismissedNotifs.push(notifId);
+                                        }
+                                        if (getAlerts().every(a => a.style.display === 'none')) {
+                                            hideNotifications();
+                                        } else {
+                                            notificationsToggle.style.display = 'flex';
+                                            setTimeout(() => {
+                                                notificationsToggle.classList.add('show');
+                                            }, 10);
+                                            notifBadge.textContent = dismissedNotifs.length;
+                                            notifBadge.style.display = 'inline-block';
+                                            stickyAlerts.classList.remove('bell-hidden');
+                                            stickyAlerts.classList.add('bell-visible');
+                                        }
+                                    }, 500);
+                                });
+                                alert.style.cursor = 'pointer';
+                            });
+
+                            // Start the auto-hide timer for the first notification
+                            autoHideTimeout = setTimeout(autoHideNotification, 5000);
+                        });
+                        </script>
 
                         <h2 class="card-title mb-3 mt-3">Bloodbanks</h2>
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="card h-100">
                                     <div class="card-body">
-                                        <h5 class="card-title">Approved Blood Units</h5>
+                                        <h5 class="card-title">Blood Inventory Levels</h5>
                                         <div class="chart-container">
                                             <canvas id="bloodChart"></canvas>
+                        
+                                            
+                            
                                         </div>
                                     </div>
                                 </div>
@@ -504,6 +1339,69 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                                 </div>
                             </div>
                         </div>
+
+                        <style>
+                        /* Updated styles */
+                        .card {
+                            border-radius: 8px;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                            margin-bottom: 20px;
+                        }
+
+                        .chart-container {
+                            position: relative;
+                            height: 300px;
+                            width: 100%;
+                        }
+
+                        .blood-legend {
+                            padding: 10px;
+                            font-size: 0.9rem;
+                            background: #fff;
+                            border-radius: 6px;
+                        }
+
+                        .legend-item {
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                        }
+
+                        .legend-dot {
+                            width: 12px;
+                            height: 12px;
+                            border-radius: 50%;
+                        }
+
+                        .total-blood-container {
+                            padding: 15px;
+                            border-top: 1px solid #eee;
+                            background: #fff;
+                        }
+
+                        .progress {
+                            border-radius: 8px;
+                            background-color: #f8f9fa;
+                            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+                        }
+
+                        .progress-bar {
+                            font-weight: 600;
+                            font-size: 0.95rem;
+                            text-shadow: 1px 1px 1px rgba(0,0,0,0.1);
+                            transition: width 0.6s ease;
+                        }
+
+                        .bg-danger { background-color: rgba(220, 53, 69, 0.85); }
+                        .bg-warning { background-color: rgba(255, 193, 7, 0.85); }
+                        .bg-success { background-color: rgba(40, 167, 69, 0.85); }
+
+                        .card-title {
+                            color: #941022;
+                            font-weight: bold;
+                            margin-bottom: 1.5rem;
+                        }
+                        </style>
 
                         <?php
                         // Function to fetch blood requests from Supabase
@@ -565,17 +1463,26 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                                     'AB-': '#F012BE'  // Pink
                                 };
 
-                                // Bar Chart for Available Blood Units
+                                // Get blood inventory data from PHP
+                                const bloodData = <?php echo json_encode(array_values($bloodByType)); ?>;
+                                const bloodLabels = <?php echo json_encode(array_keys($bloodByType)); ?>;
+                                const criticalLevel = 30;
+
+                                // Set colors based on critical level
+                                const barColors = bloodData.map(val => val < criticalLevel ? '#FF4136' : '#2ECC40');
+
+                                // Bar Chart for Blood Inventory
                                 const ctxBar = document.getElementById('bloodChart').getContext('2d');
                                 new Chart(ctxBar, {
                                     type: 'bar',
                                     data: {
-                                        labels: <?php echo json_encode(array_keys($available_units)); ?>,
+                                        labels: bloodLabels,
                                         datasets: [{
-                                            label: 'Approved Blood Units',
-                                            data: <?php echo json_encode(array_values($available_units)); ?>,
-                                            backgroundColor: Object.values(bloodTypeColors),
-                                            hoverBackgroundColor: Object.values(bloodTypeColors).map(color => color + 'CC')
+                                            label: 'Available Units',
+                                            data: bloodData,
+                                            backgroundColor: barColors,
+                                            borderColor: barColors,
+                                            borderWidth: 1
                                         }]
                                     },
                                     options: {
@@ -587,7 +1494,7 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                                             },
                                             title: {
                                                 display: true,
-                                                text: 'Approved Blood Units by Type',
+                                                text: 'Blood Inventory Levels',
                                                 font: {
                                                     size: 16
                                                 }
@@ -598,6 +1505,9 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                                                 beginAtZero: true,
                                                 grid: {
                                                     color: '#e9ecef'
+                                                },
+                                                ticks: {
+                                                    stepSize: 10
                                                 }
                                             },
                                             x: {
@@ -605,6 +1515,9 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                                                     display: false
                                                 }
                                             }
+                                        },
+                                        animation: {
+                                            duration: 1000
                                         }
                                     }
                                 });
@@ -644,17 +1557,6 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
                                 });
                             });
                         </script>
-
-                <!-- Urgent Alerts -->
-                <div class="alert alert-danger mt-4 p-4 fw-bold fs-5 d-flex align-items-center" role="alert">
-                    <i class="bi bi-exclamation-triangle-fill me-2"></i> 🚨 Blood shortage for O- type! Immediate donations needed.
-                </div>
-                <div class="alert alert-warning p-4 fw-bold fs-5 d-flex align-items-center" role="alert">
-                    <i class="bi bi-exclamation-circle-fill me-2"></i> ⏳ <?php echo count($pending_requests); ?> pending request(s).
-                </div>
-                <div class="alert alert-info p-4 fw-bold fs-5 d-flex align-items-center" role="alert">
-                    <i class="bi bi-info-circle-fill me-2"></i> 📢 New donation drive scheduled for March 20.
-                </div>
                 <h3 class="mt-4">Your Requests <a href="dashboard-hospital-requests.php" class="btn btn-sm btn-outline-danger ms-2">View All</a></h3>
                 <table class="table table-bordered table-hover">
                     <thead class="table-dark">
@@ -977,7 +1879,7 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
     }
 
     .step.active .step-icon {
-        border-color: #941022;
+        border-colo r: #941022;
         background-color: #941022;
     }
 
@@ -1143,40 +2045,238 @@ require_once '../../assets/php_func/check_account_hospital_modal.php';
     <script>
         document.addEventListener("DOMContentLoaded", function () {
             const ctx = document.getElementById('bloodChart').getContext('2d');
-            const bloodChart = new Chart(ctx, {
+            
+            // Define thresholds
+            const criticalThreshold = 30;
+            const warningThreshold = 50;
+            
+            // Get blood inventory data
+            const bloodData = <?php echo json_encode(array_values($bloodByType)); ?>;
+            const bloodLabels = <?php echo json_encode(array_keys($bloodByType)); ?>;
+
+            // Calculate colors based on thresholds
+            const backgroundColors = bloodData.map(value => {
+                if (value < criticalThreshold) {
+                    return 'rgba(220, 53, 69, 0.85)'; // Red for critical
+                } else if (value < warningThreshold) {
+                    return 'rgba(255, 193, 7, 0.85)'; // Yellow for warning
+                }
+                return 'rgba(40, 167, 69, 0.85)'; // Green for normal
+            });
+
+            new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'],
+                    labels: bloodLabels,
                     datasets: [{
-                        label: 'Blood Units Available',
-                        data: [120, 50, 90, 30, 200, 70, 60, 40], // Placeholder data
-                        backgroundColor: '#941022',
-                        hoverBackgroundColor: '#7a0c1c'
+                        data: bloodData,
+                        backgroundColor: backgroundColors,
+                        borderColor: backgroundColors,
+                        borderWidth: 1,
+                        borderRadius: 4
                     }]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: {
                             display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw;
+                                    let status = value < criticalThreshold ? 'CRITICAL' :
+                                               value < warningThreshold ? 'LOW' : 'NORMAL';
+                                    return `${value} units - ${status}`;
+                                }
+                            }
                         }
                     },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            grid: {
-                                color: '#e9ecef'
-                            }
-                        },
-                        x: {
-                            grid: {
-                                display: false
+                            title: {
+                                display: true,
+                                text: 'Units Available'
                             }
                         }
                     }
                 }
             });
         });
+    </script>
+
+    <style>
+
+    /* New styles for total blood bar */
+    .total-blood-container {
+        padding: 15px;
+        border-top: 1px solid #eee;
+    }
+    .progress {
+        border-radius: 8px;
+        background-color: #f8f9fa;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .progress-bar {
+        font-weight: 600;
+        font-size: 0.95rem;
+        text-shadow: 1px 1px 1px rgba(0,0,0,0.1);
+        transition: width 0.6s ease;
+    }
+    </style>
+
+    <script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const ctx = document.getElementById('bloodChart').getContext('2d');
+        
+        // Define thresholds as percentages
+        const criticalThreshold = 30; // 30%
+        const warningThreshold = 50; // 50%
+        const maxCapacity = 100; // 100 units as reference for percentage
+        
+        // Get blood inventory data from PHP and convert to percentages
+        const bloodData = <?php echo json_encode(array_values($bloodByType)); ?>.map(value => 
+            Math.min((value / maxCapacity) * 100, 100) // Convert to percentage, cap at 100%
+        );
+        const bloodLabels = <?php echo json_encode(array_keys($bloodByType)); ?>;
+
+        // Calculate background colors based on percentage levels
+        const backgroundColors = bloodData.map(percentage => {
+            if (percentage <= criticalThreshold) {
+                return 'rgba(220, 53, 69, 0.85)'; // Red for critical
+            } else if (percentage <= warningThreshold) {
+                return 'rgba(255, 193, 7, 0.85)'; // Yellow for warning
+            }
+            return 'rgba(40, 167, 69, 0.85)'; // Green for good
+        });
+
+        const borderColors = backgroundColors.map(color => color.replace('0.85', '1'));
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: bloodLabels,
+                datasets: [
+                    {
+                        label: 'Blood Inventory Level',
+                        data: bloodData,
+                        backgroundColor: backgroundColors,
+                        borderColor: borderColors,
+                        borderWidth: 2,
+                        borderRadius: 6,
+                        barThickness: 35,
+                        categoryPercentage: 0.8,
+                        barPercentage: 0.9
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const percentage = Math.round(context.raw);
+                                let status = '';
+                                if (percentage <= criticalThreshold) {
+                                    status = '❗ CRITICAL LEVEL';
+                                } else if (percentage <= warningThreshold) {
+                                    status = '⚠️ WARNING LEVEL';
+                                } else {
+                                    status = '✅ SUFFICIENT';
+                                }
+                                return `Capacity: ${percentage}% - ${status}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                            grid: {
+                            color: 'rgba(0, 0, 0, 0.1)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            stepSize: 20,
+                            font: {
+                                weight: '500'
+                            },
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Inventory Level (%)',
+                            font: {
+                                weight: 'bold',
+                                size: 14
+                            },
+                            padding: {top: 10, bottom: 10}
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                        },
+                        ticks: {
+                            font: {
+                                weight: '600'
+                            }
+                        }
+                    }
+                },
+                animation: {
+                    duration: 1500,
+                    easing: 'easeInOutQuart'
+                    }
+                }
+            });
+
+        // Add threshold lines
+        const horizonalLinePlugin = {
+            id: 'horizontalLines',
+            beforeDraw: (chart) => {
+                const {ctx, chartArea: {left, right, top, bottom}, scales: {y}} = chart;
+                
+                // Critical threshold line
+                ctx.beginPath();
+                ctx.strokeStyle = 'rgba(220, 53, 69, 0.5)';
+                ctx.setLineDash([5, 5]);
+                ctx.moveTo(left, y.getPixelForValue(criticalThreshold));
+                ctx.lineTo(right, y.getPixelForValue(criticalThreshold));
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                // Warning threshold line
+                ctx.beginPath();
+                ctx.strokeStyle = 'rgba(255, 193, 7, 0.5)';
+                ctx.setLineDash([5, 5]);
+                ctx.moveTo(left, y.getPixelForValue(warningThreshold));
+                ctx.lineTo(right, y.getPixelForValue(warningThreshold));
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                // Add labels for threshold lines
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillStyle = 'rgba(220, 53, 69, 0.8)';
+                ctx.fillText('Critical (30%)', right - 10, y.getPixelForValue(criticalThreshold) - 5);
+                ctx.fillStyle = 'rgba(255, 193, 7, 0.8)';
+                ctx.fillText('Warning (50%)', right - 10, y.getPixelForValue(warningThreshold) - 5);
+            }
+        };
+        
+        Chart.register(horizonalLinePlugin);
          
         document.getElementById('whenNeeded').addEventListener('change', function() {
     var scheduleDateTime = document.getElementById('scheduleDateTime');

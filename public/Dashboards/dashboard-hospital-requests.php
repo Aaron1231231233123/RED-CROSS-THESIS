@@ -532,16 +532,6 @@ th {
                         <h3 class="text-danger mb-0"><?php echo $_SESSION['user_first_name']; ?></h3>
                         <small class="text-muted">Hospital Request Dashboard</small>
                     </div>
-                    
-
-
-
-
-
-
-
-
-
 
                     <ul class="nav flex-column">
                         <li class="nav-item">
@@ -555,7 +545,12 @@ th {
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-hospital-history.php">
+                        <a class="nav-link" href="dashboard-hospital-history.php">
+                                <i class="fas fa-print me-2"></i>Print Requests
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="dashboard-hospital-request-history.php">
                                 <i class="fas fa-history me-2"></i>Request History
                             </a>
                         </li>
