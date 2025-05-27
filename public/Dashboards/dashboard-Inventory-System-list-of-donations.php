@@ -718,7 +718,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                         <i class="fas fa-eye"></i>
                                                     </button>
                                                     <?php if ($status !== 'declined' && $status !== 'approved'): ?>
-                                                    <button class="btn btn-sm btn-warning edit-donor" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>" data-bs-toggle="modal" data-bs-target="#editDonorForm">
+                                                    <button class="btn btn-sm btn-warning edit-donor" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>">
                                                         <i class="fas fa-edit"></i>
                                                     </button>
                                                     <?php endif; ?>
@@ -1139,14 +1139,21 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     e.stopPropagation();
                     const donorId = this.getAttribute('data-donor-id');
                     const eligibilityId = this.getAttribute('data-eligibility-id');
-                    
                     if (!donorId) {
                         console.error('No donor ID found for edit button');
                         return;
                     }
-                    
-                    console.log(`Editing donor ID: ${donorId}, eligibility ID: ${eligibilityId}`);
-                    loadEditForm(donorId, eligibilityId);
+                    // Show donor details modal (same as view button)
+                    document.getElementById('donorDetails').innerHTML = `
+                        <div class="text-center my-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Loading donor details...</p>
+                        </div>
+                    `;
+                    donorModal.show();
+                    fetchDonorDetails(donorId, eligibilityId);
                 });
             });
             
