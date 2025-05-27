@@ -374,6 +374,15 @@ error_log("Blood Received Count: " . $bloodReceivedCount);
 error_log("Blood In Stock Count: " . $bloodInStockCount);
 error_log("Blood By Type: " . json_encode($bloodByType));
 
+// --- Pending Donors Alert Setup ---
+include_once __DIR__ . '/modules/donation_pending.php';
+$pendingDonorsCount = isset($pendingDonations) && is_array($pendingDonations) ? count($pendingDonations) : 0;
+
+$maxCapacity = 800;
+$totalUnits = $bloodInStockCount;
+$totalPercentage = $maxCapacity > 0 ? min(($totalUnits / $maxCapacity) * 100, 100) : 0;
+$statusClass = $totalPercentage < 30 ? 'critical' : ($totalPercentage < 50 ? 'warning' : 'healthy');
+$statusText = $totalPercentage < 30 ? 'CRITICAL LOW' : ($totalPercentage < 50 ? 'WARNING' : 'HEALTHY');
 ?>
 
 <!DOCTYPE html>
@@ -802,9 +811,302 @@ h6 {
     margin-bottom: 1rem;
 }
 
+/* --- Sticky Alerts & Blood Alert Styles (copied from hospital dashboard for consistency) --- */
+.sticky-alerts {
+    position: fixed;
+    top: 150px;
+    right: 32px;
+    z-index: 1000;
+    width: 370px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.sticky-alerts.hidden {
+    animation: slideOutRight 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.sticky-alerts:not(.hidden) {
+    animation: slideInRight 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.blood-alert {
+    position: relative;
+    margin: 0;
+    box-shadow: 0 4px 16px rgba(148,16,34,0.08), 0 1.5px 4px rgba(0,0,0,0.04);
+    border-radius: 14px;
+    border-left: 6px solid #b38b00;
+    background: #fffbe6;
+    padding: 20px 24px 20px 20px;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    color: #b38b00;
+    cursor: pointer;
+    min-width: 320px;
+    max-width: 370px;
+    transition: all 0.3s ease;
+    animation: slideInRight 0.3s ease;
+}
+.blood-alert.fade-out {
+    animation: slideOutRight 0.3s ease forwards;
+}
+.blood-alert .notif-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4em;
+    background: #fffbe6;
+    color: #b38b00;
+    box-shadow: 0 1px 4px rgba(148,16,34,0.08);
+    margin-right: 6px;
+}
+.blood-alert .notif-content { flex: 1; }
+.blood-alert .notif-title {
+    font-weight: 700;
+    font-size: 1.08em;
+    margin-bottom: 2px;
+}
+.blood-alert .notif-close {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    font-size: 1.1em;
+    color: #aaa;
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+.blood-alert .notif-close:hover { color: #941022; }
+.blood-alert.fade-out { opacity: 0; transform: translateX(60px); }
+@keyframes slideInRight {
+    from { opacity: 0; transform: translateX(60px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideOutRight {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(60px); }
+}
+.total-overview-card {
+    background: #fff;
+    border: none;
+    border-radius: 15px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+}
+.inventory-header {
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+}
+.inventory-title {
+    color: #2c3e50;
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0;
+}
+.percentage-display {
+    margin-top: 1rem;
+}
+.percentage-display .h2 {
+    font-size: 2.5rem;
+    font-weight: 700;
+}
+.critical-text { color: #dc2626; }
+.warning-text { color: #d97706; }
+.healthy-text { color: #16a34a; }
+.status-badge {
+    padding: 10px 20px;
+    border-radius: 30px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    background: #fff;
+    transition: box-shadow 0.3s, background 0.3s, color 0.3s;
+}
+.status-badge.status-critical {
+    color: #dc2626;
+    background: #ffeaea;
+    animation: pulseCritical 1.2s infinite alternate;
+}
+.status-badge.status-warning {
+    color: #d97706;
+    background: #fff7e6;
+    animation: pulseWarning 1.2s infinite alternate;
+}
+.status-badge.status-healthy {
+    color: #16a34a;
+    background: #e6fff2;
+    animation: pulseHealthy 1.2s infinite alternate;
+}
+.status-badge i {
+    font-size: 1.2rem;
+}
+@keyframes pulseCritical {
+    0% { box-shadow: 0 0 0 0 #dc262680; }
+    100% { box-shadow: 0 0 16px 4px #dc262640; }
+}
+@keyframes pulseWarning {
+    0% { box-shadow: 0 0 0 0 #d9770680; }
+    100% { box-shadow: 0 0 16px 4px #d9770640; }
+}
+@keyframes pulseHealthy {
+    0% { box-shadow: 0 0 0 0 #16a34a80; }
+    100% { box-shadow: 0 0 16px 4px #16a34a40; }
+}
+.inventory-progress-wrapper {
+    margin-top: 1rem;
+}
+.inventory-progress {
+    width: 100%;
+    background: #f1f5f9;
+    border-radius: 12px;
+    height: 24px;
+    position: relative;
+}
+.progress-fill.bg-critical {
+    background: #dc2626;
+}
+.progress-fill.bg-warning {
+    background: #d97706;
+}
+.progress-fill.bg-healthy {
+    background: #16a34a;
+}
+.compact-progress-card {
+    border-radius: 18px;
+    box-shadow: 0 8px 32px 0 rgba(220,38,38,0.10), 0 1.5px 4px rgba(0,0,0,0.04);
+    margin-bottom: 0.5rem;
+}
+.compact-progress-card .card-body {
+    padding: 0.75rem 1.5rem !important;
+}
+.percentage-display .h4 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin-bottom: 0;
+}
+.status-badge {
+    font-size: 1.05rem;
+    padding: 8px 20px;
+}
+.inventory-progress {
+    height: 18px !important;
+    border-radius: 10px !important;
+}
+.progress-fill.bg-critical {
+    background: #dc2626;
+}
+.progress-fill.bg-warning {
+    background: #d97706;
+}
+.progress-fill.bg-healthy {
+    background: #16a34a;
+}
+.alert-danger {
+    background: #ffeaea !important;
+    color: #dc2626 !important;
+    border: none !important;
+    border-radius: 10px !important;
+    box-shadow: 0 2px 8px rgba(220,38,38,0.06);
+    font-size: 1.08rem;
+}
+.progress-thresholds {
+    height: 32px;
+    position: relative;
+}
+.threshold-marker {
+    z-index: 2;
+}
+.threshold-label {
+    display: inline-block;
+    min-width: 38px;
+    text-align: center;
+    background: #fff;
+    color: #888;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 12px;
+    padding: 2px 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.threshold-line {
+    width: 2px;
+    height: 18px;
+    background: #e0e0e0;
+    margin: 2px auto 0 auto;
+    border-radius: 2px;
+}
     </style>
 </head>
 <body>
+    <!-- Pending Donors Sticky Alert & Notification Bell -->
+    <?php if ($pendingDonorsCount > 0): ?>
+    <button class="notifications-toggle" id="notificationsToggle" style="position: fixed; top: 100px; right: 32px; z-index: 1100; display: none; background: none; border: none; outline: none; align-items: center; justify-content: center; padding: 0; width: 56px; height: 56px; border-radius: 50%; box-shadow: 0 2px 8px rgba(148,16,34,0.08); background: #fff; transition: box-shadow 0.2s;">
+        <i class="fas fa-bell" style="font-size: 2em; color: #941022; position: relative;"></i>
+        <span class="badge rounded-pill" id="notifBadge" style="position: absolute; top: 10px; right: 10px; background: #dc3545; color: #fff; border: 2px solid #fff; font-size: 1em; font-weight: 700; padding: 2px 7px; border-radius: 12px; box-shadow: 0 1px 4px rgba(220,53,69,0.12); display:none; animation: pulseBadge 1.2s infinite; min-width: 24px; text-align: center;">0</span>
+    </button>
+    <div class="sticky-alerts" id="stickyAlerts">
+        <div class="blood-alert alert" role="alert" data-notif-id="pending">
+            <span class="notif-icon"><i class="fas fa-clock"></i></span>
+            <div class="notif-content">
+                <div class="notif-title">Pending Donors</div>
+                <div>There are <b><?php echo $pendingDonorsCount; ?></b> donor(s) pending approval. <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" style="color:#b38b00;text-decoration:underline;">View List</a></div>
+            </div>
+            <button class="notif-close" title="Dismiss" aria-label="Dismiss">&times;</button>
+        </div>
+    </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const stickyAlerts = document.getElementById('stickyAlerts');
+        const alert = stickyAlerts.querySelector('.blood-alert');
+        const closeBtn = alert.querySelector('.notif-close');
+        const notificationsToggle = document.getElementById('notificationsToggle');
+        const notifBadge = document.getElementById('notifBadge');
+        let autoHideTimeout;
+        let dismissed = false;
+
+        function showBell() {
+            notificationsToggle.style.display = 'flex';
+            setTimeout(() => notificationsToggle.classList.add('show'), 10);
+            notifBadge.textContent = '1';
+            notifBadge.style.display = 'inline-block';
+        }
+        function hideBell() {
+            notificationsToggle.classList.remove('show');
+            notificationsToggle.style.display = 'none';
+            notifBadge.style.display = 'none';
+        }
+        function hideAlert() {
+            alert.classList.add('fade-out');
+            setTimeout(() => { stickyAlerts.style.display = 'none'; showBell(); }, 500);
+            dismissed = true;
+        }
+        closeBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            hideAlert();
+        });
+        alert.addEventListener('click', function(e) {
+            if (e.target.classList.contains('notif-close')) return;
+            hideAlert();
+        });
+        notificationsToggle.addEventListener('click', function() {
+            stickyAlerts.style.display = '';
+            alert.classList.remove('fade-out');
+            hideBell();
+            dismissed = false;
+            // Restart auto-hide
+            clearTimeout(autoHideTimeout);
+            autoHideTimeout = setTimeout(hideAlert, 7000);
+        });
+        autoHideTimeout = setTimeout(hideAlert, 7000);
+    });
+    </script>
+    <?php endif; ?>
+
     <!-- Confirmation Modal -->
     <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -931,7 +1233,145 @@ h6 {
             </div>
         </div>
     </div>
-
+    <!-- Compact Blood Bank Inventory Status Progress Bar (Full Width, with Enhanced Thresholds and Bar) -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="card total-overview-card compact-progress-card mb-2" style="box-shadow: 0 8px 32px 0 rgba(220,38,38,0.10), 0 1.5px 4px rgba(0,0,0,0.04); border-radius: 18px;">
+                <div class="card-body py-3 px-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="percentage-display d-flex align-items-end">
+                            <span class="h4 mb-0 fw-bold <?php echo $statusClass; ?>-text" style="font-size: 2.2rem; line-height: 1;"><?php echo round($totalPercentage); ?>%</span>
+                            <span class="text-muted ms-2 mb-1" style="font-size: 1.1rem;">Capacity</span>
+                        </div>
+                        <div class="status-indicator">
+                            <div class="status-badge status-<?php echo $statusClass; ?> animate-badge" style="font-size: 1.05rem; padding: 8px 20px;">
+                                <i class="fas <?php echo $totalPercentage < 30 ? 'fa-exclamation-triangle' : 'fa-check-circle'; ?>"></i>
+                                <span><?php echo $statusText; ?></span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Threshold Markers and Lines -->
+                    <div class="progress-thresholds position-relative mb-1" style="height: 48px;">
+                        <!-- 30% Marker and Line -->
+                        <div class="threshold-marker" style="position: absolute; left: 30%; top: 0; text-align: center; width: 60px; z-index: 2;">
+                            <span class="threshold-label">30%</span>
+                            <div class="threshold-line-extended"></div>
+                        </div>
+                        <!-- 50% Marker and Line -->
+                        <div class="threshold-marker" style="position: absolute; left: 50%; top: 0; text-align: center; width: 60px; transform: translateX(-50%); z-index: 2;">
+                            <span class="threshold-label">50%</span>
+                            <div class="threshold-line-extended"></div>
+                        </div>
+                    </div>
+                    <div class="inventory-progress-wrapper" style="margin-top: 0.5rem;">
+                        <div class="inventory-progress position-relative mb-0 enhanced-progress-bar">
+                            <div class="progress-track" style="width: 100%; height: 100%; position: absolute;">
+                                <div class="progress-fill bg-<?php echo $statusClass; ?>" style="width: <?php echo $totalPercentage; ?>%; height: 100%; border-radius: 24px; transition: width 0.6s;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <?php
+                    // Show critical alert if status is critical
+                    if ($statusClass === 'critical') {
+                        // List all blood types that are critically low
+                        $criticalTypes = [];
+                        foreach ($bloodByType as $type => $count) {
+                            if ($count < 30) $criticalTypes[] = $type;
+                        }
+                        if (!empty($criticalTypes)) {
+                            echo '<div class="alert alert-danger mt-3 mb-0 p-3 d-flex align-items-center" style="background: #ffeaea; color: #dc2626; border-radius: 10px; border: none; box-shadow: 0 2px 8px rgba(220,38,38,0.06);">';
+                            echo '<i class="fas fa-exclamation-circle me-3" style="font-size: 1.5rem;"></i>';
+                            echo '<div><strong>Critical Alert</strong><br>';
+                            echo implode(', ', $criticalTypes) . ' blood types require immediate attention!';
+                            echo '</div></div>';
+                        }
+                    }
+                    ?>
+                </div>
+            </div>
+        </div>
+    </div>
+<style>
+.compact-progress-card {
+    border-radius: 18px;
+    box-shadow: 0 8px 32px 0 rgba(220,38,38,0.10), 0 1.5px 4px rgba(0,0,0,0.04);
+    margin-bottom: 0.5rem;
+}
+.compact-progress-card .card-body {
+    padding: 0.75rem 1.5rem !important;
+}
+.percentage-display .h4 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin-bottom: 0;
+}
+.status-badge {
+    font-size: 1.05rem;
+    padding: 8px 20px;
+}
+.enhanced-progress-bar {
+    height: 28px !important;
+    border-radius: 8px;
+    background-color: #f8f9fa;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+    position: relative;
+}
+.inventory-progress {
+    height: 28px !important;
+    border-radius: 24px !important;
+    overflow: hidden;
+}
+.progress-fill.bg-critical {
+    border-radius: 8px !important;
+    transition: width 0.6s;
+    background: #dc2626;
+}
+.progress-fill.bg-warning {
+    border-radius: 8px !important;
+    transition: width 0.6s;
+    background: #d97706;
+}
+.progress-fill.bg-healthy {
+    border-radius: 8px !important;
+    transition: width 0.6s;
+    background: #16a34a;
+}
+.alert-danger {
+    background: #ffeaea !important;
+    color: #dc2626 !important;
+    border: none !important;
+    border-radius: 10px !important;
+    box-shadow: 0 2px 8px rgba(220,38,38,0.06);
+    font-size: 1.08rem;
+}
+.progress-thresholds {
+    height: 48px;
+    position: relative;
+}
+.threshold-marker {
+    z-index: 2;
+}
+.threshold-label {
+    display: inline-block;
+    min-width: 38px;
+    text-align: center;
+    background: #fff;
+    color: #888;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 12px;
+    padding: 2px 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.threshold-line-extended {
+    width: 4px;
+    height: 44px;
+    background: linear-gradient(to bottom, #e0e0e0 80%, #f1f5f9 100%);
+    margin: 2px auto 0 auto;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+</style>
                     <!-- Available Blood per Unit Section -->
                     <div class="mb-5">
                         <h5 class="mb-4" style="font-weight: 600;">Available Blood per Unit</h5>
