@@ -677,7 +677,7 @@ foreach ($bloodByType as $type => $count) {
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="dashboard-hospital-request-history.php">
-                                <i class="fas fa-history me-2"></i>Request History
+                                <i class="fas fa-history me-2"></i>Approved History
                             </a>
                         </li>
                         <li class="nav-item">

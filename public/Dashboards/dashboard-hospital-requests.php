@@ -303,164 +303,7 @@ th {
 .desc .sort-indicator {
     color: #ffffff;
 }
-/* Timeline Styling */
-.timeline {
-    display: flex;
-    justify-content: space-between;
-    position: relative;
-    margin: 20px 0;
-}
 
-.timeline::before {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background-color: #ddd;
-    z-index: 1;
-}
-
-.timeline-step {
-    position: relative;
-    z-index: 2;
-    background-color: #fff;
-    padding: 5px 10px;
-    border: 2px solid #ddd;
-    border-radius: 20px;
-    text-align: center;
-    font-size: 14px;
-    color: #666;
-}
-
-.timeline-step[data-status="active"] {
-    border-color: #0d6efd;
-    color: #0d6efd;
-    font-weight: bold;
-}
-
-.timeline-step[data-status="completed"] {
-    border-color: #198754;
-    background-color: #198754;
-    color: #fff;
-}
-
-/* Progress Tracker Styles */
-.progress-tracker {
-    margin-top: 30px;
-    padding: 20px;
-}
-
-.progress-steps {
-    position: relative;
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 30px;
-}
-
-.progress-line {
-    position: absolute;
-    top: 25px;
-    left: 0;
-    width: 100%;
-    height: 3px;
-    background-color: #e9ecef;
-    z-index: 1;
-}
-
-.progress-line-fill {
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    background-color: #941022;
-    transition: width 0.5s ease;
-    width: 0;
-}
-
-.step {
-    position: relative;
-    z-index: 2;
-    text-align: center;
-    width: 50px;
-}
-
-.step-icon {
-    width: 50px;
-    height: 50px;
-    background-color: #fff;
-    border: 3px solid #e9ecef;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto;
-    transition: all 0.3s ease;
-}
-
-.step-icon i {
-    color: #6c757d;
-    font-size: 20px;
-}
-
-.step-label {
-    margin-top: 10px;
-    font-size: 12px;
-    color: #6c757d;
-}
-
-.step.active .step-icon {
-    border-color: #941022;
-    background-color: #941022;
-}
-
-.step.active .step-icon i {
-    color: #fff;
-}
-
-.step.completed .step-icon {
-    border-color: #198754;
-    background-color: #198754;
-}
-
-.step.completed .step-icon i {
-    color: #fff;
-}
-
-.step-time {
-    font-size: 11px;
-    color: #6c757d;
-    margin-top: 5px;
-}
-
-/* Countdown Timer Styles */
-.countdown-container {
-    padding: 20px;
-    border-radius: 10px;
-    margin-bottom: 30px;
-}
-
-.countdown-timer {
-    font-family: 'Arial', sans-serif;
-}
-
-.time-block {
-    text-align: center;
-    min-width: 80px;
-}
-
-.time-value {
-    font-size: 48px;
-    font-weight: bold;
-    line-height: 1;
-}
-
-.time-label {
-    font-size: 14px;
-    text-transform: uppercase;
-    margin-top: 5px;
-}
 
 /* Loading Spinner - Minimal Addition */
 .btn-loading {
@@ -546,7 +389,7 @@ th {
                         </li>
                         <li class="nav-item">
                         <a class="nav-link" href="dashboard-hospital-history.php">
-                                <i class="fas fa-print me-2"></i>Print Requests
+                                <i class="fas fa-print me-2"></i>Approved Requests
                             </a>
                         </li>
                         <li class="nav-item">
@@ -614,10 +457,7 @@ th {
                                             <td><?php echo date('Y-m-d', strtotime($request['requested_on'])); ?></td>
                                             <td>
                                                 <?php if ($request['status'] !== 'Completed' && $request['status'] !== 'Rejected'): ?>
-                                                    <button class="btn btn-sm btn-danger" onclick="showTrackingModal('<?php echo htmlspecialchars($request['request_id']); ?>')">
-                                                        <i class="fas fa-map-marker-alt"></i> Track
-                                                    </button>
-                                                    <button class="btn btn-sm btn-warning edit-btn" 
+                                                    <button class="btn btn-sm btn-primary view-btn" 
                                                         data-request-id="<?php echo htmlspecialchars($request['request_id']); ?>"
                                                         data-patient-name="<?php echo htmlspecialchars($request['patient_name']); ?>"
                                                         data-patient-age="<?php echo htmlspecialchars($request['patient_age']); ?>"
@@ -628,7 +468,7 @@ th {
                                                         data-component="Whole Blood"
                                                         data-units="<?php echo htmlspecialchars($request['units_requested']); ?>"
                                                         data-when-needed="<?php echo htmlspecialchars($request['when_needed']); ?>">
-                                                        <i class="fas fa-edit"></i> Edit
+                                                        <i class="fas fa-eye"></i> View
                                                     </button>
                                                 <?php endif; ?>
                                             </td>
@@ -780,108 +620,86 @@ th {
         </div>
     </div>
 </div>
-<!-- Edit Modal -->
-<div class="modal fade" id="bloodReorderModal" tabindex="-1" aria-labelledby="bloodEditModalLabel" aria-hidden="true">
+<!-- View Modal -->
+<div class="modal fade" id="bloodReorderModal" tabindex="-1" aria-labelledby="bloodViewModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="bloodEditModalLabel">Edit Blood Request</h5>
+                <h5 class="modal-title" id="bloodViewModalLabel">View Blood Request</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <form id="editRequestForm">
+                <form id="viewRequestForm">
                     <input type="hidden" id="editRequestId">
                     <!-- Patient Name -->
                     <div class="mb-3">
                         <label class="form-label">Patient Name</label>
-                        <input type="text" class="form-control" id="reorderPatientName">
+                        <input type="text" class="form-control" id="reorderPatientName" readonly>
                     </div>
 
                     <!-- Age and Gender -->
                     <div class="mb-3 row">
                         <div class="col">
                             <label class="form-label">Age</label>
-                            <input type="number" class="form-control" id="reorderAge">
+                            <input type="number" class="form-control" id="reorderAge" readonly>
                         </div>
                         <div class="col">
                             <label class="form-label">Gender</label>
-                            <select class="form-select" id="reorderGender">
-                                <option>Male</option>
-                                <option>Female</option>
-                            </select>
+                            <input type="text" class="form-control" id="reorderGender" readonly>
                         </div>
                     </div>
 
                     <!-- Diagnosis -->
                     <div class="mb-3">
                         <label class="form-label">Diagnosis</label>
-                        <input type="text" class="form-control" id="reorderDiagnosis">
+                        <input type="text" class="form-control" id="reorderDiagnosis" readonly>
                     </div>
 
                     <!-- Blood Type and RH -->
                     <div class="mb-3 row">
                         <div class="col">
                             <label class="form-label">Blood Type</label>
-                            <select class="form-select" id="reorderBloodType">
-                                <option value="A">A</option>
-                                <option value="B">B</option>
-                                <option value="O">O</option>
-                                <option value="AB">AB</option>
-                            </select>
+                            <input type="text" class="form-control" id="reorderBloodType" readonly>
                         </div>
                         <div class="col">
                             <label class="form-label">RH</label>
-                            <select class="form-select" id="reorderRH">
-                                <option value="Positive">Positive</option>
-                                <option value="Negative">Negative</option>
-                            </select>
+                            <input type="text" class="form-control" id="reorderRH" readonly>
                         </div>
                     </div>
 
                     <!-- Component -->
                     <div class="mb-3">
                         <label class="form-label">Component</label>
-                        <select class="form-select" id="reorderComponent">
-                            <option value="Whole Blood">Whole Blood</option>
-                            <option value="Platelet Concentrate">Platelet Concentrate</option>
-                            <option value="Fresh Frozen Plasma">Fresh Frozen Plasma</option>
-                            <option value="Packed Red Blood Cells">Packed Red Blood Cells</option>
-                        </select>
+                        <input type="text" class="form-control" id="reorderComponent" readonly>
                     </div>
 
                     <!-- Number of Units -->
                     <div class="mb-3">
                         <label class="form-label">Number of Units</label>
-                        <input type="number" class="form-control" id="reorderUnits" min="1">
+                        <input type="number" class="form-control" id="reorderUnits" readonly>
                     </div>
 
                     <!-- When Needed -->
                     <div class="mb-3">
                         <label class="form-label">When Needed</label>
-                        <select id="reorderWhenNeeded" class="form-select">
-                            <option value="ASAP">ASAP</option>
-                            <option value="Scheduled">Scheduled</option>
-                        </select>
+                        <input type="text" class="form-control" id="reorderWhenNeeded" readonly>
                     </div>
 
                     <!-- Scheduled Date & Time -->
                     <div id="reorderScheduleDateTime" class="mb-3 d-none">
                         <label class="form-label">Scheduled Date & Time</label>
                         <div class="input-group">
-                            <input type="datetime-local" class="form-control" id="reorderScheduledDateTime">
+                            <input type="text" class="form-control" id="reorderScheduledDateTime" readonly>
                             <span class="input-group-text bg-light scheduled-label"></span>
                         </div>
-                        <small class="form-text text-muted mt-1">
-                            Select your preferred date and time for blood delivery
-                        </small>
                     </div>
 
                     <!-- Buttons -->
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="submit" class="btn btn-warning">
-                            <i class="fas fa-save me-1"></i> Save Changes
-                        </button>
+                        <a href="#" class="btn btn-primary" id="printButton">
+                            <i class="fas fa-print me-1"></i> Print Request
+                        </a>
                     </div>
                 </form>
             </div>
@@ -889,92 +707,7 @@ th {
     </div>
 </div>
 
-<!-- Track Modal -->
-<div class="modal fade" id="trackingModal" tabindex="-1" aria-labelledby="trackingModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="trackingModalLabel">Blood Request Tracking</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <!-- Countdown Timer -->
-                <div class="countdown-container text-center mb-4">
-                    <h3 class="text-danger mb-2">Estimated Time Remaining</h3>
-                    <div class="countdown-timer d-flex justify-content-center gap-3">
-                        <div class="time-block">
-                            <div id="hours" class="time-value display-4 fw-bold text-danger">--</div>
-                            <div class="time-label text-muted">HOURS</div>
-                        </div>
-                        <div class="time-block">
-                            <div class="display-4 fw-bold text-danger">:</div>
-                        </div>
-                        <div class="time-block">
-                            <div id="minutes" class="time-value display-4 fw-bold text-danger">--</div>
-                            <div class="time-label text-muted">MINUTES</div>
-                        </div>
-                        <div class="time-block">
-                            <div class="display-4 fw-bold text-danger">:</div>
-                        </div>
-                        <div class="time-block">
-                            <div id="seconds" class="time-value display-4 fw-bold text-danger">--</div>
-                            <div class="time-label text-muted">SECONDS</div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Progress Tracker -->
-                <div class="progress-tracker">
-                    <div class="progress-steps">
-                        <div class="progress-line">
-                            <div class="progress-line-fill"></div>
-                        </div>
-                        
-                        <div class="step">
-                            <div class="step-icon">
-                                <i class="fas fa-file-medical"></i>
-                            </div>
-                            <div class="step-label">Request Submitted</div>
-                            <div class="step-time"></div>
-                        </div>
 
-                        <div class="step">
-                            <div class="step-icon">
-                                <i class="fas fa-vial"></i>
-                            </div>
-                            <div class="step-label">Processing</div>
-                            <div class="step-time"></div>
-                        </div>
-
-                        <div class="step">
-                            <div class="step-icon">
-                                <i class="fas fa-clipboard-check"></i>
-                            </div>
-                            <div class="step-label">Request Approved</div>
-                            <div class="step-time"></div>
-                        </div>
-
-                        <div class="step">
-                            <div class="step-icon">
-                                <i class="fas fa-truck"></i>
-                            </div>
-                            <div class="step-label">In Transit</div>
-                            <div class="step-time"></div>
-                        </div>
-
-                        <div class="step">
-                            <div class="step-icon">
-                                <i class="fas fa-check-circle"></i>
-                            </div>
-                            <div class="step-label">Delivered</div>
-                            <div class="step-time"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -1196,8 +929,8 @@ document.addEventListener("DOMContentLoaded", function () {
             // Update label when date changes
             document.getElementById('reorderScheduledDateTime').addEventListener('change', updateScheduledLabel);
 
-            // Handle edit button clicks
-            document.querySelectorAll('.edit-btn').forEach(button => {
+            // Handle view button clicks
+            document.querySelectorAll('.view-btn').forEach(button => {
                 button.addEventListener('click', function(e) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -1205,10 +938,10 @@ document.addEventListener("DOMContentLoaded", function () {
                     // Get data from button attributes
                     const data = this.dataset;
                     
-                    // Store request ID for update
+                    // Store request ID for printing
                     document.getElementById('editRequestId').value = data.requestId;
                     
-                    // Populate edit modal with request data
+                    // Populate view modal with request data
                     document.getElementById('reorderPatientName').value = data.patientName;
                     document.getElementById('reorderAge').value = data.patientAge;
                     document.getElementById('reorderGender').value = data.patientGender;
@@ -1217,255 +950,41 @@ document.addEventListener("DOMContentLoaded", function () {
                     document.getElementById('reorderRH').value = data.rhFactor;
                     document.getElementById('reorderComponent').value = data.component;
                     document.getElementById('reorderUnits').value = data.units;
+                    document.getElementById('reorderWhenNeeded').value = data.whenNeeded === 'ASAP' ? 'ASAP' : 'Scheduled';
 
-                    // Handle when needed
+                    // Handle scheduled date & time
                     const whenNeeded = new Date(data.whenNeeded);
                     const now = new Date();
                     if (whenNeeded > now) {
-                        document.getElementById('reorderWhenNeeded').value = 'Scheduled';
                         document.getElementById('reorderScheduleDateTime').classList.remove('d-none');
-                        document.getElementById('reorderScheduledDateTime').value = data.whenNeeded.slice(0, 16);
-                        updateScheduledLabel();
+                        document.getElementById('reorderScheduledDateTime').value = formatDate(whenNeeded);
                     } else {
-                        document.getElementById('reorderWhenNeeded').value = 'ASAP';
                         document.getElementById('reorderScheduleDateTime').classList.add('d-none');
                     }
 
-                    // Show the edit modal
+                    // Update print button href
+                    document.getElementById('printButton').href = `print-blood-requests.php?request_id=${data.requestId}`;
+
+                    // Show the view modal
                     new bootstrap.Modal(document.getElementById('bloodReorderModal')).show();
                 });
             });
 
-            // Handle edit form submission
-            document.getElementById('editRequestForm').addEventListener('submit', async function(e) {
-                e.preventDefault();
-                
-                const requestId = document.getElementById('editRequestId').value;
-                const whenNeeded = document.getElementById('reorderWhenNeeded').value;
-                const scheduledDateTime = document.getElementById('reorderScheduledDateTime').value;
-                
-                // Add loading state to button
-                const submitButton = this.querySelector('button[type="submit"]');
-                submitButton.disabled = true;
-                submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
-
-                try {
-                    // Get form data
-                    const formData = {
-                        patient_name: document.getElementById('reorderPatientName').value,
-                        patient_age: parseInt(document.getElementById('reorderAge').value),
-                        patient_gender: document.getElementById('reorderGender').value,
-                        patient_diagnosis: document.getElementById('reorderDiagnosis').value,
-                        patient_blood_type: document.getElementById('reorderBloodType').value,
-                        rh_factor: document.getElementById('reorderRH').value,
-                        component: document.getElementById('reorderComponent').value,
-                        units_requested: parseInt(document.getElementById('reorderUnits').value),
-                        is_asap: whenNeeded === 'ASAP',
-                        when_needed: whenNeeded === 'ASAP' ? new Date().toISOString() : scheduledDateTime
-                    };
-
-                    // Log the request details for debugging
-                    console.log('Updating request:', requestId);
-                    console.log('Update data:', formData);
-
-                    // Make the update request
-                    const response = await fetch(`<?php echo SUPABASE_URL; ?>/rest/v1/blood_requests?request_id=eq.${requestId}`, {
-                        method: 'PATCH',
-                        headers: {
-                            'apikey': '<?php echo SUPABASE_API_KEY; ?>',
-                            'Authorization': 'Bearer <?php echo SUPABASE_API_KEY; ?>',
-                            'Content-Type': 'application/json',
-                            'Prefer': 'return=representation'
-                        },
-                        body: JSON.stringify(formData)
-                    });
-
-                    // Log the response for debugging
-                    console.log('Response status:', response.status);
-                    const responseText = await response.text();
-                    console.log('Response body:', responseText);
-
-                    if (!response.ok) {
-                        throw new Error(`Update failed with status ${response.status}: ${responseText}`);
-                    }
-
-                    // Show success message
-                    const successAlert = document.createElement('div');
-                    successAlert.className = 'alert alert-success alert-dismissible fade show';
-                    successAlert.innerHTML = `
-                        Request updated successfully!
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    `;
-                    document.querySelector('.modal-body').insertBefore(successAlert, document.querySelector('.modal-body').firstChild);
-
-                    // Reload page after a short delay
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 1500);
-
-                } catch (error) {
-                    console.error('Error updating request:', error);
-                    
-                    // Show error message in modal
-                    const errorAlert = document.createElement('div');
-                    errorAlert.className = 'alert alert-danger alert-dismissible fade show';
-                    errorAlert.innerHTML = `
-                        Failed to update request: ${error.message}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    `;
-                    document.querySelector('.modal-body').insertBefore(errorAlert, document.querySelector('.modal-body').firstChild);
-                    
-                } finally {
-                    // Restore button state
-                    submitButton.disabled = false;
-                    submitButton.innerHTML = '<i class="fas fa-save me-1"></i> Save Changes';
-                }
-            });
-        });
-
-        // Static countdown timer simulation
-        function updateStaticTimer() {
-            let seconds = parseInt(document.getElementById('staticSeconds').textContent);
-            let minutes = parseInt(document.getElementById('staticMinutes').textContent);
-            let hours = parseInt(document.getElementById('staticHours').textContent);
-
-            seconds--;
-            if (seconds < 0) {
-                seconds = 59;
-                minutes--;
-                if (minutes < 0) {
-                    minutes = 59;
-                    hours--;
-                    if (hours < 0) {
-                        hours = 0;
-                        minutes = 0;
-                        seconds = 0;
-                    }
-                }
-            }
-
-            document.getElementById('staticHours').textContent = hours.toString().padStart(2, '0');
-            document.getElementById('staticMinutes').textContent = minutes.toString().padStart(2, '0');
-            document.getElementById('staticSeconds').textContent = seconds.toString().padStart(2, '0');
-        }
-
-        // Update timer every second
-        setInterval(updateStaticTimer, 1000);
-
-        // Function to show tracking modal
-        function showTrackingModal(requestId) {
-            const trackingModal = new bootstrap.Modal(document.getElementById('trackingModal'));
-            
-            // Get all request IDs from the table
-            const requestIds = Array.from(document.querySelectorAll('table tbody tr')).map(row => {
-                return row.cells[0].textContent.trim();
-            }).sort();
-
-            // Check if this is the lowest request ID
-            const isLowestId = requestId === requestIds[0];
-
-            // Get modal elements
-            const countdownContainer = document.querySelector('.countdown-container h3');
-            const hours = document.getElementById('hours');
-            const minutes = document.getElementById('minutes');
-            const seconds = document.getElementById('seconds');
-            const steps = document.querySelectorAll('.step');
-            const progressLine = document.querySelector('.progress-line-fill');
-
-            if (isLowestId) {
-                // Being Delivered state
-                countdownContainer.textContent = 'Estimated Time Remaining';
-                hours.textContent = '00';
-                minutes.textContent = '20';
-                seconds.textContent = '00';
-
-                // Mark first three steps as completed
-                for (let i = 0; i < 3; i++) {
-                    steps[i].classList.add('completed');
-                    steps[i].classList.remove('active');
-                    steps[i].querySelector('.step-time').textContent = new Date().toLocaleTimeString();
-                }
-
-                // Set "In Transit" as active
-                steps[3].classList.add('active');
-                steps[3].classList.remove('completed');
-                steps[3].querySelector('.step-time').textContent = 'In Progress';
-                steps[4].classList.remove('completed', 'active');
-                steps[4].querySelector('.step-time').textContent = '--:--';
-
-                // Set progress to 75%
-                progressLine.style.width = '75%';
-
-                // Start countdown
-                startCountdown();
-            } else {
-                // Processing state
-                countdownContainer.textContent = 'Processing Request';
-                hours.textContent = '--';
-                minutes.textContent = '--';
-                seconds.textContent = '--';
-
-                // Mark first two steps as completed
-                for (let i = 0; i < 2; i++) {
-                    steps[i].classList.add('completed');
-                    steps[i].classList.remove('active');
-                    steps[i].querySelector('.step-time').textContent = new Date().toLocaleTimeString();
-                }
-
-                // Set "Request Approved" as active
-                steps[2].classList.add('active');
-                steps[2].classList.remove('completed');
-                steps[2].querySelector('.step-time').textContent = 'In Progress';
-
-                // Reset remaining steps
-                for (let i = 3; i < steps.length; i++) {
-                    steps[i].classList.remove('completed', 'active');
-                    steps[i].querySelector('.step-time').textContent = '--:--';
-                }
-
-                // Set progress to 50%
-                progressLine.style.width = '50%';
-            }
-
-            trackingModal.show();
-        }
-
-        let countdownInterval;
-
-        function startCountdown() {
-            if (countdownInterval) {
-                clearInterval(countdownInterval);
-            }
-
-            let totalSeconds = 20 * 60; // 20 minutes in seconds
-
-            countdownInterval = setInterval(() => {
-                if (totalSeconds <= 0) {
-                    clearInterval(countdownInterval);
-                    return;
-                }
-
-                totalSeconds--;
-                const hours = Math.floor(totalSeconds / 3600);
-                const minutes = Math.floor((totalSeconds % 3600) / 60);
-                const seconds = totalSeconds % 60;
-
-                document.getElementById('hours').textContent = String(hours).padStart(2, '0');
-                document.getElementById('minutes').textContent = String(minutes).padStart(2, '0');
-                document.getElementById('seconds').textContent = String(seconds).padStart(2, '0');
-
-                // Update progress line (75% to 100% during delivery)
-                const progress = 75 + (25 * (1 - totalSeconds / (20 * 60)));
-                document.querySelector('.progress-line-fill').style.width = `${progress}%`;
-            }, 1000);
-        }
-
-        // Clean up interval when modal is hidden
-        document.getElementById('trackingModal').addEventListener('hidden.bs.modal', () => {
-            if (countdownInterval) {
-                clearInterval(countdownInterval);
+            // Format date helper function
+            function formatDate(date) {
+                const options = { 
+                    weekday: 'short', 
+                    year: 'numeric', 
+                    month: 'short', 
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                };
+                return new Date(date).toLocaleDateString('en-US', options);
             }
         });
+
+
 
         // Add loading state to sidebar links
         document.querySelectorAll('.dashboard-home-sidebar .nav-link').forEach(link => {

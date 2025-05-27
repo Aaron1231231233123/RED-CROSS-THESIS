@@ -872,7 +872,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                         </li>
                         <li class="nav-item">
                         <a class="nav-link" href="dashboard-hospital-history.php">
-                                <i class="fas fa-print me-2"></i>Print Requests
+                                <i class="fas fa-print me-2"></i>Approved Requests
                             </a>
                         </li>
                         <li class="nav-item">

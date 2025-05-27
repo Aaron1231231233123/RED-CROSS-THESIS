@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Iloilo Blood Donor Heatmap & Planner</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Leaflet JS & Heat Plugin -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+
+  <style>
+ html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: Arial, sans-serif;
+}
+
+body {
+  display: flex;
+  overflow: hidden;
+}
+
+#sidebar {
+  width: 350px;
+  background: #f9f9f9;
+  border-right: 1px solid #ddd;
+  padding: 15px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  height: 100vh; /* ensure sidebar fills full height */
+}
+
+#map {
+  flex-grow: 1;
+  height: 100vh; /* map needs full height */
+}   
+    label {
+      font-weight: bold;
+    }
+    select, input[type="date"], input[type="time"] {
+      width: 100%;
+      padding: 6px;
+      margin: 5px 0 15px 0;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      padding: 10px;
+      border: none;
+      width: 100%;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .summary-item {
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+    .location-list {
+      margin: 0; padding: 0; list-style: none;
+      max-height: 150px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      background: white;
+    }
+    .location-list li {
+      padding: 6px 10px;
+      border-bottom: 1px solid #eee;
+      cursor: default;
+    }
+    .location-list li:last-child {
+      border-bottom: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h2>Blood Drive Planner</h2>
+
+  <label for="bloodTypeFilter">Blood Type:</label>
+  <select id="bloodTypeFilter">
+    <option value="all">All</option>
+    <option value="A+">A+</option>
+    <option value="A-">A-</option>
+    <option value="B+">B+</option>
+    <option value="B-">B-</option>
+    <option value="O+">O+</option>
+    <option value="O-">O-</option>
+    <option value="AB+">AB+</option>
+    <option value="AB-">AB-</option>
+  </select>
+
+  <label for="genderFilter">Gender:</label>
+  <select id="genderFilter">
+    <option value="all">All</option>
+    <option value="male">Male</option>
+    <option value="female">Female</option>
+  </select>
+
+  <label for="ageGroupFilter">Age Group:</label>
+  <select id="ageGroupFilter">
+    <option value="all">All</option>
+    <option value="18-30">18-30</option>
+    <option value="31-50">31-50</option>
+    <option value="51+">51+</option>
+  </select>
+
+  <hr>
+
+  <div id="summary">
+    <h3>Summary</h3>
+    <div class="summary-item" id="totalDonors">Total Donors: 0</div>
+    <div class="summary-item" id="maleDonors">Male Donors: 0</div>
+    <div class="summary-item" id="femaleDonors">Female Donors: 0</div>
+    <div class="summary-item" id="age18_30">Age 18-30: 0</div>
+    <div class="summary-item" id="age31_50">Age 31-50: 0</div>
+    <div class="summary-item" id="age51_plus">Age 51+: 0</div>
+  </div>
+
+  <hr>
+
+  <div id="topLocations">
+    <h3>Top Donor Locations</h3>
+    <ul class="location-list" id="locationList">
+      <!-- dynamically filled -->
+    </ul>
+  </div>
+
+  <hr>
+
+  <h3>Plan Blood Drive</h3>
+  <label for="driveDate">Select Date:</label>
+  <input type="date" id="driveDate" />
+
+  <label for="driveTime">Select Time:</label>
+  <input type="time" id="driveTime" />
+
+  <button id="savePlanBtn">Save Plan</button>
+  <div id="planStatus" style="margin-top:10px; color: green;"></div>
+</div>
+
+<div id="map"></div>
+
+<script>
+  // Initialize map
+  const map = L.map('map').setView([10.8, 122.5], 10);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  // Fake donor locations associated with towns (simplified town coords)
+  const townCoords = {
+    'Jaro': [10.7206, 122.5474],
+    'Santa Barbara': [10.7459, 122.5215],
+    'Pavia': [10.7300, 122.5625],
+    'Cabatuan': [10.7810, 122.4912],
+    'Oton': [10.7013, 122.4797],
+    'Iloilo City Proper': [10.7000, 122.5700]
+  };
+
+  // Generate donors with random town assignments
+  const bloodTypes = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+  const genders = ['male', 'female'];
+
+  const donors = [];
+  for (let i = 0; i < 200; i++) {
+    const townKeys = Object.keys(townCoords);
+    const town = townKeys[Math.floor(Math.random() * townKeys.length)];
+    const baseCoord = townCoords[town];
+
+    donors.push({
+      lat: baseCoord[0] + (Math.random() - 0.5) * 0.03,  // jitter near town center
+      lng: baseCoord[1] + (Math.random() - 0.5) * 0.03,
+      age: 18 + Math.floor(Math.random() * 50),
+      gender: genders[Math.floor(Math.random() * genders.length)],
+      blood: bloodTypes[Math.floor(Math.random() * bloodTypes.length)],
+      intensity: 0.8,
+      town: town
+    });
+  }
+
+  let heatLayer = null;
+
+  // Elements for filters
+  const bloodTypeFilter = document.getElementById('bloodTypeFilter');
+  const genderFilter = document.getElementById('genderFilter');
+  const ageGroupFilter = document.getElementById('ageGroupFilter');
+
+  // Summary fields
+  const totalDonorsEl = document.getElementById('totalDonors');
+  const maleDonorsEl = document.getElementById('maleDonors');
+  const femaleDonorsEl = document.getElementById('femaleDonors');
+  const age18_30El = document.getElementById('age18_30');
+  const age31_50El = document.getElementById('age31_50');
+  const age51_plusEl = document.getElementById('age51_plus');
+  const locationListEl = document.getElementById('locationList');
+
+  // Filter donors and update heatmap and summary
+  function updateHeatmapAndSummary() {
+    const bloodFilter = bloodTypeFilter.value;
+    const genderFilterVal = genderFilter.value;
+    const ageGroupVal = ageGroupFilter.value;
+
+    // Filter donors
+    const filtered = donors.filter(donor => {
+      let bloodMatch = bloodFilter === 'all' || donor.blood === bloodFilter;
+      let genderMatch = genderFilterVal === 'all' || donor.gender === genderFilterVal;
+      let ageMatch = false;
+      if (ageGroupVal === 'all') ageMatch = true;
+      else if (ageGroupVal === '18-30') ageMatch = donor.age >= 18 && donor.age <= 30;
+      else if (ageGroupVal === '31-50') ageMatch = donor.age >= 31 && donor.age <= 50;
+      else if (ageGroupVal === '51+') ageMatch = donor.age >= 51;
+
+      return bloodMatch && genderMatch && ageMatch;
+    });
+
+    // Heatmap points
+    const heatPoints = filtered.map(d => [d.lat, d.lng, d.intensity]);
+
+    // Update heatmap
+    if (heatLayer) map.removeLayer(heatLayer);
+    heatLayer = L.heatLayer(heatPoints, {
+      radius: 35,
+      blur: 20,
+      maxZoom: 13,
+      minOpacity: 0.4,
+      gradient: {
+        0.2: 'blue',
+        0.4: 'lime',
+        0.6: 'orange',
+        0.8: 'red'
+      }
+    }).addTo(map);
+
+    // Update summary counts
+    totalDonorsEl.textContent = `Total Donors: ${filtered.length}`;
+    maleDonorsEl.textContent = `Male Donors: ${filtered.filter(d => d.gender === 'male').length}`;
+    femaleDonorsEl.textContent = `Female Donors: ${filtered.filter(d => d.gender === 'female').length}`;
+    age18_30El.textContent = `Age 18-30: ${filtered.filter(d => d.age >= 18 && d.age <= 30).length}`;
+    age31_50El.textContent = `Age 31-50: ${filtered.filter(d => d.age >= 31 && d.age <= 50).length}`;
+    age51_plusEl.textContent = `Age 51+: ${filtered.filter(d => d.age >= 51).length}`;
+
+    // Calculate top towns by donor count
+    const townCounts = {};
+    filtered.forEach(d => {
+      townCounts[d.town] = (townCounts[d.town] || 0) + 1;
+    });
+
+    // Sort towns descending
+    const sortedTowns = Object.entries(townCounts).sort((a,b) => b[1] - a[1]);
+
+    // Populate list in sidebar
+    locationListEl.innerHTML = '';
+    if (sortedTowns.length === 0) {
+      locationListEl.innerHTML = '<li>No donors match selected filters</li>';
+    } else {
+      sortedTowns.forEach(([town, count]) => {
+        const li = document.createElement('li');
+        li.textContent = `${town}: ${count} donors`;
+        locationListEl.appendChild(li);
+      });
+    }
+  }
+
+  // Run on filter change
+  bloodTypeFilter.addEventListener('change', updateHeatmapAndSummary);
+  genderFilter.addEventListener('change', updateHeatmapAndSummary);
+  ageGroupFilter.addEventListener('change', updateHeatmapAndSummary);
+
+  // Initialize
+  updateHeatmapAndSummary();
+
+  // Save plan button logic (just a placeholder)
+  const savePlanBtn = document.getElementById('savePlanBtn');
+  const planStatus = document.getElementById('planStatus');
+
+  savePlanBtn.addEventListener('click', () => {
+    const date = document.getElementById('driveDate').value;
+    const time = document.getElementById('driveTime').value;
+
+    if (!date || !time) {
+      planStatus.style.color = 'red';
+      planStatus.textContent = 'Please select both date and time.';
+      return;
+    }
+
+    // Placeholder for saving logic
+    planStatus.style.color = 'green';
+    planStatus.textContent = `Blood drive planned on ${date} at ${time}. (Not yet saved to backend)`;
+  });
+</script>
+
+</body>
+</html>
