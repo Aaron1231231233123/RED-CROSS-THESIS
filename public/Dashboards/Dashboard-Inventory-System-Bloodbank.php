@@ -1399,8 +1399,24 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             document.getElementById('modal-sex').value = donor.sex;
             document.getElementById('modal-civil-status').value = donor.civil_status;
             
-            // Check eligibility status via AJAX
-            fetchEligibilityStatus(bag.donor_id);
+            // Set eligibility status directly from bag data
+            const statusElem = document.getElementById('modal-eligibility-status');
+            const messageElem = document.getElementById('modal-eligibility-message');
+            const noteElem = document.getElementById('modal-eligibility-note');
+            if (bag.eligibility_status === 'approved') {
+                statusElem.textContent = 'ELIGIBLE';
+                statusElem.style.backgroundColor = '#198754'; // green
+                messageElem.textContent = 'Approved for donation';
+                // Calculate next eligible donation date (45 days after collection_date)
+                const collectionDate = new Date(bag.collection_date);
+                const nextDonationDate = new Date(collectionDate);
+                nextDonationDate.setDate(collectionDate.getDate() + 45);
+                const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                noteElem.textContent = 'Next eligible donation date: ' + nextDonationDate.toLocaleDateString(undefined, options);
+            } else {
+                // Fallback to AJAX/legacy logic
+                fetchEligibilityStatus(bag.donor_id);
+            }
             
             // Show the modal
             const modal = new bootstrap.Modal(document.getElementById('donorDetailsModal'));
