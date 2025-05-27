@@ -383,6 +383,29 @@ $totalUnits = $bloodInStockCount;
 $totalPercentage = $maxCapacity > 0 ? min(($totalUnits / $maxCapacity) * 100, 100) : 0;
 $statusClass = $totalPercentage < 30 ? 'critical' : ($totalPercentage < 50 ? 'warning' : 'healthy');
 $statusText = $totalPercentage < 30 ? 'CRITICAL LOW' : ($totalPercentage < 50 ? 'WARNING' : 'HEALTHY');
+$statusColor = $statusClass === 'critical' ? '#dc2626' : ($statusClass === 'warning' ? '#d97706' : '#16a34a');
+
+// Notification logic
+$notifications = [];
+if ($pendingDonorsCount > 0) {
+    $notifications[] = [
+        'type' => 'pending',
+        'icon' => 'fa-clock',
+        'title' => 'Pending Donors',
+        'message' => "There are <b>$pendingDonorsCount</b> donor(s) pending approval.",
+        'color' => '#b38b00',
+        'bg' => '#fffbe6',
+    ];
+}
+$notifications[] = [
+    'type' => 'inventory',
+    'icon' => $statusClass === 'critical' ? 'fa-exclamation-triangle' : ($statusClass === 'warning' ? 'fa-exclamation-circle' : 'fa-check-circle'),
+    'title' => 'Inventory Status',
+    'message' => "Blood bank inventory is at <b>$statusText</b> (" . round($totalPercentage) . '%)',
+    'color' => $statusColor,
+    'bg' => $statusClass === 'critical' ? '#ffeaea' : ($statusClass === 'warning' ? '#fff7e6' : '#e6fff2'),
+];
+$notifCount = count($notifications);
 ?>
 
 <!DOCTYPE html>
@@ -1043,36 +1066,38 @@ h6 {
     </style>
 </head>
 <body>
-    <!-- Pending Donors Sticky Alert & Notification Bell -->
-    <?php if ($pendingDonorsCount > 0): ?>
+    <!-- Notification Bell and Alerts -->
+    <?php if ($notifCount > 0): ?>
     <button class="notifications-toggle" id="notificationsToggle" style="position: fixed; top: 100px; right: 32px; z-index: 1100; display: none; background: none; border: none; outline: none; align-items: center; justify-content: center; padding: 0; width: 56px; height: 56px; border-radius: 50%; box-shadow: 0 2px 8px rgba(148,16,34,0.08); background: #fff; transition: box-shadow 0.2s;">
         <i class="fas fa-bell" style="font-size: 2em; color: #941022; position: relative;"></i>
         <span class="badge rounded-pill" id="notifBadge" style="position: absolute; top: 10px; right: 10px; background: #dc3545; color: #fff; border: 2px solid #fff; font-size: 1em; font-weight: 700; padding: 2px 7px; border-radius: 12px; box-shadow: 0 1px 4px rgba(220,53,69,0.12); display:none; animation: pulseBadge 1.2s infinite; min-width: 24px; text-align: center;">0</span>
     </button>
     <div class="sticky-alerts" id="stickyAlerts">
-        <div class="blood-alert alert" role="alert" data-notif-id="pending">
-            <span class="notif-icon"><i class="fas fa-clock"></i></span>
+        <?php foreach ($notifications as $notif): ?>
+        <div class="blood-alert alert" role="alert" data-notif-id="<?php echo $notif['type']; ?>" style="background: <?php echo $notif['bg']; ?>; color: <?php echo $notif['color']; ?>; border-left: 6px solid <?php echo $notif['color']; ?>;">
+            <span class="notif-icon" style="background: #fff; color: <?php echo $notif['color']; ?>;"><i class="fas <?php echo $notif['icon']; ?>"></i></span>
             <div class="notif-content">
-                <div class="notif-title">Pending Donors</div>
-                <div>There are <b><?php echo $pendingDonorsCount; ?></b> donor(s) pending approval. <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" style="color:#b38b00;text-decoration:underline;">View List</a></div>
+                <div class="notif-title"><?php echo $notif['title']; ?></div>
+                <div><?php echo $notif['message']; ?></div>
             </div>
             <button class="notif-close" title="Dismiss" aria-label="Dismiss">&times;</button>
         </div>
+        <?php endforeach; ?>
     </div>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const stickyAlerts = document.getElementById('stickyAlerts');
-        const alert = stickyAlerts.querySelector('.blood-alert');
-        const closeBtn = alert.querySelector('.notif-close');
         const notificationsToggle = document.getElementById('notificationsToggle');
         const notifBadge = document.getElementById('notifBadge');
         let autoHideTimeout;
-        let dismissed = false;
-
+        let dismissedNotifs = [];
+        function getAlerts() {
+            return Array.from(document.querySelectorAll('.blood-alert'));
+        }
         function showBell() {
             notificationsToggle.style.display = 'flex';
             setTimeout(() => notificationsToggle.classList.add('show'), 10);
-            notifBadge.textContent = '1';
+            notifBadge.textContent = '<?php echo $notifCount; ?>';
             notifBadge.style.display = 'inline-block';
         }
         function hideBell() {
@@ -1080,29 +1105,44 @@ h6 {
             notificationsToggle.style.display = 'none';
             notifBadge.style.display = 'none';
         }
-        function hideAlert() {
+        function hideAlert(alert) {
             alert.classList.add('fade-out');
-            setTimeout(() => { stickyAlerts.style.display = 'none'; showBell(); }, 500);
-            dismissed = true;
+            setTimeout(() => { alert.style.display = 'none';
+                if (getAlerts().every(a => a.style.display === 'none')) {
+                    showBell();
+                }
+            }, 500);
+            dismissedNotifs.push(alert.getAttribute('data-notif-id'));
         }
-        closeBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            hideAlert();
-        });
-        alert.addEventListener('click', function(e) {
-            if (e.target.classList.contains('notif-close')) return;
-            hideAlert();
+        getAlerts().forEach(alert => {
+            alert.querySelector('.notif-close').addEventListener('click', function(e) {
+                e.stopPropagation();
+                hideAlert(alert);
+            });
+            alert.addEventListener('click', function(e) {
+                if (e.target.classList.contains('notif-close')) return;
+                hideAlert(alert);
+            });
+            alert.style.cursor = 'pointer';
         });
         notificationsToggle.addEventListener('click', function() {
+            getAlerts().forEach(alert => {
+                if (dismissedNotifs.includes(alert.getAttribute('data-notif-id'))) {
+                    alert.style.display = '';
+                    alert.classList.remove('fade-out');
+                }
+            });
+            dismissedNotifs = [];
             stickyAlerts.style.display = '';
-            alert.classList.remove('fade-out');
             hideBell();
-            dismissed = false;
-            // Restart auto-hide
             clearTimeout(autoHideTimeout);
-            autoHideTimeout = setTimeout(hideAlert, 7000);
+            autoHideTimeout = setTimeout(() => {
+                getAlerts().forEach(alert => hideAlert(alert));
+            }, 7000);
         });
-        autoHideTimeout = setTimeout(hideAlert, 7000);
+        autoHideTimeout = setTimeout(() => {
+            getAlerts().forEach(alert => hideAlert(alert));
+        }, 7000);
     });
     </script>
     <?php endif; ?>
