@@ -299,10 +299,14 @@ if (is_array($eligibilityData) && !empty($eligibilityData)) {
             $bloodCollectionData = isset($bloodCollectionData[0]) ? $bloodCollectionData[0] : null;
         }
         
-        // Calculate expiration date (42 days from collection)
+        // Calculate expiration date (35 days from collection)
         $collectionDate = new DateTime($item['collection_start_time']);
         $expirationDate = clone $collectionDate;
-        $expirationDate->modify('+42 days');
+        $expirationDate->modify('+35 days');
+        
+        // Only include bags with amount_taken > 0 and not expired
+        $amount_taken = $bloodCollectionData && isset($bloodCollectionData['amount_taken']) ? intval($bloodCollectionData['amount_taken']) : 0;
+        $isExpired = (new DateTime() > $expirationDate);
         
         // Create blood bag entry
         $bloodBag = [
@@ -310,11 +314,11 @@ if (is_array($eligibilityData) && !empty($eligibilityData)) {
             'donor_id' => $item['donor_id'],
             'serial_number' => $item['unit_serial_number'],
             'blood_type' => $item['blood_type'],
-            'bags' => $bloodCollectionData && isset($bloodCollectionData['amount_taken']) ? $bloodCollectionData['amount_taken'] : '1',
+            'bags' => $amount_taken,
             'bag_type' => $item['blood_bag_type'] ?: 'Standard',
             'collection_date' => $collectionDate->format('Y-m-d'),
             'expiration_date' => $expirationDate->format('Y-m-d'),
-            'status' => (new DateTime() > $expirationDate) ? 'Expired' : 'Valid',
+            'status' => $isExpired ? 'Expired' : 'Valid',
             'eligibility_status' => $item['status'],
             'eligibility_end_date' => $item['end_date'],
         ];
@@ -350,9 +354,11 @@ $bloodByType = [
 
 // Calculate blood type counts from blood inventory
 foreach ($bloodInventory as $bag) {
-    $bloodType = $bag['blood_type'] ?? '';
-    if (isset($bloodByType[$bloodType]) && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-        $bloodByType[$bloodType] += floatval($bag['bags']);
+    if ($bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+        $bloodType = $bag['blood_type'] ?? '';
+        if (isset($bloodByType[$bloodType])) {
+            $bloodByType[$bloodType] += floatval($bag['bags']);
+        }
     }
 }
 
@@ -1416,20 +1422,36 @@ h6 {
                     <div class="mb-5">
                         <h5 class="mb-4" style="font-weight: 600;">Available Blood per Unit</h5>
                         <div class="row g-4">
-                            <!-- First row: A+, A-, B+, B- -->
+                            <!-- Blood Type Cards -->
                             <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-a-pos">
+                                <div class="card inventory-system-blood-card blood-type-o-pos">
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type O+</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['O+'] ?? 0; ?></p>
+                                        <p class="inventory-system-blood-availability">Availability: <?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'O+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></p>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-a-neg">
+                                <div class="card inventory-system-blood-card blood-type-a-pos">
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type A+</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['A+'] ?? 0; ?></p>
+                                        <p class="inventory-system-blood-availability">Availability: <?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'A+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -1437,41 +1459,81 @@ h6 {
                                 <div class="card inventory-system-blood-card blood-type-b-pos">
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type B+</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['B+'] ?? 0; ?></p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-b-neg">
-                                    <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type AB+</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['AB+'] ?? 0; ?></p>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Second row: O+, O-, AB+, AB- -->
-                            <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-o-pos">
-                                    <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type O-</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['O-'] ?? 0; ?></p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-o-neg">
-                                    <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type A-</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['A-'] ?? 0; ?></p>
+                                        <p class="inventory-system-blood-availability">Availability: <?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'B+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></p>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="card inventory-system-blood-card blood-type-ab-pos">
                                     <div class="card-body p-4">
+                                        <h5 class="inventory-system-blood-title">Blood Type AB+</h5>
+                                        <p class="inventory-system-blood-availability">Availability: <?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'AB+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Second row: O-, A-, B-, AB- -->
+                            <div class="col-md-3">
+                                <div class="card inventory-system-blood-card blood-type-o-neg">
+                                    <div class="card-body p-4">
+                                        <h5 class="inventory-system-blood-title">Blood Type O-</h5>
+                                        <p class="inventory-system-blood-availability">Availability: <?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'O-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card inventory-system-blood-card blood-type-a-neg">
+                                    <div class="card-body p-4">
+                                        <h5 class="inventory-system-blood-title">Blood Type A-</h5>
+                                        <p class="inventory-system-blood-availability">Availability: <?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'A-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card inventory-system-blood-card blood-type-b-neg">
+                                    <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type B-</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['B-'] ?? 0; ?></p>
+                                        <p class="inventory-system-blood-availability">Availability: <?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'B-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -1479,7 +1541,15 @@ h6 {
                                 <div class="card inventory-system-blood-card blood-type-ab-neg">
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type AB-</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo $bloodByType['AB-'] ?? 0; ?></p>
+                                        <p class="inventory-system-blood-availability">Availability: <?php 
+                                            $count = 0;
+                                            foreach ($bloodInventory as $bag) {
+                                                if ($bag['blood_type'] == 'AB-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
+                                                    $count += floatval($bag['bags']);
+                                                }
+                                            }
+                                            echo (int)$count;
+                                        ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -1488,14 +1558,361 @@ h6 {
 
                     <!-- GIS Mapping Section -->
                     <div class="mb-4">
-                        <div class="d-flex align-items-center mb-3">
-                            <span class="me-2" style="display: inline-block; width: 12px; height: 12px; background-color: #333; margin-right: 8px;"></span>
-                            <h5 class="mb-0" style="font-weight: 600;">GIS Mapping</h5>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div class="d-flex align-items-center">
+                                <span class="me-2" style="display: inline-block; width: 12px; height: 12px; background-color: #333; margin-right: 8px;"></span>
+                                <h5 class="mb-0" style="font-weight: 600;">GIS Mapping</h5>
+                            </div>
+                            <div class="filters d-flex gap-3">
+                                <select id="bloodTypeFilter" class="form-select form-select-sm">
+                                    <option value="all">All Blood Types</option>
+                                    <option value="A+">A+</option>
+                                    <option value="A-">A-</option>
+                                    <option value="B+">B+</option>
+                                    <option value="B-">B-</option>
+                                    <option value="O+">O+</option>
+                                    <option value="O-">O-</option>
+                                    <option value="AB+">AB+</option>
+                                    <option value="AB-">AB-</option>
+                                </select>
+                            </div>
                         </div>
-                        <div id="map" class="bg-light rounded-3" style="height: 600px; width: 100%; max-width: 100%; margin: 0 auto; border: 1px solid #eee;">
-                            <!-- Map will be loaded here -->
+                        <div class="row">
+                            <div class="col-md-9">
+                                <div id="map" class="bg-light rounded-3" style="height: 600px; width: 100%; max-width: 100%; margin: 0 auto; border: 1px solid #eee;"></div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#summaryCollapse">
+                                        <h6 class="card-title mb-0">Summary</h6>
+                                        <i class="fas fa-chevron-down"></i>
+                                    </div>
+                                    <div id="summaryCollapse" class="collapse show">
+                                        <div class="card-body">
+                                            <div class="summary-item" id="totalDonors">Total Donors: 0</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-header bg-light d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#locationsCollapse">
+                                        <h6 class="card-title mb-0">Top Donor Locations</h6>
+                                        <i class="fas fa-chevron-down"></i>
+                                    </div>
+                                    <div id="locationsCollapse" class="collapse show">
+                                        <div class="card-body">
+                                            <ul class="location-list list-unstyled" id="locationList">
+                                                <!-- Dynamically filled -->
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
+
+                    <!-- Add required CSS -->
+                    <style>
+                        .location-list {
+                            max-height: 200px;
+                            overflow-y: auto;
+                        }
+                        .location-list li {
+                            padding: 6px 0;
+                            border-bottom: 1px solid #eee;
+                        }
+                        .location-list li:last-child {
+                            border-bottom: none;
+                        }
+                        .summary-item {
+                            margin-bottom: 8px;
+                            font-size: 14px;
+                        }
+                        .card-header .fa-chevron-down {
+                            transition: transform 0.3s;
+                        }
+                        .card-header[aria-expanded="true"] .fa-chevron-down {
+                            transform: rotate(180deg);
+                        }
+                    </style>
+
+                    <!-- Add Leaflet CSS and JS -->
+                    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+                    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+                    <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+
+                    <?php
+                    // STEP 1: Get ALL successful collections (no time filter)
+                    $eligibilityResponse = supabaseRequest("eligibility?select=eligibility_id,donor_id,blood_type,collection_successful&collection_successful=eq.true");
+                    
+                    $eligibilityData = [];
+                    if (isset($eligibilityResponse['data'])) {
+                        $eligibilityData = $eligibilityResponse['data'];
+                    }
+
+                    // Count ALL successful collections
+                    $totalDonorCount = count($eligibilityData);
+
+                    // STEP 2: Track two separate sets of data:
+                    // 1. City counts for Top Donors - using ALL eligibility data
+                    // 2. Full address data for heatmap - using filtered data if needed
+                    $cityDonorCounts = []; // For Top Donors list - NO TIME FILTER
+                    $heatmapData = []; // For the heatmap
+
+                    // Process Top Donor Locations first - using ALL eligibility data
+                    foreach ($eligibilityData as $eligibility) {
+                        // Get donor's address data for city counting
+                        $donorFormResponse = supabaseRequest(
+                            'donor_form?select=permanent_address,office_address&donor_id=eq.' . $eligibility['donor_id']
+                        );
+
+                        if (isset($donorFormResponse['data']) && !empty($donorFormResponse['data'])) {
+                            $donorForm = $donorFormResponse['data'][0];
+                            
+                            // Get the address (office first, then permanent)
+                            $address = !empty($donorForm['office_address']) ? $donorForm['office_address'] : $donorForm['permanent_address'];
+                            
+                            // For Top Donors: Extract city name
+                            $iloiloCities = [
+                                'Oton', 'Pavia', 'Leganes', 'Santa Barbara', 'San Miguel', 
+                                'Cabatuan', 'Maasin', 'Janiuay', 'Pototan', 'Dumangas',
+                                'Zarraga', 'New Lucena', 'Alimodian', 'Leon', 'Tubungan',
+                                'Iloilo City'
+                            ];
+
+                            foreach ($iloiloCities as $cityName) {
+                                if (stripos($address, $cityName) !== false) {
+                                    if (!isset($cityDonorCounts[$cityName])) {
+                                        $cityDonorCounts[$cityName] = 0;
+                                    }
+                                    $cityDonorCounts[$cityName]++;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    // Function to clean and standardize address
+                    function standardizeAddress($address) {
+                        // List of known municipalities/cities in Iloilo
+                        $municipalities = [
+                            'Pototan', 'Oton', 'Pavia', 'Leganes', 'Santa Barbara', 'San Miguel',
+                            'Cabatuan', 'Maasin', 'Janiuay', 'Dumangas', 'Zarraga', 'New Lucena',
+                            'Alimodian', 'Leon', 'Tubungan', 'Iloilo City'
+                        ];
+
+                        // Clean the address
+                        $address = trim($address);
+                        
+                        // Check for municipality conflicts
+                        $foundMunicipalities = [];
+                        foreach ($municipalities as $muni) {
+                            if (stripos($address, $muni) !== false) {
+                                $foundMunicipalities[] = $muni;
+                            }
+                        }
+
+                        // If we found multiple municipalities, use the first one
+                        if (count($foundMunicipalities) > 1) {
+                            $primaryLocation = $foundMunicipalities[0];
+                            // Remove other municipalities from address
+                            foreach (array_slice($foundMunicipalities, 1) as $muni) {
+                                $address = str_ireplace($muni, '', $address);
+                            }
+                            // Ensure primary location is at the end
+                            $address = str_ireplace($primaryLocation, '', $address);
+                            $address = trim($address, ' ,.') . ', ' . $primaryLocation;
+                        }
+
+                        // Add province and country if not present
+                        if (stripos($address, 'Iloilo') === false) {
+                            $address .= ', Iloilo';
+                        }
+                        if (stripos($address, 'Philippines') === false) {
+                            $address .= ', Philippines';
+                        }
+
+                        // Clean up multiple commas and spaces
+                        $address = preg_replace('/\s+/', ' ', $address);
+                        $address = preg_replace('/,+/', ',', $address);
+                        $address = trim($address, ' ,');
+
+                        return $address;
+                    }
+
+                    // Now process heatmap data separately
+                    foreach ($eligibilityData as $eligibility) {
+                        $donorFormResponse = supabaseRequest(
+                            'donor_form?select=permanent_address&donor_id=eq.' . $eligibility['donor_id']
+                        );
+
+                        if (isset($donorFormResponse['data']) && !empty($donorFormResponse['data'])) {
+                            $donorForm = $donorFormResponse['data'][0];
+                            
+                            // For Heatmap: Use permanent address
+                            if (!empty($donorForm['permanent_address'])) {
+                                $standardizedAddress = standardizeAddress($donorForm['permanent_address']);
+                                $heatmapData[] = [
+                                    'original_address' => $donorForm['permanent_address'],
+                                    'address' => $standardizedAddress
+                                ];
+                            }
+                        }
+                    }
+
+                    // Sort cities by donor count
+                    arsort($cityDonorCounts);
+                    ?>
+
+                    <script>
+                    // Initialize map centered on Iloilo
+                    const map = L.map('map').setView([10.7202, 122.5621], 11); // Centered on Iloilo City
+
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        maxZoom: 18,
+                        attribution: '&copy; OpenStreetMap contributors'
+                    }).addTo(map);
+
+                    let heatLayer = null;
+                    let markers = L.layerGroup().addTo(map);
+                    const points = [];
+
+                    // Elements for filters
+                    const bloodTypeFilter = document.getElementById('bloodTypeFilter');
+
+                    // Summary fields
+                    const totalDonorsEl = document.getElementById('totalDonors');
+                    const locationListEl = document.getElementById('locationList');
+
+                    // Separate data for Top Donors and Heatmap
+                    const cityDonorCounts = <?php echo json_encode($cityDonorCounts); ?>;
+                    const heatmapData = <?php echo json_encode($heatmapData); ?>;
+
+                    // Function to geocode address using Nominatim with fallback attempts
+                    async function geocodeAddress(location) {
+                        const addresses = [
+                            location.address,
+                            // Try without specific landmarks
+                            location.address.replace(/,([^,]*Hospital[^,]*),/, ','),
+                            // Try just the municipality and province
+                            location.address.split(',').slice(-3).join(',')
+                        ];
+
+                        for (const address of addresses) {
+                            try {
+                                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&countrycodes=ph`);
+                                const data = await response.json();
+                                
+                                if (data && data.length > 0) {
+                                    // Filter results to prioritize Iloilo locations
+                                    const iloiloResults = data.filter(result => 
+                                        result.display_name.toLowerCase().includes('iloilo')
+                                    );
+                                    
+                                    const result = iloiloResults.length > 0 ? iloiloResults[0] : data[0];
+                                    
+                                    return {
+                                        lat: parseFloat(result.lat),
+                                        lng: parseFloat(result.lon),
+                                        display_name: result.display_name
+                                    };
+                                }
+                            } catch (error) {
+                                console.error('Geocoding error:', error);
+                                continue;
+                            }
+                            // Add delay between attempts
+                            await delay(1000);
+                        }
+                        return null;
+                    }
+
+                    // Function to add delay between geocoding requests
+                    function delay(ms) {
+                        return new Promise(resolve => setTimeout(resolve, ms));
+                    }
+
+                    // Process all addresses and update map
+                    async function processAddresses() {
+                        markers.clearLayers();
+                        if (heatLayer) {
+                            map.removeLayer(heatLayer);
+                        }
+
+                        const points = [];
+                        for (const location of heatmapData) {
+                            // Add delay to respect Nominatim's usage policy
+                            await delay(1000);
+                            
+                            const coords = await geocodeAddress(location);
+                            if (coords) {
+                                points.push([coords.lat, coords.lng, 0.8]);
+                                
+                                // Add marker with popup showing both original and geocoded address
+                                const marker = L.marker([coords.lat, coords.lng])
+                                    .bindPopup(`
+                                        <strong>Original Address:</strong><br>
+                                        ${location.original_address}<br><br>
+                                        <strong>Geocoded Address:</strong><br>
+                                        ${coords.display_name}
+                                    `);
+                                markers.addLayer(marker);
+                            } else {
+                                console.warn('Failed to geocode address:', location.address);
+                            }
+                        }
+
+                        if (points.length > 0) {
+                            heatLayer = L.heatLayer(points, {
+                                radius: 35,
+                                blur: 20,
+                                maxZoom: 13,
+                                minOpacity: 0.4,
+                                gradient: {
+                                    0.2: 'blue',
+                                    0.4: 'lime',
+                                    0.6: 'orange',
+                                    0.8: 'red'
+                                }
+                            }).addTo(map);
+                        }
+                    }
+
+                    function updateTopDonorLocations() {
+                        // Update Top Donors list - this is independent of filters
+                        locationListEl.innerHTML = '';
+                        if (Object.keys(cityDonorCounts).length === 0) {
+                            locationListEl.innerHTML = '<li class="p-2">No locations found</li>';
+                        } else {
+                            Object.entries(cityDonorCounts).forEach(([city, count]) => {
+                                const li = document.createElement('li');
+                                li.className = 'p-2 mb-2 border-bottom';
+                                li.innerHTML = `
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <strong>${city}</strong>
+                                        <span class="badge bg-danger">${count}</span>
+                                    </div>`;
+                                locationListEl.appendChild(li);
+                            });
+                        }
+                    }
+
+                    function updateDisplay() {
+                        // Update total count
+                        totalDonorsEl.textContent = 'Total Donors: <?php echo $totalDonorCount; ?>';
+                        
+                        // Update Top Donor Locations (independent of filters)
+                        updateTopDonorLocations();
+                        
+                        // Process addresses and update heatmap
+                        processAddresses();
+                    }
+
+                    // Add event listeners - these only affect the heatmap
+                    bloodTypeFilter.addEventListener('change', processAddresses);
+
+                    // Initialize
+                    updateDisplay();
+                    </script>
                 </div>
             </main>
         </div>
