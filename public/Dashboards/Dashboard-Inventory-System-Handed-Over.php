@@ -1133,7 +1133,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             <td><?php echo isset($request['last_updated']) ? date('Y-m-d', strtotime($request['last_updated'])) : '-'; ?></td>
                                         <?php endif; ?>
                                         <td>
-                                            <button type="button" class="btn btn-sm btn-info view-details" data-request='<?php echo json_encode($request); ?>' title="View Details">
+                                            <button type="button" class="btn btn-sm btn-info view-details" data-request='<?php echo json_encode($request); ?>' title="Request Details">
                                                 <i class="fas fa-eye"></i>
                                             </button>
                                             <?php 
@@ -1159,7 +1159,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 <div class="modal-dialog modal-lg">
                     <div class="modal-content">
                         <div class="modal-header bg-dark text-white">
-                            <h5 class="modal-title" id="requestDetailsModalLabel">Request Details</h5>
+                            <h5 class="modal-title" id="requestDetailsModalLabel">Request Detail</h5>
                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
@@ -1270,253 +1270,62 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-    function searchTable() {
-        const searchInput = document.getElementById('searchInput').value.toLowerCase();
-        const searchCategory = document.getElementById('searchCategory').value;
-        const table = document.querySelector('table');
-        const rows = table.querySelectorAll('tbody tr');
-        
-        let visibleRows = 0;
-        let totalRows = 0;
-        
-        // Remove any existing "no results" message
-        const existingNoResults = document.getElementById('noResultsRow');
-        if (existingNoResults) {
-            existingNoResults.remove();
-        }
-
-        for (let i = 0; i < rows.length; i++) {
-            const row = rows[i];
-            const cells = row.querySelectorAll('td');
-            
-            // Skip rows with no cells or "No requests found" message rows
-            if (cells.length <= 1 || row.querySelector('td[colspan]')) {
-                continue;
-            }
-            
-            totalRows++;
-            let found = false;
-
-            if (searchCategory === 'all') {
-                // Search all columns except actions
-                for (let j = 0; j < cells.length - 1; j++) {
-                    const cellText = cells[j]?.textContent.toLowerCase() || '';
-                    if (cellText.includes(searchInput)) {
-                        found = true;
-                        break;
-                    }
-                }
-            } else {
-                // Map category to column index based on the table structure
-                let columnIndex;
-                
-                switch(searchCategory) {
-                    case 'hospital':
-                        columnIndex = 5; // Hospital name column
-                        break;
-                    case 'blood_type':
-                        columnIndex = 2; // Blood type column
-                        break;
-                    case 'patient':
-                        columnIndex = 1; // Patient name column
-                        break;
-                    case 'doctor':
-                        columnIndex = 6; // Doctor column
-                        break;
-                    case 'date':
-                        // For dates, try to look for date patterns in multiple columns
-                        const dateRegex = /\d{1,2}\/\d{1,2}\/\d{2,4}|\d{1,2}-\d{1,2}-\d{2,4}|\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{2,4}/i;
-                        
-                        for (let j = 0; j < cells.length - 1; j++) {
-                            const cellText = cells[j]?.textContent.toLowerCase() || '';
-                            const dateMatches = cellText.match(dateRegex);
-                            
-                            if (dateMatches && dateMatches.some(date => date.toLowerCase().includes(searchInput))) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        break;
-                    default:
-                        columnIndex = null;
-                }
-                
-                if (columnIndex !== null && cells[columnIndex]) {
-                    const cellText = cells[columnIndex].textContent.toLowerCase();
-                    found = cellText.includes(searchInput);
-                }
-            }
-
-            // Show or hide row based on search results
-            if (found) {
-                row.style.display = '';
-                visibleRows++;
-            } else {
-                row.style.display = 'none';
-            }
-        }
-        
-        // If no results found and there was input, show a message
-        if (visibleRows === 0 && totalRows > 0) {
-            const tbody = table.querySelector('tbody');
-            const noResultsRow = document.createElement('tr');
-            noResultsRow.id = 'noResultsRow';
-            
-            // Get the number of columns from the header
-            const headerCells = table.querySelectorAll('thead th');
-            const colCount = headerCells.length || 10;
-            
-            noResultsRow.innerHTML = `
-                <td colspan="${colCount}" class="text-center">
-                    <div class="alert alert-info m-2">
-                        No matching requests found for "${searchInput}" in category "${searchCategory}"
-                        <button class="btn btn-outline-primary btn-sm ms-2" onclick="clearSearch()">
-                            Clear Search
-                        </button>
-                    </div>
-                </td>
-            `;
-            
-            tbody.appendChild(noResultsRow);
-        }
-        
-        // Update search results info
-        updateSearchInfo(visibleRows, totalRows);
-    }
-    
-    // Function to update search information
-    function updateSearchInfo(visibleCount, totalCount) {
-        const searchContainer = document.querySelector('.search-container');
-        let searchInfo = document.getElementById('searchInfo');
-        
-        if (!searchInfo) {
-            searchInfo = document.createElement('div');
-            searchInfo.id = 'searchInfo';
-            searchInfo.classList.add('text-muted', 'mt-2', 'small');
-            searchContainer.appendChild(searchInfo);
-        }
-        
-        const searchInputValue = document.getElementById('searchInput').value.trim();
-        if (searchInputValue === '') {
-            searchInfo.textContent = '';
-            return;
-        }
-        
-        searchInfo.textContent = `Showing ${visibleCount} of ${totalCount} entries`;
-    }
-    
-    // Function to clear search
-    function clearSearch() {
-        document.getElementById('searchInput').value = '';
-        document.getElementById('searchCategory').value = 'all';
-        searchTable();
-    }
-
     document.addEventListener('DOMContentLoaded', function() {
-        // Add event listeners for real-time search
-        document.getElementById('searchInput').addEventListener('keyup', searchTable);
-        document.getElementById('searchCategory').addEventListener('change', searchTable);
-        
-        // Initialize modals
-        const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
-        const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
-            backdrop: false,
-            keyboard: false
-        });
-        const requestDetailsModal = new bootstrap.Modal(document.getElementById('requestDetailsModal'));
-        const updateStatusModal = new bootstrap.Modal(document.getElementById('updateStatusModal'));
-        const completeRequestModal = new bootstrap.Modal(document.getElementById('completeRequestModal'));
+        // Initialize the modal ONCE
+        const requestDetailsModalElem = document.getElementById('requestDetailsModal');
+        const requestDetailsModalInstance = new bootstrap.Modal(requestDetailsModalElem);
 
-        // Function to show confirmation modal
-        window.showConfirmationModal = function() {
-            confirmationModal.show();
-        };
-
-        // Function to handle form submission
-        window.proceedToDonorForm = function() {
-            confirmationModal.hide();
-            loadingModal.show();
-            
-            setTimeout(() => {
-                window.location.href = '../../src/views/forms/donor-form-modal.php';
-            }, 1500);
-        };
-
-        // Handle view details button clicks
-        document.querySelectorAll('.view-details').forEach(button => {
-            button.addEventListener('click', function() {
-                const requestData = JSON.parse(this.getAttribute('data-request'));
-                
-                // Populate the modal with request details
-                document.getElementById('detail-request-id').textContent = '#' + requestData.request_id;
-                document.getElementById('detail-patient-name').textContent = requestData.patient_name;
-                document.getElementById('detail-patient-age').textContent = requestData.patient_age || 'N/A';
-                document.getElementById('detail-patient-gender').textContent = requestData.patient_gender || 'N/A';
-                document.getElementById('detail-blood-type').textContent = requestData.patient_blood_type + 
-                    (requestData.rh_factor && requestData.rh_factor.toLowerCase() === 'positive' ? '+' : '-');
-                document.getElementById('detail-units').textContent = requestData.units_requested;
-                document.getElementById('detail-urgent').textContent = requestData.is_asap ? 'Yes (ASAP)' : 'No';
-                document.getElementById('detail-hospital').textContent = requestData.hospital_admitted;
-                document.getElementById('detail-doctor').textContent = requestData.physician_name;
-                
-                // Format date if it exists
-                if (requestData.requested_on) {
-                    const requestDate = new Date(requestData.requested_on);
-                    document.getElementById('detail-requested-on').textContent = requestDate.toLocaleString();
-                } else {
-                    document.getElementById('detail-requested-on').textContent = 'N/A';
+        // Use event delegation for all .view-details buttons in the table
+        const table = document.querySelector('table');
+        if (table) {
+            table.addEventListener('click', function(e) {
+                const btn = e.target.closest('.view-details');
+                if (btn) {
+                    let requestData;
+                    try {
+                        requestData = JSON.parse(btn.getAttribute('data-request'));
+                    } catch (e) {
+                        requestData = {};
+                    }
+                    function safeText(val, fallback = 'N/A') {
+                        return (val !== undefined && val !== null && val !== '') ? val : fallback;
+                    }
+                    document.getElementById('detail-request-id').textContent = '#' + safeText(requestData.request_id, '');
+                    document.getElementById('detail-patient-name').textContent = safeText(requestData.patient_name);
+                    document.getElementById('detail-patient-age').textContent = safeText(requestData.patient_age);
+                    document.getElementById('detail-patient-gender').textContent = safeText(requestData.patient_gender);
+                    document.getElementById('detail-blood-type').textContent = safeText(requestData.patient_blood_type) + 
+                        (safeText(requestData.rh_factor, '').toLowerCase() === 'positive' ? '+' : '-');
+                    document.getElementById('detail-units').textContent = safeText(requestData.units_requested);
+                    document.getElementById('detail-urgent').textContent = requestData.is_asap ? 'Yes (ASAP)' : 'No';
+                    document.getElementById('detail-hospital').textContent = safeText(requestData.hospital_admitted);
+                    document.getElementById('detail-doctor').textContent = safeText(requestData.physician_name);
+                    if (requestData.requested_on) {
+                        const requestDate = new Date(requestData.requested_on);
+                        document.getElementById('detail-requested-on').textContent = isNaN(requestDate.getTime()) ? 'N/A' : requestDate.toLocaleString();
+                    } else {
+                        document.getElementById('detail-requested-on').textContent = 'N/A';
+                    }
+                    let statusHTML = '';
+                    const statusValue = safeText(requestData.status, '');
+                    if (statusValue === 'Accepted') {
+                        statusHTML = '<span class="badge bg-success">Accepted</span>';
+                    } else if (statusValue === 'Declined' || statusValue === 'declined') {
+                        statusHTML = '<span class="badge bg-danger">Declined</span>';
+                    } else if (statusValue === 'Confirmed') {
+                        statusHTML = '<span class="badge bg-primary">Handed Over</span>';
+                    } else if (!statusValue) {
+                        statusHTML = '<span class="badge bg-secondary">Not Set</span>';
+                    } else {
+                        statusHTML = `<span class="badge bg-secondary">${statusValue}</span>`;
+                    }
+                    document.getElementById('detail-status').innerHTML = statusHTML;
+                    document.getElementById('detail-diagnosis').textContent = safeText(requestData.patient_diagnosis, 'No diagnosis provided');
+                    // Show the modal
+                    requestDetailsModalInstance.show();
                 }
-                
-                // Set status with appropriate styling
-                let statusHTML = '';
-                const statusValue = requestData.status || '';
-                
-                if (statusValue === 'Accepted') {
-                    statusHTML = '<span class="badge bg-success">Accepted</span>';
-                } else if (statusValue === 'Declined' || statusValue === 'declined') {
-                    statusHTML = '<span class="badge bg-danger">Declined</span>';
-                } else if (!statusValue) {
-                    statusHTML = '<span class="badge bg-secondary">Not Set</span>';
-                } else {
-                    statusHTML = `<span class="badge bg-secondary">${statusValue}</span>`;
-                }
-                
-                document.getElementById('detail-status').innerHTML = statusHTML;
-                
-                // Set diagnosis
-                document.getElementById('detail-diagnosis').textContent = requestData.patient_diagnosis || 'No diagnosis provided';
-                
-                // Show the modal
-                requestDetailsModal.show();
             });
-        });
-        
-        // Handle update status button clicks
-        document.querySelectorAll('.update-status').forEach(button => {
-            button.addEventListener('click', function() {
-                const requestId = this.getAttribute('data-request-id');
-                document.getElementById('update-request-id').value = requestId;
-                updateStatusModal.show();
-            });
-        });
-        
-        // Handle complete request button clicks
-        document.querySelectorAll('.update-completed').forEach(button => {
-            button.addEventListener('click', function() {
-                const requestId = this.getAttribute('data-request-id');
-                document.getElementById('complete-request-id').value = requestId;
-                completeRequestModal.show();
-            });
-        });
-        
-        // Auto-dismiss alerts after 5 seconds
-        setTimeout(() => {
-            const alerts = document.querySelectorAll('.alert');
-            alerts.forEach(alert => {
-                const bsAlert = new bootstrap.Alert(alert);
-                bsAlert.close();
-            });
-        }, 5000);
+        }
     });
     </script>
 </body>
