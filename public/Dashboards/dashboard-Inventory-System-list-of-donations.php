@@ -1274,17 +1274,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <button type="button" class="btn btn-primary" id="processThisDonorBtn" data-donor-id="${donor.donor_id}">
                             <i class="fas fa-list-check me-2"></i> Process This Donor
                         </button>
-                        <button type="button" class="btn btn-success" id="viewEditDonorFormBtn" data-donor-id="${donor.donor_id}">
-                            <i class="fas fa-edit me-2"></i> View/Edit Donor Form
-                        </button>
                         ` : eligibility.status === 'declined' ? `
                         ` : eligibility.status === 'approved' ? `
                         ` : `
                         <button type="button" class="btn btn-primary" id="processThisDonorBtn" data-donor-id="${donor.donor_id}">
                             <i class="fas fa-list-check me-2"></i> Process This Donor
-                        </button>
-                        <button type="button" class="btn btn-success" id="viewEditDonorFormBtn" data-donor-id="${donor.donor_id}">
-                            <i class="fas fa-edit me-2"></i> View/Edit Donor Form
                         </button>
                         `}
                     </div>`;
@@ -1348,55 +1342,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             
                             if (donorModal) donorModal.hide();
                             if (processDonorConfirmationModal) processDonorConfirmationModal.show();
-                        });
-                        
-                        document.getElementById('viewEditDonorFormBtn').addEventListener('click', function() {
-                            const donorId = this.getAttribute('data-donor-id');
-                            
-                            if (!donorId) {
-                                console.error('No donor ID found for view/edit button');
-                                alert('Error: Donor ID not found. Please try again.');
-                                return;
-                            }
-                            
-                            console.log('Viewing/editing donor ID:', donorId);
-                            
-                            // Close donor modal and show loading modal
-                            const donorModal = bootstrap.Modal.getInstance(document.getElementById('donorModal'));
-                            const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
-                            
-                            if (donorModal) donorModal.hide();
-                            loadingModal.show();
-                            
-                            // Store the donor_id in the session then redirect
-                            fetch('../../assets/php_func/set_donor_session.php', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({
-                                    donor_id: donorId,
-                                    view_mode: true // Flag to indicate this is for viewing/editing
-                                })
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    console.log('Donor ID stored in session for viewing/editing');
-                                    setTimeout(() => {
-                                        window.location.href = '../../src/views/forms/donor-form.php?mode=edit&donor_id=' + donorId;
-                                    }, 1000);
-                                } else {
-                                    console.error('Failed to store donor ID in session:', data.error);
-                                    alert('Error: Failed to prepare donor form. Please try again.');
-                                    loadingModal.hide();
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Error preparing donor form:', error);
-                                alert('Error: Failed to prepare donor form. Please try again.');
-                                loadingModal.hide();
-                            });
                         });
                     } else if (eligibility.status === 'approved') {
                         // For approved donors, no buttons to handle
