@@ -542,36 +542,42 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" style="width: 65px; height: 65px; object-fit: contain;">
                         <span class="text-primary ms-1" style="font-size: 1.5rem; font-weight: 600;">Dashboard</span>
                     </div>
-                <a href="dashboard-Inventory-System.php" class="nav-link">
-                    <span><i class="fas fa-home"></i>Home</span>
-                </a>
-                
-                <a class="nav-link active" data-bs-toggle="collapse" href="#bloodDonationsCollapse" role="button" aria-expanded="true" aria-controls="bloodDonationsCollapse">
-                    <span><i class="fas fa-tint"></i>Blood Donations</span>
-                    <i class="fas fa-chevron-down"></i>
-                </a>
-                <div class="collapse show" id="bloodDonationsCollapse">
-                    <div class="collapse-menu">
-                        <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" class="nav-link <?php echo ($status === 'pending' || !$status) ? 'active' : ''; ?>">Pending</a>
-                        <a href="dashboard-Inventory-System-list-of-donations.php?status=approved" class="nav-link <?php echo $status === 'approved' ? 'active' : ''; ?>">Approved</a>
-                        <a href="dashboard-Inventory-System-list-of-donations.php?status=declined" class="nav-link <?php echo $status === 'declined' ? 'active' : ''; ?>">Declined</a>
+                <ul class="nav flex-column">
+                    <a href="dashboard-Inventory-System.php" class="nav-link">
+                        <span><i class="fas fa-home"></i>Home</span>
+                    </a>
+                    <a class="nav-link" data-bs-toggle="collapse" href="#bloodDonationsCollapse" role="button" aria-expanded="false" aria-controls="bloodDonationsCollapse">
+                        <span><i class="fas fa-tint"></i>Blood Donations</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </a>
+                    <div class="collapse<?php echo (!isset($status) || in_array($status, ['pending', 'approved', 'declined'])) ? ' show' : ''; ?>" id="bloodDonationsCollapse">
+                        <div class="collapse-menu">
+                            <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" class="nav-link<?php echo ($status === 'pending' || !$status) ? ' active' : ''; ?>">Pending</a>
+                            <a href="dashboard-Inventory-System-list-of-donations.php?status=approved" class="nav-link<?php echo $status === 'approved' ? ' active' : ''; ?>">Approved</a>
+                            <a href="dashboard-Inventory-System-list-of-donations.php?status=declined" class="nav-link<?php echo $status === 'declined' ? ' active' : ''; ?>">Declined</a>
+                        </div>
                     </div>
-                </div>
-
-                <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
-                    <span><i class="fas fa-tint"></i>Blood Bank</span>
-                </a>
-                <a href="Dashboard-Inventory-System-Hospital-Request.php" class="nav-link">
-                    <span><i class="fas fa-list"></i>Requests</span>
-                </a>
-                <a href="Dashboard-Inventory-System-Handed-Over.php" class="nav-link">
-                    <span><i class="fas fa-check"></i>Handover</span>
-                </a>
-                <a href="../../assets/php_func/logout.php" class="nav-link">
-                        <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
-                </a>
-            </nav>
-        </div>
+                    <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
+                        <span><i class="fas fa-tint"></i>Blood Bank</span>
+                    </a>
+                    <a class="nav-link" data-bs-toggle="collapse" href="#hospitalRequestsCollapse" role="button" aria-expanded="false" aria-controls="hospitalRequestsCollapse">
+                        <span><i class="fas fa-list"></i>Hospital Requests</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </a>
+                    <div class="collapse" id="hospitalRequestsCollapse">
+                        <div class="collapse-menu">
+                            <a href="Dashboard-Inventory-System-Hospital-Request.php?status=requests" class="nav-link">Requests</a>
+                            <a href="Dashboard-Inventory-System-Handed-Over.php?status=accepted" class="nav-link">Accepted</a>
+                            <a href="Dashboard-Inventory-System-Handed-Over.php?status=handedover" class="nav-link">Handed Over</a>
+                            <a href="Dashboard-Inventory-System-Handed-Over.php?status=declined" class="nav-link">Declined</a>
+                        </div>
+                    </div>
+                    <a href="../../assets/php_func/logout.php" class="nav-link">
+                            <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
+                    </a>
+                </ul>
+            </div>
+           </nav>
            <!-- Main Content -->
            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
             <div class="container-fluid p-4 custom-margin">

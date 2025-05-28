@@ -143,17 +143,28 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
     }
 }
 
-// Fetch blood requests with pending status
-function fetchBloodRequests() {
-    $endpoint = "blood_requests?status=eq.Pending&order=is_asap.desc,requested_on.desc";
+// Fetch blood requests based on status from GET parameter
+$status = isset($_GET['status']) ? strtolower($_GET['status']) : 'requests';
+
+function fetchBloodRequestsByStatus($status) {
+    if ($status === 'accepted') {
+        $endpoint = "blood_requests?status=eq.Accepted&order=is_asap.desc,requested_on.desc";
+    } elseif ($status === 'handedover') {
+        $endpoint = "blood_requests?status=eq.Confirmed&order=is_asap.desc,requested_on.desc";
+    } elseif ($status === 'declined') {
+        $endpoint = "blood_requests?status=eq.Declined&order=is_asap.desc,requested_on.desc";
+    } else { // 'requests' or any other value defaults to pending
+        $endpoint = "blood_requests?status=eq.Pending&order=is_asap.desc,requested_on.desc";
+    }
     $response = supabaseRequest($endpoint);
-    
     if ($response['code'] >= 200 && $response['code'] < 300) {
         return $response['data'];
     } else {
         return [];
     }
 }
+
+$blood_requests = fetchBloodRequestsByStatus($status);
 
 // Handle request acceptance
 if (isset($_POST['accept_request'])) {
@@ -188,7 +199,7 @@ if (isset($_POST['accept_request'])) {
                     // Success! Set a success message instead of redirecting
                     $success_message = "Request #$request_id has been successfully accepted. You can view it in the Handover section.";
                     // Refresh the list of blood requests
-                    $blood_requests = fetchBloodRequests();
+                    $blood_requests = fetchBloodRequestsByStatus($status);
                 } else {
                     // Format a better error message for debugging
                     $error_message = "Failed to accept request. Error code: " . $response['code'];
@@ -257,9 +268,6 @@ if (isset($_POST['decline_request'])) {
         }
     }
 }
-
-// Fetch blood requests
-$blood_requests = fetchBloodRequests();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -755,37 +763,43 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" style="width: 65px; height: 65px; object-fit: contain;">
                         <span class="text-primary ms-1" style="font-size: 1.5rem; font-weight: 600;">Dashboard</span>
                     </div>
-                <a href="dashboard-Inventory-System.php" class="nav-link">
-                    <span><i class="fas fa-home"></i>Home</span>
-                </a>
-                
-                <a class="nav-link" data-bs-toggle="collapse" href="#bloodDonationsCollapse" role="button" aria-expanded="false" aria-controls="bloodDonationsCollapse">
-                    <span><i class="fas fa-tint"></i>Blood Donations</span>
-                    <i class="fas fa-chevron-down"></i>
-                </a>
-                <div class="collapse" id="bloodDonationsCollapse">
-                    <div class="collapse-menu">
-                        <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" class="nav-link">Pending</a>
-                        <a href="dashboard-Inventory-System-list-of-donations.php?status=approved" class="nav-link">Approved</a>
-                        <a href="dashboard-Inventory-System-list-of-donations.php?status=declined" class="nav-link">Declined</a>
+                <ul class="nav flex-column">
+                    <a href="dashboard-Inventory-System.php" class="nav-link">
+                        <span><i class="fas fa-home"></i>Home</span>
+                    </a>
+                    <a class="nav-link" data-bs-toggle="collapse" href="#bloodDonationsCollapse" role="button" aria-expanded="false" aria-controls="bloodDonationsCollapse">
+                        <span><i class="fas fa-tint"></i>Blood Donations</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </a>
+                    <div class="collapse" id="bloodDonationsCollapse">
+                        <div class="collapse-menu">
+                            <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" class="nav-link">Pending</a>
+                            <a href="dashboard-Inventory-System-list-of-donations.php?status=approved" class="nav-link">Approved</a>
+                            <a href="dashboard-Inventory-System-list-of-donations.php?status=declined" class="nav-link">Declined</a>
+                        </div>
                     </div>
-                </div>
-
-                <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
-                    <span><i class="fas fa-tint"></i>Blood Bank</span>
-                </a>
-                <a href="Dashboard-Inventory-System-Hospital-Request.php" class="nav-link active">
-                    <span><i class="fas fa-list"></i>Requests</span>
-                </a>
-                <a href="Dashboard-Inventory-System-Handed-Over.php" class="nav-link">
-                    <span><i class="fas fa-check"></i>Handover</span>
-                </a>
-                <a href="../../assets/php_func/logout.php" class="nav-link">
-                        <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
-                </a>
+                    <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
+                        <span><i class="fas fa-tint"></i>Blood Bank</span>
+                    </a>
+                    <a class="nav-link" data-bs-toggle="collapse" href="#hospitalRequestsCollapse" role="button" aria-expanded="false" aria-controls="hospitalRequestsCollapse">
+                        <span><i class="fas fa-list"></i>Hospital Requests</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </a>
+                    <div class="collapse<?php echo (!isset($status) || in_array($status, ['requests', 'accepted', 'handedover', 'declined'])) ? ' show' : ''; ?>" id="hospitalRequestsCollapse">
+                        <div class="collapse-menu">
+                            <a href="Dashboard-Inventory-System-Hospital-Request.php?status=requests" class="nav-link<?php echo (!isset($_GET['status']) || $_GET['status'] === 'requests') ? ' active' : ''; ?>">Requests</a>
+                            <a href="Dashboard-Inventory-System-Handed-Over.php?status=accepted" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'accepted') ? ' active' : ''; ?>">Accepted</a>
+                            <a href="Dashboard-Inventory-System-Handed-Over.php?status=handedover" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'handedover') ? ' active' : ''; ?>">Handed Over</a>
+                            <a href="Dashboard-Inventory-System-Handed-Over.php?status=declined" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'declined') ? ' active' : ''; ?>">Declined</a>
+                        </div>
+                    </div>
+                    <a href="../../assets/php_func/logout.php" class="nav-link">
+                            <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
+                    </a>
+                </ul>
             </nav>
 
-           <!-- Main Content -->
+        <!-- Main Content -->
         <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 mb-5">
             <?php if (!empty($error_message)): ?>
             <div class="alert alert-danger alert-dismissible fade show mt-3" role="alert">
@@ -810,7 +824,19 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             <?php endif; ?>
             
             <div class="container-fluid p-3 email-container">
-                <h2 class="text-left">Hospital Blood Requests</h2>
+                <h2 class="text-left">
+                    <?php
+                        if ($status === 'accepted') {
+                            echo 'Accepted Hospital Requests';
+                        } elseif ($status === 'handedover') {
+                            echo 'Handed Over Hospital Requests';
+                        } elseif ($status === 'declined') {
+                            echo 'Declined Hospital Requests';
+                        } else {
+                            echo 'Hospital Requests';
+                        }
+                    ?>
+                </h2>
                 
                 <div class="row mb-3">
                     <div class="col-12">
@@ -841,7 +867,19 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             
                 <!-- Blood Request Items -->
                 <?php if (empty($blood_requests)): ?>
-                    <div class="alert alert-info text-center">No pending blood requests found.</div>
+                    <div class="alert alert-info text-center">
+                        <?php
+                            if ($status === 'accepted') {
+                                echo 'No accepted blood requests found.';
+                            } elseif ($status === 'handedover') {
+                                echo 'No handed over blood requests found.';
+                            } elseif ($status === 'declined') {
+                                echo 'No declined blood requests found.';
+                            } else {
+                                echo 'No hospital blood requests found.';
+                            }
+                        ?>
+                    </div>
                 <?php else: ?>
                     <?php foreach ($blood_requests as $request): ?>
                         <?php 
