@@ -1034,7 +1034,7 @@ select.donor_form_input[disabled] {
     <div class="container-fluid p-0">
         <!-- Header -->
         <div class="dashboard-home-header">
-            <h4 class="header-title">Staff Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
+            <h4 class="header-title">Interviewer Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
             <button class="register-btn" onclick="showConfirmationModal()">
                 Register Donor
             </button>
@@ -1090,7 +1090,7 @@ select.donor_form_input[disabled] {
             <main class="col-md-9 col-lg-10 main-content">
                 <div class="content-wrapper">
                     <div class="welcome-section">
-                        <h2 class="welcome-title">Welcome, Blood Bank Reviewer!</h2>
+                        <h2 class="welcome-title">Welcome, Interviewer!</h2>
                     </div>
                     
                     <!-- Status Cards -->

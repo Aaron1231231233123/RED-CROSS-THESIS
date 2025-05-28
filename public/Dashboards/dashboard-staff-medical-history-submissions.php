@@ -623,7 +623,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
             <main class="col-md-9 col-lg-10 main-content">
                 <div class="content-wrapper">
                     <div class="welcome-section">
-                        <h2 class="welcome-title">Welcome, Blood Bank Reviewer!</h2>
+                        <h2 class="welcome-title">Welcome, Staff!</h2>
                     </div>
                     
                     <!-- Status Cards -->
