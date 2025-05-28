@@ -234,6 +234,22 @@ if (isset($_POST['update_completed'])) {
 
 // Fetch blood requests
 $handover_requests = fetchHandoverRequests();
+
+// Filter by status if GET parameter is set
+$filter_status = isset($_GET['status']) ? strtolower($_GET['status']) : '';
+if ($filter_status === 'accepted') {
+    $handover_requests = array_filter($handover_requests, function($req) {
+        return isset($req['status']) && $req['status'] === 'Accepted';
+    });
+} elseif ($filter_status === 'handedover') {
+    $handover_requests = array_filter($handover_requests, function($req) {
+        return isset($req['status']) && $req['status'] === 'Confirmed';
+    });
+} elseif ($filter_status === 'declined') {
+    $handover_requests = array_filter($handover_requests, function($req) {
+        return isset($req['status']) && $req['status'] === 'Declined';
+    });
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -699,12 +715,25 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
                     <span><i class="fas fa-tint me-2"></i>Blood Bank</span>
                 </a>
-                <a href="Dashboard-Inventory-System-Hospital-Request.php" class="nav-link">
-                    <span><i class="fas fa-list me-2"></i>Requests</span>
+                
+                <a class="nav-link" data-bs-toggle="collapse" href="#hospitalRequestsCollapse" role="button" aria-expanded="true" aria-controls="hospitalRequestsCollapse">
+                    <span><i class="fas fa-list"></i>Hospital Requests</span>
+                    <i class="fas fa-chevron-down"></i>
                 </a>
-                <a href="Dashboard-Inventory-System-Handed-Over.php" class="nav-link active">
-                    <span><i class="fas fa-check me-2"></i>Handover</span>
-                </a>
+                <div class="collapse show" id="hospitalRequestsCollapse">
+                    <div class="collapse-menu">
+                        <a href="Dashboard-Inventory-System-Hospital-Request.php?status=requests" class="nav-link<?php echo (!isset($_GET['status']) || $_GET['status'] === 'requests') ? ' active' : ''; ?>">Requests</a>
+                        <a href="Dashboard-Inventory-System-Handed-Over.php?status=accepted" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'accepted') ? ' active' : ''; ?>">Accepted</a>
+                        <a href="Dashboard-Inventory-System-Handed-Over.php?status=handedover" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'handedover') ? ' active' : ''; ?>">Handed Over</a>
+                        <a href="Dashboard-Inventory-System-Handed-Over.php?status=declined" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'declined') ? ' active' : ''; ?>">Declined</a>
+                    </div>
+                </div>
+                
+                
+                
+                
+                
+                
                 <a href="../../assets/php_func/logout.php" class="nav-link">
                     <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
                 </a>
@@ -728,7 +757,19 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             <?php endif; ?>
 
             <div class="container-fluid p-3 email-container">
-                    <h2 class="text-left">List of Handed Over Requests</h2>
+                    <h2 class="text-left">
+                        <?php
+                            if ($filter_status === 'accepted') {
+                                echo 'Accepted Requests';
+                            } elseif ($filter_status === 'handedover') {
+                                echo 'Handed Over Requests';
+                            } elseif ($filter_status === 'declined') {
+                                echo 'Declined Requests';
+                            } else {
+                                echo 'List of Handed Over Requests';
+                            }
+                        ?>
+                    </h2>
                     <div class="row mb-3">
                         <div class="col-12">
                             <div class="search-container">

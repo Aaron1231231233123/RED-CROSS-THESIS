@@ -1225,12 +1225,18 @@ h6 {
                         <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
                             <span><i class="fas fa-tint"></i>Blood Bank</span>
                         </a>
-                        <a href="Dashboard-Inventory-System-Hospital-Request.php" class="nav-link">
-                            <span><i class="fas fa-list"></i>Requests</span>
+                        <a class="nav-link" data-bs-toggle="collapse" href="#hospitalRequestsCollapse" role="button" aria-expanded="false" aria-controls="hospitalRequestsCollapse">
+                            <span><i class="fas fa-list"></i>Hospital Requests</span>
+                            <i class="fas fa-chevron-down"></i>
                         </a>
-                        <a href="Dashboard-Inventory-System-Handed-Over.php" class="nav-link">
-                            <span><i class="fas fa-check"></i>Handover</span>
-                        </a>
+                        <div class="collapse" id="hospitalRequestsCollapse">
+                            <div class="collapse-menu">
+                                <a href="Dashboard-Inventory-System-Hospital-Request.php?status=requests" class="nav-link">Requests</a>
+                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=accepted" class="nav-link">Accepted</a>
+                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=handedover" class="nav-link">Handed Over</a>
+                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=declined" class="nav-link">Declined</a>
+                            </div>
+                        </div>
                         <a href="../../assets/php_func/logout.php" class="nav-link">
                                 <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
                         </a>
