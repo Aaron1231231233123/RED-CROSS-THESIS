@@ -316,7 +316,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         if (isset($_POST['reason']) && !empty($_POST['reason'])) {
-            $physical_exam_data['recommendation'] = $_POST['reason'];
+            $physical_exam_data['reason'] = $_POST['reason'];
         }
         
         if (isset($_POST['blood_bag_type']) && !empty($_POST['blood_bag_type'])) {

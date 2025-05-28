@@ -599,7 +599,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
 /* GIS Map Styling */
 #map {
-    height: 600px;
+    height: 800px;
+    min-height: 400px;
     width: 100%;
     max-width: 1200px;
     margin: 0 auto;
@@ -1588,9 +1589,9 @@ if ($statusClass === 'critical') {
                         </div>
                         <div class="row">
                             <div class="col-md-9">
-                                <div id="map" class="bg-light rounded-3" style="height: 600px; width: 100%; max-width: 100%; margin: 0 auto; border: 1px solid #eee;"></div>
+                                <div id="map" class="bg-light rounded-3" style="height: 677px; width: 100%; max-width: 100%; margin: 0 auto; border: 1px solid #eee;"></div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-3 dashboard-gis-sidebar">
                                 <div class="card mb-3">
                                     <div class="card-header bg-light d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#summaryCollapse">
                                         <h6 class="card-title mb-0">Summary</h6>
@@ -1602,7 +1603,7 @@ if ($statusClass === 'critical') {
                                         </div>
                                     </div>
                                 </div>
-                                <div class="card">
+                                <div class="card mb-3">
                                     <div class="card-header bg-light d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#locationsCollapse">
                                         <h6 class="card-title mb-0">Top Donor Locations</h6>
                                         <i class="fas fa-chevron-down"></i>
@@ -1615,6 +1616,31 @@ if ($statusClass === 'critical') {
                                         </div>
                                     </div>
                                 </div>
+                                <div class="card" id="locationActionsCard">
+                                    <div class="card-body p-3">
+                                        <h6 class="mb-3">Blood Drive Actions</h6>
+                                        <form id="bloodDriveForm">
+                                            <div class="mb-2">
+                                                <label for="selectedLocation" class="form-label">Selected Location</label>
+                                                <input type="text" class="form-control" id="selectedLocation" name="selectedLocation" readonly placeholder="Select a location from Top Donor Locations">
+                                            </div>
+                                            <div class="row mb-3">
+                                                <div class="col-6">
+                                                    <label for="driveDate" class="form-label">Date</label>
+                                                    <input type="date" class="form-control" id="driveDate" name="driveDate">
+                                                </div>
+                                                <div class="col-6">
+                                                    <label for="driveTime" class="form-label">Time</label>
+                                                    <input type="time" class="form-control" id="driveTime" name="driveTime">
+                                                </div>
+                                            </div>
+                                            <div class="d-flex gap-2">
+                                                <button type="button" class="btn btn-outline-danger w-50" id="notifyDonorsBtn" disabled>Notify Donors</button>
+                                                <button type="button" class="btn btn-danger w-50" id="scheduleDriveBtn" disabled>Schedule Blood Drive</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1622,15 +1648,20 @@ if ($statusClass === 'critical') {
                     <!-- Add required CSS -->
                     <style>
                         .location-list {
-                            max-height: 200px;
+                            max-height: 300px;
                             overflow-y: auto;
                         }
                         .location-list li {
                             padding: 6px 0;
                             border-bottom: 1px solid #eee;
+                            transition: background 0.2s;
+                            cursor: pointer;
                         }
                         .location-list li:last-child {
                             border-bottom: none;
+                        }
+                        .location-list li:hover {
+                            background: #ffeaea;
                         }
                         .summary-item {
                             margin-bottom: 8px;
@@ -1972,6 +2003,49 @@ if ($statusClass === 'critical') {
                 });
             };
         });
+    </script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Make Top Donor Locations pressable and connect to the form
+        const locationListEl = document.getElementById('locationList');
+        const selectedLocationInput = document.getElementById('selectedLocation');
+        const notifyBtn = document.getElementById('notifyDonorsBtn');
+        const scheduleBtn = document.getElementById('scheduleDriveBtn');
+        const driveDate = document.getElementById('driveDate');
+        const driveTime = document.getElementById('driveTime');
+
+        // Add click event to each location
+        Array.from(locationListEl.querySelectorAll('li')).forEach(li => {
+            li.style.cursor = 'pointer';
+            li.addEventListener('click', function() {
+                // Remove highlight from all
+                Array.from(locationListEl.querySelectorAll('li')).forEach(l => l.classList.remove('bg-light', 'fw-bold'));
+                // Highlight selected
+                this.classList.add('bg-light', 'fw-bold');
+                // Set location input
+                selectedLocationInput.value = this.querySelector('strong').textContent;
+                // Enable buttons if date and time are set
+                checkEnableButtons();
+            });
+        });
+        // Enable buttons only if location, date, and time are set
+        function checkEnableButtons() {
+            const hasLocation = selectedLocationInput.value.trim() !== '';
+            const hasDate = driveDate.value.trim() !== '';
+            const hasTime = driveTime.value.trim() !== '';
+            notifyBtn.disabled = !(hasLocation && hasDate && hasTime);
+            scheduleBtn.disabled = !(hasLocation && hasDate && hasTime);
+        }
+        driveDate.addEventListener('input', checkEnableButtons);
+        driveTime.addEventListener('input', checkEnableButtons);
+        // Placeholder actions
+        notifyBtn.addEventListener('click', function() {
+            alert('Notify donors in ' + selectedLocationInput.value + ' on ' + driveDate.value + ' at ' + driveTime.value);
+        });
+        scheduleBtn.addEventListener('click', function() {
+            alert('Schedule blood drive in ' + selectedLocationInput.value + ' on ' + driveDate.value + ' at ' + driveTime.value);
+        });
+    });
     </script>
 </body>
 </html>
