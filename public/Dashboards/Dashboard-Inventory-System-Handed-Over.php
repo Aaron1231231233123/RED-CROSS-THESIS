@@ -906,28 +906,29 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 </div>
             </div>
             
-            <!-- Update Status Modal -->
+            <!-- Update Status Modal for Approved Collapsable -->
+            <?php if ($filter_status === 'accepted'): ?>
             <div class="modal fade" id="updateStatusModal" tabindex="-1" aria-labelledby="updateStatusModalLabel" aria-hidden="true">
                 <div class="modal-dialog">
                     <div class="modal-content">
-                        <div class="modal-header bg-dark text-white">
-                            <h5 class="modal-title" id="updateStatusModalLabel">Update Request Status</h5>
+                        <div class="modal-header" style="background-color: #a80000; color: #fff;">
+                            <h5 class="modal-title" id="updateStatusModalLabel">Confirm Blood Release</h5>
                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <form method="post">
                             <div class="modal-body">
-                                <p>Are you sure you want to update this request to <strong>Delivering</strong> status?</p>
-                                <p>This indicates that the blood units are currently being transported to the requesting hospital.</p>
+                                <p>The blood request will be <strong>marked as picked up</strong>. This action will deduct the issued blood unit(s) from the inventory.</p>
+                                <p>Please <strong>confirm</strong> that the blood has been successfully handed over to the recipient or their representative.</p>
                                 <input type="hidden" id="update-request-id" name="request_id">
                             </div>
                             <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                <button type="submit" name="update_delivering" class="btn btn-primary">Update to Delivering</button>
+                                <button type="submit" name="update_delivering" class="btn btn-warning text-white" style="background-color: #ffc107; color: #fff;">Confirm Pickup</button>
                             </div>
                         </form>
                     </div>
                 </div>
             </div>
+            <?php endif; ?>
             
             <!-- Complete Request Modal -->
             <div class="modal fade" id="completeRequestModal" tabindex="-1" aria-labelledby="completeRequestModalLabel" aria-hidden="true">
