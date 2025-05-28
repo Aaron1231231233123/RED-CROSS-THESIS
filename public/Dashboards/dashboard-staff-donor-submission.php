@@ -1125,11 +1125,11 @@ select.donor_form_input[disabled] {
                         <table class="dashboard-staff-tables table-hover">
                             <thead>
                                 <tr>
-                                    <th>Date</th>
+                                    <th>Donation Date</th>
                                     <th>Surname</th>
-                                    <th>Firstname</th>
-                                    <th>Birthdate</th>
-                                    <th>Sex</th>
+                                    <th>First Name</th>
+                                    <th>Gender</th>
+                                    <th>Age</th>
                                 </tr>
                             </thead>
                             <tbody id="donorTableBody">
@@ -1138,21 +1138,17 @@ select.donor_form_input[disabled] {
                                         <?php
                                         // Ensure $donor is an array before merging
                                         if (is_array($donor)) {
-                                            // Make sure donor_id is explicitly included in the data
-                                            $donorData = $donor;
-                                            $donorData['donor_id'] = $donor['donor_id'] ?? null;
-                                            
-                                            // For debugging
-                                            error_log("Donor data being encoded: " . substr(print_r($donorData, true), 0, 200));
-                                            
-                                            // Encode with proper JSON flags and error handling
-                                            $encoded_data = json_encode($donorData, JSON_HEX_APOS | JSON_HEX_QUOT);
+                                            // Calculate age if missing but birthdate is available
+                                            if (empty($donor['age']) && !empty($donor['birthdate'])) {
+                                                $birthDate = new DateTime($donor['birthdate']);
+                                                $today = new DateTime();
+                                                $donor['age'] = $birthDate->diff($today)->y;
+                                            }
+                                            $encoded_data = json_encode($donor, JSON_HEX_APOS | JSON_HEX_QUOT);
                                             if (json_last_error() !== JSON_ERROR_NONE) {
-                                                error_log("JSON encoding error: " . json_last_error_msg());
                                                 $encoded_data = '{}';
                                             }
                                         } else {
-                                            error_log("Invalid donor data: " . print_r($donor, true));
                                             continue;
                                         }
                                         ?>
@@ -1166,13 +1162,12 @@ select.donor_form_input[disabled] {
                                                     echo $date->format('F d, Y h:i A');
                                                 } else {
                                                     echo 'N/A';
-                                                    error_log("Missing 'submitted_at' for donor: " . print_r($donor, true));
                                                 }
                                             ?></td>
                                             <td><?php echo isset($donor['surname']) ? htmlspecialchars($donor['surname']) : ''; ?></td>
                                             <td><?php echo isset($donor['first_name']) ? htmlspecialchars($donor['first_name']) : ''; ?></td>
-                                            <td><?php echo isset($donor['birthdate']) ? htmlspecialchars($donor['birthdate']) : ''; ?></td>
-                                            <td><?php echo isset($donor['sex']) ? htmlspecialchars($donor['sex']) : ''; ?></td>
+                                            <td><?php echo isset($donor['sex']) ? htmlspecialchars(ucfirst($donor['sex'])) : ''; ?></td>
+                                            <td><?php echo isset($donor['age']) ? htmlspecialchars($donor['age']) : ''; ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php endif; ?>

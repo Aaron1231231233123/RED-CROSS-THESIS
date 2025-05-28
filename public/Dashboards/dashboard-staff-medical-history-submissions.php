@@ -47,7 +47,7 @@ $offset = ($current_page - 1) * $records_per_page;
 $donors = [];
 
 // Get all donor records
-$query_url = SUPABASE_URL . '/rest/v1/donor_form?select=donor_id,surname,first_name,middle_name,birthdate,age,submitted_at&order=submitted_at.desc';
+$query_url = SUPABASE_URL . '/rest/v1/donor_form?select=donor_id,surname,first_name,middle_name,birthdate,age,sex,registration_channel,submitted_at&order=submitted_at.desc';
 
 $ch = curl_init();
 curl_setopt_array($ch, [
@@ -154,7 +154,7 @@ if ($response === false || is_null(json_decode($response, true))) {
 }
 
 // Handle status filtering
-$status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
+$status_filter = isset($_GET['status']) ? $_GET['status'] : 'incoming';
 
 // Filter donors based on status if needed
 $filtered_donors = [];
@@ -217,9 +217,11 @@ foreach ($donorGroups as $group) {
     $donors[] = $donor;
 }
 
-// Sort by latest submission date (newest first)
+// Sort by updated_at (FIFO: oldest first)
 usort($donors, function($a, $b) {
-    return $b['latest_submission'] <=> $a['latest_submission'];
+    $a_time = isset($a['updated_at']) ? strtotime($a['updated_at']) : (isset($a['latest_submission']) ? strtotime($a['latest_submission']) : (isset($a['submitted_at']) ? strtotime($a['submitted_at']) : 0));
+    $b_time = isset($b['updated_at']) ? strtotime($b['updated_at']) : (isset($b['latest_submission']) ? strtotime($b['latest_submission']) : (isset($b['submitted_at']) ? strtotime($b['submitted_at']) : 0));
+    return $a_time <=> $b_time;
 });
 
 $total_records = count($donors);
@@ -626,15 +628,15 @@ $donors = array_slice($donors, $offset, $records_per_page);
                     
                     <!-- Status Cards -->
                     <div class="dashboard-staff-status">
-                        <a href="?status=incoming" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'incoming') ? 'active' : ''; ?>">
+                        <a href="?status=incoming" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'incoming' ? 'active' : ''); ?>">
                             <p class="dashboard-staff-count"><?php echo $incoming_count; ?></p>
                             <p class="dashboard-staff-title">Incoming Registrations</p>
                         </a>
-                        <a href="?status=approved" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'approved') ? 'active' : ''; ?>">
+                        <a href="?status=approved" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'approved' ? 'active' : ''); ?>">
                             <p class="dashboard-staff-count"><?php echo $approved_count; ?></p>
                             <p class="dashboard-staff-title">Approved</p>
                         </a>
-                        <a href="?status=declined" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'declined') ? 'active' : ''; ?>">
+                        <a href="?status=declined" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'declined' ? 'active' : ''); ?>">
                             <p class="dashboard-staff-count"><?php echo $declined_count; ?></p>
                             <p class="dashboard-staff-title">Declined</p>
                         </a>
@@ -656,20 +658,27 @@ $donors = array_slice($donors, $offset, $records_per_page);
                         <table class="dashboard-staff-tables table-hover">
                             <thead>
                                 <tr>
-                                    <th>Donation #</th>
-                                    <th>Last Donation</th>
+                                    <th>Donation Date</th>
                                     <th>Surname</th>
                                     <th>First Name</th>
-                                    <th>Middle Name</th>
+                                    <th>Gender</th>
                                     <th>Age</th>
-                                    <th>Total</th>
+                                    <th>Gateway</th>
                                 </tr>
                             </thead>
                             <tbody id="donorTableBody">
                                 <?php if($donors && is_array($donors)): ?>
                                     <?php foreach($donors as $index => $donor): ?>
+                                        <?php
+                                        // Calculate age if missing but birthdate is available
+                                        if (empty($donor['age']) && !empty($donor['birthdate'])) {
+                                            $birthDate = new DateTime($donor['birthdate']);
+                                            $today = new DateTime();
+                                            $donor['age'] = $birthDate->diff($today)->y;
+                                        }
+                                        $gateway = isset($donor['registration_channel']) ? ($donor['registration_channel'] === 'Mobile' ? 'Mobile' : 'PRC Portal') : 'PRC Portal';
+                                        ?>
                                         <tr class="clickable-row" data-donor-id="<?php echo $donor['donor_id']; ?>">
-                                            <td><?php echo $offset + $index + 1; ?></td>
                                             <td><?php 
                                                 if (isset($donor['latest_submission'])) {
                                                     $date = new DateTime($donor['latest_submission']);
@@ -680,14 +689,14 @@ $donors = array_slice($donors, $offset, $records_per_page);
                                             ?></td>
                                             <td><?php echo isset($donor['surname']) ? htmlspecialchars($donor['surname']) : ''; ?></td>
                                             <td><?php echo isset($donor['first_name']) ? htmlspecialchars($donor['first_name']) : ''; ?></td>
-                                            <td><?php echo isset($donor['middle_name']) ? htmlspecialchars($donor['middle_name']) : ''; ?></td>
+                                            <td><?php echo !empty($donor['sex']) ? htmlspecialchars(ucfirst($donor['sex'])) : 'N/A'; ?></td>
                                             <td><?php echo isset($donor['age']) ? htmlspecialchars($donor['age']) : ''; ?></td>
-                                            <td><span class="badge bg-primary"><?php echo isset($donor['donation_count']) ? $donor['donation_count'] : '1'; ?></span></td>
+                                            <td><?php echo htmlspecialchars($gateway); ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr>
-                                        <td colspan="7" class="text-center">No donor records found</td>
+                                        <td colspan="6" class="text-center">No donor records found</td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>

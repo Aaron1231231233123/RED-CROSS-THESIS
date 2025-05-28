@@ -263,6 +263,13 @@ switch ($status_filter) {
         break;
 }
 
+// Sort screenings by updated_at (FIFO: oldest first)
+usort($display_screenings, function($a, $b) {
+    $a_time = isset($a['updated_at']) ? strtotime($a['updated_at']) : (isset($a['created_at']) ? strtotime($a['created_at']) : 0);
+    $b_time = isset($b['updated_at']) ? strtotime($b['updated_at']) : (isset($b['created_at']) ? strtotime($b['created_at']) : 0);
+    return $a_time <=> $b_time;
+});
+
 $total_records = count($display_screenings);
 $total_pages = ceil($total_records / $records_per_page);
 
@@ -808,11 +815,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                             <thead>
                                 <tr>
                                     <th>#</th>
-                                    <th>Date</th>
+                                    <th>Donation Date</th>
                                     <th>Surname</th>
                                     <th>First Name</th>
                                     <th>Blood Type</th>
-                                    <th>Donation Type</th>
                                 </tr>
                             </thead>
                             <tbody id="screeningTableBody">
@@ -830,7 +836,6 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                         
                                         // Blood type and donation type
                                         $bloodType = isset($screening['blood_type']) ? $screening['blood_type'] : 'Unknown';
-                                        $donationType = isset($screening['donation_type']) ? $screening['donation_type'] : 'Unknown';
                                         
                                         // Use the regular clickable-row class instead of pending-exam
                                         ?>
@@ -844,7 +849,6 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                             <td><?php echo htmlspecialchars($surname); ?></td>
                                             <td><?php echo htmlspecialchars($firstName); ?></td>
                                             <td><?php echo htmlspecialchars($bloodType); ?></td>
-                                            <td><?php echo htmlspecialchars($donationType); ?></td>
                                         </tr>
                                 <?php 
                                     }

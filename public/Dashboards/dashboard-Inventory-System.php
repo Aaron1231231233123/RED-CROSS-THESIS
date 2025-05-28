@@ -1070,6 +1070,8 @@ h6 {
     border-radius: 2px;
 }
     </style>
+    <!-- Iconify for custom icons -->
+    <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
 </head>
 <body>
     <!-- Notification Bell and Alerts -->
@@ -1567,7 +1569,7 @@ if ($statusClass === 'critical') {
                     <div class="mb-4">
                         <div class="d-flex justify-content-between align-items-center mb-3" style="margin-top: 30px;">
                             <div class="d-flex align-items-center">
-                                <span class="me-2" style="display: inline-block; width: 12px; height: 12px; background-color: #333; margin-right: 8px;"></span>
+                                <span class="iconify me-2" data-icon="mdi:map-marker" style="font-size: 1.5rem; color: #941022; vertical-align: middle;"></span>
                                 <h5 class="mb-0" style="font-weight: 600;">GIS Mapping</h5>
                             </div>
                             <div class="filters d-flex gap-3">

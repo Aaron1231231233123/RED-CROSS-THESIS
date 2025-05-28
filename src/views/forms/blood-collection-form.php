@@ -102,10 +102,35 @@ if ($response) {
 $sequence = getNextSequenceNumber($existing_numbers);
 $generated_serial = $prefix . $sequence;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_POST['blood-bag'])) {
     try {
         // Get and validate unit serial number first
         $unit_serial_number = $_POST['serial_number'] ?? '';
+        if (empty($unit_serial_number)) {
+            // Regenerate the serial number if missing from POST
+            $today = date('Ymd');
+            $prefix = "BC-" . $today . "-";
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => SUPABASE_URL . '/rest/v1/blood_collection?select=unit_serial_number&unit_serial_number=like.' . urlencode($prefix . '%'),
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY
+                ]
+            ]);
+            $response = curl_exec($ch);
+            curl_close($ch);
+            $existing_numbers = [];
+            if ($response) {
+                $results = json_decode($response, true);
+                foreach ($results as $result) {
+                    $existing_numbers[] = $result['unit_serial_number'];
+                }
+            }
+            $sequence = getNextSequenceNumber($existing_numbers);
+            $unit_serial_number = $prefix . $sequence;
+        }
         if (empty($unit_serial_number)) {
             throw new Exception("Unit serial number is required");
         }
@@ -445,7 +470,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         } else {
             // Log the error
-            error_log("Error inserting blood collection data. HTTP Code: " . $http_code . " Response: " . $response);
+            error_log('Supabase Error: ' . $response);
+            error_log('Supabase HTTP Code: ' . $http_code);
+            error_log('Supabase Data: ' . json_encode($data));
             throw new Exception("Failed to save blood collection data. Please try again.");
         }
     } catch (Exception $e) {

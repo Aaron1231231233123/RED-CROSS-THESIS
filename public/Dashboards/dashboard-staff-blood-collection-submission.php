@@ -69,7 +69,7 @@ error_log("Found " . count($collected_physical_exam_ids) . " physical exams that
 error_log("Approved collections: " . count($approved_collections) . ", Declined collections: " . count($declined_collections));
 
 // STEP 2: Get physical examination records with "Accepted" remarks only
-$physical_exam_url = SUPABASE_URL . '/rest/v1/physical_examination?remarks=eq.Accepted&select=physical_exam_id,donor_id,remarks,blood_bag_type,donor_form(surname,first_name)&order=created_at.desc';
+$physical_exam_url = SUPABASE_URL . '/rest/v1/physical_examination?remarks=eq.Accepted&select=physical_exam_id,donor_id,remarks,blood_bag_type,created_at,donor_form(surname,first_name,middle_name,birthdate,age)&order=created_at.desc';
 $ch = curl_init($physical_exam_url);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
@@ -206,6 +206,53 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
     echo "Showing " . count($examinations) . " records on this page<br>";
     echo "</pre>";
 }
+
+// Calculate age for each physical examination
+foreach ($physical_exams as &$exam) {
+    if (isset($exam['donor_form'])) {
+        // Calculate age if not present but birthdate is available
+        if (empty($exam['donor_form']['age']) && !empty($exam['donor_form']['birthdate'])) {
+            $birthDate = new DateTime($exam['donor_form']['birthdate']);
+            $today = new DateTime();
+            $exam['donor_form']['age'] = $birthDate->diff($today)->y;
+        }
+    }
+}
+
+// Group donors by unique identity and get last donation and total count
+$donorGroups = [];
+foreach ($display_exams as $exam) {
+    $donor = $exam['donor_form'] ?? [];
+    $key = ($donor['surname'] ?? '') . '|' . ($donor['first_name'] ?? '') . '|' . ($donor['middle_name'] ?? '') . '|' . ($donor['birthdate'] ?? '');
+    $age = $donor['age'] ?? '';
+    $created_at = $exam['created_at'] ?? null;
+    if (!isset($donorGroups[$key])) {
+        $donorGroups[$key] = [
+            'info' => $donor,
+            'count' => 1,
+            'latest_submission' => $created_at,
+            'age' => $age
+        ];
+    } else {
+        $donorGroups[$key]['count']++;
+        if ($created_at && $created_at > $donorGroups[$key]['latest_submission']) {
+            $donorGroups[$key]['latest_submission'] = $created_at;
+        }
+    }
+}
+$donors = array_values($donorGroups);
+
+// Sort donor groups by updated_at (FIFO: oldest first)
+usort($donors, function($a, $b) {
+    $a_time = isset($a['info']['updated_at']) ? strtotime($a['info']['updated_at']) : (isset($a['latest_submission']) ? strtotime($a['latest_submission']) : 0);
+    $b_time = isset($b['info']['updated_at']) ? strtotime($b['info']['updated_at']) : (isset($b['latest_submission']) ? strtotime($b['latest_submission']) : 0);
+    return $a_time <=> $b_time;
+});
+
+// Apply pagination to grouped donors
+$total_records = count($donors);
+$total_pages = ceil($total_records / $records_per_page);
+$paginated_donors = array_slice($donors, $offset, $records_per_page);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -734,34 +781,84 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                         <table class="dashboard-staff-tables table-hover">
                             <thead>
                                 <tr>
-                                    <th>#</th>
+                                    <th>Donation No.</th>
+                                    <th>Last Donation</th>
                                     <th>Surname</th>
                                     <th>First Name</th>
-                                    <th>Physical Exam Remarks</th>
-                                    <th>Blood Bag Type</th>
+                                    <th>Middle Name</th>
+                                    <th>Age</th>
+                                    <th>Total</th>
                                 </tr>
                             </thead>
                             <tbody id="bloodCollectionTableBody">
-                                <?php 
-                                if (is_array($examinations) && !empty($examinations)) {
-                                    $counter = 1; // Initialize counter
-                                    foreach ($examinations as $examination) {
-                                        if (!is_array($examination)) continue;
-                                        ?>
-                                        <tr class="clickable-row" data-examination='<?php echo htmlspecialchars(json_encode([
-                                            'donor_id' => $examination['donor_id'] ?? '',
-                                            'physical_exam_id' => $examination['physical_exam_id'] ?? ''
-                                        ]), JSON_HEX_APOS | JSON_HEX_QUOT); ?>'>
-                                            <td><?php echo $counter++; ?></td>
-                                            <td><?php echo isset($examination['donor_form']['surname']) ? htmlspecialchars($examination['donor_form']['surname']) : 'N/A'; ?></td>
-                                            <td><?php echo isset($examination['donor_form']['first_name']) ? htmlspecialchars($examination['donor_form']['first_name']) : 'N/A'; ?></td>
-                                            <td><?php echo isset($examination['remarks']) ? htmlspecialchars($examination['remarks']) : 'N/A'; ?></td>
-                                            <td><?php echo isset($examination['blood_bag_type']) ? htmlspecialchars($examination['blood_bag_type']) : 'N/A'; ?></td>
-                                        </tr>
-                                <?php 
+                                <?php
+                                // Group donors by unique identity and get last donation and total count
+                                $donorGroups = [];
+                                foreach ($display_exams as $exam) {
+                                    $donor = $exam['donor_form'] ?? [];
+                                    $key = ($donor['surname'] ?? '') . '|' . ($donor['first_name'] ?? '') . '|' . ($donor['middle_name'] ?? '') . '|' . ($donor['birthdate'] ?? '');
+                                    $age = $donor['age'] ?? '';
+                                    $created_at = $exam['created_at'] ?? null;
+                                    if (!isset($donorGroups[$key])) {
+                                        $donorGroups[$key] = [
+                                            'info' => $donor,
+                                            'count' => 1,
+                                            'latest_submission' => $created_at,
+                                            'age' => $age
+                                        ];
+                                    } else {
+                                        $donorGroups[$key]['count']++;
+                                        if ($created_at && $created_at > $donorGroups[$key]['latest_submission']) {
+                                            $donorGroups[$key]['latest_submission'] = $created_at;
+                                        }
                                     }
-                                } else {
-                                    echo '<tr><td colspan="5" class="text-center">No approved records found</td></tr>';
+                                }
+                                $donors = array_values($donorGroups);
+
+                                // Apply pagination to grouped donors
+                                $total_records = count($donors);
+                                $total_pages = ceil($total_records / $records_per_page);
+                                $paginated_donors = array_slice($donors, $offset, $records_per_page);
+
+                                foreach ($paginated_donors as $index => $group) {
+                                    $donor = $group['info'];
+                                    $lastDonation = $group['latest_submission'] ? date('F d, Y', strtotime($group['latest_submission'])) : 'N/A';
+                                    $donationNo = $offset + $index + 1;
+                                    $surname = $donor['surname'] ?? '';
+                                    $firstName = $donor['first_name'] ?? '';
+                                    $middleName = $donor['middle_name'] ?? '';
+                                    $age = $group['age'] ?? '';
+                                    $total = $group['count'];
+                                    // Find the corresponding exam for this donor group (latest submission)
+                                    $exam = null;
+                                    foreach ($display_exams as $e) {
+                                        if (($e['donor_form']['surname'] ?? '') === $surname &&
+                                            ($e['donor_form']['first_name'] ?? '') === $firstName &&
+                                            ($e['donor_form']['middle_name'] ?? '') === $middleName &&
+                                            ($e['donor_form']['birthdate'] ?? '') === ($donor['birthdate'] ?? '') &&
+                                            ($e['created_at'] ?? null) === $group['latest_submission']) {
+                                            $exam = $e;
+                                            break;
+                                        }
+                                    }
+                                    $data_exam = $exam ? htmlspecialchars(json_encode([
+                                        'donor_id' => $exam['donor_id'] ?? '',
+                                        'physical_exam_id' => $exam['physical_exam_id'] ?? '',
+                                        'created_at' => $exam['created_at'] ?? '',
+                                        'surname' => $surname,
+                                        'first_name' => $firstName,
+                                        'middle_name' => $middleName,
+                                        'age' => $age
+                                    ])) : '';
+                                    echo "<tr class='clickable-row' data-examination='{$data_exam}'>
+                                        <td>{$donationNo}</td>
+                                        <td>{$lastDonation}</td>
+                                        <td>" . htmlspecialchars($surname) . "</td>
+                                        <td>" . htmlspecialchars($firstName) . "</td>
+                                        <td>" . htmlspecialchars($middleName) . "</td>
+                                        <td>" . htmlspecialchars($age) . "</td>
+                                        <td><span class='badge bg-primary'>{$total}</span></td>
+                                    </tr>";
                                 }
                                 ?>
                             </tbody>
@@ -911,7 +1008,7 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                 closeModal();
                 loadingSpinner.style.display = "block";
                 
-                // Create form and submit
+                // Create a form to POST donor_id and physical_exam_id to blood-collection-form.php
                 const form = document.createElement('form');
                 form.method = 'POST';
                 form.action = '../../src/views/forms/blood-collection-form.php';
@@ -945,14 +1042,8 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                 form.appendChild(fromDashboardInput);
                 document.body.appendChild(form);
 
-                console.log("Submitting form with donor_id: " + currentCollectionData.donor_id + 
-                          ", physical_exam_id: " + currentCollectionData.physical_exam_id +
-                          ", role_id: 3");
-                
-                setTimeout(() => {
-                    loadingSpinner.style.display = "none";
-                    form.submit();
-                }, 2000);
+                // Only submit this form to open the blood collection form for user input
+                form.submit();
             });
 
             // No Button (Closes Modal)
