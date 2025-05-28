@@ -805,9 +805,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     <th>Component</th>
                                     <th>Hospital</th>
                                     <th>Doctor</th>
-                                    <?php if ($filter_status !== 'declined'): ?>
-                                        <th>Status</th>
-                                    <?php endif; ?>
                                     <th>Reason</th>
                                     <th>Actions</th>
                                 </tr>
@@ -815,10 +812,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <tbody>
                                 <?php if (empty($handover_requests)): ?>
                                 <tr>
-                                    <td colspan="10" class="text-center">No handover requests found</td>
+                                    <td colspan="9" class="text-center">No handover requests found</td>
                                 </tr>
                                 <?php else: ?>
                                     <?php foreach ($handover_requests as $request): ?>
+                                    <?php $status = isset($request['status']) ? $request['status'] : ''; ?>
                                     <tr>
                                         <td><?php echo $request['request_id']; ?></td>
                                         <td><?php echo htmlspecialchars($request['patient_name']); ?></td>
@@ -827,27 +825,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         <td><?php echo htmlspecialchars($request['component'] ?? 'Whole Blood'); ?></td>
                                         <td><?php echo htmlspecialchars($request['hospital_admitted']); ?></td>
                                         <td><?php echo htmlspecialchars($request['physician_name']); ?></td>
-                                        <?php $status = isset($request['status']) ? $request['status'] : ''; ?>
-                                        <?php if ($filter_status !== 'declined'): ?>
-                                        <td>
-                                            <?php 
-                                            if ($status === 'Confirmed'): ?>
-                                                <span class="badge bg-success">Confirmed</span>
-                                            <?php elseif ($status === 'Accepted'): ?>
-                                                <span class="badge bg-warning">Accepted</span>
-                                            <?php elseif ($status === 'Declined'): ?>
-                                                <span class="badge bg-danger">Declined</span>
-                                            <?php else: ?>
-                                                <span class="badge bg-secondary">Not Set</span>
-                                            <?php endif; ?>
-                                        </td>
-                                        <?php endif; ?>
                                         <td><?php echo isset($request['decline_reason']) ? htmlspecialchars($request['decline_reason']) : '-'; ?></td>
                                         <td>
                                             <button type="button" class="btn btn-sm btn-info view-details" data-request='<?php echo json_encode($request); ?>' title="View Details">
                                                 <i class="fas fa-eye"></i>
                                             </button>
-                                            
                                             <?php 
                                             // Show appropriate action buttons based on status
                                             if ($status === 'Accepted'): 

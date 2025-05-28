@@ -881,50 +881,59 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         ?>
                     </div>
                 <?php else: ?>
-                    <?php foreach ($blood_requests as $request): ?>
-                        <?php 
-                            $blood_type_display = $request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-');
-                            $component_display = "Whole Blood";
-                            $priority_display = $request['is_asap'] ? 'Urgent' : 'Routine';
-                            $hospital_name = $request['hospital_admitted'] ? $request['hospital_admitted'] : 'Hospital';
-                        ?>
-                        <div class="email-item d-flex justify-content-between align-items-center" 
-                             data-bs-toggle="modal" 
-                             data-bs-target="#requestModal" 
-                             onclick="loadRequestDetails(
-                                '<?php echo htmlspecialchars($request['request_id']); ?>', 
-                                '<?php echo htmlspecialchars($request['patient_name']); ?>', 
-                                '<?php echo htmlspecialchars($blood_type_display); ?>', 
-                                '<?php echo htmlspecialchars($component_display); ?>', 
-                                '<?php echo htmlspecialchars($request['rh_factor']); ?>', 
-                                '<?php echo htmlspecialchars($request['units_requested']); ?>', 
-                                '<?php echo htmlspecialchars($request['patient_diagnosis']); ?>', 
-                                '<?php echo htmlspecialchars($hospital_name); ?>', 
-                                '<?php echo htmlspecialchars($request['physician_name']); ?>', 
-                                '<?php echo htmlspecialchars($priority_display); ?>'
-                            )">
-                            <div>
-                                <span class="email-header text-decoration-underline">
-                                    <?php echo htmlspecialchars($hospital_name); ?> - <?php echo $request['is_asap'] ? 'Urgent' : 'Routine'; ?> Request
-                                </span><br>
-                                <span class="email-subtext">
-                                    Blood Type: <?php echo htmlspecialchars($blood_type_display); ?> | 
-                                    <?php echo htmlspecialchars($request['units_requested']); ?> Units | 
-                                    <?php echo htmlspecialchars($component_display); ?>
-                                </span>
-                            </div>
-                            <div class="d-flex align-items-center">
-                                <form method="POST" class="me-2" onsubmit="event.stopPropagation();">
-                                    <input type="hidden" name="request_id" value="<?php echo htmlspecialchars($request['request_id']); ?>">
-                                    <button type="button" name="accept_request" class="btn btn-success btn-sm p-2" 
-                                            onclick="event.stopPropagation();">
-                                        Accept Request
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover align-middle" id="requestTable">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Hospital</th>
+                                <th>Request Date</th>
+                                <th>Required Date</th>
+                                <th>Time Sent</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($blood_requests as $request): ?>
+                            <?php 
+                                $hospital_name = $request['hospital_admitted'] ? $request['hospital_admitted'] : 'Hospital';
+                                $request_date = $request['requested_on'] ? date('Y-m-d', strtotime($request['requested_on'])) : '-';
+                                $required_date = $request['when_needed'] ? date('Y-m-d', strtotime($request['when_needed'])) : '-';
+                                $time_sent = $request['when_needed'] ? strtoupper(date('h:i a', strtotime($request['when_needed']))) : '-';
+                                $blood_type_display = $request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-');
+                                $component_display = 'Whole Blood';
+                                $priority_display = $request['is_asap'] ? 'Urgent' : 'Routine';
+                            ?>
+                            <tr>
+                                <td><?php echo htmlspecialchars($hospital_name); ?></td>
+                                <td><?php echo htmlspecialchars($request_date); ?></td>
+                                <td><?php echo htmlspecialchars($required_date); ?></td>
+                                <td><?php echo htmlspecialchars($time_sent); ?></td>
+                                <td>
+                                    <button 
+                                        class="btn btn-info btn-sm view-btn"
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#requestModal"
+                                        title="View Details"
+                                        onclick="loadRequestDetails(
+                                            '<?php echo htmlspecialchars($request['request_id']); ?>',
+                                            '<?php echo htmlspecialchars($request['patient_name']); ?>',
+                                            '<?php echo htmlspecialchars($blood_type_display); ?>',
+                                            '<?php echo htmlspecialchars($component_display); ?>',
+                                            '<?php echo htmlspecialchars($request['rh_factor']); ?>',
+                                            '<?php echo htmlspecialchars($request['units_requested']); ?>',
+                                            '<?php echo htmlspecialchars($request['patient_diagnosis']); ?>',
+                                            '<?php echo htmlspecialchars($hospital_name); ?>',
+                                            '<?php echo htmlspecialchars($request['physician_name']); ?>',
+                                            '<?php echo htmlspecialchars($priority_display); ?>'
+                                        )">
+                                        <i class="fas fa-eye"></i>
                                     </button>
-                                </form>
-                                <i class="fas fa-chevron-right text-muted"></i>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
                 <?php endif; ?>
             </div>
             
@@ -1218,156 +1227,4 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 }
 
                 // Show confirmation modal with selected reason
-                modalBodyText.innerHTML = `Are you sure you want to decline this request for the following reason? <br><strong>("${reason}")</strong>`;
-                confirmDeclineModal.show();
-            });
-        }
-
-        // Handle confirm decline button click
-        if (confirmDeclineBtn) {
-            confirmDeclineBtn.addEventListener("click", function() {
-                // Create a form to submit via POST
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = 'Dashboard-Inventory-System-Hospital-Request.php';
-                
-                // Add request_id field
-                const requestIdInput = document.createElement('input');
-                requestIdInput.type = 'hidden';
-                requestIdInput.name = 'request_id';
-                requestIdInput.value = document.getElementById('modalRequestId').value;
-                form.appendChild(requestIdInput);
-                
-                // Add decline_request field
-                const declineRequestInput = document.createElement('input');
-                declineRequestInput.type = 'hidden';
-                declineRequestInput.name = 'decline_request';
-                declineRequestInput.value = '1';
-                form.appendChild(declineRequestInput);
-                
-                // Add decline_reason field
-                const declineReasonInput = document.createElement('input');
-                declineReasonInput.type = 'hidden';
-                declineReasonInput.name = 'decline_reason';
-                declineReasonInput.value = responseSelect.value;
-                form.appendChild(declineReasonInput);
-                
-                // Hide the confirmation modal
-                confirmDeclineModal.hide();
-                
-                // Append form to body, submit it, then remove it
-                document.body.appendChild(form);
-                form.submit();
-            });
-        }
-
-        // Function to load request details into modal
-        window.loadRequestDetails = function(requestId, name, bloodType, component, rhFactor, units, diagnosis, hospital, physician, priority) {
-            // Set request ID in the hidden field
-            document.getElementById('modalRequestId').value = requestId;
-            
-            // Fill in the other fields
-            document.getElementById('patientName').value = name;
-            document.getElementById('bloodType').value = bloodType;
-            document.getElementById('component').value = component;
-            document.getElementById('rhFactor').value = rhFactor;
-            document.getElementById('unitsNeeded').value = units;
-            document.getElementById('diagnosis').value = diagnosis;
-            document.getElementById('hospital').value = hospital;
-            document.getElementById('physician').value = physician;
-            document.getElementById('priority').value = priority;
-            
-            // Clear any previous decline reason
-            document.getElementById('responseSelect').value = '';
-            
-            // Reset the Accept Request button's text if it was changed
-            const acceptButton = document.getElementById('modalAcceptButton');
-            if (acceptButton) {
-                acceptButton.innerHTML = '<i class="fas fa-check-circle"></i> Accept Request';
-                acceptButton.disabled = false;
-            }
-            
-            // Set the request ID in the accept modal as well
-            document.getElementById('accept-request-id').value = requestId;
-        };
-
-        // Add event listener for the modal's Accept Request button
-        const modalAcceptButton = document.getElementById('modalAcceptButton');
-        if (modalAcceptButton) {
-            modalAcceptButton.addEventListener('click', function(e) {
-                // Check if a decline reason is selected
-                const declineReason = document.getElementById('responseSelect').value;
-                if (declineReason && declineReason !== '') {
-                    // Show an alert if a decline reason is selected
-                    showAlert("warning", "You've selected a reason for declining. Please clear the reason if you want to accept this request.");
-                    return;
-                }
-                
-                // Get the request ID from the hidden field
-                const requestId = document.getElementById('modalRequestId').value;
-                
-                // Set the request ID in the confirmation modal
-                document.getElementById('accept-request-id').value = requestId;
-                
-                // Close the request details modal and show the confirmation modal
-                requestDetailsModal.hide();
-                acceptRequestModal.show();
-            });
-        }
-
-        // Add event listeners for the main list Accept Request buttons
-        const listAcceptButtons = document.querySelectorAll('.accept-request-btn');
-        if (listAcceptButtons.length > 0) {
-            listAcceptButtons.forEach(button => {
-                button.addEventListener('click', function(e) {
-                    // Prevent the click from bubbling up to the email-item
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    // Get request ID and row data
-                    const requestId = this.getAttribute('data-request-id');
-                    const row = this.closest('.email-item');
-                    
-                    // Manually trigger the click on the row to show the details modal first
-                    row.click();
-                });
-            });
-        }
-        
-        // Add event listener for the Confirm Acceptance button in the accept modal
-        if (confirmAcceptBtn) {
-            confirmAcceptBtn.addEventListener('click', function() {
-                // Create a form to submit via POST
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = 'Dashboard-Inventory-System-Hospital-Request.php';
-                
-                // Add request_id field
-                const requestIdInput = document.createElement('input');
-                requestIdInput.type = 'hidden';
-                requestIdInput.name = 'request_id';
-                requestIdInput.value = document.getElementById('accept-request-id').value;
-                form.appendChild(requestIdInput);
-                
-                // Add accept_request field
-                const acceptRequestInput = document.createElement('input');
-                acceptRequestInput.type = 'hidden';
-                acceptRequestInput.name = 'accept_request';
-                acceptRequestInput.value = '1';
-                form.appendChild(acceptRequestInput);
-                
-                // Hide the confirmation modal
-                acceptRequestModal.hide();
-                
-                // Show loading modal
-                loadingModal.show();
-                
-                // Append form to body, submit it, then remove it
-                document.body.appendChild(form);
-                form.submit();
-            });
-        }
-    });
-    </script>
-</body>
-</html>
+                modalBodyText.innerHTML = `Are you sure you want to decline this request for the following reason? <br><strong>("${reason}")</strong>`
