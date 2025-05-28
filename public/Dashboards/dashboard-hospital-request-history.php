@@ -864,7 +864,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                         </li>
                         <li class="nav-item">
                             <a class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-requests.php' ? ' active' : ''; ?>" href="dashboard-hospital-requests.php">
-                                <i class="fas fa-tint me-2"></i>Your Requests
+                                <i class="fas fa-tint me-2"></i>Active Requests
                             </a>
                         </li>
                         <li class="nav-item">
@@ -879,7 +879,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                             </a>
                             <div class="collapse<?php echo $isHistory ? ' show' : ''; ?>" id="historyCollapse">
                                 <div class="collapse-menu">
-                                    <a href="dashboard-hospital-history.php" class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-history.php' ? ' active' : ''; ?>">Accepted</a>
+                                    <a href="dashboard-hospital-history.php" class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-history.php' ? ' active' : ''; ?>">Approved</a>
                                     <a href="dashboard-hospital-request-history.php?status=completed" class="nav-link<?php echo $isHistory && $status === 'completed' ? ' active' : ''; ?>">Completed</a>
                                     <a href="dashboard-hospital-request-history.php?status=declined" class="nav-link<?php echo $isHistory && $status === 'declined' ? ' active' : ''; ?>">Declined</a>
                                 </div>
@@ -985,57 +985,43 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                 <table class="table table-bordered table-hover table-striped">
                                     <thead class="table-dark">
                                         <tr>
-                                            <th>Number</th>
+                                            <th>No.</th>
                                             <th>Patient Name</th>
                                             <th>Age</th>
                                             <th>Gender</th>
                                             <th>Blood Type</th>
                                             <th>Quantity</th>
-                                            <th>Status</th>
                                             <th>Physician</th>
                                             <th>Requested On</th>
-                                            <th>Printed On</th>
+                                            <?php if ($historyStatus === 'declined'): ?>
+                                                <th>Reason for Declining</th>
+                                            <?php else: ?>
+                                                <th>Pick Up Date</th>
+                                            <?php endif; ?>
                                         </tr>
                                     </thead>
                                     <tbody id="requestTable">
                                         <?php if (is_null($filtered_requests)): ?>
-                                            <tr><td colspan="10" class="text-center">Please select a status from the sidebar to view requests.</td></tr>
+                                            <tr><td colspan="9" class="text-center">Please select a status from the sidebar to view requests.</td></tr>
                                         <?php elseif (empty($filtered_requests)): ?>
-                                            <tr><td colspan="10" class="text-center">No blood requests found for this status.</td></tr>
+                                            <tr><td colspan="9" class="text-center">No blood requests found.</td></tr>
                                         <?php else: ?>
                                             <?php $rowNum = 1; foreach ($filtered_requests as $request): ?>
-                                                <tr>
-                                                    <td><?php echo $rowNum++; ?></td>
-                                                    <td><?php echo htmlspecialchars($request['patient_name']); ?></td>
-                                                    <td><?php echo htmlspecialchars($request['patient_age']); ?></td>
-                                                    <td><?php echo htmlspecialchars($request['patient_gender']); ?></td>
-                                                    <td><?php echo htmlspecialchars($request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-')); ?></td>
-                                                    <td><?php echo htmlspecialchars($request['units_requested'] . ' Units'); ?></td>
-                                                    <td>
-                                                        <?php 
-                                                        if ($request['status'] === 'Approved' || $request['status'] === 'Accepted') {
-                                                            echo '<span class="badge bg-primary">Approved</span>';
-                                                        } elseif ($request['status'] === 'Completed' || $request['status'] === 'Confirmed' || $request['status'] === 'Printed') {
-                                                            echo '<span class="badge bg-info text-dark">Printed</span>';
-                                                        } elseif ($request['status'] === 'Pending') {
-                                                            echo '<span class="badge bg-warning text-dark">Pending</span>';
-                                                        } elseif ($request['status'] === 'Declined') {
-                                                            echo '<span class="badge bg-danger decline-reason-badge" style="cursor:pointer;" data-request-id="' . htmlspecialchars($request['request_id']) . '" data-bs-toggle="modal" data-bs-target="#declineReasonModal" onclick="showDeclineReason(' . htmlspecialchars($request['request_id']) . ', \'' . htmlspecialchars(addslashes($request['decline_reason'] ?? 'No reason provided')) . '\')">Declined</span>';
-                                                        } else {
-                                                            echo '<span class="badge bg-secondary">No Action</span>';
-                                                        }
-                                                        ?>
-                                                    </td>
-                                                    <td><?php echo htmlspecialchars($request['physician_name']); ?></td>
-                                                    <td><?php echo date('Y-m-d', strtotime($request['requested_on'])); ?></td>
-                                                    <td>
-                                                        <?php if (in_array($request['status'], ['Printed','Completed','Confirmed'])): ?>
-                                                            <?php echo $request['last_updated'] ? date('Y-m-d', strtotime($request['last_updated'])) : '-'; ?>
-                                                        <?php else: ?>
-                                                            -
-                                                        <?php endif; ?>
-                                                    </td>
-                                                </tr>
+                                            <tr>
+                                                <td><?php echo $rowNum++; ?></td>
+                                                <td><?php echo htmlspecialchars($request['patient_name']); ?></td>
+                                                <td><?php echo htmlspecialchars($request['patient_age']); ?></td>
+                                                <td><?php echo htmlspecialchars($request['patient_gender']); ?></td>
+                                                <td><?php echo htmlspecialchars($request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-')); ?></td>
+                                                <td><?php echo htmlspecialchars($request['units_requested'] . ' Units'); ?></td>
+                                                <td><?php echo htmlspecialchars($request['physician_name'] ?? ''); ?></td>
+                                                <td><?php echo date('Y-m-d', strtotime($request['requested_on'])); ?></td>
+                                                <?php if ($historyStatus === 'declined'): ?>
+                                                    <td><?php echo htmlspecialchars($request['decline_reason'] ?? '-'); ?></td>
+                                                <?php else: ?>
+                                                    <td><?php echo !empty($request['last_updated']) ? date('Y-m-d', strtotime($request['last_updated'])) : '-'; ?></td>
+                                                <?php endif; ?>
+                                            </tr>
                                             <?php endforeach; ?>
                                         <?php endif; ?>
                                     </tbody>

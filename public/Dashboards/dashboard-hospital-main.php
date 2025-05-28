@@ -672,17 +672,17 @@ foreach ($bloodByType as $type => $count) {
                         </li>
                         <li class="nav-item">
                             <?php
-                            $historyPages = ['dashboard-hospital-request-history.php', 'dashboard-hospital-history.php'];
+                            $historyPages = ['dashboard-hospital-request-history.php'];
                             $isHistory = in_array(basename($_SERVER['PHP_SELF']), $historyPages);
                             $status = $_GET['status'] ?? '';
                             ?>
-                            <a class="nav-link d-flex justify-content-between align-items-center" data-bs-toggle="collapse" href="#historyCollapse" role="button" aria-expanded="<?php echo $isHistory ? 'true' : 'false'; ?>" aria-controls="historyCollapse" id="historyCollapseBtn">
-                                <span><i class="fas fa-history me-2"></i>Requests</span>
+                            <a class="nav-link d-flex justify-content-between align-items-center<?php echo $isHistory ;?>" data-bs-toggle="collapse" href="#historyCollapse" role="button" aria-expanded="<?php echo $isHistory ? 'true' : 'false'; ?>" aria-controls="historyCollapse" id="historyCollapseBtn">
+                                <span><i class="fas fa-history me-2"></i>History</span>
                                 <i class="fas fa-chevron-down transition-arrow<?php echo $isHistory ? ' rotate' : ''; ?>" id="historyChevron"></i>
                             </a>
                             <div class="collapse<?php echo $isHistory ? ' show' : ''; ?>" id="historyCollapse">
                                 <div class="collapse-menu">
-                                    <a href="dashboard-hospital-history.php" class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-history.php' ? ' active' : ''; ?>">Accepted</a>
+                                    <a href="dashboard-hospital-history.php" class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-history.php' ? ' active' : ''; ?>">Approved</a>
                                     <a href="dashboard-hospital-request-history.php?status=completed" class="nav-link<?php echo $isHistory && $status === 'completed' ? ' active' : ''; ?>">Completed</a>
                                     <a href="dashboard-hospital-request-history.php?status=declined" class="nav-link<?php echo $isHistory && $status === 'declined' ? ' active' : ''; ?>">Declined</a>
                                 </div>
