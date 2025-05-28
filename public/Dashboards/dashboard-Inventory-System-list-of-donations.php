@@ -646,9 +646,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         <th>Middle Name</th>
                                         <th>Age</th>
                                         <th>Sex</th>
-                                            <th>Blood Type</th>
-                                            <th>Donation Type</th>
-                                            <th>Actions</th>
+                                        <th>Blood Type</th>
+                                        <th>Actions</th>
                                         <?php elseif ($status === 'pending'): ?>
                                             <th>Surname</th>
                                             <th>First Name</th>
@@ -686,7 +685,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                     <td><?php echo htmlspecialchars($donation['age'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['sex'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['blood_type'] ?? 'Unknown'); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['donation_type'] ?? 'Unknown'); ?></td>
                                                 <?php elseif ($status === 'pending'): ?>
                                                     <td><?php echo htmlspecialchars($donation['surname'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($donation['first_name'] ?? ''); ?></td>
@@ -1268,6 +1266,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         ${isApproved ? `<div><strong>Management Done:</strong> ${eligibility.management_done || 'None'}</div>` : ''}
                         
                         ${isApproved ? `<div><strong>Office Address:</strong> ${donor.office_address || 'Not specified'}</div>` : ''}
+                        ${isApproved ? `<div><strong>Donation Type:</strong> ${eligibility.donation_type || 'Unknown'}</div>` : ''}
                         </div>
                     
                     <div class="d-flex justify-content-center gap-3 mt-4">
@@ -1279,9 +1278,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <i class="fas fa-edit me-2"></i> View/Edit Donor Form
                         </button>
                         ` : eligibility.status === 'declined' ? `
-                        <button type="button" class="btn btn-secondary" disabled>
-                            <i class="fas fa-info-circle me-2"></i> Donor is Declined
-                        </button>
                         ` : eligibility.status === 'approved' ? `
                         ` : `
                         <button type="button" class="btn btn-primary" id="processThisDonorBtn" data-donor-id="${donor.donor_id}">

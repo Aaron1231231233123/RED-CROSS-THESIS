@@ -1639,8 +1639,8 @@ if ($statusClass === 'critical') {
                         }
                         .card-header[aria-expanded="true"] .fa-chevron-down {
                             transform: rotate(180deg);
-                        }
-                    </style>
+}
+    </style>
 
                     <!-- Add Leaflet CSS and JS -->
                     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
