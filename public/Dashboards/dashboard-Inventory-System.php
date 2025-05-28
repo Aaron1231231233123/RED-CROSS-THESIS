@@ -1243,7 +1243,9 @@ h6 {
                 <div class="content-wrapper p-4">
                     <div class="d-flex justify-content-between align-items-center mb-4">
                         <h2 class="welcome-heading mb-0" style="font-weight: 700; font-size: 2rem;">Welcome back!</h2>
-                        <span class="text-muted"><?php echo date('d F Y'); ?> ■</span>
+                        <p class="text-dark mb-0">
+                        <strong><?php echo date('d F Y'); ?></strong> <i class="fas fa-calendar-alt ms-2"></i>
+</p>
                     </div>
 
                     <!-- Statistics Cards -->
@@ -1263,7 +1265,7 @@ h6 {
                 <div class="card-body inventory-system-stats-body">
                     <div class="inventory-system-stats-container">
                         <span class="inventory-system-stats-label">Blood Inventory</span>
-                        <span class="inventory-system-stats-value"><?php echo $bloodReceivedCount; ?></span>
+                        <span class="inventory-system-stats-value"><?php echo $bloodInStockCount; ?></span>
                     </div>
                 </div>
             </div>
@@ -1273,7 +1275,7 @@ h6 {
                 <div class="card-body inventory-system-stats-body">
                     <div class="inventory-system-stats-container">
                         <span class="inventory-system-stats-label">Blood Donors</span>
-                        <span class="inventory-system-stats-value"><?php echo $bloodInStockCount; ?></span>
+                        <span class="inventory-system-stats-value"><?php echo $bloodReceivedCount; ?></span>
                     </div>
                 </div>
             </div>
@@ -1316,23 +1318,6 @@ h6 {
                             </div>
                         </div>
                     </div>
-                    <?php
-                    // Show critical alert if status is critical
-                    if ($statusClass === 'critical') {
-                        // List all blood types that are critically low
-                        $criticalTypes = [];
-                        foreach ($bloodByType as $type => $count) {
-                            if ($count < 30) $criticalTypes[] = $type;
-                        }
-                        if (!empty($criticalTypes)) {
-                            echo '<div class="alert alert-danger mt-3 mb-0 p-3 d-flex align-items-center" style="background: #ffeaea; color: #dc2626; border-radius: 10px; border: none; box-shadow: 0 2px 8px rgba(220,38,38,0.06);">';
-                            echo '<i class="fas fa-exclamation-circle me-3" style="font-size: 1.5rem;"></i>';
-                            echo '<div><strong>Critical Alert</strong><br>';
-                            echo implode(', ', $criticalTypes) . ' blood types require immediate attention!';
-                            echo '</div></div>';
-                        }
-                    }
-                    ?>
                 </div>
             </div>
         </div>
@@ -1555,10 +1540,26 @@ h6 {
                             </div>
                         </div>
                     </div>
-
+                    <?php
+// Show critical alert if status is critical
+if ($statusClass === 'critical') {
+    // List all blood types that are critically low
+    $criticalTypes = [];
+    foreach ($bloodByType as $type => $count) {
+        if ($count < 30) $criticalTypes[] = $type;
+    }
+    if (!empty($criticalTypes)) {
+        echo '<div class="alert alert-danger mt-3 mb-0 p-3 d-flex align-items-center" style="background: #ffeaea; color: #dc2626; border-radius: 10px; border: none; box-shadow: 0 2px 8px rgba(220,38,38,0.06);">';
+        echo '<i class="fas fa-exclamation-circle me-3" style="font-size: 1.5rem;"></i>';
+        echo '<div><strong>Critical Alert</strong><br>';
+        echo implode(', ', $criticalTypes) . ' blood types require immediate attention!';
+        echo '</div></div>';
+    }
+}
+?>
                     <!-- GIS Mapping Section -->
                     <div class="mb-4">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-3" style="margin-top: 30px;">
                             <div class="d-flex align-items-center">
                                 <span class="me-2" style="display: inline-block; width: 12px; height: 12px; background-color: #333; margin-right: 8px;"></span>
                                 <h5 class="mb-0" style="font-weight: 600;">GIS Mapping</h5>

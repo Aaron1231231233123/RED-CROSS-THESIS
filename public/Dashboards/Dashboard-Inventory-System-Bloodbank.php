@@ -267,11 +267,10 @@ foreach ($bloodInventory as $bag) {
     if (is_numeric($bag['bags']) && $bag['status'] == 'Valid') {
         $totalBags += floatval($bag['bags']); // Sum the amount values
         $validBags++;
-    }
-    
-    // Track unique blood types
-    if (!in_array($bag['blood_type'], $availableTypes)) {
-        $availableTypes[] = $bag['blood_type'];
+        // Only count available types if there is at least one valid unit
+        if (!in_array($bag['blood_type'], $availableTypes) && floatval($bag['bags']) > 0) {
+            $availableTypes[] = $bag['blood_type'];
+        }
     }
     
     // Calculate expiration status
@@ -1113,8 +1112,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <tr class="bg-danger text-white">
                                     <th>Serial Number</th>
                                     <th>Blood Type</th>
-                                    <th>Units</th>
-                                    <th>Bag Type</th>
                                     <th>Collection Date</th>
                                     <th>Expiration Date</th>
                                     <th>Actions</th>
@@ -1125,8 +1122,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <tr>
                                     <td><?php echo $bag['serial_number']; ?></td>
                                     <td><?php echo $bag['blood_type']; ?></td>
-                                    <td><?php echo $bag['bags']; ?></td>
-                                    <td><?php echo $bag['bag_type']; ?></td>
                                     <td><?php echo $bag['collection_date']; ?></td>
                                     <td><?php echo $bag['expiration_date']; ?></td>
                                     <td class="text-center">
@@ -1138,7 +1133,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <?php endforeach; ?>
                                 <?php if (empty($currentPageInventory)): ?>
                                 <tr>
-                                    <td colspan="7" class="text-center">No blood inventory records found. Please wait for an administrator to add data.</td>
+                                    <td colspan="5" class="text-center">No blood inventory records found. Please wait for an administrator to add data.</td>
                                 </tr>
                                 <?php endif; ?>
                             </tbody>
@@ -1240,12 +1235,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="donor-details-form-group">
                                     <label class="donor-details-form-label">Blood Type</label>
                                     <input type="text" class="donor-details-form-control" id="modal-blood-type" readonly>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="donor-details-form-group">
-                                    <label class="donor-details-form-label">Amount (ml)</label>
-                                    <input type="text" class="donor-details-form-control" id="modal-bags" readonly>
                                 </div>
                             </div>
                         </div>
@@ -1386,7 +1375,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             // Blood Unit Information
             document.getElementById('modal-serial-number').value = bag.serial_number;
             document.getElementById('modal-blood-type').value = bag.blood_type;
-            document.getElementById('modal-bags').value = bag.bags;
             document.getElementById('modal-collection-date').value = bag.collection_date;
             document.getElementById('modal-expiration-date').value = bag.expiration_date;
             

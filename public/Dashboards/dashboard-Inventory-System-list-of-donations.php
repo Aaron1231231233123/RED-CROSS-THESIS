@@ -649,7 +649,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             <th>Age</th>
                                             <th>Sex</th>
                                             <th>Date Submitted</th>
-                                            <th>Channel/Gateway</th>
+                                            <th>Gateway</th>
                                             <th>Actions</th>
                                         <?php elseif ($status === 'declined'): ?>
                                             <th>Surname</th>
@@ -717,7 +717,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                     <button class="btn btn-sm btn-info view-donor" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>">
                                                         <i class="fas fa-eye"></i>
                                                     </button>
-                                                    <?php if ($status !== 'declined' && $status !== 'approved'): ?>
+                                                    <?php if ($status !== 'declined' && $status !== 'approved' && $status !== 'pending'): ?>
                                                     <button class="btn btn-sm btn-warning edit-donor" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>">
                                                         <i class="fas fa-edit"></i>
                                                     </button>
