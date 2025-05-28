@@ -798,14 +798,24 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <table class="table table-striped table-hover">
                             <thead class="table-dark">
                                 <tr>
-                                    <th>Request ID</th>
+                                    <th>No.</th>
                                     <th>Patient Name</th>
                                     <th>Blood Type</th>
                                     <th>Units</th>
-                                    <th>Component</th>
                                     <th>Hospital</th>
-                                    <th>Doctor</th>
-                                    <th>Reason</th>
+                                    <?php if ($filter_status !== 'declined'): ?>
+                                        <?php if ($filter_status !== 'accepted' && $filter_status !== 'handedover'): ?>
+                                            <th>Doctor</th>
+                                            <th>Reason</th>
+                                        <?php elseif ($filter_status === 'accepted' || $filter_status === 'handedover'): ?>
+                                            <!-- No Doctor/Reason columns for approved/handed over -->
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        <th>Reason</th>
+                                    <?php endif; ?>
+                                    <?php if ($filter_status === 'handedover'): ?>
+                                        <th>Pickup Date</th>
+                                    <?php endif; ?>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -815,17 +825,25 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     <td colspan="9" class="text-center">No handover requests found</td>
                                 </tr>
                                 <?php else: ?>
-                                    <?php foreach ($handover_requests as $request): ?>
+                                    <?php $rowNum = 1; foreach ($handover_requests as $request): ?>
                                     <?php $status = isset($request['status']) ? $request['status'] : ''; ?>
                                     <tr>
-                                        <td><?php echo $request['request_id']; ?></td>
+                                        <td><?php echo $rowNum++; ?></td>
                                         <td><?php echo htmlspecialchars($request['patient_name']); ?></td>
                                         <td><?php echo htmlspecialchars($request['patient_blood_type']) . (strtolower($request['rh_factor']) == 'positive' ? '+' : '-'); ?></td>
                                         <td><?php echo $request['units_requested']; ?></td>
-                                        <td><?php echo htmlspecialchars($request['component'] ?? 'Whole Blood'); ?></td>
                                         <td><?php echo htmlspecialchars($request['hospital_admitted']); ?></td>
-                                        <td><?php echo htmlspecialchars($request['physician_name']); ?></td>
-                                        <td><?php echo isset($request['decline_reason']) ? htmlspecialchars($request['decline_reason']) : '-'; ?></td>
+                                        <?php if ($filter_status !== 'declined'): ?>
+                                            <?php if ($filter_status !== 'accepted' && $filter_status !== 'handedover'): ?>
+                                                <td><?php echo htmlspecialchars($request['physician_name']); ?></td>
+                                                <td><?php echo isset($request['decline_reason']) ? htmlspecialchars($request['decline_reason']) : '-'; ?></td>
+                                            <?php endif; ?>
+                                        <?php else: ?>
+                                            <td><?php echo isset($request['decline_reason']) ? htmlspecialchars($request['decline_reason']) : '-'; ?></td>
+                                        <?php endif; ?>
+                                        <?php if ($filter_status === 'handedover'): ?>
+                                            <td><?php echo isset($request['last_updated']) ? date('Y-m-d', strtotime($request['last_updated'])) : '-'; ?></td>
+                                        <?php endif; ?>
                                         <td>
                                             <button type="button" class="btn btn-sm btn-info view-details" data-request='<?php echo json_encode($request); ?>' title="View Details">
                                                 <i class="fas fa-eye"></i>
@@ -864,7 +882,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     <p><strong>Patient Age:</strong> <span id="detail-patient-age"></span></p>
                                     <p><strong>Patient Gender:</strong> <span id="detail-patient-gender"></span></p>
                                     <p><strong>Blood Type:</strong> <span id="detail-blood-type"></span></p>
-                                    <p><strong>Component:</strong> <span id="detail-component"></span></p>
                                 </div>
                                 <div class="col-md-6">
                                     <p><strong>Units Requested:</strong> <span id="detail-units"></span></p>
@@ -1124,7 +1141,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 document.getElementById('detail-patient-gender').textContent = requestData.patient_gender || 'N/A';
                 document.getElementById('detail-blood-type').textContent = requestData.patient_blood_type + 
                     (requestData.rh_factor && requestData.rh_factor.toLowerCase() === 'positive' ? '+' : '-');
-                document.getElementById('detail-component').textContent = requestData.component || 'Whole Blood';
                 document.getElementById('detail-units').textContent = requestData.units_requested;
                 document.getElementById('detail-urgent').textContent = requestData.is_asap ? 'Yes (ASAP)' : 'No';
                 document.getElementById('detail-hospital').textContent = requestData.hospital_admitted;
