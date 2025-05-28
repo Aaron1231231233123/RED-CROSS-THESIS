@@ -1232,7 +1232,7 @@ h6 {
                         <div class="collapse" id="hospitalRequestsCollapse">
                             <div class="collapse-menu">
                                 <a href="Dashboard-Inventory-System-Hospital-Request.php?status=requests" class="nav-link">Requests</a>
-                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=accepted" class="nav-link">Accepted</a>
+                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=accepted" class="nav-link">Approved</a>
                                 <a href="Dashboard-Inventory-System-Handed-Over.php?status=handedover" class="nav-link">Handed Over</a>
                                 <a href="Dashboard-Inventory-System-Handed-Over.php?status=declined" class="nav-link">Declined</a>
                             </div>

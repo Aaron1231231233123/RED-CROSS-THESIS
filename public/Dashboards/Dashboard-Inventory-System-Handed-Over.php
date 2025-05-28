@@ -723,7 +723,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 <div class="collapse show" id="hospitalRequestsCollapse">
                     <div class="collapse-menu">
                         <a href="Dashboard-Inventory-System-Hospital-Request.php?status=requests" class="nav-link<?php echo (!isset($_GET['status']) || $_GET['status'] === 'requests') ? ' active' : ''; ?>">Requests</a>
-                        <a href="Dashboard-Inventory-System-Handed-Over.php?status=accepted" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'accepted') ? ' active' : ''; ?>">Accepted</a>
+                        <a href="Dashboard-Inventory-System-Handed-Over.php?status=accepted" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'accepted') ? ' active' : ''; ?>">Approved</a>
                         <a href="Dashboard-Inventory-System-Handed-Over.php?status=handedover" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'handedover') ? ' active' : ''; ?>">Handed Over</a>
                         <a href="Dashboard-Inventory-System-Handed-Over.php?status=declined" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'declined') ? ' active' : ''; ?>">Declined</a>
                     </div>
@@ -805,8 +805,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     <th>Component</th>
                                     <th>Hospital</th>
                                     <th>Doctor</th>
-                                    <th>Status</th>
-                                    <th>Reason (if Declined)</th>
+                                    <?php if ($filter_status !== 'declined'): ?>
+                                        <th>Status</th>
+                                    <?php endif; ?>
+                                    <th>Reason</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -825,10 +827,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         <td><?php echo htmlspecialchars($request['component'] ?? 'Whole Blood'); ?></td>
                                         <td><?php echo htmlspecialchars($request['hospital_admitted']); ?></td>
                                         <td><?php echo htmlspecialchars($request['physician_name']); ?></td>
+                                        <?php $status = isset($request['status']) ? $request['status'] : ''; ?>
+                                        <?php if ($filter_status !== 'declined'): ?>
                                         <td>
                                             <?php 
-                                            $status = isset($request['status']) ? $request['status'] : '';
-                                            
                                             if ($status === 'Confirmed'): ?>
                                                 <span class="badge bg-success">Confirmed</span>
                                             <?php elseif ($status === 'Accepted'): ?>
@@ -839,6 +841,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                 <span class="badge bg-secondary">Not Set</span>
                                             <?php endif; ?>
                                         </td>
+                                        <?php endif; ?>
                                         <td><?php echo isset($request['decline_reason']) ? htmlspecialchars($request['decline_reason']) : '-'; ?></td>
                                         <td>
                                             <button type="button" class="btn btn-sm btn-info view-details" data-request='<?php echo json_encode($request); ?>' title="View Details">
