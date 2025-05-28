@@ -378,24 +378,37 @@ th {
 
                     <ul class="nav flex-column">
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-hospital-main.php">
+                            <a class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-main.php' ? ' active' : ''; ?>" href="dashboard-hospital-main.php">
                                 <i class="fas fa-home me-2"></i>Home
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-hospital-requests.php">
+                            <a class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-requests.php' ? ' active' : ''; ?>" href="dashboard-hospital-requests.php">
                                 <i class="fas fa-tint me-2"></i>Your Requests
                             </a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link" href="dashboard-hospital-history.php">
-                                <i class="fas fa-print me-2"></i>Approved Requests
+                            <a class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-history.php' ? ' active' : ''; ?>" href="dashboard-hospital-history.php">
+                                <i class="fas fa-print me-2"></i>Print Requests
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-hospital-request-history.php">
-                                <i class="fas fa-history me-2"></i>Request History
+                            <?php
+                            $historyPages = ['dashboard-hospital-request-history.php'];
+                            $isHistory = in_array(basename($_SERVER['PHP_SELF']), $historyPages);
+                            $status = $_GET['status'] ?? '';
+                            ?>
+                            <a class="nav-link d-flex justify-content-between align-items-center<?php echo $isHistory ? ' active' : ''; ?>" data-bs-toggle="collapse" href="#historyCollapse" role="button" aria-expanded="<?php echo $isHistory ? 'true' : 'false'; ?>" aria-controls="historyCollapse" id="historyCollapseBtn">
+                                <span><i class="fas fa-history me-2"></i>History</span>
+                                <i class="fas fa-chevron-down transition-arrow<?php echo $isHistory ? ' rotate' : ''; ?>" id="historyChevron"></i>
                             </a>
+                            <div class="collapse<?php echo $isHistory ? ' show' : ''; ?>" id="historyCollapse">
+                                <div class="collapse-menu">
+                                    <a href="dashboard-hospital-request-history.php?status=accepted" class="nav-link<?php echo $isHistory && $status === 'accepted' ? ' active' : ''; ?>">Accepted</a>
+                                    <a href="dashboard-hospital-request-history.php?status=completed" class="nav-link<?php echo $isHistory && $status === 'completed' ? ' active' : ''; ?>">Completed</a>
+                                    <a href="dashboard-hospital-request-history.php?status=declined" class="nav-link<?php echo $isHistory && $status === 'declined' ? ' active' : ''; ?>">Declined</a>
+                                </div>
+                            </div>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="../../assets/php_func/logout.php">
@@ -428,7 +441,7 @@ th {
                         <table class="table table-bordered table-hover">
                             <thead class="table-dark">
                                 <tr>
-                                    <th>Request ID</th>
+                                    <th>Number</th>
                                     <th>Patient Name</th>
                                     <th>Age</th>
                                     <th>Gender</th>
@@ -440,20 +453,35 @@ th {
                                 </tr>
                             </thead>
                             <tbody id="requestTable">
-                                <?php if (empty($blood_requests)): ?>
+                                <?php $rowNum = 1; if (empty($blood_requests)): ?>
                                 <tr>
                                     <td colspan="9" class="text-center">No pending blood requests found.</td>
                                 </tr>
                                 <?php else: ?>
                                     <?php foreach ($blood_requests as $request): ?>
                                         <tr>
-                                            <td><?php echo htmlspecialchars($request['request_id']); ?></td>
+                                            <td><?php echo $rowNum++; ?></td>
                                             <td><?php echo htmlspecialchars($request['patient_name']); ?></td>
                                             <td><?php echo htmlspecialchars($request['patient_age']); ?></td>
                                             <td><?php echo htmlspecialchars($request['patient_gender']); ?></td>
                                             <td><?php echo htmlspecialchars($request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-')); ?></td>
                                             <td><?php echo htmlspecialchars($request['units_requested'] . ' Units'); ?></td>
-                                            <td><?php echo htmlspecialchars($request['status']); ?></td>
+                                            <td>
+                                                <?php 
+                                                $status = $request['status'];
+                                                if ($status === 'Approved' || $status === 'Accepted') {
+                                                    echo '<span class="badge bg-primary">Approved</span>';
+                                                } elseif ($status === 'Completed' || $status === 'Confirmed' || $status === 'Printed') {
+                                                    echo '<span class="badge bg-info text-dark">Printed</span>';
+                                                } elseif ($status === 'Pending') {
+                                                    echo '<span class="badge bg-warning text-dark">Pending</span>';
+                                                } elseif ($status === 'Declined') {
+                                                    echo '<span class="badge bg-danger">Declined</span>';
+                                                } else {
+                                                    echo '<span class="badge bg-secondary">No Action</span>';
+                                                }
+                                                ?>
+                                            </td>
                                             <td><?php echo date('Y-m-d', strtotime($request['requested_on'])); ?></td>
                                             <td>
                                                 <?php if ($request['status'] !== 'Completed' && $request['status'] !== 'Rejected'): ?>

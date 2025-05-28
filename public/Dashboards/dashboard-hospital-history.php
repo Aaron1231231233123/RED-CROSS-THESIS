@@ -805,6 +805,13 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
             color: #6c757d;
         }
 
+        .modal-header-red {
+            background-color: #941022 !important;
+            color: #fff !important;
+            border-top-left-radius: 0.3rem;
+            border-top-right-radius: 0.3rem;
+        }
+
     </style>
 </head>
 <body>
@@ -827,24 +834,37 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
 
                     <ul class="nav flex-column">
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-hospital-main.php">
+                            <a class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-main.php' ? ' active' : ''; ?>" href="dashboard-hospital-main.php">
                                 <i class="fas fa-home me-2"></i>Home
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-hospital-requests.php">
+                            <a class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-requests.php' ? ' active' : ''; ?>" href="dashboard-hospital-requests.php">
                                 <i class="fas fa-tint me-2"></i>Your Requests
                             </a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link active" href="dashboard-hospital-history.php">
-                                <i class="fas fa-print me-2""></i>Approved Requests
+                            <a class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-history.php' ? ' active' : ''; ?>" href="dashboard-hospital-history.php">
+                                <i class="fas fa-print me-2"></i>Print Requests
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-hospital-request-history.php">
-                                <i class="fas fa-history me-2"></i>Request History
+                            <?php
+                            $historyPages = ['dashboard-hospital-request-history.php'];
+                            $isHistory = in_array(basename($_SERVER['PHP_SELF']), $historyPages);
+                            $status = $_GET['status'] ?? '';
+                            ?>
+                            <a class="nav-link d-flex justify-content-between align-items-center<?php echo $isHistory ? ' active' : ''; ?>" data-bs-toggle="collapse" href="#historyCollapse" role="button" aria-expanded="<?php echo $isHistory ? 'true' : 'false'; ?>" aria-controls="historyCollapse" id="historyCollapseBtn">
+                                <span><i class="fas fa-history me-2"></i>History</span>
+                                <i class="fas fa-chevron-down transition-arrow<?php echo $isHistory ? ' rotate' : ''; ?>" id="historyChevron"></i>
                             </a>
+                            <div class="collapse<?php echo $isHistory ? ' show' : ''; ?>" id="historyCollapse">
+                                <div class="collapse-menu">
+                                    <a href="dashboard-hospital-request-history.php?status=accepted" class="nav-link<?php echo $isHistory && $status === 'accepted' ? ' active' : ''; ?>">Accepted</a>
+                                    <a href="dashboard-hospital-request-history.php?status=completed" class="nav-link<?php echo $isHistory && $status === 'completed' ? ' active' : ''; ?>">Completed</a>
+                                    <a href="dashboard-hospital-request-history.php?status=declined" class="nav-link<?php echo $isHistory && $status === 'declined' ? ' active' : ''; ?>">Declined</a>
+                                </div>
+                            </div>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="../../assets/php_func/logout.php">
@@ -878,7 +898,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                 <table class="table table-bordered table-hover">
                                     <thead class="table-dark">
                                         <tr>
-                                            <th>Request ID</th>
+                                            <th>Number</th>
                                             <th>Patient Name</th>
                                             <th>Age</th>
                                             <th>Gender</th>
@@ -892,7 +912,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php if (empty($blood_requests)): ?>
+                                        <?php $rowNum = 1; if (empty($blood_requests)): ?>
                                         <tr>
                                             <td colspan="11" class="text-center">No blood requests found.</td>
                                         </tr>
@@ -900,7 +920,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                             <?php foreach ($blood_requests as $request): ?>
                                                 <?php if ($request['status'] === 'Approved' || $request['status'] === 'Accepted'): ?>
                                                 <tr>
-                                                    <td><?php echo htmlspecialchars($request['request_id']); ?></td>
+                                                    <td><?php echo $rowNum++; ?></td>
                                                     <td><?php echo htmlspecialchars($request['patient_name']); ?></td>
                                                     <td><?php echo htmlspecialchars($request['patient_age']); ?></td>
                                                     <td><?php echo htmlspecialchars($request['patient_gender']); ?></td>
@@ -1113,7 +1133,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
 <div class="modal fade" id="confirmDeductionModal" tabindex="-1" aria-labelledby="confirmDeductionModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
-      <div class="modal-header bg-primary text-white">
+      <div class="modal-header modal-header-red">
         <h5 class="modal-title" id="confirmDeductionModalLabel">Confirm Blood Deduction</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
@@ -1123,9 +1143,24 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-primary" id="confirmDeductionBtn">OK</button>
-            </div>
-        </div>
+      </div>
     </div>
+  </div>
+</div>
+
+<!-- Blood Request Receipt Modal -->
+<div class="modal fade" id="bloodRequestReceiptModal" tabindex="-1" aria-labelledby="bloodRequestReceiptModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header" style="background-color: #941022; color: #fff;">
+        <h5 class="modal-title" id="bloodRequestReceiptModalLabel">Blood Request Receipt</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-0">This receipt must be presented to the Philippine Red Cross (PRC) to claim the patient's blood request.</p>
+      </div>
+    </div>
+  </div>
 </div>
 
     <!-- Bootstrap 5.3 JS and Popper -->

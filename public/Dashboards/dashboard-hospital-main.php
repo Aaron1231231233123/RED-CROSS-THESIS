@@ -661,24 +661,37 @@ foreach ($bloodByType as $type => $count) {
                     
                     <ul class="nav flex-column">
                         <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-hospital-main.php">
+                            <a class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-main.php' ? ' active' : ''; ?>" href="dashboard-hospital-main.php">
                                 <i class="fas fa-home me-2"></i>Home
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-hospital-requests.php">
+                            <a class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-requests.php' ? ' active' : ''; ?>" href="dashboard-hospital-requests.php">
                                 <i class="fas fa-tint me-2"></i>Your Requests
                             </a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link" href="dashboard-hospital-history.php">
+                            <a class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-history.php' ? ' active' : ''; ?>" href="dashboard-hospital-history.php">
                                 <i class="fas fa-print me-2"></i>Print Requests
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-hospital-request-history.php">
-                                <i class="fas fa-history me-2"></i>Approved History
+                            <?php
+                            $historyPages = ['dashboard-hospital-request-history.php'];
+                            $isHistory = in_array(basename($_SERVER['PHP_SELF']), $historyPages);
+                            $status = $_GET['status'] ?? '';
+                            ?>
+                            <a class="nav-link d-flex justify-content-between align-items-center<?php echo $isHistory ? ' active' : ''; ?>" data-bs-toggle="collapse" href="#historyCollapse" role="button" aria-expanded="<?php echo $isHistory ? 'true' : 'false'; ?>" aria-controls="historyCollapse" id="historyCollapseBtn">
+                                <span><i class="fas fa-history me-2"></i>History</span>
+                                <i class="fas fa-chevron-down transition-arrow<?php echo $isHistory ? ' rotate' : ''; ?>" id="historyChevron"></i>
                             </a>
+                            <div class="collapse<?php echo $isHistory ? ' show' : ''; ?>" id="historyCollapse">
+                                <div class="collapse-menu">
+                                    <a href="dashboard-hospital-request-history.php?status=accepted" class="nav-link<?php echo $isHistory && $status === 'accepted' ? ' active' : ''; ?>">Accepted</a>
+                                    <a href="dashboard-hospital-request-history.php?status=completed" class="nav-link<?php echo $isHistory && $status === 'completed' ? ' active' : ''; ?>">Completed</a>
+                                    <a href="dashboard-hospital-request-history.php?status=declined" class="nav-link<?php echo $isHistory && $status === 'declined' ? ' active' : ''; ?>">Declined</a>
+                                </div>
+                            </div>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="../../assets/php_func/logout.php">
@@ -1561,6 +1574,7 @@ foreach ($bloodByType as $type => $count) {
                 <table class="table table-bordered table-hover">
                     <thead class="table-dark">
                         <tr>
+                            <th>Number</th>
                             <th>Patient Name</th>
                             <th>Blood Type</th>
                             <th>Quantity</th>
@@ -1569,11 +1583,9 @@ foreach ($bloodByType as $type => $count) {
                         </tr>
                     </thead>
                     <tbody>
-                        <?php 
-                        $displayed_requests = array_slice($pending_requests, 0, 5); // Only show first 5
-                        foreach ($displayed_requests as $request): 
-                        ?>
+                        <?php $rowNum = 1; foreach ($pending_requests ?? [] as $request): ?>
                             <tr>
+                                <td><?php echo $rowNum++; ?></td>
                                 <td>
                                     <a href="dashboard-hospital-requests.php" class="text-danger text-decoration-none">
                                         <?php echo maskPatientInfo($request['patient_name']); ?>
@@ -2654,6 +2666,22 @@ foreach ($bloodByType as $type => $count) {
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
     }
+    </script>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var historyCollapse = document.getElementById('historyCollapse');
+        var chevron = document.getElementById('historyChevron');
+        var btn = document.getElementById('historyCollapseBtn');
+        if (historyCollapse && chevron && btn) {
+            historyCollapse.addEventListener('show.bs.collapse', function () {
+                chevron.classList.add('rotate');
+            });
+            historyCollapse.addEventListener('hide.bs.collapse', function () {
+                chevron.classList.remove('rotate');
+            });
+        }
+    });
     </script>
 </body>
 </html>

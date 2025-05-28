@@ -470,39 +470,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 // Fetch blood requests for the current user
 $blood_requests = fetchBloodRequests($_SESSION['user_id']);
 
-// Sort the blood requests to match the desired order
-usort($blood_requests, function($a, $b) {
-    // Priority: Approved/Accepted first
-    if (($a['status'] === 'Approved' || $a['status'] === 'Accepted') && 
-        ($b['status'] !== 'Approved' && $b['status'] !== 'Accepted')) {
-        return -1;
-    }
-    if (($a['status'] !== 'Approved' && $a['status'] !== 'Accepted') && 
-        ($b['status'] === 'Approved' || $b['status'] === 'Accepted')) {
-        return 1;
-    }
-    
-    // Priority: Pending second
-    if ($a['status'] === 'Pending' && $b['status'] !== 'Pending' && 
-        $b['status'] !== 'Approved' && $b['status'] !== 'Accepted') {
-        return -1;
-    }
-    if ($a['status'] !== 'Pending' && $a['status'] !== 'Approved' && 
-        $a['status'] !== 'Accepted' && $b['status'] === 'Pending') {
-        return 1;
-    }
-    
-    // Priority: Declined last
-    if ($a['status'] === 'Declined' && $b['status'] !== 'Declined') {
-        return 1;
-    }
-    if ($a['status'] !== 'Declined' && $b['status'] === 'Declined') {
-        return -1;
-    }
-    
-    // For same status, sort by date (newest first)
-    return strtotime($b['requested_on']) - strtotime($a['requested_on']);
-});
+// Determine which status filter is active based on the sidebar button
+$historyStatus = $_GET['status'] ?? '';
+
+// Map sidebar status to request status values
+$statusMap = [
+    'accepted' => ['Approved', 'Accepted'],
+    'completed' => ['Printed', 'Completed', 'Confirmed'],
+    'declined' => ['Declined'],
+];
+
+if (isset($statusMap[$historyStatus])) {
+    $filtered_requests = array_filter($blood_requests, function($req) use ($statusMap, $historyStatus) {
+        return in_array($req['status'], $statusMap[$historyStatus]);
+    });
+    // Sort filtered requests as before
+    usort($filtered_requests, function($a, $b) {
+        $order = ['Approved', 'Accepted', 'Printed', 'Completed', 'Confirmed', 'Declined', 'Pending', 'No Action'];
+        return array_search($a['status'], $order) - array_search($b['status'], $order);
+    });
+} else {
+    $filtered_requests = null;
+}
 
 // Calculate summary statistics
 $total_units = 0;
@@ -839,6 +828,14 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
             color: #6c757d;
         }
 
+        /* Add this to the sidebar CSS */
+        .transition-arrow {
+            transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+        }
+        .transition-arrow.rotate {
+            transform: rotate(180deg);
+        }
+
     </style>
 </head>
 <body>
@@ -861,24 +858,37 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
 
                     <ul class="nav flex-column">
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-hospital-main.php">
+                            <a class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-main.php' ? ' active' : ''; ?>" href="dashboard-hospital-main.php">
                                 <i class="fas fa-home me-2"></i>Home
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard-hospital-requests.php">
+                            <a class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-requests.php' ? ' active' : ''; ?>" href="dashboard-hospital-requests.php">
                                 <i class="fas fa-tint me-2"></i>Your Requests
                             </a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link" href="dashboard-hospital-history.php">
+                            <a class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-history.php' ? ' active' : ''; ?>" href="dashboard-hospital-history.php">
                                 <i class="fas fa-print me-2"></i>Approved Requests
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-hospital-request-history.php">
-                                <i class="fas fa-history me-2"></i>Request History
+                            <?php
+                            $historyPages = ['dashboard-hospital-request-history.php'];
+                            $isHistory = in_array(basename($_SERVER['PHP_SELF']), $historyPages);
+                            $status = $_GET['status'] ?? '';
+                            ?>
+                            <a class="nav-link d-flex justify-content-between align-items-center" data-bs-toggle="collapse" href="#historyCollapse" role="button" aria-expanded="<?php echo $isHistory ? 'true' : 'false'; ?>" aria-controls="historyCollapse" id="historyCollapseBtn">
+                                <span><i class="fas fa-history me-2"></i>History</span>
+                                <i class="fas fa-chevron-down transition-arrow<?php echo $isHistory ? ' rotate' : ''; ?>" id="historyChevron"></i>
                             </a>
+                            <div class="collapse<?php echo $isHistory ? ' show' : ''; ?>" id="historyCollapse">
+                                <div class="collapse-menu">
+                                    <a href="dashboard-hospital-request-history.php?status=accepted" class="nav-link<?php echo $isHistory && $status === 'accepted' ? ' active' : ''; ?>">Accepted</a>
+                                    <a href="dashboard-hospital-request-history.php?status=completed" class="nav-link<?php echo $isHistory && $status === 'completed' ? ' active' : ''; ?>">Completed</a>
+                                    <a href="dashboard-hospital-request-history.php?status=declined" class="nav-link<?php echo $isHistory && $status === 'declined' ? ' active' : ''; ?>">Declined</a>
+                                </div>
+                            </div>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="../../assets/php_func/logout.php">
@@ -980,7 +990,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                 <table class="table table-bordered table-hover table-striped">
                                     <thead class="table-dark">
                                         <tr>
-                                            <th>Request ID</th>
+                                            <th>Number</th>
                                             <th>Patient Name</th>
                                             <th>Age</th>
                                             <th>Gender</th>
@@ -993,42 +1003,38 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                         </tr>
                                     </thead>
                                     <tbody id="requestTable">
-                                        <?php if (empty($blood_requests)): ?>
-                                        <tr>
-                                        <td colspan="12" class="text-center">No blood requests found.</td>
-                                        </tr>
+                                        <?php if (is_null($filtered_requests)): ?>
+                                            <tr><td colspan="10" class="text-center">Please select a status from the sidebar to view requests.</td></tr>
+                                        <?php elseif (empty($filtered_requests)): ?>
+                                            <tr><td colspan="10" class="text-center">No blood requests found for this status.</td></tr>
                                         <?php else: ?>
-                                            <?php foreach ($blood_requests as $request): ?>
-                                                <?php
-                                                    $isPrinted = isset($request['printed']) ? $request['printed'] : ($request['status'] === 'Printed');
-                                                    $status = $request['status'];
-                                                ?>
+                                            <?php $rowNum = 1; foreach ($filtered_requests as $request): ?>
                                                 <tr>
-                                                    <td><?php echo htmlspecialchars($request['request_id']); ?></td>
+                                                    <td><?php echo $rowNum++; ?></td>
                                                     <td><?php echo htmlspecialchars($request['patient_name']); ?></td>
                                                     <td><?php echo htmlspecialchars($request['patient_age']); ?></td>
                                                     <td><?php echo htmlspecialchars($request['patient_gender']); ?></td>
                                                     <td><?php echo htmlspecialchars($request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-')); ?></td>
                                                     <td><?php echo htmlspecialchars($request['units_requested'] . ' Units'); ?></td>
                                                     <td>
-                                                        <?php if ($status === 'Approved' || $status === 'Accepted'): ?>
-                                                            <span class="badge bg-primary">Approved</span>
-                                                        <?php elseif ($status === 'Completed' || $status === 'Confirmed'): ?>
-                                                            <span class="badge bg-info text-dark">Printed</span>
-                                                        <?php elseif ($status === 'Pending'): ?>
-                                                            <span class="badge bg-warning text-dark">Pending</span>
-                                                        <?php elseif ($status === 'Declined'): ?>
-                                                            <span class="badge bg-danger decline-reason-badge" style="cursor:pointer;" data-request-id="<?php echo htmlspecialchars($request['request_id']); ?>" data-bs-toggle="modal" data-bs-target="#declineReasonModal" onclick="showDeclineReason(<?php echo htmlspecialchars($request['request_id']); ?>, '<?php echo htmlspecialchars(addslashes($request['decline_reason'] ?? 'No reason provided')); ?>')">Declined</span>
-                                                        <?php elseif ($status === 'Printed'): ?>
-                                                            <span class="badge bg-info text-dark">Printed</span>
-                                                        <?php else: ?>
-                                                            <span class="badge bg-secondary">No Action</span>
-                                                        <?php endif; ?>
+                                                        <?php 
+                                                        if ($request['status'] === 'Approved' || $request['status'] === 'Accepted') {
+                                                            echo '<span class="badge bg-primary">Approved</span>';
+                                                        } elseif ($request['status'] === 'Completed' || $request['status'] === 'Confirmed' || $request['status'] === 'Printed') {
+                                                            echo '<span class="badge bg-info text-dark">Printed</span>';
+                                                        } elseif ($request['status'] === 'Pending') {
+                                                            echo '<span class="badge bg-warning text-dark">Pending</span>';
+                                                        } elseif ($request['status'] === 'Declined') {
+                                                            echo '<span class="badge bg-danger decline-reason-badge" style="cursor:pointer;" data-request-id="' . htmlspecialchars($request['request_id']) . '" data-bs-toggle="modal" data-bs-target="#declineReasonModal" onclick="showDeclineReason(' . htmlspecialchars($request['request_id']) . ', \'' . htmlspecialchars(addslashes($request['decline_reason'] ?? 'No reason provided')) . '\')">Declined</span>';
+                                                        } else {
+                                                            echo '<span class="badge bg-secondary">No Action</span>';
+                                                        }
+                                                        ?>
                                                     </td>
                                                     <td><?php echo htmlspecialchars($request['physician_name']); ?></td>
                                                     <td><?php echo date('Y-m-d', strtotime($request['requested_on'])); ?></td>
                                                     <td>
-                                                        <?php if (in_array($status, ['Printed','Completed','Confirmed'])): ?>
+                                                        <?php if (in_array($request['status'], ['Printed','Completed','Confirmed'])): ?>
                                                             <?php echo $request['last_updated'] ? date('Y-m-d', strtotime($request['last_updated'])) : '-'; ?>
                                                         <?php else: ?>
                                                             -
@@ -1762,6 +1768,20 @@ function showStatusLog(requestId) {
     var modal = new bootstrap.Modal(document.getElementById('statusLogModal'));
     modal.show();
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    var historyCollapse = document.getElementById('historyCollapse');
+    var chevron = document.getElementById('historyChevron');
+    var btn = document.getElementById('historyCollapseBtn');
+    if (historyCollapse && chevron && btn) {
+        historyCollapse.addEventListener('show.bs.collapse', function () {
+            chevron.classList.add('rotate');
+        });
+        historyCollapse.addEventListener('hide.bs.collapse', function () {
+            chevron.classList.remove('rotate');
+        });
+    }
+});
 </script>
 </body>
 </html>
