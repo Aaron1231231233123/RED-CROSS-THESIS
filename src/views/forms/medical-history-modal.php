@@ -3,6 +3,31 @@
 session_start();
 require_once '../../../assets/conn/db_conn.php';
 
+// Display debug information if available
+if (isset($_SESSION['error_message']) || isset($_SESSION['debug_info'])) {
+    echo '<div class="debug-container" style="margin: 20px; padding: 20px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px;">';
+    echo '<h4 style="color: #721c24;">Debug Information:</h4>';
+    
+    if (isset($_SESSION['error_message'])) {
+        echo '<div style="margin-bottom: 10px;"><strong>Error:</strong> ' . htmlspecialchars($_SESSION['error_message']) . '</div>';
+    }
+    
+    if (isset($_SESSION['debug_info']) && is_array($_SESSION['debug_info'])) {
+        echo '<div style="background-color: #fff; padding: 10px; border-radius: 4px; margin-top: 10px;">';
+        echo '<strong>Debug Details:</strong><br>';
+        foreach ($_SESSION['debug_info'] as $info) {
+            echo htmlspecialchars($info) . '<br>';
+        }
+        echo '</div>';
+    }
+    
+    echo '</div>';
+    
+    // Clear the debug info after displaying
+    unset($_SESSION['error_message']);
+    unset($_SESSION['debug_info']);
+}
+
 // Clean up abandoned donor form data (older than 30 minutes)
 if (isset($_SESSION['donor_form_data']) && isset($_SESSION['donor_form_timestamp'])) {
     $currentTime = time();
@@ -99,35 +124,82 @@ if (isset($_SESSION['role_id']) && $_SESSION['role_id'] === 3 && !isset($_SESSIO
 
 // Check if we need to insert donor data from the session (redirect from declaration form)
 if (isset($_GET['insert_donor']) && $_GET['insert_donor'] === 'true' && isset($_SESSION['donor_form_data'])) {
-    error_log("Handling insert_donor request. Inserting donor record from session data.");
+    error_log("=== START DONOR INSERTION DEBUG ===");
+    error_log("Session ID: " . session_id());
     
     try {
+        // Get the donor form data from session
+        $donorFormData = $_SESSION['donor_form_data'];
+        
+        // Debug: Print full session data
+        error_log("Full Session Data: " . print_r($_SESSION, true));
+        error_log("Donor Form Data to Process: " . print_r($donorFormData, true));
+        
+        // Validate required fields
+        $requiredFields = ['first_name', 'surname', 'birthdate', 'age', 'sex', 'civil_status', 'permanent_address', 'registration_channel'];
+        $missingFields = [];
+        $fieldValues = [];
+        
+        foreach ($requiredFields as $field) {
+            if (!isset($donorFormData[$field]) || (is_string($donorFormData[$field]) && trim($donorFormData[$field]) === '') || $donorFormData[$field] === null) {
+                $missingFields[] = $field;
+            }
+            $fieldValues[$field] = $donorFormData[$field] ?? 'NOT SET';
+        }
+        
+        // Log field values for debugging
+        error_log("Field Values Check:");
+        foreach ($fieldValues as $field => $value) {
+            error_log("$field: " . print_r($value, true));
+        }
+        
+        if (!empty($missingFields)) {
+            throw new Exception("Missing or empty required fields: " . implode(", ", $missingFields));
+        }
+        
+        // Ensure age is an integer
+        if (isset($donorFormData['age'])) {
+            $donorFormData['age'] = intval($donorFormData['age']);
+            if ($donorFormData['age'] <= 0) {
+                throw new Exception("Invalid age value: " . $donorFormData['age']);
+            }
+        }
+        
         // Insert donor record in Supabase
         $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form');
         
+        error_log("Making request to Supabase:");
+        error_log("URL: " . SUPABASE_URL . '/rest/v1/donor_form');
+        error_log("Payload: " . json_encode($donorFormData, JSON_PRETTY_PRINT));
+        
         curl_setopt($ch, CURLOPT_POST, 1);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($_SESSION['donor_form_data']));
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($donorFormData));
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'apikey: ' . SUPABASE_API_KEY,
             'Authorization: Bearer ' . SUPABASE_API_KEY,
             'Content-Type: application/json',
-            'Prefer: return=representation' // Get response data with inserted record
+            'Prefer: return=representation'
         ]);
         
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
         
-        // Check for cURL errors
+        error_log("Supabase Response:");
+        error_log("HTTP Code: " . $httpCode);
+        error_log("Content Type: " . $contentType);
+        error_log("Response Body: " . $response);
+        
         if (curl_errno($ch)) {
-            error_log("cURL Error inserting donor: " . curl_error($ch));
-            throw new Exception("Error inserting donor: " . curl_error($ch));
+            error_log("cURL Error: " . curl_error($ch));
+            throw new Exception("Error connecting to database: " . curl_error($ch));
         }
         
         curl_close($ch);
         
         if ($httpCode >= 200 && $httpCode < 300) {
-            error_log("Donor added successfully. Response: " . $response);
+            error_log("Successful response received");
             
             // Parse response to get donor ID
             $responseData = json_decode($response, true);
@@ -135,36 +207,41 @@ if (isset($_GET['insert_donor']) && $_GET['insert_donor'] === 'true' && isset($_
                 $donorId = $responseData[0]['donor_id'] ?? null;
                 
                 if ($donorId) {
-                    // Store donor ID in session and remove donor_form_data
                     $_SESSION['donor_id'] = $donorId;
                     unset($_SESSION['donor_form_data']);
                     unset($_SESSION['donor_form_timestamp']);
-                    error_log("Donor ID $donorId stored in session and form data cleared.");
+                    error_log("Donor ID $donorId stored in session");
                     
                     // Redirect to self without the insert_donor parameter
                     header('Location: medical-history-modal.php');
                     exit();
                 } else {
-                    error_log("Failed to extract donor_id from response: " . $response);
-                    throw new Exception("Error processing donor information. No donor_id in response.");
+                    throw new Exception("Error: No donor_id in response. Full response: " . $response);
                 }
             } else {
-                error_log("Invalid response format: " . $response);
-                throw new Exception("Error processing donor information. Invalid response format.");
+                throw new Exception("Error: Invalid response format. Response: " . $response);
             }
         } else {
-            error_log("Error adding donor. HTTP Code: $httpCode. Response: " . $response);
-            throw new Exception("Error submitting donor form. HTTP Code: $httpCode");
+            $errorDetails = json_decode($response, true);
+            $errorMessage = isset($errorDetails['message']) ? $errorDetails['message'] : $response;
+            throw new Exception("Error submitting donor form. HTTP Code: $httpCode. Details: " . $errorMessage);
         }
-    } catch (Exception $e) {
-        error_log("Error in insert_donor process: " . $e->getMessage());
-        $_SESSION['error_message'] = $e->getMessage();
         
-        // Redirect back to the dashboard
-        $referrer = isset($_SESSION['donor_form_referrer']) ? 
-                   $_SESSION['donor_form_referrer'] : 
-                   '../../public/Dashboards/dashboard-Inventory-System.php';
-        header('Location: ' . $referrer);
+        error_log("=== END DONOR INSERTION DEBUG ===");
+        
+    } catch (Exception $e) {
+        error_log("Error in donor insertion: " . $e->getMessage());
+        $_SESSION['error_message'] = $e->getMessage();
+        $_SESSION['debug_info'] = [
+            "Error occurred during donor insertion",
+            "Error message: " . $e->getMessage(),
+            "Session ID: " . session_id(),
+            "Form Data: " . print_r($donorFormData ?? [], true),
+            "Required Fields Status: " . print_r($fieldValues ?? [], true)
+        ];
+        
+        // Redirect to self to display the error
+        header('Location: medical-history-modal.php?error=1');
         exit();
     }
 }
@@ -220,12 +297,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (isset($_SESSION['donor_form_data']) && !isset($_SESSION['donor_id'])) {
             error_log("Medical history - Found donor_form_data in session. Inserting donor record first.");
             
-            // Get the donor form data from session
+            // Get the donor form data from session and ensure registration_channel is set
             $donorFormData = $_SESSION['donor_form_data'];
+            
+            // Ensure registration_channel is set with correct enum value
+            if (!isset($donorFormData['registration_channel'])) {
+                $donorFormData['registration_channel'] = 'PRC Portal';
+            }
+            
             error_log("Medical history - Donor data to insert: " . json_encode($donorFormData));
             
             // Insert donor record in Supabase
             $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form');
+            
+            // Log the exact data being sent
+            error_log("Medical history - Request URL: " . SUPABASE_URL . '/rest/v1/donor_form');
+            error_log("Medical history - Request payload: " . json_encode($donorFormData, JSON_PRETTY_PRINT));
             
             curl_setopt($ch, CURLOPT_POST, 1);
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($donorFormData));
@@ -240,9 +327,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             
+            // Log the response
+            error_log("Medical history - Response HTTP Code: " . $httpCode);
+            error_log("Medical history - Response body: " . $response);
+            
             // Check for cURL errors
             if (curl_errno($ch)) {
-                error_log("Medical history - cURL Error inserting donor: " . curl_error($ch));
+                error_log("Medical history - cURL Error: " . curl_error($ch));
                 throw new Exception("Error inserting donor: " . curl_error($ch));
             }
             
@@ -897,6 +988,29 @@ if (isset($_SESSION['error_message'])) {
     </style>
 </head>
 <body>
+    <?php if (isset($_SESSION['error_message']) || isset($_SESSION['debug_info'])): ?>
+    <div class="alert alert-danger alert-dismissible fade show" role="alert" style="white-space: pre-wrap; font-family: monospace;">
+        <?php if (isset($_SESSION['error_message'])): ?>
+            <strong>Error:</strong> <?php echo htmlspecialchars($_SESSION['error_message']); ?>
+        <?php endif; ?>
+        
+        <?php if (isset($_SESSION['debug_info'])): ?>
+            <hr>
+            <strong>Debug Information:</strong><br>
+            <?php foreach ($_SESSION['debug_info'] as $info): ?>
+                <?php echo htmlspecialchars($info); ?><br>
+            <?php endforeach; ?>
+        <?php endif; ?>
+        
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <?php 
+    // Clear the messages after displaying them
+    unset($_SESSION['error_message']);
+    unset($_SESSION['debug_info']);
+    endif; 
+    ?>
+    
     <div class="modal">
         <div class="modal-header">
             <h2 class="modal-title">Medical History</h2>
