@@ -1210,7 +1210,7 @@ h6 {
                             <span><i class="fas fa-home"></i>Home</span>
                         </a>
                         
-                        <a class="nav-link" data-bs-toggle="collapse" href="#bloodDonationsCollapse" role="button" aria-expanded="false" aria-controls="bloodDonationsCollapse">
+                        <a class="nav-link" href="#" data-bs-toggle="collapse" data-bs-target="#bloodDonationsCollapse" role="button" aria-expanded="false" aria-controls="bloodDonationsCollapse" onclick="event.preventDefault();">
                             <span><i class="fas fa-tint"></i>Blood Donations</span>
                             <i class="fas fa-chevron-down"></i>
                         </a>
@@ -1225,7 +1225,7 @@ h6 {
                         <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
                             <span><i class="fas fa-tint"></i>Blood Bank</span>
                         </a>
-                        <a class="nav-link" data-bs-toggle="collapse" href="#hospitalRequestsCollapse" role="button" aria-expanded="false" aria-controls="hospitalRequestsCollapse">
+                        <a class="nav-link" href="#" data-bs-toggle="collapse" data-bs-target="#hospitalRequestsCollapse" role="button" aria-expanded="false" aria-controls="hospitalRequestsCollapse" onclick="event.preventDefault();">
                             <span><i class="fas fa-list"></i>Hospital Requests</span>
                             <i class="fas fa-chevron-down"></i>
                         </a>
