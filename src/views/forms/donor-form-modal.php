@@ -99,7 +99,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
         'first_name' => $_POST['first_name'] ?? '',
         'middle_name' => $_POST['middle_name'] ?? '',
         'birthdate' => $_POST['birthdate'] ?? '',
-        'age' => intval($_POST['age'] ?? 0),
+        'age' => !empty($_POST['age']) ? intval($_POST['age']) : null,
         'sex' => $_POST['sex'] ?? '',
         'civil_status' => $_POST['civil_status'] ?? '',
         'permanent_address' => $permanent_address,
@@ -112,8 +112,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
         // Generate unique donor number and barcode
         'prc_donor_number' => generateDonorNumber(),
         'doh_nnbnets_barcode' => generateNNBNetBarcode(),
-        // Add registration channel
-        'registration_channel' => 'PRC_SYSTEM' // Default to PRC system since this is the PRC system form
+        // Set registration channel to PRC Portal since this is accessed via web browser
+        'registration_channel' => 'PRC Portal'
     ];
     
     // Log the data being processed
@@ -658,21 +658,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
         const birthdateInput = document.getElementById('birthdate');
         const ageInput = document.getElementById('age');
         
-        if (birthdateInput.value) {
-            const birthdate = new Date(birthdateInput.value);
-            const today = new Date();
-            
-            let age = today.getFullYear() - birthdate.getFullYear();
-            const monthDifference = today.getMonth() - birthdate.getMonth();
-            
-            if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthdate.getDate())) {
-                age--;
-            }
-            
-            ageInput.value = age;
-        } else {
+        if (!birthdateInput.value) {
             ageInput.value = '';
+            return;
         }
+        
+        const birthdate = new Date(birthdateInput.value);
+        const today = new Date();
+        
+        let age = today.getFullYear() - birthdate.getFullYear();
+        const monthDiff = today.getMonth() - birthdate.getMonth();
+        
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthdate.getDate())) {
+            age--;
+        }
+        
+        ageInput.value = age;
     }
     
     // Function to update the form's data-allow-enter attribute based on the current section
@@ -1025,6 +1026,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
                 console.log("Using stored referrer:", storedReferrer);
             }
         }
+    });
+
+    // Add form validation
+    document.getElementById('donorForm').addEventListener('submit', function(e) {
+        const birthdateInput = document.getElementById('birthdate');
+        const ageInput = document.getElementById('age');
+        
+        // Calculate age one final time before submission
+        calculateAge();
+        
+        // Check if age is empty or invalid
+        if (!ageInput.value || isNaN(ageInput.value) || ageInput.value <= 0) {
+            e.preventDefault();
+            alert('Please enter a valid birthdate to calculate age.');
+            birthdateInput.focus();
+            return false;
+        }
+        
+        return true;
     });
 </script>
 </body>
