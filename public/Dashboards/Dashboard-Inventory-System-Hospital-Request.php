@@ -1286,6 +1286,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
           <form id="declineRequestForm" method="post">
             <div class="modal-body">
               <input type="hidden" name="request_id" id="declineRequestId">
+              <input type="hidden" name="decline_request" value="1">
               <select class="form-select" name="decline_reason" id="declineReasonSelect" required>
                 <option value="" selected disabled>Select a reason</option>
                 <option value="Low Blood Supply">Low Blood Supply</option>
@@ -1300,6 +1301,25 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
               <button type="submit" class="btn btn-danger">Confirm</button>
             </div>
           </form>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Decline Confirmation Modal -->
+    <div class="modal fade" id="declineFinalConfirmModal" tabindex="-1" aria-labelledby="declineFinalConfirmModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header bg-danger text-white">
+            <h5 class="modal-title" id="declineFinalConfirmModalLabel">Confirm Decline</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p id="declineFinalConfirmText"></p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" id="declineFinalConfirmBtn" class="btn btn-danger">Yes, Decline</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1538,6 +1558,43 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 // Show the decline modal
                 var declineModal = new bootstrap.Modal(document.getElementById('declineRequestModal'));
                 setTimeout(function() { declineModal.show(); }, 300); // Wait for fade out
+            });
+        }
+
+        // Step 2: Intercept the decline reason form submit
+        const declineRequestForm = document.getElementById('declineRequestForm');
+        const declineReasonSelect = document.getElementById('declineReasonSelect');
+        const declineFinalConfirmModal = new bootstrap.Modal(document.getElementById('declineFinalConfirmModal'));
+        const declineFinalConfirmText = document.getElementById('declineFinalConfirmText');
+        const declineFinalConfirmBtn = document.getElementById('declineFinalConfirmBtn');
+
+        let declineFormSubmitPending = false; // Prevent double submit
+
+        if (declineRequestForm) {
+            declineRequestForm.addEventListener('submit', function(e) {
+                if (!declineFormSubmitPending) {
+                    e.preventDefault();
+                    const reason = declineReasonSelect.value;
+                    if (!reason) {
+                        alert('Please select a reason for declining.');
+                        return;
+                    }
+                    // Show the confirmation modal with the selected reason
+                    declineFinalConfirmText.innerHTML = `Are you sure you want to decline this request for the following reason?<br><strong>${reason}</strong>`;
+                    declineFinalConfirmModal.show();
+                }
+            });
+        }
+
+        // Step 3: On confirm, submit the form
+        if (declineFinalConfirmBtn) {
+            declineFinalConfirmBtn.addEventListener('click', function() {
+                declineFormSubmitPending = true;
+                declineFinalConfirmModal.hide();
+                // Submit the form after a short delay to allow modal to hide smoothly
+                setTimeout(() => {
+                    declineRequestForm.submit();
+                }, 300);
             });
         }
     });
