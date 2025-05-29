@@ -962,6 +962,11 @@ $donors = array_slice($donors, $offset, $records_per_page);
                         </li>
                     <?php endif; ?>
                     <li class="nav-item">
+                            <a class="nav-link" href="dashboard-staff-blood-collection-submission.php">
+                                Existing Donor
+                            </a>
+                        </li>
+                    <li class="nav-item">
                         <a class="nav-link active" href="dashboard-staff-history.php">Donor History</a>
                     </li>
                     <li class="nav-item">

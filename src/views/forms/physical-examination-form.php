@@ -945,22 +945,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             <?php endif; ?>
             
-            <?php if ($is_physician): ?>
-            <!-- Special message for physicians -->
-            <div class="physician-notice" style="background-color: #e8f4f8; padding: 15px; margin-bottom: 20px; border-radius: 5px; border-left: 5px solid #242b31;">
-                <h4 style="color: #242b31; margin-top: 0;">Physician View</h4>
-                
-                <?php if ($vitals_data && (isset($vitals_data['blood_pressure']) || isset($vitals_data['pulse_rate']) || isset($vitals_data['body_temp']))): ?>
-                    <p style="margin-bottom: 5px;">The vital signs (Blood Pressure, Pulse Rate, and Body Temp) shown below were collected earlier during screening and are displayed for your reference.</p>
-                    <p style="margin-bottom: 0;">Please review these vital signs to help determine if the donor is healthy, and complete all other fields as needed to proceed with the physical examination.</p>
-                <?php else: ?>
-                    <p style="margin-bottom: 0;">Please complete all fields as needed to proceed with the physical examination.</p>
-                <?php endif; ?>
-            </div>
-            <?php endif; ?>
-            
             <form id="physicalExamForm" method="POST" action="<?php echo $_SERVER['PHP_SELF']; ?>">
-                <h3>V. PHYSICAL EXAMINATION (To be accomplished by the Blood Bank Physician)</h3>
+                <h3>V. PHYSICAL EXAMINATION</h3>
                 <!-- Add hidden field for donor_id -->
                 <input type="hidden" name="donor_id" value="<?php echo isset($_SESSION['donor_id']) ? htmlspecialchars($_SESSION['donor_id']) : ''; ?>">
                 
@@ -979,37 +965,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <tbody>
                         <tr>
                             <td>
-                                <?php if ($is_physician && $vitals_data && isset($vitals_data['blood_pressure'])): ?>
-                                    <!-- For physicians: Read-only blood pressure with visual indicator -->
-                                    <div style="font-weight: bold; font-size: 1.2em; color: #242b31; background-color: #f5f5f5; padding: 8px; border-radius: 4px; border-left: 3px solid #a82020;">
-                                        <?php echo htmlspecialchars($vitals_data['blood_pressure']); ?>
-                                    </div>
-                                    <input type="hidden" name="blood_pressure" value="<?php echo htmlspecialchars($vitals_data['blood_pressure']); ?>">
-                                <?php else: ?>
-                                    <input type="text" name="blood_pressure" placeholder="e.g., 120/80" pattern="[0-9]{2,3}/[0-9]{2,3}" title="Format: systolic/diastolic e.g. 120/80" required>
-                                <?php endif; ?>
+                                <input type="text" name="blood_pressure" placeholder="e.g., 120/80" pattern="[0-9]{2,3}/[0-9]{2,3}" title="Format: systolic/diastolic e.g. 120/80" required>
                             </td>
                             <td>
-                                <?php if ($is_physician && $vitals_data && isset($vitals_data['pulse_rate'])): ?>
-                                    <!-- For physicians: Read-only pulse rate with visual indicator -->
-                                    <div style="font-weight: bold; font-size: 1.2em; color: #242b31; background-color: #f5f5f5; padding: 8px; border-radius: 4px; border-left: 3px solid #a82020;">
-                                        <?php echo htmlspecialchars($vitals_data['pulse_rate']); ?> BPM
-                                    </div>
-                                    <input type="hidden" name="pulse_rate" value="<?php echo htmlspecialchars($vitals_data['pulse_rate']); ?>">
-                                <?php else: ?>
-                                    <input type="number" name="pulse_rate" placeholder="BPM" min="0" max="300" required>
-                                <?php endif; ?>
+                                <input type="number" name="pulse_rate" placeholder="BPM" min="0" max="300" required>
                             </td>
                             <td>
-                                <?php if ($is_physician && $vitals_data && isset($vitals_data['body_temp'])): ?>
-                                    <!-- For physicians: Read-only body temperature with visual indicator -->
-                                    <div style="font-weight: bold; font-size: 1.2em; color: #242b31; background-color: #f5f5f5; padding: 8px; border-radius: 4px; border-left: 3px solid #a82020;">
-                                        <?php echo htmlspecialchars($vitals_data['body_temp']); ?> °C
-                                    </div>
-                                    <input type="hidden" name="body_temp" value="<?php echo htmlspecialchars($vitals_data['body_temp']); ?>">
-                                <?php else: ?>
-                                    <input type="number" name="body_temp" placeholder="°C" step="0.1" min="35" max="42" required>
-                                <?php endif; ?>
+                                <input type="number" name="body_temp" placeholder="°C" step="0.1" min="35" max="42" required>
                             </td>
                             <td><input type="text" name="gen_appearance" placeholder="Enter observation" required></td>
                             <td><input type="text" name="skin" placeholder="Enter observation" required></td>
@@ -1085,8 +1047,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <!-- Loading Spinner -->
     <div class="loading-spinner" id="loadingSpinner"></div>
 
-
-
     <script>
         let confirmationDialog = document.getElementById("confirmationDialog");
         let loadingSpinner = document.getElementById("loadingSpinner");
@@ -1157,43 +1117,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // No Button (Closes Modal)
         cancelButton.addEventListener("click", function() {
             closeModal();
-        });
-
-        document.addEventListener('DOMContentLoaded', function() {
-            <?php if (!$is_physician && $_SESSION['role_id'] != 1): ?>
-            // If not physician or admin, show unauthorized message
-            const formContainer = document.querySelector('.physical-examination');
-            if (formContainer) {
-                formContainer.innerHTML = `
-                    <div style="background-color: #f8f8f8; color: #242b31; padding: 20px; border-radius: 5px; text-align: center; border-left: 5px solid #a82020;">
-                        <h3>Unauthorized Access</h3>
-                        <p>Only physicians are authorized to access and complete this physical examination form.</p>
-                        <a href="../../../public/Dashboards/dashboard-staff-main.php" style="display: inline-block; margin-top: 15px; padding: 10px 20px; background-color: #a82020; color: white; text-decoration: none; border-radius: 5px;">Return to Dashboard</a>
-                    </div>
-                `;
-            }
-            <?php elseif ($is_physician): ?>
-            // For physicians, show a notice that they need to complete all fields
-            const formHeader = document.querySelector('h3');
-            if (formHeader) {
-                const notice = document.createElement('div');
-                notice.style.backgroundColor = '#f8f8f8';
-                notice.style.color = '#242b31';
-                notice.style.padding = '10px';
-                notice.style.borderRadius = '5px';
-                notice.style.marginBottom = '15px';
-                notice.style.borderLeft = '5px solid #a82020';
-                notice.innerHTML = '<strong>Notice:</strong> As a Physician, you are required to complete all fields in this physical examination form.';
-                formHeader.parentNode.insertBefore(notice, formHeader.nextSibling);
-            }
-            
-            // Show a subtle highlight on required fields
-            document.querySelectorAll('input[required], select[required], textarea[required]').forEach(field => {
-                if (field.type !== 'radio' && field.type !== 'checkbox') {
-                    field.style.borderLeft = '3px solid #a82020';
-                }
-            });
-            <?php endif; ?>
         });
     </script>
 </body>
