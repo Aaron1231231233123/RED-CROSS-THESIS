@@ -1275,6 +1275,35 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         </div>
     </div>
     
+    <!-- Decline Request Modal -->
+    <div class="modal fade" id="declineRequestModal" tabindex="-1" aria-labelledby="declineRequestModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Reason for Declining</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <form id="declineRequestForm" method="post">
+            <div class="modal-body">
+              <input type="hidden" name="request_id" id="declineRequestId">
+              <select class="form-select" name="decline_reason" id="declineReasonSelect" required>
+                <option value="" selected disabled>Select a reason</option>
+                <option value="Low Blood Supply">Low Blood Supply</option>
+                <option value="Ineligible Requestor">Ineligible Requestor</option>
+                <option value="Medical Restrictions">Medical Restrictions</option>
+                <option value="Pending Verification">Pending Verification</option>
+                <option value="Duplicate Request">Duplicate Request</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="modal-footer">
+              <button type="submit" class="btn btn-danger">Confirm</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    
     <!-- jQuery first (if needed) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <!-- Popper.js -->
@@ -1492,6 +1521,25 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             document.body.appendChild(form);
             form.submit();
         });
+
+        // Decline button in the request details modal
+        const declineBtn = document.getElementById('declineRequest');
+        if (declineBtn) {
+            declineBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                // Set the request ID in the decline modal
+                const reqId = document.getElementById('modalRequestId').value;
+                document.getElementById('declineRequestId').value = reqId;
+                // Reset the select
+                document.getElementById('declineReasonSelect').selectedIndex = 0;
+                // Hide the request details modal first
+                var requestDetailsModal = bootstrap.Modal.getInstance(document.getElementById('requestModal'));
+                if (requestDetailsModal) requestDetailsModal.hide();
+                // Show the decline modal
+                var declineModal = new bootstrap.Modal(document.getElementById('declineRequestModal'));
+                setTimeout(function() { declineModal.show(); }, 300); // Wait for fade out
+            });
+        }
     });
     </script>
 </body>
