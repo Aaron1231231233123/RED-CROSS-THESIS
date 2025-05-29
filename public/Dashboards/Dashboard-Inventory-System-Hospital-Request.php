@@ -166,6 +166,116 @@ function fetchBloodRequestsByStatus($status) {
 
 $blood_requests = fetchBloodRequestsByStatus($status);
 
+// Helper function to query Supabase tables (for inventory check)
+function querySQL($table, $select = "*", $filters = null) {
+    $ch = curl_init();
+
+    $headers = [
+        'Content-Type: application/json',
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY,
+        'Prefer: return=representation'
+    ];
+
+    $url = SUPABASE_URL . '/rest/v1/' . $table . '?select=' . urlencode($select);
+
+    if ($filters) {
+        foreach ($filters as $key => $value) {
+            $url .= '&' . $key . '=' . urlencode($value);
+        }
+    }
+
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+    $response = curl_exec($ch);
+    $error = curl_error($ch);
+
+    curl_close($ch);
+
+    if ($error) {
+        return ['error' => $error];
+    }
+
+    return json_decode($response, true);
+}
+
+// Helper function to get compatible blood types based on recipient's blood type
+function getCompatibleBloodTypes($blood_type, $rh_factor) {
+    $is_positive = $rh_factor === 'Positive';
+    $compatible_types = [];
+    switch ($blood_type) {
+        case 'O':
+            if ($is_positive) {
+                $compatible_types = [
+                    ['type' => 'O', 'rh' => 'Positive', 'priority' => 2],
+                    ['type' => 'O', 'rh' => 'Negative', 'priority' => 1]
+                ];
+            } else {
+                $compatible_types = [
+                    ['type' => 'O', 'rh' => 'Negative', 'priority' => 1]
+                ];
+            }
+            break;
+        case 'A':
+            if ($is_positive) {
+                $compatible_types = [
+                    ['type' => 'A', 'rh' => 'Positive', 'priority' => 4],
+                    ['type' => 'A', 'rh' => 'Negative', 'priority' => 3],
+                    ['type' => 'O', 'rh' => 'Positive', 'priority' => 2],
+                    ['type' => 'O', 'rh' => 'Negative', 'priority' => 1]
+                ];
+            } else {
+                $compatible_types = [
+                    ['type' => 'A', 'rh' => 'Negative', 'priority' => 2],
+                    ['type' => 'O', 'rh' => 'Negative', 'priority' => 1]
+                ];
+            }
+            break;
+        case 'B':
+            if ($is_positive) {
+                $compatible_types = [
+                    ['type' => 'B', 'rh' => 'Positive', 'priority' => 4],
+                    ['type' => 'B', 'rh' => 'Negative', 'priority' => 3],
+                    ['type' => 'O', 'rh' => 'Positive', 'priority' => 2],
+                    ['type' => 'O', 'rh' => 'Negative', 'priority' => 1]
+                ];
+            } else {
+                $compatible_types = [
+                    ['type' => 'B', 'rh' => 'Negative', 'priority' => 2],
+                    ['type' => 'O', 'rh' => 'Negative', 'priority' => 1]
+                ];
+            }
+            break;
+        case 'AB':
+            if ($is_positive) {
+                $compatible_types = [
+                    ['type' => 'AB', 'rh' => 'Positive', 'priority' => 8],
+                    ['type' => 'AB', 'rh' => 'Negative', 'priority' => 7],
+                    ['type' => 'A', 'rh' => 'Positive', 'priority' => 6],
+                    ['type' => 'A', 'rh' => 'Negative', 'priority' => 5],
+                    ['type' => 'B', 'rh' => 'Positive', 'priority' => 4],
+                    ['type' => 'B', 'rh' => 'Negative', 'priority' => 3],
+                    ['type' => 'O', 'rh' => 'Positive', 'priority' => 2],
+                    ['type' => 'O', 'rh' => 'Negative', 'priority' => 1]
+                ];
+            } else {
+                $compatible_types = [
+                    ['type' => 'AB', 'rh' => 'Negative', 'priority' => 4],
+                    ['type' => 'A', 'rh' => 'Negative', 'priority' => 3],
+                    ['type' => 'B', 'rh' => 'Negative', 'priority' => 2],
+                    ['type' => 'O', 'rh' => 'Negative', 'priority' => 1]
+                ];
+            }
+            break;
+    }
+    usort($compatible_types, function($a, $b) {
+        return $a['priority'] - $b['priority'];
+    });
+    return $compatible_types;
+}
+
 // Function to check if a blood request can be fulfilled (no deduction, just check)
 function canFulfillBloodRequest($request_id) {
     $request_url = SUPABASE_URL . '/rest/v1/blood_requests?request_id=eq.' . $request_id;
@@ -181,13 +291,10 @@ function canFulfillBloodRequest($request_id) {
     $request_data = json_decode($response, true);
     if (empty($request_data)) return [false, 'Request not found.'];
     $request_data = $request_data[0];
-
     $requested_blood_type = $request_data['patient_blood_type'];
     $requested_rh_factor = $request_data['rh_factor'];
     $units_requested = intval($request_data['units_requested']);
     $blood_type_full = $requested_blood_type . ($requested_rh_factor === 'Positive' ? '+' : '-');
-
-    // Fetch all available, not expired, collected blood bags
     $eligibilityData = querySQL(
         'eligibility',
         'eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status,blood_collection_id',
@@ -207,6 +314,7 @@ function canFulfillBloodRequest($request_id) {
         $expirationDate->modify('+35 days');
         $isExpired = ($today > $expirationDate);
         $amount_taken = $bloodCollectionData && isset($bloodCollectionData['amount_taken']) ? intval($bloodCollectionData['amount_taken']) : 0;
+        // Only count bags that are not expired and have amount_taken > 0 (status 'Valid')
         if ($amount_taken > 0 && !$isExpired) {
             $available_bags[] = [
                 'eligibility_id' => $item['eligibility_id'],
@@ -215,11 +323,13 @@ function canFulfillBloodRequest($request_id) {
                 'amount_taken' => $amount_taken,
                 'collection_start_time' => $item['collection_start_time'],
                 'expiration_date' => $expirationDate->format('Y-m-d'),
+                'status' => 'Valid',
             ];
         }
     }
     $units_found = 0;
     $remaining_units = $units_requested;
+    $deducted_by_type = [];
     foreach ($available_bags as $bag) {
         if ($remaining_units <= 0) break;
         if ($bag['blood_type'] === $blood_type_full) {
@@ -228,10 +338,35 @@ function canFulfillBloodRequest($request_id) {
                 $units_to_take = min($available_units, $remaining_units);
                 $units_found += $units_to_take;
                 $remaining_units -= $units_to_take;
+                if (!isset($deducted_by_type[$bag['blood_type']])) {
+                    $deducted_by_type[$bag['blood_type']] = 0;
+                }
+                $deducted_by_type[$bag['blood_type']] += $units_to_take;
             }
         }
     }
-    // Optionally, add compatible blood type logic here if needed
+    if ($remaining_units > 0) {
+        $compatible_types = getCompatibleBloodTypes($requested_blood_type, $requested_rh_factor);
+        foreach ($compatible_types as $compatible_type) {
+            if ($remaining_units <= 0) break;
+            $compatible_blood_type = $compatible_type['type'] . ($compatible_type['rh'] === 'Positive' ? '+' : '-');
+            foreach ($available_bags as $bag) {
+                if ($remaining_units <= 0) break;
+                if ($bag['blood_type'] === $compatible_blood_type) {
+                    $available_units = $bag['amount_taken'];
+                    if ($available_units > 0) {
+                        $units_to_take = min($available_units, $remaining_units);
+                        $units_found += $units_to_take;
+                        $remaining_units -= $units_to_take;
+                        if (!isset($deducted_by_type[$bag['blood_type']])) {
+                            $deducted_by_type[$bag['blood_type']] = 0;
+                        }
+                        $deducted_by_type[$bag['blood_type']] += $units_to_take;
+                    }
+                }
+            }
+        }
+    }
     if ($units_found < $units_requested) {
         $shortage = $units_requested - $units_found;
         $msg = "Unable to fulfill blood request due to insufficient fresh blood inventory.\n\n";
@@ -239,6 +374,12 @@ function canFulfillBloodRequest($request_id) {
         $msg .= "Units Requested: {$units_requested}\n";
         $msg .= "Fresh Units Available: {$units_found}\n";
         $msg .= "Shortage: {$shortage} units\n";
+        if (!empty($deducted_by_type)) {
+            $msg .= "Available Fresh Blood Types:\n";
+            foreach ($deducted_by_type as $type => $amount) {
+                $msg .= "• {$type}: {$amount} units\n";
+            }
+        }
         return [false, $msg];
     }
     return [true, ''];
@@ -271,7 +412,8 @@ if (isset($_POST['accept_request'])) {
                     ];
                     $response = supabaseRequest($updateEndpoint, 'PATCH', $data);
                     if ($response['code'] >= 200 && $response['code'] < 300) {
-                        $success_message = "Request #$request_id has been successfully accepted. You can view it in the Handover section.";
+                        $success_message = "Request #$request_id has been successfully accepted. You can view it in the Approved tab.";
+                        // Do not redirect, just show the message
                         $blood_requests = fetchBloodRequestsByStatus($status);
                     } else {
                         $error_message = "Failed to accept request. Error code: " . $response['code'];
@@ -818,6 +960,30 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         </div>
     </div>
 
+    <?php if (!empty($modal_error_message)): ?>
+    <!-- Insufficient Inventory Modal -->
+    <div class="modal fade show" id="insufficientInventoryModal" tabindex="-1" aria-labelledby="insufficientInventoryModalLabel" aria-modal="true" style="display: block; background: rgba(0,0,0,0.5);">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-danger text-white">
+            <h5 class="modal-title" id="insufficientInventoryModalLabel">Insufficient Blood Inventory</h5>
+            <button type="button" class="btn-close btn-close-white" onclick="window.location.href=window.location.href;"></button>
+          </div>
+          <div class="modal-body"><?php echo nl2br(htmlspecialchars($modal_error_message)); ?></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-danger" onclick="window.location.href=window.location.href;">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        var modal = new bootstrap.Modal(document.getElementById('insufficientInventoryModal'));
+        modal.show();
+      });
+    </script>
+    <?php endif; ?>
+
     <div class="container-fluid">
         <!-- Header -->
         <div class="dashboard-home-header bg-light p-3 border-bottom">
@@ -1304,6 +1470,28 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 modalBodyText.innerHTML = `Are you sure you want to decline this request for the following reason? <br><strong>("${reason}")</strong>`
             });
         }
+
+        // Accept Request button logic
+        document.getElementById('modalAcceptButton').addEventListener('click', function() {
+            // Get the request_id from the hidden field
+            var requestId = document.getElementById('modalRequestId').value;
+            // Create a hidden form and submit it
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '';
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'request_id';
+            input.value = requestId;
+            form.appendChild(input);
+            var accept = document.createElement('input');
+            accept.type = 'hidden';
+            accept.name = 'accept_request';
+            accept.value = '1';
+            form.appendChild(accept);
+            document.body.appendChild(form);
+            form.submit();
+        });
     });
     </script>
 </body>
