@@ -1048,7 +1048,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     <h2 class="text-left">
                         <?php
                             if ($filter_status === 'accepted') {
-                                echo 'Accepted Requests';
+                                echo 'Approved Requests';
                             } elseif ($filter_status === 'handedover') {
                                 echo 'Handed Over Requests';
                             } elseif ($filter_status === 'declined') {
