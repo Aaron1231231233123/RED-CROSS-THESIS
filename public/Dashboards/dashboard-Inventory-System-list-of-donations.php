@@ -1259,9 +1259,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <div><strong>Permanent Address:</strong> ${donor.permanent_address || 'N/A'}</div>
                         ${isApproved ? `<div><strong>Eligibility End Date:</strong> ${eligibility.end_date ? new Date(eligibility.end_date).toLocaleDateString() : 'N/A'}</div>` : ''}
                         
-                        ${isApproved ? `<div><strong>Blood Bag Type:</strong> ${eligibility.blood_bag_type || 'Not specified'}</div>` : ''}
-                        ${isApproved ? `<div><strong>Amount Collected:</strong> ${eligibility.amount_collected || 'Not specified'}</div>` : ''}
-                        
                         ${isApproved ? `<div><strong>Donor Reaction:</strong> ${eligibility.donor_reaction || 'None'}</div>` : ''}
                         ${isApproved ? `<div><strong>Management Done:</strong> ${eligibility.management_done || 'None'}</div>` : ''}
                         
