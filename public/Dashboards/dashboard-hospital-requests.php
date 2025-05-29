@@ -418,7 +418,7 @@ th {
             <!-- Main Content -->
                 <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                     <div class="container-fluid p-4 custom-margin">
-                        <h2 style="color: #941022; border-bottom: 2px solid #941022; padding-bottom: 18px; margin-bottom: 25px;">Your Blood Requests</h2>
+                        <h2 style="color: #941022; border-bottom: 2px solid #941022; padding-bottom: 18px; margin-bottom: 25px;">Active Blood Requests</h2>
                     
                         <!-- Add search bar -->
                         <div class="search-box mb-4">

@@ -942,7 +942,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
             <!-- Main Content -->
                 <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                     <div class="container-fluid p-4 custom-margin">
-                            <h2 class="card-title mb-3">Request History</h2>
+                            <h2 class="card-title mb-3">Approved Blood Requests</h2>
                             
 
                                             <!-- Add search bar -->

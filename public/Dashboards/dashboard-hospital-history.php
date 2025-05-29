@@ -680,7 +680,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                     <div class="container-fluid p-4 custom-margin">
                         
-                        <h2 class="card-title mb-3">Print Requests</h2>
+                        <h2 class="card-title mb-3">Approved Blood Requests</h2>
                             
                             <!-- Search Bar -->
                             <div class="search-box mb-4">
