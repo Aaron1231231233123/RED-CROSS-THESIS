@@ -153,8 +153,8 @@ function fetchBloodRequestsByStatus($status) {
         $endpoint = "blood_requests?status=eq.Confirmed&order=is_asap.desc,requested_on.desc";
     } elseif ($status === 'declined') {
         $endpoint = "blood_requests?status=eq.Declined&order=is_asap.desc,requested_on.desc";
-    } else { // 'requests' or any other value defaults to pending
-        $endpoint = "blood_requests?status=eq.Pending&order=is_asap.desc,requested_on.desc";
+    } else { // 'requests' or any other value defaults to pending + rescheduled
+        $endpoint = "blood_requests?or=(status.eq.Pending,status.eq.Rescheduled)&order=is_asap.desc,requested_on.desc";
     }
     $response = supabaseRequest($endpoint);
     if ($response['code'] >= 200 && $response['code'] < 300) {
@@ -481,6 +481,39 @@ if (isset($_POST['decline_request'])) {
                 $error_message .= $verifyResponse['error'];
             }
         }
+    }
+}
+
+// PHP backend logic for rescheduling
+if (isset($_POST['reschedule_request']) && isset($_POST['request_id'])) {
+    $request_id = $_POST['request_id'];
+    // Fetch the request to get current required date
+    $verifyEndpoint = "blood_requests?request_id=eq.$request_id&select=*";
+    $verifyResponse = supabaseRequest($verifyEndpoint);
+    if ($verifyResponse['code'] >= 200 && $verifyResponse['code'] < 300 && !empty($verifyResponse['data'])) {
+        $request = $verifyResponse['data'][0];
+        $current_required_date = $request['when_needed'];
+        $new_required_date = date('Y-m-d\TH:i:s+00:00', strtotime($current_required_date . ' +3 days'));
+        // Update status to Rescheduled and required date
+        $updateEndpoint = "blood_requests?request_id=eq.$request_id";
+        $data = [
+            'status' => 'Rescheduled',
+            'when_needed' => $new_required_date,
+            'last_updated' => 'now'
+        ];
+        $updateResponse = supabaseRequest($updateEndpoint, 'PATCH', $data);
+        if ($updateResponse['code'] >= 200 && $updateResponse['code'] < 300) {
+            // Schedule a task to set status back to Pending after 3 days (pseudo, needs cron or similar in real app)
+            // For now, just return success
+            echo json_encode(['success' => true]);
+            exit;
+        } else {
+            echo json_encode(['success' => false, 'error' => 'Failed to update request.']);
+            exit;
+        }
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Request not found.']);
+        exit;
     }
 }
 ?>
@@ -969,18 +1002,48 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             <h5 class="modal-title" id="insufficientInventoryModalLabel">Insufficient Blood Inventory</h5>
             <button type="button" class="btn-close btn-close-white" onclick="window.location.href=window.location.href;"></button>
           </div>
-          <div class="modal-body"><?php echo nl2br(htmlspecialchars($modal_error_message)); ?></div>
+          <div class="modal-body">
+            <?php echo nl2br(htmlspecialchars($modal_error_message)); ?>
+            <input type="hidden" id="insufficientRequestId" value="<?php echo htmlspecialchars($_POST['request_id'] ?? '', ENT_QUOTES); ?>">
+          </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-danger" onclick="window.location.href=window.location.href;">Close</button>
+            <button type="button" class="btn btn-primary" id="rescheduleRequestBtn">Reschedule</button>
           </div>
         </div>
       </div>
     </div>
     <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        var modal = new bootstrap.Modal(document.getElementById('insufficientInventoryModal'));
-        modal.show();
-      });
+    document.addEventListener('DOMContentLoaded', function() {
+      var modal = new bootstrap.Modal(document.getElementById('insufficientInventoryModal'));
+      modal.show();
+
+      // Attach reschedule logic
+      document.getElementById('rescheduleRequestBtn').onclick = function() {
+        var requestId = document.getElementById('insufficientRequestId') ? document.getElementById('insufficientRequestId').value : null;
+        if (!requestId) {
+          alert('Request ID not found.');
+          return;
+        }
+        // Send AJAX request to reschedule
+        fetch('', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'reschedule_request=1&request_id=' + encodeURIComponent(requestId)
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            alert('Request has been rescheduled for 3 days later.');
+            window.location.reload();
+          } else {
+            alert('Failed to reschedule: ' + (data.error || 'Unknown error'));
+          }
+        })
+        .catch(err => {
+          alert('Error: ' + err);
+        });
+      };
+    });
     </script>
     <?php endif; ?>
 
@@ -1128,6 +1191,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <th>Request Date</th>
                                 <th>Required Date</th>
                                 <th>Time Sent</th>
+                                <th>Status</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
@@ -1147,6 +1211,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <td><?php echo htmlspecialchars($request_date); ?></td>
                                 <td><?php echo htmlspecialchars($required_date); ?></td>
                                 <td><?php echo htmlspecialchars($time_sent); ?></td>
+                                <td>
+                                    <?php
+                                    $status_val = isset($request['status']) ? strtolower($request['status']) : '';
+                                    if ($status_val === 'pending') {
+                                        echo '<span class="badge bg-warning text-dark">Pending</span>';
+                                    } elseif ($status_val === 'rescheduled') {
+                                        echo '<span class="badge bg-info text-dark">Rescheduled</span>';
+                                    }
+                                    ?>
+                                </td>
                                 <td>
                                     <button 
                                         class="btn btn-info btn-sm view-btn"
