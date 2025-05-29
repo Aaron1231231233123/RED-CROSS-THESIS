@@ -1685,7 +1685,7 @@ foreach ($bloodByType as $type => $count) {
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Number of Units</label>
-                            <input type="number" class="form-control" name="units_requested" min="1" required style="width: 105%;">
+                            <input type="number" class="form-control" name="units_requested" min="1" max="10" required style="width: 105%;">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">When Needed</label>
@@ -2676,6 +2676,22 @@ foreach ($bloodByType as $type => $count) {
                 chevron.classList.remove('rotate');
             });
         }
+    });
+    </script>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // ... existing code ...
+        // Add validation for 10 unit blood limit
+        var unitsInput = document.querySelector('input[name="units_requested"]');
+        if (unitsInput) {
+            unitsInput.addEventListener('input', function() {
+                if (parseInt(this.value, 10) > 10) {
+                    this.value = 10;
+                }
+            });
+        }
+        // ... existing code ...
     });
     </script>
 </body>

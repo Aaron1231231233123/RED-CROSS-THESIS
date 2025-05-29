@@ -80,277 +80,6 @@ function testSupabaseConnection() {
     ];
 }
 
-// Function to update blood request status and deduct inventory
-function updateBloodRequestAndInventory($request_id) {
-    try {
-        // First test the connection
-        $connection_test = testSupabaseConnection();
-        if (!$connection_test['success']) {
-            error_log("Supabase connection test failed. HTTP Code: " . $connection_test['http_code']);
-            error_log("Response: " . $connection_test['response']);
-            error_log("CURL Error: " . $connection_test['error']);
-            
-            throw new Exception("Unable to connect to the database. Please try again later.");
-        }
-
-        $ch = curl_init();
-        
-        error_log("Starting blood request confirmation process for request ID: " . $request_id);
-        
-        $headers = [
-            'apikey: ' . SUPABASE_API_KEY,
-            'Authorization: Bearer ' . SUPABASE_API_KEY,
-            'Content-Type: application/json',
-            'Prefer: return=representation'
-        ];
-
-        // First, get the blood request details
-        $request_url = SUPABASE_URL . '/rest/v1/blood_requests?request_id=eq.' . $request_id;
-        error_log("Fetching blood request details from: " . $request_url);
-        
-        curl_setopt($ch, CURLOPT_URL, $request_url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        
-        if ($http_code !== 200) {
-            throw new Exception("Failed to fetch blood request. HTTP Code: " . $http_code);
-        }
-
-        $request_data = json_decode($response, true);
-        if (empty($request_data)) {
-            throw new Exception("No blood request found with ID: " . $request_id);
-        }
-        
-        $request_data = $request_data[0];
-        $requested_blood_type = $request_data['patient_blood_type'];
-        $requested_rh_factor = $request_data['rh_factor'];
-        $units_requested = intval($request_data['units_requested']); // Convert to integer
-        $blood_type_full = $requested_blood_type . ($requested_rh_factor === 'Positive' ? '+' : '-');
-
-        // --- MATCH ADMIN DASHBOARD LOGIC FOR AVAILABLE BLOOD ---
-        // 1. Query eligibility for all successful collections
-        $eligibilityData = querySQL(
-            'eligibility',
-            'eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status,blood_collection_id',
-            ['collection_successful' => 'eq.true']
-        );
-        
-        $available_bags = [];
-        $today = new DateTime();
-        foreach ($eligibilityData as $item) {
-            // 2. For each eligibility, fetch related blood_collection
-            if (!empty($item['blood_collection_id'])) {
-                $bloodCollectionData = querySQL('blood_collection', '*', ['blood_collection_id' => 'eq.' . $item['blood_collection_id']]);
-                $bloodCollectionData = isset($bloodCollectionData[0]) ? $bloodCollectionData[0] : null;
-            } else {
-                $bloodCollectionData = null;
-            }
-            // 3. Use collection_start_time for expiration
-            $collectionDate = new DateTime($item['collection_start_time']);
-            $expirationDate = clone $collectionDate;
-            $expirationDate->modify('+35 days'); // or '+42 days'
-            $isExpired = ($today > $expirationDate);
-            // 4. Only count bags with amount_taken > 0 and not expired
-            $amount_taken = $bloodCollectionData && isset($bloodCollectionData['amount_taken']) ? intval($bloodCollectionData['amount_taken']) : 0;
-            if ($amount_taken > 0 && !$isExpired) {
-                $available_bags[] = [
-                    'eligibility_id' => $item['eligibility_id'],
-                    'blood_collection_id' => $item['blood_collection_id'],
-                    'blood_type' => $item['blood_type'],
-                    'amount_taken' => $amount_taken,
-                    'collection_start_time' => $item['collection_start_time'],
-                    'expiration_date' => $expirationDate->format('Y-m-d'),
-                ];
-            }
-        }
-        // --- END ADMIN LOGIC MATCH ---
-
-        // Now use $available_bags for deduction logic
-        $units_found = 0;
-        $collections_to_update = [];
-        $remaining_units = $units_requested;
-        $deducted_by_type = [];
-
-        // First try exact matches
-        foreach ($available_bags as $bag) {
-            if ($remaining_units <= 0) break;
-            if ($bag['blood_type'] === $blood_type_full) {
-                $available_units = $bag['amount_taken'];
-                if ($available_units > 0) {
-                    $units_to_take = min($available_units, $remaining_units);
-                    $units_found += $units_to_take;
-                    $remaining_units -= $units_to_take;
-                    if (!isset($deducted_by_type[$bag['blood_type']])) {
-                        $deducted_by_type[$bag['blood_type']] = 0;
-                    }
-                    $deducted_by_type[$bag['blood_type']] += $units_to_take;
-                    $bag['units_to_take'] = $units_to_take;
-                    $collections_to_update[] = $bag;
-                }
-            }
-        }
-        // If we still need units, try compatible types
-        if ($remaining_units > 0) {
-            $compatible_types = getCompatibleBloodTypes($requested_blood_type, $requested_rh_factor);
-            foreach ($compatible_types as $compatible_type) {
-                if ($remaining_units <= 0) break;
-                $compatible_blood_type = $compatible_type['type'] . ($compatible_type['rh'] === 'Positive' ? '+' : '-');
-                foreach ($available_bags as $bag) {
-                    if ($remaining_units <= 0) break;
-                    if ($bag['blood_type'] === $compatible_blood_type &&
-                        !in_array($bag['blood_collection_id'], array_column($collections_to_update, 'blood_collection_id'))) {
-                        $available_units = $bag['amount_taken'];
-                        if ($available_units > 0) {
-                            $units_to_take = min($available_units, $remaining_units);
-                            $units_found += $units_to_take;
-                            $remaining_units -= $units_to_take;
-                            if (!isset($deducted_by_type[$bag['blood_type']])) {
-                                $deducted_by_type[$bag['blood_type']] = 0;
-                            }
-                            $deducted_by_type[$bag['blood_type']] += $units_to_take;
-                            $bag['units_to_take'] = $units_to_take;
-                            $collections_to_update[] = $bag;
-                        }
-                    }
-                }
-            }
-        }
-
-        if ($units_found < $units_requested) {
-            $shortage = $units_requested - $units_found;
-            $error_message = "Unable to fulfill blood request due to insufficient fresh blood inventory.\n\n";
-            $error_message .= "Request Details:\n";
-            $error_message .= "• Requested Blood Type: {$blood_type_full}\n";
-            $error_message .= "• Units Requested: {$units_requested}\n";
-            $error_message .= "• Fresh Units Available: {$units_found}\n";
-            $error_message .= "• Shortage: {$shortage} units\n\n";
-
-            if (!empty($deducted_by_type)) {
-                $error_message .= "Available Fresh Blood Types:\n";
-                foreach ($deducted_by_type as $type => $amount) {
-                    $error_message .= "• {$type}: {$amount} units\n";
-                }
-            }
-
-            header('Content-Type: application/json');
-            echo json_encode([
-                'success' => false,
-                'message' => $error_message,
-                'error_type' => 'INSUFFICIENT_FRESH_INVENTORY',
-                'requested_blood_type' => $blood_type_full,
-                'units_requested' => $units_requested,
-                'units_found' => $units_found,
-                'shortage' => $shortage,
-                'deducted_by_type' => $deducted_by_type
-            ]);
-            exit;
-        }
-
-        // Update blood collections to deduct the used units
-        foreach ($collections_to_update as $collection) {
-            // Calculate new amount after deduction (as integer)
-            $new_amount = intval($collection['amount_taken']) - intval($collection['units_to_take']);
-            if ($new_amount < 0) $new_amount = 0; // Never negative
-            $update_data = json_encode([
-                'amount_taken' => $new_amount,
-                'updated_at' => date('Y-m-d H:i:s')
-            ]);
-            $update_url = SUPABASE_URL . '/rest/v1/blood_collection';
-            $update_url .= '?blood_collection_id=eq.' . $collection['blood_collection_id'];
-            curl_setopt($ch, CURLOPT_URL, $update_url);
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $update_data);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'apikey: ' . SUPABASE_API_KEY,
-                'Authorization: Bearer ' . SUPABASE_API_KEY,
-                'Content-Type: application/json',
-                'Prefer: return=minimal'
-            ]);
-            $update_response = curl_exec($ch);
-            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            if ($http_code !== 200 && $http_code !== 204) {
-                header('Content-Type: application/json');
-                echo json_encode([
-                    'success' => false,
-                    'message' => "Failed to update blood collection {$collection['blood_collection_id']}. HTTP Code: {$http_code}",
-                    'error_type' => 'UPDATE_COLLECTION_FAILED',
-                    'collection_id' => $collection['blood_collection_id']
-                ]);
-                exit;
-            }
-        }
-
-        // Update request status
-        $request_update_data = json_encode([
-            'status' => 'Confirmed',
-            'last_updated' => date('Y-m-d H:i:s')
-        ]);
-        
-        $update_url = SUPABASE_URL . '/rest/v1/blood_requests';
-        $update_url .= '?request_id=eq.' . $request_id;
-        
-        curl_setopt($ch, CURLOPT_URL, $update_url);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $request_update_data);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'apikey: ' . SUPABASE_API_KEY,
-            'Authorization: Bearer ' . SUPABASE_API_KEY,
-            'Content-Type: application/json',
-            'Prefer: return=minimal'
-        ]);
-        
-        $request_update = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        
-        if ($http_code !== 200 && $http_code !== 204) {
-            header('Content-Type: application/json');
-            echo json_encode([
-                'success' => false,
-                'message' => 'Failed to update request status. HTTP Code: ' . $http_code,
-                'error_type' => 'UPDATE_REQUEST_FAILED',
-                'request_id' => $request_id
-            ]);
-            exit;
-        }
-        
-        curl_close($ch);
-
-        // Create detailed success message
-        $detailed_message = "Successfully processed blood request #{$request_id}:\n";
-        $detailed_message .= "- Requested blood type: {$blood_type_full}\n";
-        $detailed_message .= "- Total units deducted: {$units_requested}\n\n";
-        $detailed_message .= "Deduction Details:\n";
-        foreach ($deducted_by_type as $type => $amount) {
-            $detailed_message .= "- {$type}: {$amount} units\n";
-        }
-
-        header('Content-Type: application/json');
-        echo json_encode([
-            'success' => true,
-            'request_id' => $request_id,
-            'message' => 'Blood request completed successfully',
-            'detailed_message' => $detailed_message,
-            'units_deducted' => $units_requested,
-            'blood_type' => $blood_type_full,
-            'collections_updated' => count($collections_to_update),
-            'units_found' => $units_found,
-            'deducted_by_type' => $deducted_by_type
-        ]);
-        exit;
-    } catch (Exception $e) {
-        error_log("Error in updateBloodRequestAndInventory: " . $e->getMessage());
-        header('Content-Type: application/json');
-        echo json_encode([
-            'success' => false,
-            'message' => "An error occurred: " . $e->getMessage()
-        ]);
-        exit;
-    }
-}
-
 // Helper function to get compatible blood types based on recipient's blood type
 // Returns an array of compatible blood types in order of priority
 function getCompatibleBloodTypes($blood_type, $rh_factor) {
@@ -445,24 +174,27 @@ function getCompatibleBloodTypes($blood_type, $rh_factor) {
 
 // Handle AJAX request for blood confirmation
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'confirm') {
-    header('Content-Type: application/json');
-    
-    try {
-        $request_id = $_POST['request_id'] ?? null;
-        
-        if (!$request_id) {
-            throw new Exception('Request ID is required');
-        }
-        
-        $result = updateBloodRequestAndInventory($request_id);
-        echo json_encode($result);
-        
-    } catch (Exception $e) {
-        error_log("Error processing confirmation request: " . $e->getMessage());
-        echo json_encode([
-            'success' => false,
-            'message' => $e->getMessage()
+    $request_id = $_POST['request_id'] ?? null;
+    if ($request_id) {
+        $ch = curl_init();
+        $headers = [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=minimal'
+        ];
+        $update_data = json_encode([
+            'status' => 'Confirmed',
+            'last_updated' => date('Y-m-d H:i:s')
         ]);
+        $update_url = SUPABASE_URL . '/rest/v1/blood_requests?request_id=eq.' . $request_id;
+        curl_setopt($ch, CURLOPT_URL, $update_url);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $update_data);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_exec($ch);
+        curl_close($ch);
     }
     exit;
 }
@@ -498,6 +230,34 @@ if (!empty($blood_requests)) {
 
 // Find most requested blood type
 $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type_counts), $blood_type_counts) : 'N/A';
+
+// Add PHP handler for print action if not already present
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'print') {
+    $request_id = $_POST['request_id'] ?? null;
+    if ($request_id) {
+        // Update the request status to 'Printed' (optional, for tracking)
+        $ch = curl_init();
+        $headers = [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=minimal'
+        ];
+        $update_data = json_encode([
+            'status' => 'Printed',
+            'last_updated' => date('Y-m-d H:i:s')
+        ]);
+        $update_url = SUPABASE_URL . '/rest/v1/blood_requests?request_id=eq.' . $request_id;
+        curl_setopt($ch, CURLOPT_URL, $update_url);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $update_data);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_exec($ch);
+        curl_close($ch);
+    }
+    exit;
+}
 
 ?>
 
@@ -812,6 +572,38 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
             border-top-right-radius: 0.3rem;
         }
 
+        /* Modal Styling - Unified with dashboard-hospital-main.php */
+        .modal-content {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        .modal-header {
+            background-color: #941022;
+            color: white;
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+            padding: 1.5rem;
+        }
+        .modal-header .btn-close {
+            color: white;
+            filter: brightness(0) invert(1);
+        }
+        .modal-body {
+            padding: 2rem;
+        }
+        .modal-body h6.fw-bold {
+            color: #941022;
+            font-size: 1.1rem;
+            border-bottom: 2px solid #941022;
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .modal-dialog.modal-lg {
+            max-width: 800px;
+            width: 100%;
+        }
+
     </style>
 </head>
 <body>
@@ -922,11 +714,17 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                                     <td><?php echo htmlspecialchars($request['physician_name']); ?></td>
                                                     <td><?php echo date('Y-m-d', strtotime($request['requested_on'])); ?></td>
                                                     <td>
-                                                        <button class="btn btn-success pickup-btn" 
-                                                                data-request-id="<?php echo htmlspecialchars($request['request_id']); ?>"
-                                                                onclick="markAsConfirmed(<?php echo htmlspecialchars($request['request_id']); ?>)">
-                                                            <i class="fas fa-print me-1"></i> Print
-                                                        </button>
+                                                        <?php if ($request['status'] === 'Accepted'): ?>
+                                                            <button class="btn btn-success btn-sm confirm-btn" data-request-id="<?php echo htmlspecialchars($request['request_id']); ?>">
+                                                                <i class="fas fa-check"></i> Confirm & Print
+                                                            </button>
+                                                        <?php else: ?>
+                                                            <button class="btn btn-success pickup-btn" 
+                                                                    data-request-id="<?php echo htmlspecialchars($request['request_id']); ?>"
+                                                                    onclick="printRequest(<?php echo htmlspecialchars($request['request_id']); ?>)">
+                                                                <i class="fas fa-print me-1"></i> Print
+                                                            </button>
+                                                        <?php endif; ?>
                                                     </td>
                                                 </tr>
                                                 <?php endif; ?>
@@ -943,7 +741,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
 
 <!-- Blood Request Modal -->
 <div class="modal fade" id="bloodRequestModal" tabindex="-1" aria-labelledby="bloodRequestModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="bloodRequestModalLabel">Blood Request Form</h5>
@@ -1006,7 +804,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Number of Units</label>
-                            <input type="number" class="form-control" name="units_requested" min="1" required style="width: 105%;">
+                            <input type="number" class="form-control" name="units_requested" min="1" max="10" required style="width: 105%;">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">When Needed</label>
@@ -1118,25 +916,6 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
   </div>
 </div>
 
-<!-- Confirm Deduction Modal -->
-<div class="modal fade" id="confirmDeductionModal" tabindex="-1" aria-labelledby="confirmDeductionModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header modal-header-red">
-        <h5 class="modal-title" id="confirmDeductionModalLabel">Confirm Blood Deduction</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body" id="confirmDeductionModalBody">
-        Are you sure you want to mark this blood request as confirmed? This will deduct the units from inventory.
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary" id="confirmDeductionBtn">OK</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- Blood Request Receipt Modal -->
 <div class="modal fade" id="bloodRequestReceiptModal" tabindex="-1" aria-labelledby="bloodRequestReceiptModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
@@ -1147,6 +926,25 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
       </div>
       <div class="modal-body">
         <p class="mb-0">This receipt must be presented to the Philippine Red Cross (PRC) to claim the patient's blood request.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Modal -->
+<div class="modal fade" id="confirmRequestModal" tabindex="-1" aria-labelledby="confirmRequestModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title" id="confirmRequestModalLabel">Confirm Blood Request</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to confirm this blood request? This will mark the request as Confirmed and allow you to print the request form.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" id="confirmRequestBtn">Yes, Confirm & Print</button>
       </div>
     </div>
   </div>
@@ -1189,6 +987,16 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
           searchBar.addEventListener('blur', function() {
               this.style.boxShadow = 'none';
           });
+
+          // Add validation for 10 unit blood limit
+          var unitsInput = document.querySelector('input[name="units_requested"]');
+          if (unitsInput) {
+              unitsInput.addEventListener('input', function() {
+                  if (parseInt(this.value, 10) > 10) {
+                      this.value = 10;
+                  }
+              });
+          }
       });
      </script>
 
@@ -1216,13 +1024,16 @@ function showInsufficientInventoryModal(message) {
     modal.show();
 }
 
-function showConfirmDeductionModal(onConfirm) {
-    var modal = new bootstrap.Modal(document.getElementById('confirmDeductionModal'));
-    document.getElementById('confirmDeductionBtn').onclick = function() {
-        modal.hide();
-        onConfirm();
-    };
-    modal.show();
+function printRequest(requestId) {
+    // Optionally, update the status to 'Printed' via AJAX (if you want to log that it was printed)
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'action=print&request_id=' + encodeURIComponent(requestId)
+    }).finally(function() {
+        // Always redirect to print page
+        window.location.href = `print-blood-request.php?request_id=${requestId}`;
+    });
 }
 
 // Replace alert() and confirm() in markAsConfirmed
@@ -1300,7 +1111,7 @@ function markAsConfirmed(requestId) {
             if (printBtn) {
                 printBtn.addEventListener('click', function() {
                     // Redirect to print page with request ID
-                    window.location.href = `print-blood-request.php?request_id=${data.request_id}`;
+                    window.location.href = 'print-blood-request.php?request_id=' + data.request_id;
                 });
             }
         } else {
@@ -1627,6 +1438,35 @@ function sortTableByStatus() {
     // Re-append rows in new order
     rows.forEach(row => table.appendChild(row));
 }
-     </script>
+
+document.addEventListener('DOMContentLoaded', function() {
+    let selectedRequestId = null;
+    // Show modal on confirm button click
+    document.querySelectorAll('.confirm-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            selectedRequestId = this.getAttribute('data-request-id');
+            var modal = new bootstrap.Modal(document.getElementById('confirmRequestModal'));
+            modal.show();
+        });
+    });
+    // Handle confirm in modal
+    document.getElementById('confirmRequestBtn').addEventListener('click', function() {
+        if (!selectedRequestId) return;
+        // AJAX to update status
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'action=confirm&request_id=' + encodeURIComponent(selectedRequestId)
+        }).then(function(response) {
+            if (response.ok) {
+                // Redirect to print-blood-request.php with request_id
+                window.location.href = 'print-blood-request.php?request_id=' + selectedRequestId;
+            } else {
+                alert('Failed to confirm request.');
+            }
+        });
+    });
+});
+</script>
 </body>
 </html>

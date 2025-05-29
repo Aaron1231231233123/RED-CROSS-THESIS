@@ -1099,7 +1099,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             <!-- No Doctor/Reason columns for approved/handed over -->
                                         <?php endif; ?>
                                     <?php else: ?>
-                                        <th>Reason</th>
+                                        <th>Reason for Declining</th>
                                     <?php endif; ?>
                                     <?php if ($filter_status === 'handedover'): ?>
                                         <th>Pickup Date</th>

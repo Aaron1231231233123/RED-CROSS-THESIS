@@ -836,6 +836,37 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
             transform: rotate(180deg);
         }
 
+        /* Modal Styling - Unified with dashboard-hospital-main.php */
+        .modal-content {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        .modal-header {
+            background-color: #941022;
+            color: white;
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+            padding: 1.5rem;
+        }
+        .modal-header .btn-close {
+            color: white;
+            filter: brightness(0) invert(1);
+        }
+        .modal-body {
+            padding: 2rem;
+        }
+        .modal-body h6.fw-bold {
+            color: #941022;
+            font-size: 1.1rem;
+            border-bottom: 2px solid #941022;
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .modal-dialog.modal-lg {
+            max-width: 800px;
+            width: 100%;
+        }
     </style>
 </head>
 <body>
@@ -944,32 +975,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-md-2">
-                                    <div class="card h-100">
-                                        <div class="card-body">
-                                            <h5 class="card-title">Total Requests</h5>
-                                            <p class="card-text fs-3"><?php echo count($blood_requests); ?></p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-2">
-                                    <div class="card h-100">
-                                        <div class="card-body">
-                                            <h5 class="card-title">Total Units Picked-Up</h5>
-                                            <p class="card-text fs-3"><?php echo $total_picked_up; ?> Units</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-2">
-                                    <div class="card h-100">
-                                        <div class="card-body">
-                                            <h5 class="card-title">Total Printed</h5>
-                                            <p class="card-text fs-3 mb-0">
-                                                <?php echo array_reduce($blood_requests, function($carry, $r) { return $carry + (in_array($r['status'], ['Printed','Completed','Confirmed']) ? 1 : 0); }, 0); ?>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
+                               
                                 <div class="col-md-2">
                                     <div class="card h-100">
                                         <div class="card-body">
@@ -1035,7 +1041,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
 
 <!-- Blood Request Modal -->
 <div class="modal fade" id="bloodRequestModal" tabindex="-1" aria-labelledby="bloodRequestModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="bloodRequestModalLabel">Blood Request Form</h5>
@@ -1098,7 +1104,7 @@ $most_requested_type = !empty($blood_type_counts) ? array_search(max($blood_type
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Number of Units</label>
-                            <input type="number" class="form-control" name="units_requested" min="1" required style="width: 105%;">
+                            <input type="number" class="form-control" name="units_requested" min="1" max="10" required style="width: 105%;">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">When Needed</label>
@@ -1643,6 +1649,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 signatureUploadDiv.classList.add('d-none');
                 signaturePadDiv.classList.remove('d-none');
                 initSignaturePad();
+            }
+        });
+    }
+
+    // Add validation for 10 unit blood limit
+    var unitsInput = document.querySelector('input[name="units_requested"]');
+    if (unitsInput) {
+        unitsInput.addEventListener('input', function() {
+            if (parseInt(this.value, 10) > 10) {
+                this.value = 10;
             }
         });
     }

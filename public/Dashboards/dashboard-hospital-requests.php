@@ -419,11 +419,6 @@ th {
                 <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                     <div class="container-fluid p-4 custom-margin">
                         <h2 style="color: #941022; border-bottom: 2px solid #941022; padding-bottom: 18px; margin-bottom: 25px;">Your Blood Requests</h2>
-                        <!-- Priority Explanation Note -->
-                        <div class="alert alert-info d-flex align-items-center mb-4" style="background: #f8f9fa; color: #941022; border: 1px solid #941022;">
-                            <i class="fas fa-info-circle me-2"></i>
-                            <span><strong>Priority:</strong> Requests marked as <span class="badge bg-warning text-dark">ASAP</span> are considered high priority and will be processed first.</span>
-                        </div>
                     
                         <!-- Add search bar -->
                         <div class="search-box mb-4">
@@ -580,7 +575,7 @@ th {
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Number of Units</label>
-                            <input type="number" class="form-control" name="units_requested" min="1" required style="width: 105%;">
+                            <input type="number" class="form-control" name="units_requested" min="1" max="10" required style="width: 105%;">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">When Needed</label>
@@ -1312,6 +1307,16 @@ document.addEventListener("DOMContentLoaded", function () {
                     signatureUploadDiv.classList.add('d-none');
                     signaturePadDiv.classList.remove('d-none');
                     initSignaturePad();
+                }
+            });
+        }
+
+        // Add validation for 10 unit blood limit
+        var unitsInput = document.querySelector('input[name="units_requested"]');
+        if (unitsInput) {
+            unitsInput.addEventListener('input', function() {
+                if (parseInt(this.value, 10) > 10) {
+                    this.value = 10;
                 }
             });
         }

@@ -76,32 +76,47 @@ $current_date = date('F d, Y');
             padding: 0;
         }
         .print-container {
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: stretch;
+            display: block;
+            margin: 0 auto;
+            padding: 0;
+            min-height: unset;
         }
         .statement-box {
-            flex: 1 0 auto;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            min-height: 92vh;
+            display: block;
             max-width: 1000px;
             width: 100%;
             margin: 5px auto;
-            padding: 30px 30px 30px 30px;
+            padding: 20px 18px 18px 18px;
             border: 1px solid #eee;
             box-shadow: 0 0 10px rgba(0,0,0,0.15);
             background: #fff;
             border-radius: 10px;
             font-size: 1.05rem;
+            min-height: unset;
         }
         .rc-header {
             margin-bottom: 1.2rem;
+            text-align: center;
+        }
+        .rc-logo {
+            max-width: 90px;
+            width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto 0.5rem auto;
+            filter: none;
         }
         .rc-title {
-            font-size: 1.35rem;
+            font-size: 1.55rem;
+            font-weight: 800;
+            color: #941022;
+            margin-bottom: 0.3rem;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            text-shadow: 0 1px 0 #fff, 0 2px 4px rgba(148,16,34,0.08);
+            border-bottom: 2.5px solid #941022;
+            display: inline-block;
+            padding-bottom: 0.15em;
         }
         .rc-section-title {
             margin-top: 1.2rem;
@@ -109,7 +124,7 @@ $current_date = date('F d, Y');
             font-size: 1.08rem;
         }
         .signature-line {
-            margin-top: 80px;
+            margin-top: 40px;
             margin-bottom: 40px;
             display: flex;
             justify-content: space-between;
@@ -132,9 +147,10 @@ $current_date = date('F d, Y');
         @media print {
             .no-print { display: none !important; }
             body { background: white !important; }
-            .statement-box { box-shadow: none !important; border: none !important; width: 100% !important; }
-            html, body { height: auto; }
-            @page { size: A4; margin: 0.7cm; }
+            .statement-box { box-shadow: none !important; border: none !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0.7cm 0.7cm 0.7cm 0.7cm !important; min-height: 0 !important; display: block !important; }
+            .print-container { margin: 0 !important; padding: 0 !important; min-height: 0 !important; display: block !important; }
+            html, body { height: auto !important; min-height: 0 !important; }
+            @page { size: A4; margin: 1.2cm; }
             .print-container, .statement-box, .signature-line, .rc-footer {
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
@@ -146,8 +162,8 @@ $current_date = date('F d, Y');
     <div class="print-container">
         <div class="statement-box">
             <div class="rc-header">
+                <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" class="rc-logo">
                 <div class="rc-title">Philippine Red Cross</div>
-                <img src="../../assets/img/redcross-logo.png" alt="Red Cross Logo" class="rc-logo">
             </div>
             <div class="text-center mb-4">
                 <h4 class="fw-bold" style="color:#941022;">Official Blood Release Statement</h4>
