@@ -734,10 +734,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 <h4>Staff</h4>
                 <ul class="nav flex-column">
                     
-                    <?php if ($user_staff_roles === 'interviewer'): ?>
+                <?php if ($user_staff_roles === 'interviewer'): ?>
                         <li class="nav-item">
                             <a class="nav-link active" href="dashboard-staff-donor-submission.php">
-                                Donor Interviews Submissions
+                                System Registration
                             </a>
                         </li>
                     <?php endif; ?>
@@ -745,7 +745,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     <?php if ($user_staff_roles === 'reviewer'): ?>
                         <li class="nav-item">
                             <a class="nav-link active" href="dashboard-staff-medical-history-submissions.php">
-                                Donor Medical Interview Submissions
+                                New Donor
                             </a>
                         </li>
                     <?php endif; ?>
@@ -753,7 +753,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     <?php if ($user_staff_roles === 'physician'): ?>
                         <li class="nav-item">
                             <a class="nav-link active" href="dashboard-staff-physical-submission.php">
-                                Physical Exams Submissions
+                                Physical Exam Submissions
                             </a>
                         </li>
                     <?php endif; ?>
