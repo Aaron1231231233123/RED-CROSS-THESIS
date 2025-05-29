@@ -12,7 +12,7 @@ function fetchBloodRequests($user_id) {
         'Authorization: Bearer ' . SUPABASE_API_KEY
     ];
     
-    $url = SUPABASE_URL . '/rest/v1/blood_requests?user_id=eq.' . $user_id . '&status=eq.Pending&order=requested_on.desc';
+    $url = SUPABASE_URL . '/rest/v1/blood_requests?user_id=eq.' . $user_id . '&or=(status.eq.Pending,status.eq.Rescheduled)&order=requested_on.desc';
     
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -474,6 +474,8 @@ th {
                                                     echo '<span class="badge bg-warning text-dark">Pending</span>';
                                                 } elseif ($status === 'Declined') {
                                                     echo '<span class="badge bg-danger">Declined</span>';
+                                                } elseif ($status === 'Rescheduled') {
+                                                    echo '<span class="badge bg-primary">Rescheduled</span>';
                                                 } else {
                                                     echo '<span class="badge bg-secondary">No Action</span>';
                                                 }
@@ -658,13 +660,12 @@ th {
             <div class="modal-body">
                 <form id="viewRequestForm">
                     <input type="hidden" id="editRequestId">
-                    <!-- Patient Name -->
+                    <!-- Patient Information -->
                     <div class="mb-3">
                         <label class="form-label">Patient Name</label>
                         <input type="text" class="form-control" id="reorderPatientName" readonly>
                     </div>
 
-                    <!-- Age and Gender -->
                     <div class="mb-3 row">
                         <div class="col">
                             <label class="form-label">Age</label>
@@ -676,55 +677,39 @@ th {
                         </div>
                     </div>
 
-                    <!-- Diagnosis -->
                     <div class="mb-3">
                         <label class="form-label">Diagnosis</label>
                         <input type="text" class="form-control" id="reorderDiagnosis" readonly>
                     </div>
 
-                    <!-- Blood Type and RH -->
                     <div class="mb-3 row">
                         <div class="col">
                             <label class="form-label">Blood Type</label>
                             <input type="text" class="form-control" id="reorderBloodType" readonly>
                         </div>
                         <div class="col">
-                            <label class="form-label">RH</label>
+                            <label class="form-label">RH Factor</label>
                             <input type="text" class="form-control" id="reorderRH" readonly>
                         </div>
                     </div>
 
-                    <!-- Component -->
                     <div class="mb-3">
                         <label class="form-label">Component</label>
                         <input type="text" class="form-control" id="reorderComponent" readonly>
                     </div>
 
-                    <!-- Number of Units -->
                     <div class="mb-3">
                         <label class="form-label">Number of Units</label>
                         <input type="number" class="form-control" id="reorderUnits" readonly>
                     </div>
 
-                    <!-- When Needed -->
                     <div class="mb-3">
                         <label class="form-label">When Needed</label>
                         <input type="datetime-local" class="form-control" id="reorderWhenNeeded" readonly>
                     </div>
 
-                    <!-- Scheduled Date & Time -->
-                    <div id="reorderScheduleDateTime" class="mb-3 d-none">
-                        <label class="form-label">Scheduled Date & Time</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control" id="reorderScheduledDateTime" readonly>
-                            <span class="input-group-text bg-light scheduled-label"></span>
-                        </div>
-                    </div>
-
-                    <!-- Buttons -->
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        
                     </div>
                 </form>
             </div>
@@ -909,104 +894,62 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         });
 
-        document.addEventListener("DOMContentLoaded", function () {
-            // Function to format date for display
-            function formatDate(date) {
-                const options = { 
-                    weekday: 'short', 
-                    year: 'numeric', 
-                    month: 'short', 
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                };
-                return new Date(date).toLocaleDateString('en-US', options);
-            }
-
-            // Function to update scheduled label
-            function updateScheduledLabel() {
-                const dateInput = document.getElementById('reorderScheduledDateTime');
-                const label = document.querySelector('.scheduled-label');
-                if (dateInput.value) {
-                    const formattedDate = formatDate(dateInput.value);
-                    label.textContent = `Scheduled for: ${formattedDate}`;
-                } else {
-                    label.textContent = '';
-                }
-            }
-
-            // Handle when needed change in edit modal
-            document.getElementById('reorderWhenNeeded').addEventListener('change', function() {
-                const scheduleDateTimeDiv = document.getElementById('reorderScheduleDateTime');
-                if (this.value === 'Scheduled') {
-                    scheduleDateTimeDiv.classList.remove('d-none');
-                    // Set default date to tomorrow
-                    const tomorrow = new Date();
-                    tomorrow.setDate(tomorrow.getDate() + 1);
-                    tomorrow.setHours(9, 0, 0, 0); // Set to 9 AM
-                    document.getElementById('reorderScheduledDateTime').value = tomorrow.toISOString().slice(0, 16);
-                    updateScheduledLabel();
-                } else {
-                    scheduleDateTimeDiv.classList.add('d-none');
-                }
-            });
-
-            // Update label when date changes
-            document.getElementById('reorderScheduledDateTime').addEventListener('change', updateScheduledLabel);
-
+        document.addEventListener('DOMContentLoaded', function() {
             // Handle view button clicks
-            document.querySelectorAll('.view-btn').forEach(button => {
-                button.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
+            const viewButtons = document.querySelectorAll('.view-btn');
+            if (viewButtons) {
+                viewButtons.forEach(button => {
+                    button.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        
+                        // Get data from button attributes
+                        const data = this.dataset;
+                        
+                        try {
+                            // Store request ID
+                            const editRequestId = document.getElementById('editRequestId');
+                            if (editRequestId) editRequestId.value = data.requestId;
+                            
+                            // Populate view modal with request data
+                            const elements = {
+                                'reorderPatientName': data.patientName,
+                                'reorderAge': data.patientAge,
+                                'reorderGender': data.patientGender,
+                                'reorderDiagnosis': data.patientDiagnosis,
+                                'reorderBloodType': data.bloodType,
+                                'reorderRH': data.rhFactor,
+                                'reorderComponent': data.component,
+                                'reorderUnits': data.units,
+                                'reorderWhenNeeded': data.whenNeeded
+                            };
 
-                    // Get data from button attributes
-                    const data = this.dataset;
-                    
-                    // Store request ID
-                    document.getElementById('editRequestId').value = data.requestId;
-                    
-                    // Populate view modal with request data
-                    document.getElementById('reorderPatientName').value = data.patientName;
-                    document.getElementById('reorderAge').value = data.patientAge;
-                    document.getElementById('reorderGender').value = data.patientGender;
-                    document.getElementById('reorderDiagnosis').value = data.patientDiagnosis;
-                    document.getElementById('reorderBloodType').value = data.bloodType;
-                    document.getElementById('reorderRH').value = data.rhFactor;
-                    document.getElementById('reorderComponent').value = data.component;
-                    document.getElementById('reorderUnits').value = data.units;
-                    
-                    // Format the when needed date for datetime-local input
-                    const whenNeededDate = new Date(data.whenNeeded);
-                    const formattedDate = whenNeededDate.toISOString().slice(0, 16); // Format: YYYY-MM-DDThh:mm
-                    document.getElementById('reorderWhenNeeded').value = formattedDate;
+                            // Set values for each element if it exists
+                            Object.entries(elements).forEach(([id, value]) => {
+                                const element = document.getElementById(id);
+                                if (element) {
+                                    if (id === 'reorderWhenNeeded' && value) {
+                                        // Format date for datetime-local input
+                                        const date = new Date(value);
+                                        if (!isNaN(date.getTime())) {
+                                            element.value = date.toISOString().slice(0, 16);
+                                        }
+                                    } else {
+                                        element.value = value || '';
+                                    }
+                                }
+                            });
 
-                    // Handle scheduled date & time
-                    const whenNeeded = new Date(data.whenNeeded);
-                    const now = new Date();
-                    if (whenNeeded > now) {
-                        document.getElementById('reorderScheduleDateTime').classList.remove('d-none');
-                        document.getElementById('reorderScheduledDateTime').value = formatDate(whenNeeded);
-                    } else {
-                        document.getElementById('reorderScheduleDateTime').classList.add('d-none');
-                    }
-
-                    // Show the view modal
-                    new bootstrap.Modal(document.getElementById('bloodReorderModal')).show();
+                            // Show the view modal
+                            const modal = document.getElementById('bloodReorderModal');
+                            if (modal) {
+                                const bsModal = new bootstrap.Modal(modal);
+                                bsModal.show();
+                            }
+                        } catch (error) {
+                            console.error('Error displaying view modal:', error);
+                        }
+                    });
                 });
-            });
-
-            // Format date helper function
-            function formatDate(date) {
-                const options = { 
-                    weekday: 'short', 
-                    year: 'numeric', 
-                    month: 'short', 
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                };
-                return new Date(date).toLocaleDateString('en-US', options);
             }
         });
 
