@@ -166,53 +166,126 @@ function fetchBloodRequestsByStatus($status) {
 
 $blood_requests = fetchBloodRequestsByStatus($status);
 
+// Function to check if a blood request can be fulfilled (no deduction, just check)
+function canFulfillBloodRequest($request_id) {
+    $request_url = SUPABASE_URL . '/rest/v1/blood_requests?request_id=eq.' . $request_id;
+    $ch = curl_init($request_url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY,
+        'Content-Type: application/json'
+    ]);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    $request_data = json_decode($response, true);
+    if (empty($request_data)) return [false, 'Request not found.'];
+    $request_data = $request_data[0];
+
+    $requested_blood_type = $request_data['patient_blood_type'];
+    $requested_rh_factor = $request_data['rh_factor'];
+    $units_requested = intval($request_data['units_requested']);
+    $blood_type_full = $requested_blood_type . ($requested_rh_factor === 'Positive' ? '+' : '-');
+
+    // Fetch all available, not expired, collected blood bags
+    $eligibilityData = querySQL(
+        'eligibility',
+        'eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status,blood_collection_id',
+        ['collection_successful' => 'eq.true']
+    );
+    $available_bags = [];
+    $today = new DateTime();
+    foreach ($eligibilityData as $item) {
+        if (!empty($item['blood_collection_id'])) {
+            $bloodCollectionData = querySQL('blood_collection', '*', ['blood_collection_id' => 'eq.' . $item['blood_collection_id']]);
+            $bloodCollectionData = isset($bloodCollectionData[0]) ? $bloodCollectionData[0] : null;
+        } else {
+            $bloodCollectionData = null;
+        }
+        $collectionDate = new DateTime($item['collection_start_time']);
+        $expirationDate = clone $collectionDate;
+        $expirationDate->modify('+35 days');
+        $isExpired = ($today > $expirationDate);
+        $amount_taken = $bloodCollectionData && isset($bloodCollectionData['amount_taken']) ? intval($bloodCollectionData['amount_taken']) : 0;
+        if ($amount_taken > 0 && !$isExpired) {
+            $available_bags[] = [
+                'eligibility_id' => $item['eligibility_id'],
+                'blood_collection_id' => $item['blood_collection_id'],
+                'blood_type' => $item['blood_type'],
+                'amount_taken' => $amount_taken,
+                'collection_start_time' => $item['collection_start_time'],
+                'expiration_date' => $expirationDate->format('Y-m-d'),
+            ];
+        }
+    }
+    $units_found = 0;
+    $remaining_units = $units_requested;
+    foreach ($available_bags as $bag) {
+        if ($remaining_units <= 0) break;
+        if ($bag['blood_type'] === $blood_type_full) {
+            $available_units = $bag['amount_taken'];
+            if ($available_units > 0) {
+                $units_to_take = min($available_units, $remaining_units);
+                $units_found += $units_to_take;
+                $remaining_units -= $units_to_take;
+            }
+        }
+    }
+    // Optionally, add compatible blood type logic here if needed
+    if ($units_found < $units_requested) {
+        $shortage = $units_requested - $units_found;
+        $msg = "Unable to fulfill blood request due to insufficient fresh blood inventory.\n\n";
+        $msg .= "Requested Blood Type: {$blood_type_full}\n";
+        $msg .= "Units Requested: {$units_requested}\n";
+        $msg .= "Fresh Units Available: {$units_found}\n";
+        $msg .= "Shortage: {$shortage} units\n";
+        return [false, $msg];
+    }
+    return [true, ''];
+}
+
 // Handle request acceptance
 if (isset($_POST['accept_request'])) {
     $request_id = $_POST['request_id'];
-    
     if (empty($request_id)) {
         $error_message = "Invalid request ID. Please try again.";
     } else {
-        // First verify that the request exists and get all its data
-        $verifyEndpoint = "blood_requests?request_id=eq.$request_id&select=*";
-        $verifyResponse = supabaseRequest($verifyEndpoint);
-        
-        if ($verifyResponse['code'] >= 200 && $verifyResponse['code'] < 300) {
-            if (empty($verifyResponse['data'])) {
-                $error_message = "Request ID not found. Please try again.";
-            } else {
-                // Request exists, update status to 'Accepted'
-                $updateEndpoint = "blood_requests?request_id=eq.$request_id";
-                
-                // Important: The status must match exactly what's in the enum
-                $data = [
-                    'status' => 'Accepted', // Must match the database enum values (Pending, Accepted, Declined) case-sensitive
-                    'last_updated' => 'now' // The supabaseRequest function will format this correctly
-                ];
-                
-                // Log the request for debugging
-                error_log("Accepting request $request_id with status: Accepted (ID verified)");
-                
-                $response = supabaseRequest($updateEndpoint, 'PATCH', $data);
-                
-                if ($response['code'] >= 200 && $response['code'] < 300) {
-                    // Success! Set a success message instead of redirecting
-                    $success_message = "Request #$request_id has been successfully accepted. You can view it in the Handover section.";
-                    // Refresh the list of blood requests
-                    $blood_requests = fetchBloodRequestsByStatus($status);
-                } else {
-                    // Format a better error message for debugging
-                    $error_message = "Failed to accept request. Error code: " . $response['code'];
-                    if (isset($response['error'])) {
-                        $error_message .= " - " . $response['error'];
-                    }
-                    error_log("Failed to accept request #$request_id: " . json_encode($response));
-                }
-            }
+        // Check if there are enough units
+        list($can_fulfill, $fulfill_msg) = canFulfillBloodRequest($request_id);
+        if (!$can_fulfill) {
+            $modal_error_message = $fulfill_msg;
         } else {
-            $error_message = "Could not verify request. Please try again. Error: ";
-            if (isset($verifyResponse['error'])) {
-                $error_message .= $verifyResponse['error'];
+            // Proceed as before
+            // First verify that the request exists and get all its data
+            $verifyEndpoint = "blood_requests?request_id=eq.$request_id&select=*";
+            $verifyResponse = supabaseRequest($verifyEndpoint);
+            if ($verifyResponse['code'] >= 200 && $verifyResponse['code'] < 300) {
+                if (empty($verifyResponse['data'])) {
+                    $error_message = "Request ID not found. Please try again.";
+                } else {
+                    // Request exists, update status to 'Accepted'
+                    $updateEndpoint = "blood_requests?request_id=eq.$request_id";
+                    $data = [
+                        'status' => 'Accepted',
+                        'last_updated' => 'now'
+                    ];
+                    $response = supabaseRequest($updateEndpoint, 'PATCH', $data);
+                    if ($response['code'] >= 200 && $response['code'] < 300) {
+                        $success_message = "Request #$request_id has been successfully accepted. You can view it in the Handover section.";
+                        $blood_requests = fetchBloodRequestsByStatus($status);
+                    } else {
+                        $error_message = "Failed to accept request. Error code: " . $response['code'];
+                        if (isset($response['error'])) {
+                            $error_message .= " - " . $response['error'];
+                        }
+                        error_log("Failed to accept request #$request_id: " . json_encode($response));
+                    }
+                }
+            } else {
+                $error_message = "Could not verify request. Please try again. Error: ";
+                if (isset($verifyResponse['error'])) {
+                    $error_message .= $verifyResponse['error'];
+                }
             }
         }
     }
@@ -998,19 +1071,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <label>Priority:</label>
                                 <input type="text" class="form-control" id="priority" readonly>
                             </div>
-        
-                            <div class="mb-3">
-                                <label for="responseSelect">Reason for Declining:</label>
-                                <select id="responseSelect" name="decline_reason" class="form-control">
-                                    <option value="">-- Select a Reason --</option>
-                                    <option value="Low Blood Supply">Low Blood Supply</option>
-                                    <option value="Ineligible Requestor">Ineligible Requestor</option>
-                                    <option value="Medical Restrictions">Medical Restrictions</option>
-                                    <option value="Pending Verification">Pending Verification</option>
-                                    <option value="Duplicate Request">Duplicate Request</option>
-                                    <option value="other">Other (Specify Below)</option>
-                                </select>
-                            </div>
                             
                             <div class="modal-footer">
                                 <button type="button" class="btn btn-danger" id="declineRequest">
@@ -1057,7 +1117,21 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-    // Consolidate all JavaScript into one script tag
+    // Add this function to populate the modal fields (must be global for inline onclick)
+    function loadRequestDetails(request_id, patientName, bloodType, component, rhFactor, unitsNeeded, diagnosis, hospital, physician, priority) {
+        console.log('loadRequestDetails called with:', arguments);
+        document.getElementById('modalRequestId').value = request_id;
+        document.getElementById('patientName').value = patientName;
+        document.getElementById('bloodType').value = bloodType;
+        document.getElementById('component').value = component;
+        document.getElementById('rhFactor').value = rhFactor;
+        document.getElementById('unitsNeeded').value = unitsNeeded;
+        document.getElementById('diagnosis').value = diagnosis;
+        document.getElementById('hospital').value = hospital;
+        document.getElementById('physician').value = physician;
+        document.getElementById('priority').value = priority;
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         // Initialize modals
         const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
@@ -1228,3 +1302,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
                 // Show confirmation modal with selected reason
                 modalBodyText.innerHTML = `Are you sure you want to decline this request for the following reason? <br><strong>("${reason}")</strong>`
+            });
+        }
+    });
+    </script>
+</body>
+</html>
