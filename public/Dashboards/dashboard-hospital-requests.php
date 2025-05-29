@@ -445,14 +445,13 @@ th {
                                     <th>Status</th>
                                     <th>Physician</th>
                                     <th>Requested On</th>
-                                    <th>Pick Up Date</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody id="requestTable">
                                 <?php $rowNum = 1; if (empty($blood_requests)): ?>
                                 <tr>
-                                    <td colspan="11" class="text-center">No pending blood requests found.</td>
+                                    <td colspan="10" class="text-center">No pending blood requests found.</td>
                                 </tr>
                                 <?php else: ?>
                                     <?php foreach ($blood_requests as $request): ?>
@@ -483,7 +482,6 @@ th {
                                             </td>
                                             <td><?php echo htmlspecialchars($request['physician_name'] ?? ''); ?></td>
                                             <td><?php echo date('Y-m-d', strtotime($request['requested_on'])); ?></td>
-                                            <td><?php echo !empty($request['last_updated']) ? date('Y-m-d', strtotime($request['last_updated'])) : '-'; ?></td>
                                             <td>
                                                 <?php if ($request['status'] !== 'Completed' && $request['status'] !== 'Rejected'): ?>
                                                     <button class="btn btn-sm btn-primary view-btn" 

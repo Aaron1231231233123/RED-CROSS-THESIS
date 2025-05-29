@@ -1298,7 +1298,6 @@ h6 {
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <div class="percentage-display d-flex align-items-end">
                             <span class="h4 mb-0 fw-bold <?php echo $statusClass; ?>-text" style="font-size: 2.2rem; line-height: 1;"><?php echo round($totalPercentage); ?>%</span>
-                            <span class="text-muted ms-2 mb-1" style="font-size: 1.1rem;">Capacity</span>
                         </div>
                         <div class="status-indicator">
                             <div class="status-badge status-<?php echo $statusClass; ?> animate-badge" style="font-size: 1.05rem; padding: 8px 20px;">
@@ -1603,14 +1602,14 @@ if ($statusClass === 'critical') {
                                         </div>
                                     </div>
                                 </div>
-                                <div class="card mb-3">
-                                    <div class="card-header bg-light d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#locationsCollapse">
+                                <div class="card mb-3" >
+                                    <div class="card-header bg-light d-flex justify-content-between align-items-center" style="cursor: pointer; " data-bs-toggle="collapse" data-bs-target="#locationsCollapse">
                                         <h6 class="card-title mb-0">Top Donor Locations</h6>
                                         <i class="fas fa-chevron-down"></i>
                                     </div>
                                     <div id="locationsCollapse" class="collapse show">
                                         <div class="card-body">
-                                            <ul class="location-list list-unstyled" id="locationList">
+                                            <ul class="location-list list-unstyled" id="locationList" >
                                                 <!-- Dynamically filled -->
                                             </ul>
                                         </div>
@@ -1647,21 +1646,49 @@ if ($statusClass === 'critical') {
 
                     <!-- Add required CSS -->
                     <style>
+                        /* Hide markers visually but keep their functionality */
+                        .leaflet-marker-icon,
+                        .leaflet-marker-shadow {
+                            display: none !important;
+                        }
+                        
+                        /* Existing styles */
                         .location-list {
-                            max-height: 300px;
+                            max-height: 144px;
                             overflow-y: auto;
+                            scrollbar-width: thin;
+                            scrollbar-color: #dc3545 #f8f9fa;
+                            padding-right: 5px;
+                        }
+                        .location-list::-webkit-scrollbar {
+                            width: 6px;
+                        }
+                        .location-list::-webkit-scrollbar-track {
+                            background: #f8f9fa;
+                            border-radius: 3px;
+                        }
+                        .location-list::-webkit-scrollbar-thumb {
+                            background-color: #dc3545;
+                            border-radius: 3px;
                         }
                         .location-list li {
-                            padding: 6px 0;
+                            height: 40px;
+                            padding: 8px 12px;
                             border-bottom: 1px solid #eee;
                             transition: background 0.2s;
                             cursor: pointer;
+                            margin-bottom: 8px;
+                            display: flex;
+                            align-items: center;
                         }
                         .location-list li:last-child {
-                            border-bottom: none;
+                            margin-bottom: 0;
                         }
                         .location-list li:hover {
                             background: #ffeaea;
+                        }
+                        .location-list li .d-flex {
+                            width: 100%;
                         }
                         .summary-item {
                             margin-bottom: 8px;
@@ -1672,8 +1699,8 @@ if ($statusClass === 'critical') {
                         }
                         .card-header[aria-expanded="true"] .fa-chevron-down {
                             transform: rotate(180deg);
-}
-    </style>
+                        }
+                    </style>
 
                     <!-- Add Leaflet CSS and JS -->
                     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -1719,14 +1746,24 @@ if ($statusClass === 'critical') {
                                 'Iloilo City'
                             ];
 
+                            $cityFound = false;
                             foreach ($iloiloCities as $cityName) {
                                 if (stripos($address, $cityName) !== false) {
                                     if (!isset($cityDonorCounts[$cityName])) {
                                         $cityDonorCounts[$cityName] = 0;
                                     }
                                     $cityDonorCounts[$cityName]++;
+                                    $cityFound = true;
                                     break;
                                 }
+                            }
+
+                            // If no city was found in the address, count it as unidentified
+                            if (!$cityFound) {
+                                if (!isset($cityDonorCounts['Unidentified Location'])) {
+                                    $cityDonorCounts['Unidentified Location'] = 0;
+                                }
+                                $cityDonorCounts['Unidentified Location']++;
                             }
                         }
                     }
@@ -1923,16 +1960,36 @@ if ($statusClass === 'critical') {
                         if (Object.keys(cityDonorCounts).length === 0) {
                             locationListEl.innerHTML = '<li class="p-2">No locations found</li>';
                         } else {
-                            Object.entries(cityDonorCounts).forEach(([city, count]) => {
-                                const li = document.createElement('li');
-                                li.className = 'p-2 mb-2 border-bottom';
-                                li.innerHTML = `
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <strong>${city}</strong>
-                                        <span class="badge bg-danger">${count}</span>
-                                    </div>`;
-                                locationListEl.appendChild(li);
-                            });
+                            // Separate identified and unidentified locations
+                            const identifiedLocations = [];
+                            const unidentifiedLocations = [];
+
+                            Object.entries(cityDonorCounts)
+                                .sort((a, b) => b[1] - a[1])
+                                .forEach(([city, count]) => {
+                                    const li = document.createElement('li');
+                                    li.className = 'p-2 mb-2 border-bottom';
+                                    li.innerHTML = `
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <strong>${city}</strong>
+                                            <span class="badge bg-danger">${count}</span>
+                                        </div>`;
+                                    
+                                    // Check if location is identified (has a known city name)
+                                    if (city.toLowerCase() === 'unidentified location') {
+                                        unidentifiedLocations.push(li);
+                                    } else {
+                                        identifiedLocations.push(li);
+                                    }
+                                });
+
+                            // First add all identified locations
+                            identifiedLocations.forEach(li => locationListEl.appendChild(li));
+
+                            // Then add unidentified locations if any exist
+                            if (unidentifiedLocations.length > 0) {
+                                unidentifiedLocations.forEach(li => locationListEl.appendChild(li));
+                            }
                         }
                     }
 

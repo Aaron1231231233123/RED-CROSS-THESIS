@@ -720,7 +720,6 @@ foreach ($bloodByType as $type => $count) {
                                         <div class="inventory-percentage d-flex align-items-center">
                                             <div class="percentage-display">
                                                 <span class="h2 mb-0 fw-bold <?php echo $statusClass; ?>-text"><?php echo round($totalPercentage); ?>%</span>
-                                                <span class="text-muted ms-2">Capacity</span>
                                             </div>
                                         </div>
                                     </div>
