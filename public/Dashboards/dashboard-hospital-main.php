@@ -667,7 +667,7 @@ foreach ($bloodByType as $type => $count) {
                         </li>
                         <li class="nav-item">
                             <a class="nav-link<?php echo basename($_SERVER['PHP_SELF']) === 'dashboard-hospital-requests.php' ? ' active' : ''; ?>" href="dashboard-hospital-requests.php">
-                                <i class="fas fa-tint me-2"></i>Your Requests
+                                <i class="fas fa-tint me-2"></i>Active Requests
                             </a>
                         </li>
                         <li class="nav-item">
@@ -677,7 +677,7 @@ foreach ($bloodByType as $type => $count) {
                             $status = $_GET['status'] ?? '';
                             ?>
                             <a class="nav-link d-flex justify-content-between align-items-center<?php echo $isHistory ;?>" data-bs-toggle="collapse" href="#historyCollapse" role="button" aria-expanded="<?php echo $isHistory ? 'true' : 'false'; ?>" aria-controls="historyCollapse" id="historyCollapseBtn">
-                                <span><i class="fas fa-history me-2"></i>History</span>
+                                <span><i class="fas fa-history me-2"></i>Requests</span>
                                 <i class="fas fa-chevron-down transition-arrow<?php echo $isHistory ? ' rotate' : ''; ?>" id="historyChevron"></i>
                             </a>
                             <div class="collapse<?php echo $isHistory ? ' show' : ''; ?>" id="historyCollapse">
