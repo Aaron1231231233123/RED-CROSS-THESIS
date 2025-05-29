@@ -1363,7 +1363,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
               <input type="hidden" name="decline_request" value="1">
               <select class="form-select" name="decline_reason" id="declineReasonSelect" required>
                 <option value="" selected disabled>Select a reason</option>
-                <option value="Low Blood Supply">Low Blood Supply</option>
                 <option value="Ineligible Requestor">Ineligible Requestor</option>
                 <option value="Medical Restrictions">Medical Restrictions</option>
                 <option value="Pending Verification">Pending Verification</option>
