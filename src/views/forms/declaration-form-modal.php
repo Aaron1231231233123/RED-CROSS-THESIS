@@ -6,26 +6,22 @@ require_once '../../../assets/conn/db_conn.php';
 // Store the referrer URL to use it for the return button
 $referrer = '';
 
-// Check HTTP_REFERER first
-if (isset($_SERVER['HTTP_REFERER'])) {
-    $referrer = $_SERVER['HTTP_REFERER'];
-}
-
-// If no referrer or it's not from a dashboard, check for a passed parameter
-if (!$referrer || !stripos($referrer, 'dashboard')) {
-    // Check if the donor form referrer is stored in session
-    if (isset($_SESSION['donor_form_referrer'])) {
-        $referrer = $_SESSION['donor_form_referrer'];
+// Only set the referrer in the session if not already set
+if (!isset($_SESSION['declaration_form_referrer'])) {
+    if (isset($_SERVER['HTTP_REFERER'])) {
+        $referrer = $_SERVER['HTTP_REFERER'];
     }
+    if (!$referrer || !stripos($referrer, 'dashboard')) {
+        if (isset($_SESSION['donor_form_referrer'])) {
+            $referrer = $_SESSION['donor_form_referrer'];
+        }
+    }
+    if (!$referrer) {
+        $referrer = '../../public/Dashboards/dashboard-Inventory-System.php';
+    }
+    $_SESSION['declaration_form_referrer'] = $referrer;
 }
-
-// Default fallback
-if (!$referrer) {
-    $referrer = '../../public/Dashboards/dashboard-Inventory-System.php';
-}
-
-// Store the referrer in the session for use when redirecting back
-$_SESSION['declaration_form_referrer'] = $referrer;
+$referrer = $_SESSION['declaration_form_referrer'];
 
 // Log all potential donor_id sources for debugging
 error_log("Declaration form - donor_id sources: SESSION=" . ($_SESSION['donor_id'] ?? 'not set') . 

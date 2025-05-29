@@ -369,13 +369,13 @@ function canFulfillBloodRequest($request_id) {
     }
     if ($units_found < $units_requested) {
         $shortage = $units_requested - $units_found;
-        $msg = "Unable to fulfill blood request due to insufficient fresh blood inventory.\n\n";
+        $msg = "Unable to fulfill blood request due to insufficient blood inventory.\n\n";
         $msg .= "Requested Blood Type: {$blood_type_full}\n";
         $msg .= "Units Requested: {$units_requested}\n";
-        $msg .= "Fresh Units Available: {$units_found}\n";
+        $msg .= "Units Available: {$units_found}\n";
         $msg .= "Shortage: {$shortage} units\n";
         if (!empty($deducted_by_type)) {
-            $msg .= "Available Fresh Blood Types:\n";
+            $msg .= "Available Blood Types:\n";
             foreach ($deducted_by_type as $type => $amount) {
                 $msg .= "• {$type}: {$amount} units\n";
             }

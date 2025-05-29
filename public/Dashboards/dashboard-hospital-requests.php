@@ -418,7 +418,7 @@ th {
             <!-- Main Content -->
                 <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                     <div class="container-fluid p-4 custom-margin">
-                        <h2 style="color: #941022; border-bottom: 2px solid #941022; padding-bottom: 18px; margin-bottom: 25px;">Your Blood Requests</h2>
+                        <h2 style="color: #941022; border-bottom: 2px solid #941022; padding-bottom: 18px; margin-bottom: 25px;">Active Blood Requests</h2>
                     
                         <!-- Add search bar -->
                         <div class="search-box mb-4">
@@ -575,7 +575,7 @@ th {
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Number of Units</label>
-                            <input type="number" class="form-control" name="units_requested" min="1" max="10" required style="width: 105%;">
+                            <input type="number" class="form-control" name="units_requested" min="1" required style="width: 105%;">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">When Needed</label>
@@ -649,7 +649,7 @@ th {
 </div>
 <!-- View Modal -->
 <div class="modal fade" id="bloodReorderModal" tabindex="-1" aria-labelledby="bloodViewModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="bloodViewModalLabel">View Blood Request</h5>
@@ -709,7 +709,7 @@ th {
                     <!-- When Needed -->
                     <div class="mb-3">
                         <label class="form-label">When Needed</label>
-                        <input type="text" class="form-control" id="reorderWhenNeeded" readonly>
+                        <input type="datetime-local" class="form-control" id="reorderWhenNeeded" readonly>
                     </div>
 
                     <!-- Scheduled Date & Time -->
@@ -724,9 +724,7 @@ th {
                     <!-- Buttons -->
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <a href="#" class="btn btn-primary" id="printButton">
-                            <i class="fas fa-print me-1"></i> Print Request
-                        </a>
+                        
                     </div>
                 </form>
             </div>
@@ -965,7 +963,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     // Get data from button attributes
                     const data = this.dataset;
                     
-                    // Store request ID for printing
+                    // Store request ID
                     document.getElementById('editRequestId').value = data.requestId;
                     
                     // Populate view modal with request data
@@ -977,7 +975,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     document.getElementById('reorderRH').value = data.rhFactor;
                     document.getElementById('reorderComponent').value = data.component;
                     document.getElementById('reorderUnits').value = data.units;
-                    document.getElementById('reorderWhenNeeded').value = data.whenNeeded === 'ASAP' ? 'ASAP' : 'Scheduled';
+                    
+                    // Format the when needed date for datetime-local input
+                    const whenNeededDate = new Date(data.whenNeeded);
+                    const formattedDate = whenNeededDate.toISOString().slice(0, 16); // Format: YYYY-MM-DDThh:mm
+                    document.getElementById('reorderWhenNeeded').value = formattedDate;
 
                     // Handle scheduled date & time
                     const whenNeeded = new Date(data.whenNeeded);
@@ -988,9 +990,6 @@ document.addEventListener("DOMContentLoaded", function () {
                     } else {
                         document.getElementById('reorderScheduleDateTime').classList.add('d-none');
                     }
-
-                    // Update print button href
-                    document.getElementById('printButton').href = `print-blood-requests.php?request_id=${data.requestId}`;
 
                     // Show the view modal
                     new bootstrap.Modal(document.getElementById('bloodReorderModal')).show();
@@ -1307,16 +1306,6 @@ document.addEventListener("DOMContentLoaded", function () {
                     signatureUploadDiv.classList.add('d-none');
                     signaturePadDiv.classList.remove('d-none');
                     initSignaturePad();
-                }
-            });
-        }
-
-        // Add validation for 10 unit blood limit
-        var unitsInput = document.querySelector('input[name="units_requested"]');
-        if (unitsInput) {
-            unitsInput.addEventListener('input', function() {
-                if (parseInt(this.value, 10) > 10) {
-                    this.value = 10;
                 }
             });
         }

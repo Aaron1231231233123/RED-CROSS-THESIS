@@ -603,6 +603,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             max-width: 800px;
             width: 100%;
         }
+        .summary-card {
+            min-height: 200px;
+            height: 200px;
+            display: flex;
+            align-items: stretch;
+        }
+        .summary-card .card-title {
+            font-size: 1.5rem;
+        }
+        .summary-card .card-text {
+            font-size: 2.7rem;
+            font-weight: bold;
+        }
 
     </style>
 </head>
@@ -666,7 +679,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <!-- Main Content -->
                 <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                     <div class="container-fluid p-4 custom-margin">
-                        <h2 class="card-title mb-3">Print Requests</h2>
+                        
+                        <h2 class="card-title mb-3">Approved Blood Requests</h2>
                             
                             <!-- Search Bar -->
                             <div class="search-box mb-4">
@@ -680,7 +694,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                         placeholder="Search by patient name...">
                                 </div>
                             </div>
-
+                            <div class="row mb-4 g-3">
+                            <div class="col-md-4">
+                                <div class="card h-100 summary-card">
+                                    <div class="card-body d-flex flex-column align-items-center justify-content-center h-100">
+                                        <h5 class="card-title text-center">Total Units Requested</h5>
+                                        <p class="card-text fs-3 text-center"><?php echo $total_units; ?> Units</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card h-100 summary-card">
+                                    <div class="card-body d-flex flex-column align-items-center justify-content-center h-100">
+                                        <h5 class="card-title text-center">Most Requested Blood Type</h5>
+                                        <p class="card-text fs-3 text-center"><?php echo $most_requested_type; ?></p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card h-100 summary-card">
+                                    <div class="card-body d-flex flex-column align-items-center justify-content-center h-100">
+                                        <h5 class="card-title text-center">Total Declined</h5>
+                                        <p class="card-text fs-3 text-center">
+                                            <?php echo array_reduce($blood_requests, function($carry, $r) { return $carry + ($r['status'] === 'Declined' ? 1 : 0); }, 0); ?>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                                 <!-- Table for Request History -->
                                 <table class="table table-bordered table-hover">
                                     <thead class="table-dark">
@@ -716,7 +757,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                                     <td>
                                                         <?php if ($request['status'] === 'Accepted'): ?>
                                                             <button class="btn btn-success btn-sm confirm-btn" data-request-id="<?php echo htmlspecialchars($request['request_id']); ?>">
-                                                                <i class="fas fa-check"></i> Confirm & Print
+                                                                <i class="fas fa-check"></i> Print
                                                             </button>
                                                         <?php else: ?>
                                                             <button class="btn btn-success pickup-btn" 
@@ -748,7 +789,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <form id="bloodRequestForm">
+                <form id="bloodRequestForm" onsubmit="return false;" method="POST" action="javascript:void(0);">
                     <!-- Patient Information Section -->
                     <h6 class="mb-3 fw-bold">Patient Information</h6>
                     <div class="mb-3">
@@ -1157,210 +1198,155 @@ function showDeclineReason(requestId, reason) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Initial sort to put "No Action" at bottom
-    sortTableByStatus();
-
-    // Search functionality
-    const searchBar = document.getElementById('requestSearchBar');
-    searchBar.addEventListener('keyup', function() {
-        const searchText = this.value.toLowerCase();
-        const table = document.getElementById('requestTable');
-        const rows = table.getElementsByTagName('tr');
-
-        for (let row of rows) {
-            const text = row.textContent.toLowerCase();
-            row.style.display = text.includes(searchText) ? '' : 'none';
-        }
-    });
+    console.log('DOM Content Loaded');
     
     // Add blood request form submission handler
     const bloodRequestForm = document.getElementById('bloodRequestForm');
+    console.log('Found form:', bloodRequestForm);
+    
     if (bloodRequestForm) {
-        bloodRequestForm.addEventListener('submit', function(e) {
+        // Prevent form from submitting normally
+        bloodRequestForm.setAttribute('novalidate', '');
+        
+        bloodRequestForm.addEventListener('submit', async function(e) {
+            console.log('Form submit event triggered');
             e.preventDefault();
+            e.stopPropagation();
             
-            // Show loading state
-            const submitBtn = this.querySelector('button[type="submit"]');
-            const originalBtnText = submitBtn.innerHTML;
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
-            
-            // Create FormData object
-            const formData = new FormData(this);
-            
-            // Add additional data
-            formData.append('user_id', '<?php echo $_SESSION['user_id']; ?>');
-            formData.append('status', 'Pending');
-            formData.append('physician_name', '<?php echo $_SESSION['user_surname']; ?>');
-            formData.append('requested_on', new Date().toISOString());
-            
-            // Handle "when needed" logic
-            const whenNeeded = document.getElementById('whenNeeded').value;
-            const isAsap = whenNeeded === 'ASAP';
-            formData.append('is_asap', isAsap ? 'true' : 'false');
-            
-            // Always set when_needed as a timestamp
-            if (isAsap) {
-                // For ASAP, use current date/time
-                formData.set('when_needed', new Date().toISOString());
-                } else {
-                // For Scheduled, use the selected date/time
-                const scheduledDate = document.querySelector('#scheduleDateTime input').value;
-                if (scheduledDate) {
-                    formData.set('when_needed', new Date(scheduledDate).toISOString());
-                } else {
-                    // If no date selected for scheduled, default to current date
-                    formData.set('when_needed', new Date().toISOString());
-                }
+            // Validate form
+            if (!bloodRequestForm.checkValidity()) {
+                console.log('Form validation failed');
+                e.stopPropagation();
+                return false;
             }
             
-            // Define exact fields from the database schema
-            const validFields = [
-                'request_id', 'user_id', 'patient_name', 'patient_age', 'patient_gender', 
-                'patient_diagnosis', 'patient_blood_type', 'rh_factor', 'blood_component', 
-                'units_requested', 'when_needed', 'is_asap', 'hospital_admitted', 
-                'physician_name', 'requested_on', 'status'
-            ];
-            
-            // Convert FormData to JSON object, only including valid fields
-            const data = {};
-            validFields.forEach(field => {
-                if (formData.has(field)) {
-                    const value = formData.get(field);
-                    
-                    // Convert numeric values to numbers
-                    if (field === 'patient_age' || field === 'units_requested') {
-                        data[field] = parseInt(value, 10);
-                    } 
-                    // Convert boolean strings to actual booleans
-                    else if (field === 'is_asap') {
-                        data[field] = value === 'true';
-                    }
-                    // Format timestamps properly
-                    else if (field === 'when_needed' || field === 'requested_on') {
-                        try {
-                            // Ensure we have a valid date
-                            const dateObj = new Date(value);
-                            if (isNaN(dateObj.getTime())) {
-                                throw new Error(`Invalid date for ${field}: ${value}`);
+            try {
+                console.log('Starting form submission process');
+                const submitBtn = this.querySelector('button[type="submit"]');
+                const originalBtnText = submitBtn.innerHTML;
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+
+                const formData = new FormData(this);
+                
+                // Add additional data
+                formData.append('user_id', '<?php echo $_SESSION['user_id']; ?>');
+                formData.append('status', 'Pending');
+                formData.append('physician_name', '<?php echo $_SESSION['user_surname']; ?>');
+                formData.append('requested_on', new Date().toISOString());
+                
+                // Handle "when needed" logic
+                const whenNeeded = document.getElementById('whenNeeded').value;
+                const isAsap = whenNeeded === 'ASAP';
+                formData.append('is_asap', isAsap ? 'true' : 'false');
+                
+                // Set when_needed based on ASAP or scheduled
+                if (isAsap) {
+                    formData.set('when_needed', new Date().toISOString());
+                } else {
+                    const scheduledDate = document.querySelector('#scheduleDateTime input').value;
+                    formData.set('when_needed', scheduledDate ? new Date(scheduledDate).toISOString() : new Date().toISOString());
+                }
+
+                // Define valid fields and create data object
+                const validFields = [
+                    'request_id', 'user_id', 'patient_name', 'patient_age', 'patient_gender', 
+                    'patient_diagnosis', 'patient_blood_type', 'rh_factor', 'blood_component', 
+                    'units_requested', 'when_needed', 'is_asap', 'hospital_admitted', 
+                    'physician_name', 'requested_on', 'status'
+                ];
+
+                // Convert FormData to JSON object
+                const data = {};
+                validFields.forEach(field => {
+                    if (formData.has(field)) {
+                        const value = formData.get(field);
+                        
+                        if (field === 'patient_age' || field === 'units_requested') {
+                            data[field] = parseInt(value, 10);
+                        } else if (field === 'is_asap') {
+                            data[field] = value === 'true';
+                        } else if (field === 'when_needed' || field === 'requested_on') {
+                            try {
+                                const dateObj = new Date(value);
+                                if (!isNaN(dateObj.getTime())) {
+                                    data[field] = dateObj.toISOString();
+                                } else {
+                                    data[field] = new Date().toISOString();
+                                }
+                            } catch (err) {
+                                console.error(`Error formatting date for ${field}:`, err);
+                                data[field] = new Date().toISOString();
                             }
-                            // Format as ISO string with timezone
-                            data[field] = dateObj.toISOString();
-                        } catch (err) {
-                            console.error(`Error formatting date for ${field}:`, err);
-                            // Default to current time if invalid
-                            data[field] = new Date().toISOString();
+                        } else {
+                            data[field] = value;
                         }
                     }
-                    // All other fields as strings
-                    else {
-                        data[field] = value;
-                    }
-                }
-            });
-            
-            console.log('Submitting request data:', data);
-            console.log('Valid fields in database:', validFields);
-            console.log('FormData keys:', Array.from(formData.keys()));
-            console.log('when_needed value:', data.when_needed);
-            console.log('requested_on value:', data.requested_on);
-            console.log('is_asap value:', data.is_asap);
-            
-            // Send data to server
-            fetch('<?php echo SUPABASE_URL; ?>/rest/v1/blood_requests', {
-                method: 'POST',
-                headers: {
-                    'apikey': '<?php echo SUPABASE_API_KEY; ?>',
-                    'Authorization': 'Bearer <?php echo SUPABASE_API_KEY; ?>',
-                    'Content-Type': 'application/json',
-                    'Prefer': 'return=minimal'
-                },
-                body: JSON.stringify(data)
-            })
-            .then(response => {
-                console.log('Request response status:', response.status);
+                });
+
+                console.log('Sending data to server:', data);
+
+                // Send request to Supabase
+                const response = await fetch('<?php echo SUPABASE_URL; ?>/rest/v1/blood_requests', {
+                    method: 'POST',
+                    headers: {
+                        'apikey': '<?php echo SUPABASE_API_KEY; ?>',
+                        'Authorization': 'Bearer <?php echo SUPABASE_API_KEY; ?>',
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                console.log('Server response:', response);
+
                 if (!response.ok) {
-                    return response.text().then(text => {
-                        console.error('Error response body:', text);
-                        // Try to parse as JSON to extract more details
-                        try {
-                            const errorJson = JSON.parse(text);
-                            throw new Error(`Error ${response.status}: ${errorJson.message || errorJson.error || text}`);
-                        } catch (jsonError) {
-                            // If can't parse as JSON, use the raw text
-                            throw new Error(`Error ${response.status}: ${text}`);
-                        }
-                    });
+                    const text = await response.text();
+                    console.error('Error response:', text);
+                    try {
+                        const errorJson = JSON.parse(text);
+                        throw new Error(`Error ${response.status}: ${errorJson.message || errorJson.error || text}`);
+                    } catch (jsonError) {
+                        throw new Error(`Error ${response.status}: ${text}`);
+                    }
                 }
-                return response.text();
-            })
-            .then(result => {
-                console.log('Request submitted successfully:', result);
-                
-                // Show success message
+
+                // Success handling
+                console.log('Request successful');
                 alert('Blood request submitted successfully!');
-                
-                // Reset form and close modal
                 bloodRequestForm.reset();
                 const modal = bootstrap.Modal.getInstance(document.getElementById('bloodRequestModal'));
                 modal.hide();
-                
-                // Reload the page to show the new request
                 window.location.reload();
-            })
-            .catch(error => {
+
+            } catch (error) {
                 console.error('Error submitting request:', error);
                 alert('Error submitting request: ' + error.message);
-            })
-            .finally(() => {
-                // Restore button state
+            } finally {
+                const submitBtn = bloodRequestForm.querySelector('button[type="submit"]');
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = originalBtnText;
-    });
-});
-    }
-    
-    // Handle when needed change
-    const whenNeededSelect = document.getElementById('whenNeeded');
-    const scheduleDateTimeDiv = document.getElementById('scheduleDateTime');
-    
-    if (whenNeededSelect && scheduleDateTimeDiv) {
-        whenNeededSelect.addEventListener('change', function() {
-            if (this.value === 'Scheduled') {
-                scheduleDateTimeDiv.classList.remove('d-none');
-                scheduleDateTimeDiv.style.opacity = 1;
-                scheduleDateTimeDiv.querySelector('input').required = true;
-            } else {
-                scheduleDateTimeDiv.style.opacity = 0;
-                setTimeout(() => {
-                    scheduleDateTimeDiv.classList.add('d-none');
-                    scheduleDateTimeDiv.querySelector('input').required = false;
-                }, 500);
+                submitBtn.innerHTML = 'Submit Request';
             }
+            
+            return false; // Prevent form submission
         });
-    }
-    
-    // Handle signature method toggle
-    const uploadSignatureRadio = document.getElementById('uploadSignature');
-    const drawSignatureRadio = document.getElementById('drawSignature');
-    const signatureUploadDiv = document.getElementById('signatureUpload');
-    const signaturePadDiv = document.getElementById('signaturePad');
-    
-    if (uploadSignatureRadio && drawSignatureRadio) {
-        uploadSignatureRadio.addEventListener('change', function() {
-            if (this.checked) {
-                signatureUploadDiv.classList.remove('d-none');
-                signaturePadDiv.classList.add('d-none');
-            }
-        });
-        
-        drawSignatureRadio.addEventListener('change', function() {
-            if (this.checked) {
-                signatureUploadDiv.classList.add('d-none');
-                signaturePadDiv.classList.remove('d-none');
-                initSignaturePad();
-            }
-        });
+
+        // Add click handler to submit button as backup
+        const submitBtn = bloodRequestForm.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Submit button clicked');
+                // Trigger the form submission
+                const submitEvent = new Event('submit', {
+                    bubbles: true,
+                    cancelable: true
+                });
+                bloodRequestForm.dispatchEvent(submitEvent);
+                return false;
+            });
+        }
     }
 });
 

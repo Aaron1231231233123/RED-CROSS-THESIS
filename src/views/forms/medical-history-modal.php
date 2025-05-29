@@ -486,63 +486,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($http_code === 201) {
             $responseData = json_decode($response, true);
-            
             if (is_array($responseData) && isset($responseData[0]['medical_history_id'])) {
                 // Store the new medical_history_id in the session
                 $_SESSION['medical_history_id'] = $responseData[0]['medical_history_id'];
-                
-                // Log success
                 error_log("Medical history data submitted and saved with ID: " . $_SESSION['medical_history_id']);
-                error_log("Proceeding to donor form modal with donor_id: " . $_SESSION['donor_id']);
-                
-                // Ensure we're passing along the correct donor_id
+                error_log("Proceeding to declaration form modal with donor_id: " . $_SESSION['donor_id']);
                 $donor_id = $_SESSION['donor_id'];
-                
-                // Generate hash for the donor_id
-                $salt = "RedCross2024";
-                $hash = hash('sha256', $donor_id . $salt);
-                
-                // Now it's safe to clear the donor form data from session
-                if (isset($_SESSION['donor_form_data'])) {
-                    error_log("Medical history - Clearing donor_form_data from session after successful submission");
-                    unset($_SESSION['donor_form_data']);
-                    unset($_SESSION['donor_form_timestamp']);
-                }
-                
-                // Role-based redirection
-                if (isset($_SESSION['role_id'])) {
-                    if ($_SESSION['role_id'] === 1) { // Admin
-                        // Admin redirection to admin dashboard
-                        header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
-                    } else if ($_SESSION['role_id'] === 3) { // Staff
-                        // Determine the appropriate dashboard based on user role
-                        $userStaffRole = isset($_SESSION['user_staff_roles']) ? strtolower($_SESSION['user_staff_roles']) : '';
-                        error_log("REDIRECT: Staff role detected: " . $userStaffRole);
-                        
-                        // Redirect based on user role
-                        switch ($userStaffRole) {
-                            case 'reviewer':
-                                header('Location: ../../../public/Dashboards/dashboard-staff-medical-history-submissions.php');
-                                break;
-                            case 'interviewer':
-                                header('Location: ../../../public/Dashboards/dashboard-staff-donor-submission.php');
-                                break;
-                            case 'physician':
-                                header('Location: ../../../public/Dashboards/dashboard-staff-physical-submission.php');
-                                break;
-                            case 'phlebotomist':
-                                header('Location: ../../../public/Dashboards/dashboard-staff-blood-collection-submission.php');
-                                break;
-                            default:
-                                // Default staff dashboard fallback
-                                header('Location: ../../../public/Dashboards/dashboard-staff-donor-submission.php');
-                                break;
-                        }
-                    }
+                // Store the referrer for use in declaration form's back button
+                if (isset($_SESSION['medical_history_referrer'])) {
+                    $_SESSION['declaration_form_referrer'] = $_SESSION['medical_history_referrer'];
                 } else {
-                    // Default redirection for non-logged in users to donor form modal
-                    header('Location: donor-form-modal.php?' . $hash);
+                    $_SESSION['declaration_form_referrer'] = '../../public/Dashboards/dashboard-Inventory-System.php';
                 }
+                // Redirect to declaration form modal with donor_id
+                header('Location: declaration-form-modal.php?donor_id=' . urlencode($donor_id));
                 exit();
             } else {
                 error_log("Failed to extract medical_history_id from response: " . print_r($responseData, true));
