@@ -1326,6 +1326,19 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 }
             });
         }
+        // Add event listener for update to delivering (truck) button
+        document.querySelectorAll('.update-status').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var requestId = btn.getAttribute('data-request-id');
+                // Set the hidden input in the modal
+                var input = document.getElementById('update-request-id');
+                if (input) input.value = requestId;
+                // Show the modal
+                var modal = new bootstrap.Modal(document.getElementById('updateStatusModal'));
+                modal.show();
+                console.log('Truck button clicked! Modal opened for Request ID:', requestId);
+            });
+        });
     });
     </script>
 </body>
