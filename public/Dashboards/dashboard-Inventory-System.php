@@ -158,6 +158,8 @@ $declinedDonorIdsForApproved = array_unique($declinedDonorIdsForApproved);
 
 // Now get approved eligibility records
 $approvedDonationsResponse = supabaseRequest("eligibility?status=eq.approved&select=eligibility_id,donor_id");
+// Track counted donor_ids for blood received
+$seenApprovedDonorIds = [];
 if (isset($approvedDonationsResponse['data']) && is_array($approvedDonationsResponse['data'])) {
     // Filter out donors with non-accepted physical examination remarks
     foreach ($approvedDonationsResponse['data'] as $donation) {
@@ -192,7 +194,11 @@ if (isset($approvedDonationsResponse['data']) && is_array($approvedDonationsResp
             }
             
             if (!$skipDonorApproved) {
-                $bloodReceivedCount++;
+                // Only count each donor_id once
+                if (!in_array($donation['donor_id'], $seenApprovedDonorIds)) {
+                    $bloodReceivedCount++;
+                    $seenApprovedDonorIds[] = $donation['donor_id'];
+                }
             }
         }
     }
@@ -251,12 +257,20 @@ $eligibilityData = querySQL(
     ['collection_successful' => 'eq.true']
 );
 
+// Track counted donor_ids for blood inventory
+$seenInventoryDonorIds = [];
+
 if (is_array($eligibilityData) && !empty($eligibilityData)) {
     foreach ($eligibilityData as $item) {
         // Skip if no serial number or if donor is in declined list
         if (empty($item['unit_serial_number']) || in_array($item['donor_id'], $declinedDonorIds)) {
             continue;
         }
+        // Skip if donor_id already counted
+        if (in_array($item['donor_id'], $seenInventoryDonorIds)) {
+            continue;
+        }
+        $seenInventoryDonorIds[] = $item['donor_id'];
         
         // Double-check physical examination remarks for this specific donor
         $physicalExamCheck = curl_init();

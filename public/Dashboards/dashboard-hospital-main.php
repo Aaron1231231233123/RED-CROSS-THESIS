@@ -42,6 +42,9 @@ function querySQL($table, $select = "*", $filters = null) {
 $bloodInventory = [];
 $declinedDonorIds = [];
 
+// Add this to track counted donor_ids
+$seenDonorIds = [];
+
 // Query physical examination for non-accepted remarks
 $physicalExamQuery = curl_init();
 curl_setopt_array($physicalExamQuery, [
@@ -94,6 +97,11 @@ if (is_array($eligibilityData) && !empty($eligibilityData)) {
         if (in_array($item['donor_id'], $declinedDonorIds)) {
             continue;
         }
+        // Skip if donor_id already counted
+        if (in_array($item['donor_id'], $seenDonorIds)) {
+            continue;
+        }
+        $seenDonorIds[] = $item['donor_id'];
         
         // Get blood collection data
         if (!empty($item['blood_collection_id'])) {

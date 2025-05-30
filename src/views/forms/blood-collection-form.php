@@ -102,7 +102,7 @@ if ($response) {
 $sequence = getNextSequenceNumber($existing_numbers);
 $generated_serial = $prefix . $sequence;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['blood-bag'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_POST['blood-bag'])) {
     try {
         // Get and validate unit serial number first
         $unit_serial_number = $_POST['serial_number'] ?? '';
@@ -175,8 +175,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['blood-bag'])) {
             throw new Exception("Invalid blood bag brand");
         }
 
-        // Always set amount_taken to 1
-        $amount_taken = 1;
+        // Get other form data
+        $amount_taken = !empty($_POST['amount']) ? floatval($_POST['amount']) : null;
+        if ($amount_taken === null || $amount_taken <= 0) {
+            throw new Exception("Please enter a valid amount");
+        }
+        
+        // Make sure the amount is within a valid range to prevent numeric overflow
+        // Now using integer for amount_taken (int4)
+        if ($amount_taken > 999) {
+            throw new Exception("Amount is too large. Maximum allowed is 999");
+        }
+        
+        // Convert to integer for int4 field
+        $amount_taken = intval($amount_taken);
+        
+        // Validate again after conversion to make sure we have a positive integer
+        if ($amount_taken <= 0) {
+            throw new Exception("Amount must be a positive integer value");
+        }
 
         $is_successful = isset($_POST['successful']) ? $_POST['successful'] === 'YES' : null;
         if ($is_successful === null) {
@@ -396,7 +413,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['blood-bag'])) {
                         'donation_type' => $donation_type,
                         'blood_bag_type' => $blood_bag_type,
                         'blood_bag_brand' => $blood_bag_brand,
-                        'amount_collected' => 1,
+                        'amount_collected' => $amount_taken,
                         'collection_successful' => $is_successful,
                         'donor_reaction' => $donor_reaction ?: null,
                         'management_done' => $management_done ?: null,
@@ -1105,6 +1122,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['blood-bag'])) {
                         </tr>
                     </tbody>
                 </table>
+            </div>
+
+            <div class="amount-section">
+                <label>Amount of Blood Taken: <input type="number" name="amount" placeholder="Enter amount" min="1" step="1" required></label>
             </div>
 
             <div class="successful-section">
