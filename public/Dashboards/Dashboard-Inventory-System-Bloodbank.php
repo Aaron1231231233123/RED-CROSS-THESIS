@@ -74,6 +74,9 @@ function querySQL($table, $select = "*", $filters = null) {
 // Fetch blood inventory data from eligibility table
 $bloodInventory = [];
 
+// Add this to track counted collections
+$seenCollections = [];
+
 // First, get all donors with non-accepted remarks in physical examination
 $declinedDonorIds = [];
 
@@ -158,16 +161,23 @@ if (is_array($eligibilityData) && !empty($eligibilityData)) {
             continue;
         }
         
-        // Get donor information based on donor_id
-        $donorData = querySQL('donor_form', '*', ['donor_id' => 'eq.' . $item['donor_id']]);
-        $donor = isset($donorData[0]) ? $donorData[0] : null;
-        
         // Get blood collection data to get amount_taken
         $bloodCollectionData = null;
         if (!empty($item['blood_collection_id'])) {
             $bloodCollectionData = querySQL('blood_collection', '*', ['blood_collection_id' => 'eq.' . $item['blood_collection_id']]);
             $bloodCollectionData = isset($bloodCollectionData[0]) ? $bloodCollectionData[0] : null;
         }
+        
+        // --- FIX: Only count each blood_collection_id once ---
+        if (!$bloodCollectionData || !isset($bloodCollectionData['blood_collection_id'])) {
+            continue;
+        }
+        $collectionId = $bloodCollectionData['blood_collection_id'];
+        if (in_array($collectionId, $seenCollections)) {
+            continue; // Skip duplicate
+        }
+        $seenCollections[] = $collectionId;
+        // --- END FIX ---
         
         // Calculate expiration date (35 days from collection)
         $collectionDate = new DateTime($item['collection_start_time']);
@@ -188,6 +198,14 @@ if (is_array($eligibilityData) && !empty($eligibilityData)) {
             'eligibility_status' => $item['status'],
             'eligibility_end_date' => $item['end_date'],
         ];
+        
+        // --- FIX: Always define $donor ---
+        $donor = null;
+        $donorData = querySQL('donor_form', '*', ['donor_id' => 'eq.' . $item['donor_id']]);
+        if (isset($donorData[0])) {
+            $donor = $donorData[0];
+        }
+        // --- END FIX ---
         
         // Add donor information if available
         if ($donor) {
