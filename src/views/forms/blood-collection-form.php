@@ -347,14 +347,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_
             $blood_collection_id = $collection_response[0]['blood_collection_id'] ?? null;
             
             if ($blood_collection_id) {
-                // Manually create eligibility record since the DB trigger may not be executing
-                error_log("Creating eligibility record after blood collection");
-                
-                // Get all necessary data for the eligibility record
-                // 1. Get donor_id, medical_history_id from the screening record
-                $screening_ch = curl_init();
-                curl_setopt_array($screening_ch, [
-                    CURLOPT_URL => SUPABASE_URL . "/rest/v1/screening_form?screening_id=eq." . $screening_id . "&select=donor_form_id,medical_history_id,blood_type,donation_type",
+                // Check if eligibility record already exists
+                $check_eligibility_ch = curl_init();
+                curl_setopt_array($check_eligibility_ch, [
+                    CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility?blood_collection_id=eq." . $blood_collection_id,
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_HTTPHEADER => [
                         'apikey: ' . SUPABASE_API_KEY,
@@ -362,21 +358,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_
                         'Content-Type: application/json'
                     ]
                 ]);
-                $screening_response = curl_exec($screening_ch);
-                curl_close($screening_ch);
+                $check_response = curl_exec($check_eligibility_ch);
+                curl_close($check_eligibility_ch);
                 
-                $screening_info = json_decode($screening_response, true);
+                $existing_eligibility = json_decode($check_response, true);
                 
-                if (!empty($screening_info)) {
-                    $donor_id = $screening_info[0]['donor_form_id'] ?? $_SESSION['donor_id'];
-                    $medical_history_id = $screening_info[0]['medical_history_id'] ?? null;
-                    $blood_type = $screening_info[0]['blood_type'] ?? null;
-                    $donation_type = $screening_info[0]['donation_type'] ?? null;
+                // Only create eligibility record if one doesn't exist
+                if (empty($existing_eligibility)) {
+                    error_log("No existing eligibility record found, creating new one");
                     
-                    // 2. Get physical_exam_id for this donor
-                    $physical_exam_ch = curl_init();
-                    curl_setopt_array($physical_exam_ch, [
-                        CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?donor_id=eq." . $donor_id . "&select=physical_exam_id&order=created_at.desc&limit=1",
+                    // Get all necessary data for the eligibility record
+                    // 1. Get donor_id, medical_history_id from the screening record
+                    $screening_ch = curl_init();
+                    curl_setopt_array($screening_ch, [
+                        CURLOPT_URL => SUPABASE_URL . "/rest/v1/screening_form?screening_id=eq." . $screening_id . "&select=donor_form_id,medical_history_id,blood_type,donation_type",
                         CURLOPT_RETURNTRANSFER => true,
                         CURLOPT_HTTPHEADER => [
                             'apikey: ' . SUPABASE_API_KEY,
@@ -384,86 +379,112 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_
                             'Content-Type: application/json'
                         ]
                     ]);
-                    $physical_exam_response = curl_exec($physical_exam_ch);
-                    curl_close($physical_exam_ch);
+                    $screening_response = curl_exec($screening_ch);
+                    curl_close($screening_ch);
                     
-                    $physical_exam_info = json_decode($physical_exam_response, true);
-                    $physical_exam_id = !empty($physical_exam_info) ? $physical_exam_info[0]['physical_exam_id'] : null;
+                    $screening_info = json_decode($screening_response, true);
                     
-                    // Calculate end date - Default to 9 months for successful donations
-                    $end_date = new DateTime();
-                    if ($is_successful) {
-                        $end_date->modify('+9 months');
-                    } else {
-                        $end_date->modify('+3 months'); // Default for failed collection
-                    }
-                    $end_date_formatted = $end_date->format('Y-m-d\TH:i:s.000\Z');
-                    
-                    // Determine the status
-                    $status = $is_successful ? 'approved' : 'failed_collection';
-                    
-                    // Prepare eligibility data
-                    $eligibility_data = [
-                        'donor_id' => $donor_id,
-                        'medical_history_id' => $medical_history_id,
-                        'screening_id' => $screening_id,
-                        'physical_exam_id' => $physical_exam_id,
-                        'blood_collection_id' => $blood_collection_id,
-                        'blood_type' => $blood_type,
-                        'donation_type' => $donation_type,
-                        'blood_bag_type' => $blood_bag_type,
-                        'blood_bag_brand' => $blood_bag_brand,
-                        'amount_collected' => $amount_taken,
-                        'collection_successful' => $is_successful,
-                        'donor_reaction' => $donor_reaction ?: null,
-                        'management_done' => $management_done ?: null,
-                        'collection_start_time' => $start_timestamp,
-                        'collection_end_time' => $end_timestamp,
-                        'unit_serial_number' => $unit_serial_number,
-                        'start_date' => date('Y-m-d\TH:i:s.000\Z'),
-                        'end_date' => $end_date_formatted,
-                        'status' => $status,
-                        'created_at' => date('Y-m-d H:i:s'),
-                        'updated_at' => date('Y-m-d H:i:s')
-                    ];
-                    
-                    // Remove null values to prevent database errors
-                    foreach ($eligibility_data as $key => $value) {
-                        if ($value === null) {
-                            unset($eligibility_data[$key]);
+                    if (!empty($screening_info)) {
+                        $donor_id = $screening_info[0]['donor_form_id'] ?? $_SESSION['donor_id'];
+                        $medical_history_id = $screening_info[0]['medical_history_id'] ?? null;
+                        $blood_type = $screening_info[0]['blood_type'] ?? null;
+                        $donation_type = $screening_info[0]['donation_type'] ?? null;
+                        
+                        // 2. Get physical_exam_id for this donor
+                        $physical_exam_ch = curl_init();
+                        curl_setopt_array($physical_exam_ch, [
+                            CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?donor_id=eq." . $donor_id . "&select=physical_exam_id&order=created_at.desc&limit=1",
+                            CURLOPT_RETURNTRANSFER => true,
+                            CURLOPT_HTTPHEADER => [
+                                'apikey: ' . SUPABASE_API_KEY,
+                                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                'Content-Type: application/json'
+                            ]
+                        ]);
+                        $physical_exam_response = curl_exec($physical_exam_ch);
+                        curl_close($physical_exam_ch);
+                        
+                        $physical_exam_info = json_decode($physical_exam_response, true);
+                        $physical_exam_id = !empty($physical_exam_info) ? $physical_exam_info[0]['physical_exam_id'] : null;
+                        
+                        // Calculate end date - Default to 9 months for successful donations
+                        $end_date = new DateTime();
+                        if ($is_successful) {
+                            $end_date->modify('+9 months');
+                        } else {
+                            $end_date->modify('+3 months'); // Default for failed collection
                         }
+                        $end_date_formatted = $end_date->format('Y-m-d\TH:i:s.000\Z');
+                        
+                        // Determine the status
+                        $status = $is_successful ? 'approved' : 'failed_collection';
+                        
+                        // Prepare eligibility data
+                        $eligibility_data = [
+                            'donor_id' => $donor_id,
+                            'medical_history_id' => $medical_history_id,
+                            'screening_id' => $screening_id,
+                            'physical_exam_id' => $physical_exam_id,
+                            'blood_collection_id' => $blood_collection_id,
+                            'blood_type' => $blood_type,
+                            'donation_type' => $donation_type,
+                            'blood_bag_type' => $blood_bag_type,
+                            'blood_bag_brand' => $blood_bag_brand,
+                            'amount_collected' => $amount_taken,
+                            'collection_successful' => $is_successful,
+                            'donor_reaction' => $donor_reaction ?: null,
+                            'management_done' => $management_done ?: null,
+                            'collection_start_time' => $start_timestamp,
+                            'collection_end_time' => $end_timestamp,
+                            'unit_serial_number' => $unit_serial_number,
+                            'start_date' => date('Y-m-d\TH:i:s.000\Z'),
+                            'end_date' => $end_date_formatted,
+                            'status' => $status,
+                            'created_at' => date('Y-m-d H:i:s'),
+                            'updated_at' => date('Y-m-d H:i:s')
+                        ];
+                        
+                        // Remove null values to prevent database errors
+                        foreach ($eligibility_data as $key => $value) {
+                            if ($value === null) {
+                                unset($eligibility_data[$key]);
+                            }
+                        }
+                        
+                        // Create eligibility record
+                        $eligibility_ch = curl_init();
+                        curl_setopt_array($eligibility_ch, [
+                            CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility",
+                            CURLOPT_RETURNTRANSFER => true,
+                            CURLOPT_CUSTOMREQUEST => "POST",
+                            CURLOPT_POSTFIELDS => json_encode($eligibility_data),
+                            CURLOPT_HTTPHEADER => [
+                                'apikey: ' . SUPABASE_API_KEY,
+                                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                'Content-Type: application/json',
+                                'Prefer: return=representation'
+                            ]
+                        ]);
+                        
+                        $eligibility_response = curl_exec($eligibility_ch);
+                        $eligibility_http_code = curl_getinfo($eligibility_ch, CURLINFO_HTTP_CODE);
+                        curl_close($eligibility_ch);
+                        
+                        error_log("Eligibility creation response code: " . $eligibility_http_code);
+                        error_log("Eligibility creation response: " . $eligibility_response);
                     }
-                    
-                    // Create eligibility record
-                    $eligibility_ch = curl_init();
-                    curl_setopt_array($eligibility_ch, [
-                        CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility",
-                        CURLOPT_RETURNTRANSFER => true,
-                        CURLOPT_CUSTOMREQUEST => "POST",
-                        CURLOPT_POSTFIELDS => json_encode($eligibility_data),
-                        CURLOPT_HTTPHEADER => [
-                            'apikey: ' . SUPABASE_API_KEY,
-                            'Authorization: Bearer ' . SUPABASE_API_KEY,
-                            'Content-Type: application/json',
-                            'Prefer: return=representation'
-                        ]
-                    ]);
-                    
-                    $eligibility_response = curl_exec($eligibility_ch);
-                    $eligibility_http_code = curl_getinfo($eligibility_ch, CURLINFO_HTTP_CODE);
-                    curl_close($eligibility_ch);
-                    
-                    error_log("Eligibility creation response code: " . $eligibility_http_code);
-                    error_log("Eligibility creation response: " . $eligibility_response);
+                } else {
+                    error_log("Eligibility record already exists for blood_collection_id: " . $blood_collection_id);
                 }
             }
             
-            // Success - redirect to list of donations with walk-in status
+            // Success - redirect to appropriate page based on role
             if ($_SESSION['role_id'] === 1) {
-                // Admin redirect
-                header('Location: ../../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php?status=pending');
+                // Admin redirect - include success parameter
+                error_log("Admin role: Redirecting to list of donations with success parameter");
+                header('Location: ../../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php?status=pending&success=1');
             } else {
-                // Staff redirect - go back to the blood collection submission dashboard
+                // Staff redirect
                 error_log("Blood collection success - redirecting staff user back to blood collection dashboard");
                 header('Location: ../../../public/Dashboards/dashboard-staff-blood-collection-submission.php?success=1');
             }

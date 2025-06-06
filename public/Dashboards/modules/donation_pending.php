@@ -7,12 +7,12 @@ $pendingDonations = [];
 $error = null;
 
 try {
-    // First, get all eligibility records with approved status to filter out approved donors
-    $approvedDonorIds = [];
+    // First, get all eligibility records to filter out donors with any eligibility data
+    $donorsWithEligibility = [];
     $eligibilityCurl = curl_init();
     
     curl_setopt_array($eligibilityCurl, [
-        CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility?status=eq.approved&select=donor_id",
+        CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility?select=donor_id,created_at&order=created_at.desc",
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
             "apikey: " . SUPABASE_API_KEY,
@@ -26,13 +26,22 @@ try {
     
     curl_close($eligibilityCurl);
     
-    // Process eligibility data to get list of donor IDs that already have approved status
+    // Process eligibility data to get list of donor IDs that have any eligibility record
     if (!$eligibilityErr) {
         $eligibilityData = json_decode($eligibilityResponse, true);
         if (is_array($eligibilityData)) {
+            // Track processed donor IDs to avoid duplicates
+            $processedDonorIds = [];
+            
             foreach ($eligibilityData as $eligibility) {
                 if (isset($eligibility['donor_id'])) {
-                    $approvedDonorIds[] = $eligibility['donor_id'];
+                    $donorId = $eligibility['donor_id'];
+                    
+                    // Only add donor ID if we haven't processed it yet
+                    if (!in_array($donorId, $processedDonorIds)) {
+                        $donorsWithEligibility[] = $donorId;
+                        $processedDonorIds[] = $donorId;
+                    }
                 }
             }
         }
@@ -82,8 +91,8 @@ try {
                     
                     // Process each donor
                     foreach ($donorData as $donor) {
-                        // Skip donors who already have an approved eligibility record
-                        if (in_array($donor['donor_id'], $approvedDonorIds)) {
+                        // Skip donors who have any eligibility record
+                        if (in_array($donor['donor_id'], $donorsWithEligibility)) {
                             continue;
                         }
                         
@@ -130,6 +139,6 @@ if (empty($pendingDonations) && !$error) {
 // Debug: Show exact values being used
 error_log("SUPABASE_URL: " . SUPABASE_URL);
 error_log("API Key Length: " . strlen(SUPABASE_API_KEY));
-error_log("Filtered out " . count($approvedDonorIds) . " approved donors");
+error_log("Filtered out " . count($donorsWithEligibility) . " donors with eligibility data");
 error_log("Found " . count($pendingDonations) . " pending donors");
 ?> 
