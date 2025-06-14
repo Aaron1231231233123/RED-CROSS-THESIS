@@ -16,7 +16,7 @@ $start_time = microtime(true);
 error_log("Starting blood collection submission query at " . date('H:i:s'));
 
 // STEP 1: Get all blood collection records to identify physical exams that already have blood collection
-$blood_collection_url = SUPABASE_URL . '/rest/v1/blood_collection?select=physical_exam_id,is_successful';
+$blood_collection_url = SUPABASE_URL . '/rest/v1/blood_collection?select=physical_exam_id,is_successful,donor_reaction,management_done,status,blood_bag_type,amount_taken,created_at';
 $ch = curl_init($blood_collection_url);
 $headers = array(
     'apikey: ' . SUPABASE_API_KEY,
@@ -42,18 +42,23 @@ if ($http_code !== 200) {
 $collected_physical_exam_ids = [];
 $approved_collections = [];
 $declined_collections = [];
+$blood_collection_data = []; // Store full blood collection data
 
 foreach ($blood_collections as $collection) {
     if (isset($collection['physical_exam_id']) && !empty($collection['physical_exam_id'])) {
         // Normalize the physical_exam_id to string format for consistent comparison
-        $collected_physical_exam_ids[] = (string)$collection['physical_exam_id'];
+        $exam_id = (string)$collection['physical_exam_id'];
+        $collected_physical_exam_ids[] = $exam_id;
+        
+        // Store full collection data for results display
+        $blood_collection_data[$exam_id] = $collection;
         
         // Track approved and declined collections based on is_successful
         if (isset($collection['is_successful'])) {
             if ($collection['is_successful'] === true) {
-                $approved_collections[] = (string)$collection['physical_exam_id'];
+                $approved_collections[] = $exam_id;
             } else {
-                $declined_collections[] = (string)$collection['physical_exam_id'];
+                $declined_collections[] = $exam_id;
             }
         }
         
@@ -163,6 +168,13 @@ switch ($status_filter) {
                 $exam = $item['physical_examination'];
                 $exam['physical_exam_id'] = $item['physical_exam_id'];
                 $exam['created_at'] = $item['created_at'];
+                
+                // Add blood collection data if available
+                $exam_id = (string)$item['physical_exam_id'];
+                if (isset($blood_collection_data[$exam_id])) {
+                    $exam['blood_collection'] = $blood_collection_data[$exam_id];
+                }
+                
                 $display_exams[] = $exam;
             }
         }
@@ -189,6 +201,13 @@ switch ($status_filter) {
                 $exam = $item['physical_examination'];
                 $exam['physical_exam_id'] = $item['physical_exam_id'];
                 $exam['created_at'] = $item['created_at'];
+                
+                // Add blood collection data if available
+                $exam_id = (string)$item['physical_exam_id'];
+                if (isset($blood_collection_data[$exam_id])) {
+                    $exam['blood_collection'] = $blood_collection_data[$exam_id];
+                }
+                
                 $display_exams[] = $exam;
             }
         }
@@ -200,9 +219,25 @@ switch ($status_filter) {
         break;
 }
 
-// STEP 4: Prepare pagination
+// STEP 4: Sort display exams by created_at (FIFO: oldest first)
+usort($display_exams, function($a, $b) {
+    $a_time = isset($a['updated_at']) ? strtotime($a['updated_at']) : (isset($a['created_at']) ? strtotime($a['created_at']) : 0);
+    $b_time = isset($b['updated_at']) ? strtotime($b['updated_at']) : (isset($b['created_at']) ? strtotime($b['created_at']) : 0);
+    return $a_time <=> $b_time;
+});
+
+// Prepare pagination
 $total_records = count($display_exams);
 $total_pages = ceil($total_records / $records_per_page);
+
+// Adjust current page if needed
+if ($current_page < 1) $current_page = 1;
+if ($current_page > $total_pages && $total_pages > 0) $current_page = $total_pages;
+
+// Calculate the offset for this page
+$offset = ($current_page - 1) * $records_per_page;
+
+// Slice the array to get only the records for the current page
 $display_exams = array_slice($display_exams, $offset, $records_per_page);
 
 // Log execution time
@@ -221,7 +256,7 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
 }
 
 // Calculate age for each physical examination
-foreach ($physical_exams as &$exam) {
+foreach ($display_exams as &$exam) {
     if (isset($exam['donor_form'])) {
         // Calculate age if not present but birthdate is available
         if (empty($exam['donor_form']['age']) && !empty($exam['donor_form']['birthdate'])) {
@@ -231,41 +266,6 @@ foreach ($physical_exams as &$exam) {
         }
     }
 }
-
-// Group donors by unique identity and get last donation and total count
-$donorGroups = [];
-foreach ($display_exams as $exam) {
-    $donor = $exam['donor_form'] ?? [];
-    $key = ($donor['surname'] ?? '') . '|' . ($donor['first_name'] ?? '') . '|' . ($donor['middle_name'] ?? '') . '|' . ($donor['birthdate'] ?? '');
-    $age = $donor['age'] ?? '';
-    $created_at = $exam['created_at'] ?? null;
-    if (!isset($donorGroups[$key])) {
-        $donorGroups[$key] = [
-            'info' => $donor,
-            'count' => 1,
-            'latest_submission' => $created_at,
-            'age' => $age
-        ];
-    } else {
-        $donorGroups[$key]['count']++;
-        if ($created_at && $created_at > $donorGroups[$key]['latest_submission']) {
-            $donorGroups[$key]['latest_submission'] = $created_at;
-        }
-    }
-}
-$donors = array_values($donorGroups);
-
-// Sort donor groups by updated_at (FIFO: oldest first)
-usort($donors, function($a, $b) {
-    $a_time = isset($a['info']['updated_at']) ? strtotime($a['info']['updated_at']) : (isset($a['latest_submission']) ? strtotime($a['latest_submission']) : 0);
-    $b_time = isset($b['info']['updated_at']) ? strtotime($b['info']['updated_at']) : (isset($b['latest_submission']) ? strtotime($b['latest_submission']) : 0);
-    return $a_time <=> $b_time;
-});
-
-// Apply pagination to grouped donors
-$total_records = count($donors);
-$total_pages = ceil($total_records / $records_per_page);
-$paginated_donors = array_slice($donors, $offset, $records_per_page);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -737,6 +737,51 @@ $paginated_donors = array_slice($donors, $offset, $records_per_page);
         .confirm-action:hover {
             background: #c9302c;
         }
+
+        /* Enhanced badge styling for blood collection results */
+        .badge.bg-success {
+            background-color: #28a745 !important;
+            color: white !important;
+            font-size: 0.8rem;
+            padding: 0.35rem 0.7rem;
+            font-weight: 600;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge.bg-danger {
+            background-color: #dc3545 !important;
+            color: white !important;
+            font-size: 0.8rem;
+            padding: 0.35rem 0.7rem;
+            font-weight: 600;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge.bg-warning {
+            background-color: #ffc107 !important;
+            color: #212529 !important;
+            font-size: 0.8rem;
+            padding: 0.35rem 0.7rem;
+            font-weight: 600;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge.bg-secondary {
+            background-color: #6c757d !important;
+            color: white !important;
+            font-size: 0.8rem;
+            padding: 0.35rem 0.7rem;
+            font-weight: 600;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
     </style>
 </head>
 <body class="light-mode">
@@ -854,52 +899,55 @@ $paginated_donors = array_slice($donors, $offset, $records_per_page);
                             </thead>
                             <tbody id="bloodCollectionTableBody">
                                 <?php
-                                // Group donors by unique identity and get last donation and total count
-                                $donorGroups = [];
-                                foreach ($display_exams as $exam) {
-                                    $donor = $exam['donor_form'] ?? [];
-                                    $key = ($donor['surname'] ?? '') . '|' . ($donor['first_name'] ?? '') . '|' . ($donor['middle_name'] ?? '') . '|' . ($donor['birthdate'] ?? '');
-                                    $age = $donor['age'] ?? '';
-                                    $created_at = $exam['created_at'] ?? null;
-                                    if (!isset($donorGroups[$key])) {
-                                        $donorGroups[$key] = [
-                                            'info' => $donor,
-                                            'count' => 1,
-                                            'latest_submission' => $created_at,
-                                            'age' => $age
-                                        ];
-                                    } else {
-                                        $donorGroups[$key]['count']++;
-                                        if ($created_at && $created_at > $donorGroups[$key]['latest_submission']) {
-                                            $donorGroups[$key]['latest_submission'] = $created_at;
-                                        }
-                                    }
-                                }
-                                $donors = array_values($donorGroups);
-
-                                // Apply pagination to grouped donors
-                                $total_records = count($donors);
-                                $total_pages = ceil($total_records / $records_per_page);
-                                $paginated_donors = array_slice($donors, $offset, $records_per_page);
-
-                                foreach ($display_exams as $index => $exam) {
-                                    $donor = $exam['donor_form'] ?? [];
-                                    $created_date = isset($exam['created_at']) ? date('F d, Y', strtotime($exam['created_at'])) : 'N/A';
-                                    $rowNo = $offset + $index + 1;
+                                if (!empty($display_exams)) {
+                                    $counter = ($current_page - 1) * $records_per_page + 1; // Initialize counter with pagination
+                                    foreach ($display_exams as $exam) {
+                                        $donor = $exam['donor_form'] ?? [];
+                                        $created_date = isset($exam['created_at']) ? date('F d, Y', strtotime($exam['created_at'])) : 'N/A';
                                     $surname = $donor['surname'] ?? '';
                                     $firstName = $donor['first_name'] ?? '';
                                     
-                                    // Determine status and result based on current filter
+                                    // Determine status and result based on blood collection data
                                     $status_badge = '';
                                     $result_badge = '';
-                                    $interviewer_badge = '<span class="badge bg-success">Success</span>'; // Always success
+                                    $declaration_badge = '<span class="badge bg-success">Success</span>'; // Always success
                                     
-                                    if ($status_filter === 'active') {
-                                        $status_badge = '<span class="badge bg-success">Success</span>';
-                                        $result_badge = '<span class="badge bg-success">Collected</span>';
+                                    // Check if blood collection data exists
+                                    $exam_id = (string)($exam['physical_exam_id'] ?? '');
+                                    $has_collection_data = isset($blood_collection_data[$exam_id]);
+                                    
+                                    if ($has_collection_data) {
+                                        $collection = $blood_collection_data[$exam_id];
+                                        
+                                        // Status based on is_successful
+                                        if (isset($collection['is_successful'])) {
+                                            if ($collection['is_successful'] === true) {
+                                                $status_badge = '<span class="badge bg-success">Success</span>';
+                                            } else {
+                                                $status_badge = '<span class="badge bg-danger">Failed</span>';
+                                            }
+                                        } else {
+                                            $status_badge = '<span class="badge bg-warning">In Progress</span>';
+                                        }
+                                        
+                                        // Result based on collection details - using database fields
+                                        if (isset($collection['is_successful']) && $collection['is_successful'] === true) {
+                                            // Use status field if available, otherwise default to "Collected"
+                                            $result_text = !empty($collection['status']) ? ucfirst($collection['status']) : 'Collected';
+                                            $result_badge = '<span class="badge bg-success">' . $result_text . '</span>';
+                                        } elseif (isset($collection['is_successful']) && $collection['is_successful'] === false) {
+                                            // Use donor_reaction if available, otherwise "Failed"
+                                            $result_text = !empty($collection['donor_reaction']) ? ucfirst($collection['donor_reaction']) : 'Failed';
+                                            $result_badge = '<span class="badge bg-danger">' . $result_text . '</span>';
+                                        } else {
+                                            // Use status field or default to "Processing"
+                                            $result_text = !empty($collection['status']) ? ucfirst($collection['status']) : 'Processing';
+                                            $result_badge = '<span class="badge bg-warning">' . $result_text . '</span>';
+                                        }
                                     } else {
-                                        $status_badge = '<span class="badge bg-warning text-dark">Pending</span>';
-                                        $result_badge = '<span class="badge bg-secondary">Pending</span>';
+                                        // No collection data yet
+                                        $status_badge = '<span class="badge bg-secondary">Pending</span>';
+                                        $result_badge = '<span class="badge bg-secondary">N/A</span>';
                                     }
                                     
                                     $data_exam = htmlspecialchars(json_encode([
@@ -911,13 +959,13 @@ $paginated_donors = array_slice($donors, $offset, $records_per_page);
                                     ]));
                                     
                                     echo "<tr class='clickable-row' data-examination='{$data_exam}'>
-                                        <td>{$rowNo}</td>
+                                        <td>{$counter}</td>
                                         <td>{$created_date}</td>
                                         <td>" . htmlspecialchars($surname) . "</td>
                                         <td>" . htmlspecialchars($firstName) . "</td>
                                         <td>{$status_badge}</td>
                                         <td>{$result_badge}</td>
-                                        <td><span class='badge bg-danger'>Completed</span></td>
+                                        <td>{$declaration_badge}</td>
                                         <td>
                                             <button type='button' class='btn btn-info btn-sm view-donor-btn me-1' data-donor-id='{$exam['donor_id']}' title='View Details'>
                                                 <i class='fas fa-eye'></i>
@@ -927,6 +975,10 @@ $paginated_donors = array_slice($donors, $offset, $records_per_page);
                                             </button>
                                         </td>
                                     </tr>";
+                                    $counter++; // Increment counter for next row
+                                    }
+                                } else {
+                                    echo '<tr><td colspan="8" class="text-center">No blood collection records found</td></tr>';
                                 }
                                 ?>
                             </tbody>
@@ -935,7 +987,7 @@ $paginated_donors = array_slice($donors, $offset, $records_per_page);
                         <!-- Pagination Controls -->
                         <?php if ($total_pages > 1): ?>
                         <div class="pagination-container">
-                            <nav aria-label="Donor medical history navigation">
+                            <nav aria-label="Blood collection navigation">
                                 <ul class="pagination justify-content-center">
                                     <!-- Previous button -->
                                     <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">

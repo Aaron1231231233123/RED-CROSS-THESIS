@@ -1019,17 +1019,124 @@ select.donor_form_input[disabled] {
     padding: 20px;
 }
 
-/* Responsive adjustments */
-@media (max-width: 991.98px) {
-    .sidebar {
-        position: static;
-        width: 100%;
-        height: auto;
-    }
-    .main-content {
-        margin-left: 0;
-    }
-}
+        /* Modern Modal Styles */
+        .modern-modal {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modern-header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+            color: white;
+            border-radius: 15px 15px 0 0;
+            padding: 1.5rem;
+            border-bottom: none;
+        }
+
+        .modern-body {
+            padding: 2rem;
+            background-color: #f8f9fa;
+        }
+
+        .modern-footer {
+            background-color: white;
+            border-top: 1px solid #e9ecef;
+            border-radius: 0 0 15px 15px;
+            padding: 1.5rem;
+        }
+
+        .donor-avatar {
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .info-card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .info-card-header {
+            font-size: 0.9rem;
+            color: #6c757d;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .info-card-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .section-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e9ecef;
+        }
+
+        .section-header {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #f1f3f4;
+        }
+
+        .field-group {
+            margin-bottom: 1rem;
+        }
+
+        .field-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #6c757d;
+            margin-bottom: 0.3rem;
+            display: block;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .field-value {
+            font-size: 1rem;
+            color: #333;
+            font-weight: 500;
+            padding: 0.5rem 0;
+            min-height: 1.5rem;
+        }
+
+
+
+        /* Responsive adjustments */
+        @media (max-width: 991.98px) {
+            .sidebar {
+                position: static;
+                width: 100%;
+                height: auto;
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .modern-body {
+                padding: 1rem;
+            }
+            
+            .section-card {
+                padding: 1rem;
+            }
+        }
     </style>
 </head>
 <body class="light-mode">
@@ -1147,7 +1254,8 @@ select.donor_form_input[disabled] {
                                             }
                                             $encoded_data = json_encode($donor, JSON_HEX_APOS | JSON_HEX_QUOT);
                                             if (json_last_error() !== JSON_ERROR_NONE) {
-                                                $encoded_data = '{}';
+                                                error_log("JSON encoding error for donor ID " . ($donor['donor_id'] ?? 'unknown') . ": " . json_last_error_msg());
+                                                $encoded_data = json_encode(['donor_id' => $donor['donor_id'] ?? null], JSON_HEX_APOS | JSON_HEX_QUOT);
                                             }
                                         } else {
                                             continue;
@@ -1155,11 +1263,27 @@ select.donor_form_input[disabled] {
                                         ?>
                                         <tr class="clickable-row">
                                             <td><?php echo $index + 1; ?></td>
-                                            <td><?php echo !empty($donor['start_date']) ? date('F j, Y', strtotime($donor['start_date'])) : 'N/A'; ?></td>
+                                            <td><?php 
+                                                // Try multiple date fields in order of preference
+                                                $date_to_show = '';
+                                                if (!empty($donor['submitted_at'])) {
+                                                    $date_to_show = date('F j, Y', strtotime($donor['submitted_at']));
+                                                } elseif (!empty($donor['created_at'])) {
+                                                    $date_to_show = date('F j, Y', strtotime($donor['created_at']));
+                                                } elseif (!empty($donor['start_date'])) {
+                                                    $date_to_show = date('F j, Y', strtotime($donor['start_date']));
+                                                } else {
+                                                    $date_to_show = 'N/A';
+                                                }
+                                                echo $date_to_show;
+                                            ?></td>
                                             <td><?php echo !empty($donor['surname']) ? strtoupper(htmlspecialchars($donor['surname'])) : 'N/A'; ?></td>
                                             <td><?php echo !empty($donor['first_name']) ? htmlspecialchars($donor['first_name']) : 'N/A'; ?></td>
                                             <td>
-                                                <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" data-donor-id="<?php echo $donor['donor_id']; ?>" title="View Details">
+                                                <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" 
+                                                        data-donor-id="<?php echo $donor['donor_id']; ?>" 
+                                                        data-donor='<?php echo $encoded_data; ?>' 
+                                                        title="View Details">
                                                     <i class="fas fa-eye"></i>
                                                 </button>
                                                 <button type="button" class="btn btn-warning btn-sm edit-donor-btn" data-donor-id="<?php echo $donor['donor_id']; ?>" title="Edit">
@@ -1209,181 +1333,214 @@ select.donor_form_input[disabled] {
     <!-- Donor Details Modal -->
 <div class="modal fade" id="donorDetailsModal" tabindex="-1" aria-labelledby="donorDetailsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xxl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="donorDetailsModalLabel">Donor Submission Details</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <!-- Donor Form -->
-                <form class="donor_form_container">
-                    <div class="donor_form_header">
-                        <div>
-                            <label class="donor_form_label">PRC BLOOD DONOR NUMBER:</label>
-                            <input type="text" class="donor_form_input" name="prc_donor_number" value="<?php echo isset($donor['prc_donor_number']) ? htmlspecialchars($donor['prc_donor_number']) : ''; ?>" readonly>
-                        </div>
-                        <h2>BLOOD DONOR INTERVIEW SHEET</h2>
-                        <div>
-                            <label class="donor_form_label">DOH NNBNets Barcode:</label>
-                            <input type="text" class="donor_form_input" name="doh_nnbnets_barcode" value="<?php echo isset($donor['doh_nnbnets_barcode']) ? htmlspecialchars($donor['doh_nnbnets_barcode']) : ''; ?>" readonly>
-                        </div>
+        <div class="modal-content modern-modal">
+            <div class="modal-header modern-header">
+                <div class="d-flex align-items-center">
+                    <div class="donor-avatar me-3">
+                        <i class="fas fa-user-circle fa-2x text-white"></i>
                     </div>
-                    <div class="donor_form_section">
-                        <h6>NAME:</h6>
-                        <div class="donor_form_grid grid-3">
-                            <div>
-                                <label class="donor_form_label">Surname</label>
-                                <input type="text" class="donor_form_input" name="surname" value="<?php echo isset($donor['surname']) ? htmlspecialchars($donor['surname']) : ''; ?>" readonly>
-                            </div>
-                            <div>
-                                <label class="donor_form_label">First Name</label>
-                                <input type="text" class="donor_form_input" name="first_name" value="<?php echo isset($donor['first_name']) ? htmlspecialchars($donor['first_name']) : ''; ?>" readonly>
-                            </div>
-                            <div>
-                                <label class="donor_form_label">Middle Name</label>
-                                <input type="text" class="donor_form_input" name="middle_name" value="<?php echo isset($donor['middle_name']) ? htmlspecialchars($donor['middle_name']) : ''; ?>" readonly>
-                            </div>
-                        </div>
-                        <div class="donor_form_grid grid-4">
-                            <div>
-                                <label class="donor_form_label">Birthdate</label>
-                                <input type="date" class="donor_form_input" name="birthdate" value="<?php echo isset($donor['birthdate']) ? htmlspecialchars($donor['birthdate']) : ''; ?>" readonly>
-                            </div>
-                            <div>
-                                <label class="donor_form_label">Age</label>
-                                <input type="number" class="donor_form_input" name="age" value="<?php echo isset($donor['age']) ? htmlspecialchars($donor['age']) : ''; ?>" readonly>
-                            </div>
-                            <div>
-                                <label class="donor_form_label">Sex</label>
-                                <select class="donor_form_input" name="sex" disabled>
-                                    <option value="male" <?php echo (isset($donor['sex']) && strtolower($donor['sex']) == 'male') ? 'selected' : ''; ?>>Male</option>
-                                    <option value="female" <?php echo (isset($donor['sex']) && strtolower($donor['sex']) == 'female') ? 'selected' : ''; ?>>Female</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="donor_form_label">Civil Status</label>
-                                <select class="donor_form_input" name="civil_status" disabled>
-                                    <option value="single" <?php echo (isset($donor['civil_status']) && strtolower($donor['civil_status']) == 'single') ? 'selected' : ''; ?>>Single</option>
-                                    <option value="married" <?php echo (isset($donor['civil_status']) && strtolower($donor['civil_status']) == 'married') ? 'selected' : ''; ?>>Married</option>
-                                    <option value="widowed" <?php echo (isset($donor['civil_status']) && strtolower($donor['civil_status']) == 'widowed') ? 'selected' : ''; ?>>Widowed</option>
-                                    <option value="divorced" <?php echo (isset($donor['civil_status']) && strtolower($donor['civil_status']) == 'divorced') ? 'selected' : ''; ?>>Divorced</option>
-                                </select>
-                            </div>
-                        </div>
+                    <div>
+                        <h5 class="modal-title mb-0" id="donorDetailsModalLabel">Donor Information</h5>
+                        <small class="text-white-50">Complete donor profile and submission details</small>
                     </div>
-            
-                    <div class="donor_form_section">
-                        <h6>PERMANENT ADDRESS</h6>
-                        <input type="text" class="donor_form_input" name="permanent_address" value="<?php echo isset($donor['permanent_address']) ? htmlspecialchars($donor['permanent_address']) : ''; ?>" readonly>
-                        
-                        <h6>OFFICE ADDRESS</h6>
-                        <div class="donor_form_grid grid-1">
-                            <input type="text" class="donor_form_input" name="office_address" value="<?php echo isset($donor['office_address']) ? htmlspecialchars($donor['office_address']) : ''; ?>" readonly>
-                        </div>
-                        <div class="donor_form_grid grid-4">
-                            <div>
-                                <label class="donor_form_label">Nationality</label>
-                                <input type="text" class="donor_form_input" name="nationality" value="<?php echo isset($donor['nationality']) ? htmlspecialchars($donor['nationality']) : ''; ?>" readonly>
-                            </div>
-                            <div>
-                                <label class="donor_form_label">Religion</label>
-                                <input type="text" class="donor_form_input" name="religion" value="<?php echo isset($donor['religion']) ? htmlspecialchars($donor['religion']) : ''; ?>" readonly>
-                            </div>
-                            <div>
-                                <label class="donor_form_label">Education</label>
-                                <input type="text" class="donor_form_input" name="education" value="<?php echo isset($donor['education']) ? htmlspecialchars($donor['education']) : ''; ?>" readonly>
-                            </div>
-                            <div>
-                                <label class="donor_form_label">Occupation</label>
-                                <input type="text" class="donor_form_input" name="occupation" value="<?php echo isset($donor['occupation']) ? htmlspecialchars($donor['occupation']) : ''; ?>" readonly>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="donor_form_section">
-                        <h6>CONTACT No.:</h6>
-                        <div class="donor_form_grid grid-3">
-                            <div>
-                                <label class="donor_form_label">Telephone No.</label>
-                                <input type="text" class="donor_form_input" name="telephone" value="<?php echo isset($donor['telephone']) ? htmlspecialchars($donor['telephone']) : ''; ?>" readonly>
-                            </div>
-                            <div>
-                                <label class="donor_form_label">Mobile No.</label>
-                                <input type="text" class="donor_form_input" name="mobile" value="<?php echo isset($donor['mobile']) ? htmlspecialchars($donor['mobile']) : ''; ?>" readonly>
-                            </div>
-                            <div>
-                                <label class="donor_form_label">Email Address</label>
-                                <input type="email" class="donor_form_input" name="email" value="<?php echo isset($donor['email']) ? htmlspecialchars($donor['email']) : ''; ?>" readonly>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="donor_form_section">
-                        <h6>IDENTIFICATION No.:</h6>
-                        <div class="donor_form_grid grid-6">
-                        <div>
-                            <label class="donor_form_label">School</label>
-                                <input type="text" class="donor_form_input" name="id_school" value="<?php echo isset($donor['id_school']) ? htmlspecialchars($donor['id_school']) : ''; ?>" readonly>
-                        </div>
-                        <div>
-                            <label class="donor_form_label">Company</label>
-                                <input type="text" class="donor_form_input" name="id_company" value="<?php echo isset($donor['id_company']) ? htmlspecialchars($donor['id_company']) : ''; ?>" readonly>
-                        </div>
-                        <div>
-                            <label class="donor_form_label">PRC</label>
-                                <input type="text" class="donor_form_input" name="id_prc" value="<?php echo isset($donor['id_prc']) ? htmlspecialchars($donor['id_prc']) : ''; ?>" readonly>
-                        </div>
-                        <div>
-                            <label class="donor_form_label">Driver's</label>
-                                <input type="text" class="donor_form_input" name="id_drivers" value="<?php echo isset($donor['id_drivers']) ? htmlspecialchars($donor['id_drivers']) : ''; ?>" readonly>
-                        </div>
-                        <div>
-                            <label class="donor_form_label">SSS/GSIS/BIR</label>
-                                <input type="text" class="donor_form_input" name="id_sss_gsis_bir" value="<?php echo isset($donor['id_sss_gsis_bir']) ? htmlspecialchars($donor['id_sss_gsis_bir']) : ''; ?>" readonly>
-                        </div>
-                        <div>
-                            <label class="donor_form_label">Others</label>
-                                <input type="text" class="donor_form_input" name="id_others" value="<?php echo isset($donor['id_others']) ? htmlspecialchars($donor['id_others']) : ''; ?>" readonly>
-                            </div>
-                    </div>
-                    </div>
-                </form>
-
-                <!-- Donor Declaration -->
-                <div class="donor-declaration">
-                    <!-- Donor's Signature Image -->
-                    <div class="donor-declaration-row">
-                        <div><strong>Donor's Signature:</strong></div>
-                        <?php if(isset($donor['donor_signature']) && !empty($donor['donor_signature'])): ?>
-                            <img src="../../src/views/forms/uploads/<?php echo htmlspecialchars($donor['donor_signature']); ?>" 
-                                alt="Donor's Signature" class="donor-declaration-img">
-                        <?php else: ?>
-                            <p>No donor signature available</p>
-                        <?php endif; ?>
-                    </div>
-
-                    <?php if(isset($donor['guardian_signature']) && !empty($donor['guardian_signature'])): ?>
-                    <!-- Parent/Guardian Section -->
-                    <div class="donor-declaration-row">
-                        <div><strong>Signature of Parent/Guardian:</strong></div>
-                        <img src="../../src/views/forms/uploads/<?php echo htmlspecialchars($donor['guardian_signature']); ?>" 
-                            alt="Parent/Guardian Signature" class="donor-declaration-img">
-                        <?php if(isset($donor['relationship']) && !empty($donor['relationship'])): ?>
-                        <div class="relationship-container">
-                            <strong>Relationship to Blood Donor: </strong>
-                            <input class="donor-declaration-input" type="text" 
-                                value="<?php echo htmlspecialchars($donor['relationship']); ?>" 
-                                readonly>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                    <?php endif; ?>
                 </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary px-4 py-2 fw-bold" id="Approve">Approve</button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body modern-body">
+                <!-- Donor ID Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="info-card">
+                            <div class="info-card-header">
+                                <i class="fas fa-id-card me-2"></i>
+                                PRC Blood Donor Number
+                            </div>
+                            <div class="info-card-value" name="prc_donor_number">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-card">
+                            <div class="info-card-header">
+                                <i class="fas fa-barcode me-2"></i>
+                                DOH NNBNets Barcode
+                            </div>
+                            <div class="info-card-value" name="doh_nnbnets_barcode">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Personal Information -->
+                <div class="section-card mb-4">
+                    <div class="section-header">
+                        <i class="fas fa-user me-2"></i>
+                        Personal Information
+                    </div>
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="field-group">
+                                <label class="field-label">Full Name</label>
+                                <div class="field-value">
+                                    <span name="surname">-</span>, <span name="first_name">-</span> <span name="middle_name"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="field-group">
+                                <label class="field-label">Age</label>
+                                <div class="field-value" name="age">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="field-group">
+                                <label class="field-label">Birth Date</label>
+                                <div class="field-value" name="birthdate">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="field-group">
+                                <label class="field-label">Sex</label>
+                                <div class="field-value" name="sex">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="field-group">
+                                <label class="field-label">Civil Status</label>
+                                <div class="field-value" name="civil_status">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Address & Background Information -->
+                <div class="section-card mb-4">
+                    <div class="section-header">
+                        <i class="fas fa-map-marker-alt me-2"></i>
+                        Address & Background Information
+                    </div>
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="field-group">
+                                <label class="field-label">Permanent Address</label>
+                                <div class="field-value" name="permanent_address">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="field-group">
+                                <label class="field-label">Office Address</label>
+                                <div class="field-value" name="office_address">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="field-group">
+                                <label class="field-label">Nationality</label>
+                                <div class="field-value" name="nationality">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="field-group">
+                                <label class="field-label">Religion</label>
+                                <div class="field-value" name="religion">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="field-group">
+                                <label class="field-label">Education</label>
+                                <div class="field-value" name="education">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="field-group">
+                                <label class="field-label">Occupation</label>
+                                <div class="field-value" name="occupation">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contact Information -->
+                <div class="section-card mb-4">
+                    <div class="section-header">
+                        <i class="fas fa-phone me-2"></i>
+                        Contact Information
+                    </div>
+                    <div class="row g-4">
+                        <div class="col-md-4">
+                            <div class="field-group">
+                                <label class="field-label">Mobile Number</label>
+                                <div class="field-value" name="mobile">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="field-group">
+                                <label class="field-label">Telephone</label>
+                                <div class="field-value" name="telephone">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="field-group">
+                                <label class="field-label">Email Address</label>
+                                <div class="field-value" name="email">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Identification Numbers -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <i class="fas fa-id-badge me-2"></i>
+                        Identification Numbers
+                    </div>
+                    <div class="row g-4">
+                        <div class="col-md-4">
+                            <div class="field-group">
+                                <label class="field-label">School ID</label>
+                                <div class="field-value" name="id_school">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="field-group">
+                                <label class="field-label">Company ID</label>
+                                <div class="field-value" name="id_company">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="field-group">
+                                <label class="field-label">PRC ID</label>
+                                <div class="field-value" name="id_prc">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="field-group">
+                                <label class="field-label">Driver's License</label>
+                                <div class="field-value" name="id_drivers">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="field-group">
+                                <label class="field-label">SSS/GSIS/BIR</label>
+                                <div class="field-value" name="id_sss_gsis_bir">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="field-group">
+                                <label class="field-label">Others</label>
+                                <div class="field-value" name="id_others">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer modern-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Close
+                </button>
+                <button type="button" class="btn btn-success px-4" id="Approve">
+                    <i class="fas fa-check me-2"></i>Approve Donor
+                </button>
             </div>
         </div>
     </div>
-</div>
 </div>
 
     <!-- Confirmation Modal -->
@@ -1558,23 +1715,110 @@ select.donor_form_input[disabled] {
                 console.error("ERROR: " + message);
             }
 
+            // Function to populate modal fields with donor data
+            function populateModalFields(donorData) {
+                if (!donorData) return;
+                
+                // Helper function to safely set field values
+                function setFieldValue(name, value) {
+                    const field = document.querySelector(`[name="${name}"]`);
+                    if (field) {
+                        if (field.tagName === 'DIV' || field.tagName === 'SPAN') {
+                            field.textContent = value || '-';
+                        } else {
+                            field.value = value || '';
+                        }
+                    }
+                }
+                
+                // Populate ID cards
+                setFieldValue('prc_donor_number', donorData.prc_donor_number);
+                setFieldValue('doh_nnbnets_barcode', donorData.doh_nnbnets_barcode);
+                
+                // Populate personal information
+                setFieldValue('surname', donorData.surname);
+                setFieldValue('first_name', donorData.first_name);
+                setFieldValue('middle_name', donorData.middle_name);
+                setFieldValue('age', donorData.age);
+                setFieldValue('sex', donorData.sex ? donorData.sex.charAt(0).toUpperCase() + donorData.sex.slice(1) : '-');
+                setFieldValue('civil_status', donorData.civil_status ? donorData.civil_status.charAt(0).toUpperCase() + donorData.civil_status.slice(1) : '-');
+                
+                // Format and set birthdate
+                if (donorData.birthdate) {
+                    const date = new Date(donorData.birthdate);
+                    const formattedDate = date.toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                    });
+                    setFieldValue('birthdate', formattedDate);
+                }
+                
+                // Populate address information
+                setFieldValue('permanent_address', donorData.permanent_address);
+                setFieldValue('office_address', donorData.office_address);
+                
+                // Populate background information
+                setFieldValue('nationality', donorData.nationality);
+                setFieldValue('religion', donorData.religion);
+                setFieldValue('education', donorData.education);
+                setFieldValue('occupation', donorData.occupation);
+                
+                // Populate contact information
+                setFieldValue('mobile', donorData.mobile);
+                setFieldValue('telephone', donorData.telephone);
+                setFieldValue('email', donorData.email);
+                
+                // Populate identification numbers
+                setFieldValue('id_school', donorData.id_school);
+                setFieldValue('id_company', donorData.id_company);
+                setFieldValue('id_prc', donorData.id_prc);
+                setFieldValue('id_drivers', donorData.id_drivers);
+                setFieldValue('id_sss_gsis_bir', donorData.id_sss_gsis_bir);
+                setFieldValue('id_others', donorData.id_others);
+            }
+
             // Handle view button click to populate modal
             document.querySelectorAll('.view-donor-btn').forEach(button => {
                 button.addEventListener('click', function() {
                     try {
                         const donorDataStr = this.getAttribute('data-donor');
+                        const donorId = this.getAttribute('data-donor-id');
+                        
                         console.log("View button clicked, data attribute value:", donorDataStr);
+                        console.log("Donor ID:", donorId);
+                        
+                        // Check if we have donor data
+                        if (!donorDataStr || donorDataStr === 'null' || donorDataStr === '{}') {
+                            showError('No donor data available. Please try refreshing the page.');
+                            return;
+                        }
                         
                         // Try to parse the donor data
                         currentDonorData = JSON.parse(donorDataStr);
                         console.log("Parsed donor data:", currentDonorData);
                         
                         // Check for donor_id
-                        if (!currentDonorData.donor_id) {
-                            showError('Missing donor_id in parsed data. This will cause issues with approval.');
+                        if (!currentDonorData || !currentDonorData.donor_id) {
+                            // Fallback to using the donor_id from the attribute
+                            if (donorId) {
+                                currentDonorData = { donor_id: donorId };
+                                console.log("Using fallback donor_id:", donorId);
+                            } else {
+                                showError('Missing donor_id in parsed data. This will cause issues with approval.');
+                                return;
+                            }
                         }
                         
+                        // Populate modal fields with donor data
+                        populateModalFields(currentDonorData);
+                        
+                        // Show the modal
+                        const modal = new bootstrap.Modal(document.getElementById('donorDetailsModal'));
+                        modal.show();
+                        
                     } catch (error) {
+                        console.error('Error details:', error);
                         showError('Error parsing donor data: ' + error.message);
                     }
                 });

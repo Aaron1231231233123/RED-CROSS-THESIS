@@ -29,7 +29,7 @@ error_log("Screening response sample: " . substr($response, 0, 200) . "...");
 $all_screenings = json_decode($response, true) ?: [];
 
 // 2. Get all physical examination records to determine which donor_ids to exclude
-$ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=donor_id,remarks');
+$ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=donor_id,remarks,disapproval_reason,gen_appearance,heart_and_lungs,skin,reason,blood_pressure,pulse_rate,body_temp');
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
@@ -176,6 +176,7 @@ $status_filter = isset($_GET['status']) ? $_GET['status'] : 'pending';
 
 // Create arrays for different status categories
 $active_donors = [];
+$active_donors_data = []; // Store full exam data for active donors
 
 // Filter physical exams by status
 foreach ($physical_exams as $exam) {
@@ -184,6 +185,7 @@ foreach ($physical_exams as $exam) {
         
         if ($remarks == 'accepted') {
             $active_donors[] = $exam['donor_id'];
+            $active_donors_data[$exam['donor_id']] = $exam; // Store full exam data
         }
     }
 }
@@ -217,6 +219,11 @@ switch ($status_filter) {
                         'first_name' => 'Unknown',
                         'middle_name' => ''
                     ];
+                }
+                
+                // Add physical examination data to the screening record
+                if (isset($active_donors_data[$screening['donor_form_id']])) {
+                    $screening['physical_exam'] = $active_donors_data[$screening['donor_form_id']];
                 }
                 
                 $display_screenings[] = $screening;
@@ -602,16 +609,33 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             background-color: #ffc107 !important;
             color: #212529;
             font-size: 0.85rem;
-            padding: 0.25rem 0.5rem;
-            font-weight: 500;
+            padding: 0.35rem 0.7rem;
+            font-weight: 600;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .badge.bg-success {
             background-color: #28a745 !important;
             color: white;
             font-size: 0.85rem;
-            padding: 0.25rem 0.5rem;
-            font-weight: 500;
+            padding: 0.35rem 0.7rem;
+            font-weight: 600;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge.bg-danger {
+            background-color: #dc3545 !important;
+            color: white;
+            font-size: 0.85rem;
+            padding: 0.35rem 0.7rem;
+            font-weight: 600;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         /* Action button styling */
@@ -747,6 +771,30 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         .confirm-action:hover {
             background: #c9302c;
         }
+
+        /* Observation text styling - clear and professional */
+        .observation-text {
+            font-size: 0.9rem;
+            line-height: 1.4;
+            max-width: 350px;
+            word-wrap: break-word;
+            cursor: help;
+            color: #495057;
+            font-weight: 400;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            transition: color 0.2s ease;
+        }
+
+        .observation-text:hover {
+            color: #212529 !important;
+            text-decoration: underline;
+        }
+
+        /* Vital signs emphasis */
+        .observation-text .vitals {
+            color: #28a745;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body class="light-mode">
@@ -867,6 +915,95 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                         // Format the date
                                         $date = isset($screening['created_at']) ? date('F j, Y', strtotime($screening['created_at'])) : 'Unknown';
                                         
+                                        // Determine Results and Observation based on physical exam data
+                                        $result = 'N/A';
+                                        $observation = 'N/A';
+                                        
+                                        if (isset($screening['physical_exam'])) {
+                                            $exam = $screening['physical_exam'];
+                                            
+                                            // Results column - based on remarks and disapproval_reason
+                                            if (!empty($exam['remarks'])) {
+                                                $result = ucfirst($exam['remarks']);
+                                                if (!empty($exam['disapproval_reason']) && strtolower($exam['remarks']) !== 'accepted') {
+                                                    $result .= ' - ' . $exam['disapproval_reason'];
+                                                }
+                                            }
+                                            
+                                            // Observation column - clear and understandable medical summary
+                                            $observation_parts = [];
+                                            $tooltip_details = [];
+                                            
+                                            // Primary assessment - General appearance (most important)
+                                            if (!empty($exam['gen_appearance'])) {
+                                                $appearance = ucfirst(strtolower($exam['gen_appearance']));
+                                                $observation_parts[] = $appearance . ' condition';
+                                                $tooltip_details[] = 'Physical Condition: ' . $exam['gen_appearance'];
+                                            }
+                                            
+                                            // Vital signs (if available) - very important for medical staff
+                                            $vital_signs = '';
+                                            if (!empty($exam['blood_pressure'])) {
+                                                $vital_signs .= 'BP ' . $exam['blood_pressure'];
+                                                $tooltip_details[] = 'Blood Pressure: ' . $exam['blood_pressure'];
+                                            }
+                                            if (!empty($exam['pulse_rate'])) {
+                                                if ($vital_signs) $vital_signs .= ', ';
+                                                $vital_signs .= 'Pulse ' . $exam['pulse_rate'];
+                                                $tooltip_details[] = 'Pulse Rate: ' . $exam['pulse_rate'];
+                                            }
+                                            if (!empty($exam['body_temp'])) {
+                                                if ($vital_signs) $vital_signs .= ', ';
+                                                $vital_signs .= 'Temp ' . $exam['body_temp'];
+                                                $tooltip_details[] = 'Body Temperature: ' . $exam['body_temp'];
+                                            }
+                                            
+                                            // Heart and lungs assessment
+                                            if (!empty($exam['heart_and_lungs'])) {
+                                                $heart_lungs = ucfirst(strtolower($exam['heart_and_lungs']));
+                                                $observation_parts[] = $heart_lungs . ' heart/lungs';
+                                                $tooltip_details[] = 'Heart & Lungs: ' . $exam['heart_and_lungs'];
+                                            }
+                                            
+                                            // Skin condition
+                                            if (!empty($exam['skin'])) {
+                                                $skin = ucfirst(strtolower($exam['skin']));
+                                                $observation_parts[] = $skin . ' skin';
+                                                $tooltip_details[] = 'Skin Condition: ' . $exam['skin'];
+                                            }
+                                            
+                                            // Additional notes/reasons
+                                            if (!empty($exam['reason'])) {
+                                                $tooltip_details[] = 'Additional Notes: ' . $exam['reason'];
+                                            }
+                                            
+                                            // Create the main observation text
+                                            if (!empty($observation_parts)) {
+                                                if (count($observation_parts) == 1) {
+                                                    $observation = $observation_parts[0];
+                                                } elseif (count($observation_parts) == 2) {
+                                                    $observation = $observation_parts[0] . ', ' . $observation_parts[1];
+                                                } else {
+                                                    $observation = $observation_parts[0] . ', ' . $observation_parts[1] . ' + more';
+                                                }
+                                                
+                                                // Add vital signs if available (priority display)
+                                                if ($vital_signs) {
+                                                    if (strlen($observation . ' (' . $vital_signs . ')') <= 60) {
+                                                        $observation .= ' (' . $vital_signs . ')';
+                                                    } else {
+                                                        $observation .= ' (vitals recorded)';
+                                                    }
+                                                }
+                                            } else if ($vital_signs) {
+                                                // If only vital signs available
+                                                $observation = 'Vitals: ' . $vital_signs;
+                                            }
+                                            
+                                            // Create comprehensive tooltip
+                                            $full_observation = !empty($tooltip_details) ? implode(' • ', $tooltip_details) : '';
+                                        }
+                                        
                                         $encoded_data = json_encode([
                                             'screening_id' => $screening['screening_id'] ?? '',
                                             'donor_form_id' => $screening['donor_form_id'] ?? '',
@@ -885,8 +1022,34 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                                     <span class="badge bg-warning">Pending</span>
                                                 <?php endif; ?>
                                             </td>
-                                            <td><span class="badge bg-secondary">N/A</span></td>
-                                            <td><span class="badge bg-secondary">N/A</span></td>
+                                            <td>
+                                                <?php if ($result !== 'N/A'): ?>
+                                                    <?php if (strtolower($result) === 'accepted'): ?>
+                                                        <span class="badge bg-success"><?php echo htmlspecialchars($result); ?></span>
+                                                    <?php elseif (strpos(strtolower($result), 'reject') !== false || strpos(strtolower($result), 'disapprov') !== false): ?>
+                                                        <span class="badge bg-danger"><?php echo htmlspecialchars($result); ?></span>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-warning"><?php echo htmlspecialchars($result); ?></span>
+                                                    <?php endif; ?>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary">N/A</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <?php if ($observation !== 'N/A'): ?>
+                                                    <span class="observation-text" title="<?php echo htmlspecialchars($full_observation ?: $observation); ?>">
+                                                        <?php 
+                                                        // Highlight vital signs in parentheses
+                                                        if (strpos($observation, '(') !== false && strpos($observation, ')') !== false) {
+                                                            $observation = preg_replace('/\((.*?)\)/', '(<span class="vitals">$1</span>)', $observation);
+                                                        }
+                                                        echo $observation; 
+                                                        ?>
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary">N/A</span>
+                                                <?php endif; ?>
+                                            </td>
                                             <td>
                                                 <button type="button" class="btn btn-info btn-sm view-btn me-1" 
                                                         data-screening='<?php echo htmlspecialchars($encoded_data); ?>'

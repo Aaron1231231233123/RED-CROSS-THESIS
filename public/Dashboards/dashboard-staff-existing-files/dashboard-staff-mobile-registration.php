@@ -122,6 +122,12 @@ if ($response === false || is_null(json_decode($response, true))) {
             }
         }
         $eligibility_records = array_values($unique_donors);
+
+    // Add this after the eligibility records are fetched
+    if (!empty($eligibility_records)) {
+        error_log("First record start_date: " . print_r($eligibility_records[0]['start_date'], true));
+        error_log("First record parsed date: " . print_r(date('Y-m-d', strtotime($eligibility_records[0]['start_date'])), true));
+    }
 }
 
 // Initialize counters for mobile registrations
@@ -683,7 +689,16 @@ $donors = array_slice($donors, $offset, $records_per_page);
                                     <?php foreach($eligibility_records as $index => $record): ?>
                                         <tr class="clickable-row">
                                             <td><?php echo $index + 1; ?></td>
-                                            <td><?php echo !empty($record['start_date']) ? date('F j, Y', strtotime($record['start_date'])) : 'N/A'; ?></td>
+                                            <td><?php 
+                                                if (!empty($record['start_date'])) {
+                                                    $parsed_date = strtotime($record['start_date']);
+                                                    error_log("Raw start_date: " . $record['start_date']);
+                                                    error_log("Parsed timestamp: " . $parsed_date);
+                                                    echo date('F j, Y', $parsed_date);
+                                                } else {
+                                                    echo 'N/A';
+                                                }
+                                            ?></td>
                                             <td><?php echo !empty($record['donor_form']['surname']) ? strtoupper(htmlspecialchars($record['donor_form']['surname'])) : 'N/A'; ?></td>
                                             <td><?php echo !empty($record['donor_form']['first_name']) ? htmlspecialchars($record['donor_form']['first_name']) : 'N/A'; ?></td>
                                             <td>
