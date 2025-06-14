@@ -14,9 +14,8 @@ if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] != 3) {
 }
 
 // Initialize counts
-$incoming_count = 0;
-$approved_count = 0;
-$declined_count = 0;
+$pending_interviews_count = 0;
+$todays_summary_count = 0;
 
 // --- STEP 1: Get all donors from donor_form table ---
 $all_donors_ch = curl_init();
@@ -162,30 +161,16 @@ if (empty($approved_donor_ids)) {
     }
 }
 
-$approved_count = count($approved_donor_ids);
-
-error_log("DEBUG - FOUND " . $approved_count . " APPROVED DONORS");
-error_log("DEBUG - Approved donor IDs: " . json_encode($approved_donor_ids));
-
-// --- STEP 4: Calculate incoming (donors not declined or approved) ---
-// Remove approved and declined donors from all_donor_ids to get incoming donors
-$processed_donor_ids = array_unique(array_merge($approved_donor_ids, $declined_donor_ids));
-error_log("DEBUG - Processed donor IDs: " . json_encode($processed_donor_ids));
-
-// Calculate incoming count - these are donors who have NO screening form yet
+// Calculate counts for the new card structure
 $incoming_donor_ids = array_diff($all_donor_ids, $screened_donor_ids);
-$incoming_count = count($incoming_donor_ids);
+$pending_interviews_count = count($incoming_donor_ids); // All unscreened donors are pending interviews
 
-// Add more debugging to verify calculation
-error_log("DEBUG - All donor IDs: " . json_encode($all_donor_ids));
-error_log("DEBUG - Screened donor IDs: " . json_encode($screened_donor_ids));
-error_log("DEBUG - Resulting Incoming donor IDs: " . json_encode($incoming_donor_ids));
+// Count today's submissions
+$today = date('Y-m-d');
+$todays_summary_count = 0;
 
-error_log("DEBUG - FINAL COUNTS - Total: $total_donors, Approved: $approved_count, Declined: $declined_count, Incoming: $incoming_count");
-error_log("DEBUG - LOGIC CHECK - Incoming should be donors WITHOUT screening forms: " . $total_donors . " - " . count($screened_donor_ids) . " = " . ($total_donors - count($screened_donor_ids)));
-
-// Log counts for debugging
-error_log("COUNTING SUMMARY: Total: $total_donors, Incoming (unscreened): $incoming_count, Screened: " . count($screened_donor_ids) . ", Approved: $approved_count, Declined: $declined_count");
+// We'll calculate today's count from the actual query results later
+error_log("DEBUG - Pending interviews count: $pending_interviews_count");
 
 // Add pagination settings
 $records_per_page = 15;
@@ -235,42 +220,16 @@ error_log("Screening form data (direct query): " . json_encode($debug_screening)
 $query_url = SUPABASE_URL . '/rest/v1/donor_form?select=*&order=submitted_at.desc';
 
 // Check if we're filtering by status
-$status_filter = isset($_GET['status']) ? $_GET['status'] : null;
-if ($status_filter) {
-    switch ($status_filter) {
-        case 'incoming':
-            // Only show donors without screening forms (not in processed list)
-            if (!empty($screened_donor_ids)) {
-                $screened_ids_str = implode(',', $screened_donor_ids);
-                $query_url .= '&donor_id=not.in.(' . $screened_ids_str . ')';
-            }
-            break;
-        case 'approved':
-            // Only show approved donors
-            if (!empty($approved_donor_ids)) {
-                $approved_ids_str = implode(',', $approved_donor_ids);
-                $query_url .= '&donor_id=in.(' . $approved_ids_str . ')';
-            } else {
-                // No approved donors, return empty result
-                $query_url .= '&donor_id=eq.0'; // This will match no records
-            }
-            break;
-        case 'declined':
-            // Only show declined donors
-            if (!empty($declined_donor_ids)) {
-                $declined_ids_str = implode(',', $declined_donor_ids);
-                $query_url .= '&donor_id=in.(' . $declined_ids_str . ')';
-            } else {
-                // No declined donors, return empty result
-                $query_url .= '&donor_id=eq.0'; // This will match no records
-            }
-            break;
-        default:
-            // Default behavior - show all donors
-            break;
+$status_filter = isset($_GET['status']) ? $_GET['status'] : 'pending';
+if ($status_filter === 'pending') {
+    // Show only donors without screening forms (pending interviews)
+    if (!empty($screened_donor_ids)) {
+        $screened_ids_str = implode(',', $screened_donor_ids);
+        $query_url .= '&donor_id=not.in.(' . $screened_ids_str . ')';
     }
-} else {
-    // DEFAULT VIEW - show only INCOMING donors (those without screening forms)
+} elseif ($status_filter === 'today') {
+    // Show only today's submissions AND those without screening forms
+    $query_url .= '&submitted_at=gte.' . $today . 'T00:00:00&submitted_at=lt.' . $today . 'T23:59:59';
     if (!empty($screened_donor_ids)) {
         $screened_ids_str = implode(',', $screened_donor_ids);
         $query_url .= '&donor_id=not.in.(' . $screened_ids_str . ')';
@@ -299,6 +258,13 @@ if ($response === false || is_null(json_decode($response, true))) {
 } else {
     $donors = json_decode($response, true) ?: [];
     error_log("Decoded donors count: " . count($donors));
+    
+    // Calculate today's summary count from the full donor list (before pagination)
+    foreach ($donors as $donor) {
+        if (isset($donor['submitted_at']) && date('Y-m-d', strtotime($donor['submitted_at'])) === $today) {
+            $todays_summary_count++;
+        }
+    }
 }
 
 $total_records = count($donors);
@@ -732,6 +698,42 @@ function storeDonorIdInSession($donorData) {
             font-weight: 600;
             border-radius: 4px;
         }
+
+        .badge.bg-secondary {
+            background-color: #6c757d !important;
+            font-size: 0.85rem;
+            padding: 0.25rem 0.5rem;
+            font-weight: 500;
+        }
+
+        /* Action button styling */
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+            border-radius: 4px;
+        }
+
+        .btn-info {
+            background-color: #17a2b8;
+            border-color: #17a2b8;
+        }
+
+        .btn-warning {
+            background-color: #ffc107;
+            border-color: #ffc107;
+            color: #212529;
+        }
+
+        .btn-info:hover {
+            background-color: #138496;
+            border-color: #117a8b;
+        }
+
+        .btn-warning:hover {
+            background-color: #e0a800;
+            border-color: #d39e00;
+            color: #212529;
+        }
         
         /* Section header */
         .section-header {
@@ -1049,7 +1051,7 @@ select.donor_form_input[disabled] {
                 <?php if ($user_staff_roles === 'interviewer'): ?>
                         <li class="nav-item">
                             <a class="nav-link active" href="dashboard-staff-donor-submission.php">
-                                System Registration
+                                Initial Screening Queue
                             </a>
                         </li>
                     <?php endif; ?>
@@ -1078,6 +1080,9 @@ select.donor_form_input[disabled] {
                         </li>
                     <?php endif; ?>
                     <li class="nav-item">
+                        <a class="nav-link" href="dashboard-staff-existing-files/dashboard-staff-mobile-registration.php">Mobile Registration</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="dashboard-staff-history.php">Donor History</a>
                     </li>
                     <li class="nav-item">
@@ -1095,17 +1100,13 @@ select.donor_form_input[disabled] {
                     
                     <!-- Status Cards -->
                     <div class="dashboard-staff-status">
-                        <a href="?status=incoming" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'incoming') ? 'active' : ''; ?>">
-                            <p class="dashboard-staff-count"><?php echo $incoming_count; ?></p>
-                            <p class="dashboard-staff-title">Incoming Registrations</p>
+                        <a href="?status=pending" class="status-card <?php echo (!isset($_GET['status']) || $_GET['status'] === 'pending') ? 'active' : ''; ?>">
+                            <p class="dashboard-staff-count"><?php echo $pending_interviews_count; ?></p>
+                            <p class="dashboard-staff-title">Pending Interviews</p>
                         </a>
-                        <a href="?status=approved" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'approved') ? 'active' : ''; ?>">
-                            <p class="dashboard-staff-count"><?php echo $approved_count; ?></p>
-                            <p class="dashboard-staff-title">Approved</p>
-                        </a>
-                        <a href="?status=declined" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'declined') ? 'active' : ''; ?>">
-                            <p class="dashboard-staff-count"><?php echo $declined_count; ?></p>
-                            <p class="dashboard-staff-title">Declined</p>
+                        <a href="?status=today" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'today') ? 'active' : ''; ?>">
+                            <p class="dashboard-staff-count"><?php echo $todays_summary_count; ?></p>
+                            <p class="dashboard-staff-title">Today's Summary</p>
                         </a>
                     </div>
                     
@@ -1125,16 +1126,16 @@ select.donor_form_input[disabled] {
                         <table class="dashboard-staff-tables table-hover">
                             <thead>
                                 <tr>
-                                    <th>Donation Date</th>
-                                    <th>Surname</th>
+                                    <th>No.</th>
+                                    <th>Date</th>
+                                    <th>SURNAME</th>
                                     <th>First Name</th>
-                                    <th>Gender</th>
-                                    <th>Age</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody id="donorTableBody">
                                 <?php if($donors && is_array($donors)): ?>
-                                    <?php foreach($donors as $donor): ?>
+                                    <?php foreach($donors as $index => $donor): ?>
                                         <?php
                                         // Ensure $donor is an array before merging
                                         if (is_array($donor)) {
@@ -1152,24 +1153,25 @@ select.donor_form_input[disabled] {
                                             continue;
                                         }
                                         ?>
-                                        <tr class="donor-row" 
-                                            data-bs-toggle="modal" 
-                                            data-bs-target="#donorDetailsModal" 
-                                            data-donor='<?php echo htmlspecialchars($encoded_data); ?>'>
-                                            <td><?php 
-                                                if (isset($donor['submitted_at'])) {
-                                                    $date = new DateTime($donor['submitted_at']);
-                                                    echo $date->format('F d, Y h:i A');
-                                                } else {
-                                                    echo 'N/A';
-                                                }
-                                            ?></td>
-                                            <td><?php echo isset($donor['surname']) ? htmlspecialchars($donor['surname']) : ''; ?></td>
-                                            <td><?php echo isset($donor['first_name']) ? htmlspecialchars($donor['first_name']) : ''; ?></td>
-                                            <td><?php echo isset($donor['sex']) ? htmlspecialchars(ucfirst($donor['sex'])) : ''; ?></td>
-                                            <td><?php echo isset($donor['age']) ? htmlspecialchars($donor['age']) : ''; ?></td>
+                                        <tr class="clickable-row">
+                                            <td><?php echo $index + 1; ?></td>
+                                            <td><?php echo !empty($donor['start_date']) ? date('F j, Y', strtotime($donor['start_date'])) : 'N/A'; ?></td>
+                                            <td><?php echo !empty($donor['surname']) ? strtoupper(htmlspecialchars($donor['surname'])) : 'N/A'; ?></td>
+                                            <td><?php echo !empty($donor['first_name']) ? htmlspecialchars($donor['first_name']) : 'N/A'; ?></td>
+                                            <td>
+                                                <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" data-donor-id="<?php echo $donor['donor_id']; ?>" title="View Details">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-warning btn-sm edit-donor-btn" data-donor-id="<?php echo $donor['donor_id']; ?>" title="Edit">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                            </td>
                                         </tr>
                                     <?php endforeach; ?>
+                                <?php else: ?>
+                                    <tr>
+                                        <td colspan="6" class="text-center">No records found</td>
+                                    </tr>
                                 <?php endif; ?>
                             </tbody>
                         </table>
@@ -1517,12 +1519,12 @@ select.donor_form_input[disabled] {
                 }
             }
 
-            function showNoResultsMessage(searchTerm, category) {
+                            function showNoResultsMessage(searchTerm, category) {
                 removeNoResultsMessage();
                 const messageRow = document.createElement('tr');
                 messageRow.className = 'no-results';
                 const categoryText = category === 'all' ? '' : ` in ${category}`;
-                messageRow.innerHTML = `<td colspan="5" class="text-center py-3">
+                messageRow.innerHTML = `<td colspan="6" class="text-center py-3">
                     No donors found matching "${searchTerm}"${categoryText}
                 </td>`;
                 donorTableBody.appendChild(messageRow);
@@ -1556,12 +1558,12 @@ select.donor_form_input[disabled] {
                 console.error("ERROR: " + message);
             }
 
-            // Handle row click and populate modal
-            document.querySelectorAll('.dashboard-staff-tables tbody tr').forEach(row => {
-                row.addEventListener('click', function() {
+            // Handle view button click to populate modal
+            document.querySelectorAll('.view-donor-btn').forEach(button => {
+                button.addEventListener('click', function() {
                     try {
                         const donorDataStr = this.getAttribute('data-donor');
-                        console.log("Row clicked, data attribute value:", donorDataStr);
+                        console.log("View button clicked, data attribute value:", donorDataStr);
                         
                         // Try to parse the donor data
                         currentDonorData = JSON.parse(donorDataStr);
@@ -1575,6 +1577,16 @@ select.donor_form_input[disabled] {
                     } catch (error) {
                         showError('Error parsing donor data: ' + error.message);
                     }
+                });
+            });
+
+            // Handle edit button click
+            document.querySelectorAll('.edit-donor-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const donorId = this.getAttribute('data-donor-id');
+                    console.log('Edit button clicked for donor ID:', donorId);
+                    // Add your edit functionality here
+                    alert('Edit functionality will be implemented for donor ID: ' + donorId);
                 });
             });
 

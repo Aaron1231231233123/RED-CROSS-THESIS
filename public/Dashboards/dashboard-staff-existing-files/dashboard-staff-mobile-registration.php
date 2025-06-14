@@ -70,8 +70,8 @@ if ($response === false || is_null(json_decode($response, true))) {
     // Get unique donor IDs
     $donor_ids = array_unique(array_column($eligibility_records, 'donor_id'));
     
-    // Now fetch donor_form data for these donor IDs
-    $donor_query_url = SUPABASE_URL . '/rest/v1/donor_form?select=*&donor_id=in.(' . implode(',', $donor_ids) . ')';
+    // Now fetch donor_form data for these donor IDs, filtered by Mobile registration channel
+    $donor_query_url = SUPABASE_URL . '/rest/v1/donor_form?select=*&donor_id=in.(' . implode(',', $donor_ids) . ')&registration_channel=eq.Mobile';
     
     $ch = curl_init($donor_query_url);
     curl_setopt_array($ch, [
@@ -96,134 +96,68 @@ if ($response === false || is_null(json_decode($response, true))) {
             }
         }
         
-        // Attach donor information to eligibility records
+        // Attach donor information to eligibility records and filter by Mobile registration channel
         foreach ($eligibility_records as &$record) {
             if (isset($record['donor_id']) && isset($donor_lookup[$record['donor_id']])) {
-                $record['donor_form'] = $donor_lookup[$record['donor_id']];
+                $donor_info = $donor_lookup[$record['donor_id']];
+                // Only include records with Mobile registration channel
+                if (isset($donor_info['registration_channel']) && $donor_info['registration_channel'] === 'Mobile') {
+                    $record['donor_form'] = $donor_info;
+                }
             }
         }
     }
     
-    // Filter out duplicate donor_ids, keeping only the latest record
-    $unique_donors = [];
-    foreach ($eligibility_records as $record) {
-        if (isset($record['donor_id']) && isset($record['donor_form'])) {
-            $donor_id = $record['donor_id'];
-            if (!isset($unique_donors[$donor_id]) || 
-                (isset($record['start_date']) && isset($unique_donors[$donor_id]['start_date']) &&
-                strtotime($record['start_date']) > strtotime($unique_donors[$donor_id]['start_date']))) {
-                $unique_donors[$donor_id] = $record;
+            // Filter out duplicate donor_ids, keeping only the latest record, and only include Mobile registrations
+        $unique_donors = [];
+        foreach ($eligibility_records as $record) {
+            // Only process records that have donor_form data (Mobile registrations)
+            if (isset($record['donor_id']) && isset($record['donor_form'])) {
+                $donor_id = $record['donor_id'];
+                if (!isset($unique_donors[$donor_id]) || 
+                    (isset($record['start_date']) && isset($unique_donors[$donor_id]['start_date']) &&
+                    strtotime($record['start_date']) > strtotime($unique_donors[$donor_id]['start_date']))) {
+                    $unique_donors[$donor_id] = $record;
+                }
             }
         }
-    }
-    $eligibility_records = array_values($unique_donors);
+        $eligibility_records = array_values($unique_donors);
 }
 
-// Fetch medical history records to calculate status counts
-$medical_history_url = SUPABASE_URL . '/rest/v1/medical_history?select=medical_history_id,donor_id,medical_approval';
-$ch = curl_init($medical_history_url);
-curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY
-    ]
-]);
-$response = curl_exec($ch);
-curl_close($ch);
+// Initialize counters for mobile registrations
+$pending_interviews_count = 0;
+$todays_summary_count = 0;
 
-// Initialize counters
-$incoming_count = 0;
-$approved_count = 0;
-$declined_count = 0;
+// Calculate counts after filtering mobile registrations
+$pending_interviews_count = count($eligibility_records); // All mobile registrations are pending interviews
+$todays_summary_count = 0;
 
-// Arrays to store donor IDs by status
-$donor_with_medical_history = [];
-$donor_with_approved_medical_history = [];
-$donor_with_declined_medical_history = [];
-
-if ($response === false || is_null(json_decode($response, true))) {
-    error_log("Error fetching medical history data from Supabase");
-} else {
-    $medical_histories = json_decode($response, true) ?: [];
-    error_log("Decoded medical histories count: " . count($medical_histories));
-    
-    // Process medical histories to get counts
-    $incoming_with_null_approval = [];
-
-    foreach ($medical_histories as $history) {
-        if (isset($history['donor_id'])) {
-            if (isset($history['medical_approval'])) {
-                if ($history['medical_approval'] === 'Approved') {
-                    $approved_count++;
-                    $donor_with_approved_medical_history[] = $history['donor_id'];
-                    $donor_with_medical_history[] = $history['donor_id'];
-                } else if ($history['medical_approval'] === null) {
-                    // If medical_approval is null, treat it as incoming
-                    $incoming_with_null_approval[] = $history['donor_id'];
-                } else {
-                    $declined_count++;
-                    $donor_with_declined_medical_history[] = $history['donor_id'];
-                    $donor_with_medical_history[] = $history['donor_id'];
-                }
-            } else {
-                // If medical_approval field is missing, also treat as incoming
-                $incoming_with_null_approval[] = $history['donor_id'];
-            }
-        }
+// Count today's submissions
+$today = date('Y-m-d');
+foreach ($eligibility_records as $record) {
+    if (isset($record['start_date']) && date('Y-m-d', strtotime($record['start_date'])) === $today) {
+        $todays_summary_count++;
     }
-    
-    // Remove duplicates
-    $donor_with_medical_history = array_unique($donor_with_medical_history);
-    $donor_with_approved_medical_history = array_unique($donor_with_approved_medical_history);
-    $donor_with_declined_medical_history = array_unique($donor_with_declined_medical_history);
-    $incoming_with_null_approval = array_unique($incoming_with_null_approval);
-    
-    // Calculate incoming count (donors without any medical history or with null approval)
-    $all_donor_ids = array_column($eligibility_records, 'donor_id');
-    $processed_donors = array_merge($donor_with_approved_medical_history, $donor_with_declined_medical_history);
-    $incoming_donors = array_diff($all_donor_ids, $processed_donors);
-    $incoming_count = count($incoming_donors);
-    
-    // Update counters to reflect unique donors
-    $approved_count = count($donor_with_approved_medical_history);
-    $declined_count = count($donor_with_declined_medical_history);
-    
-    // Log the detailed counts for debugging
-    error_log("Medical History Counts - Total donors: " . count($all_donor_ids));
-    error_log("Medical History Counts - Approved: $approved_count, Declined: $declined_count, Incoming: $incoming_count");
-    error_log("Medical History Counts - Donors with null approval: " . count($incoming_with_null_approval));
-    error_log("Medical History Counts - Processed donors: " . count($processed_donors));
-    error_log("Incoming count: $incoming_count, Approved count: $approved_count, Declined count: $declined_count");
 }
 
 // Handle status filtering
-$status_filter = isset($_GET['status']) ? $_GET['status'] : 'incoming';
+$status_filter = isset($_GET['status']) ? $_GET['status'] : 'pending';
 
 // Filter donors based on status if needed
 $filtered_records = [];
-if ($status_filter === 'incoming') {
+if ($status_filter === 'pending') {
+    // Show all mobile registrations (pending interviews)
+    $filtered_records = $eligibility_records;
+} elseif ($status_filter === 'today') {
+    // Show only today's submissions
+    $today = date('Y-m-d');
     foreach ($eligibility_records as $record) {
-        if (isset($record['donor_id'])) {
+        if (isset($record['start_date']) && date('Y-m-d', strtotime($record['start_date'])) === $today) {
             $filtered_records[] = $record;
         }
     }
-    $eligibility_records = $filtered_records;
-} elseif ($status_filter === 'approved') {
-    foreach ($eligibility_records as $record) {
-        if (isset($record['collection_successful']) && $record['collection_successful'] === true) {
-            $filtered_records[] = $record;
-        }
-    }
-    $eligibility_records = $filtered_records;
-} elseif ($status_filter === 'declined') {
-    foreach ($eligibility_records as $record) {
-        if (isset($record['collection_successful']) && $record['collection_successful'] === false) {
-            $filtered_records[] = $record;
-        }
-    }
-    $eligibility_records = $filtered_records;
 }
+$eligibility_records = $filtered_records;
 
 // Group donors by unique identity (surname, first_name, middle_name, birthdate)
 $donorGroups = [];
@@ -283,7 +217,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Donor Medical History</title>
+    <title>Mobile Registration - Donor Management</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
@@ -596,6 +530,42 @@ $donors = array_slice($donors, $offset, $records_per_page);
             font-weight: 600;
             border-radius: 4px;
         }
+
+        .badge.bg-secondary {
+            background-color: #6c757d !important;
+            font-size: 0.85rem;
+            padding: 0.25rem 0.5rem;
+            font-weight: 500;
+        }
+
+        /* Action button styling */
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+            border-radius: 4px;
+        }
+
+        .btn-info {
+            background-color: #17a2b8;
+            border-color: #17a2b8;
+        }
+
+        .btn-warning {
+            background-color: #ffc107;
+            border-color: #ffc107;
+            color: #212529;
+        }
+
+        .btn-info:hover {
+            background-color: #138496;
+            border-color: #117a8b;
+        }
+
+        .btn-warning:hover {
+            background-color: #e0a800;
+            border-color: #d39e00;
+            color: #212529;
+        }
         
         /* Section header */
         .section-header {
@@ -626,14 +596,14 @@ $donors = array_slice($donors, $offset, $records_per_page);
                 <?php if ($user_staff_roles === 'interviewer'): ?>
                         <li class="nav-item">
                             <a class="nav-link" href="../dashboard-staff-donor-submission.php">
-                                System Registration
+                                Initial Screening Queue
                             </a>
                         </li>
                     <?php endif; ?>
 
                     <?php if ($user_staff_roles === 'reviewer'): ?>
                         <li class="nav-item">
-                            <a class="nav-link" href="../dashboard-staff-medical-history-submissions.php">
+                            <a class="nav-link active" href="dashboard-staff-medical-history-submissions.php">
                                 New Donor
                             </a>
                         </li>
@@ -641,7 +611,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
                     
                     <?php if ($user_staff_roles === 'physician'): ?>
                         <li class="nav-item">
-                            <a class="nav-link" href="../dashboard-staff-physical-submission.php">
+                            <a class="nav-link active" href="dashboard-staff-physical-submission.php">
                                 Physical Exam Submissions
                             </a>
                         </li>
@@ -649,16 +619,14 @@ $donors = array_slice($donors, $offset, $records_per_page);
                     
                     <?php if ($user_staff_roles === 'phlebotomist'): ?>
                         <li class="nav-item">
-                            <a class="nav-link" href="../dashboard-staff-blood-collection-submission.php">
+                            <a class="nav-link active" href="dashboard-staff-blood-collection-submission.php">
                                 Blood Collection Submissions
                             </a>
                         </li>
                     <?php endif; ?>
                     <li class="nav-item">
-                            <a class="nav-link  active" href="dashboard-staff-existing-reviewer.php">
-                                Existing Donor
-                            </a>
-                        </li>
+                        <a class="nav-link active" href="">Mobile Registration</a>
+                    </li>
                     <li class="nav-item">
                         <a class="nav-link" href="dashboard-staff-history.php">Donor History</a>
                     </li>
@@ -672,26 +640,22 @@ $donors = array_slice($donors, $offset, $records_per_page);
             <main class="col-md-9 col-lg-10 main-content">
                 <div class="content-wrapper">
                     <div class="welcome-section">
-                        <h2 class="welcome-title">Welcome, Staff!</h2>
+                        <h2 class="welcome-title">Welcome, Interviewer!</h2>
                     </div>
                     
                     <!-- Status Cards -->
                     <div class="dashboard-staff-status">
-                        <a href="?status=incoming" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'incoming' ? 'active' : ''); ?>">
-                            <p class="dashboard-staff-count"><?php echo $incoming_count; ?></p>
-                            <p class="dashboard-staff-title">Incoming Registrations</p>
+                        <a href="?status=pending" class="status-card <?php echo (!isset($_GET['status']) || $_GET['status'] === 'pending' ? 'active' : ''); ?>">
+                            <p class="dashboard-staff-count"><?php echo $pending_interviews_count; ?></p>
+                            <p class="dashboard-staff-title">Pending Interviews</p>
                         </a>
-                        <a href="?status=approved" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'approved' ? 'active' : ''); ?>">
-                            <p class="dashboard-staff-count"><?php echo $approved_count; ?></p>
-                            <p class="dashboard-staff-title">Approved</p>
-                        </a>
-                        <a href="?status=declined" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'declined' ? 'active' : ''); ?>">
-                            <p class="dashboard-staff-count"><?php echo $declined_count; ?></p>
-                            <p class="dashboard-staff-title">Declined</p>
+                        <a href="?status=today" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'today' ? 'active' : ''); ?>">
+                            <p class="dashboard-staff-count"><?php echo $todays_summary_count; ?></p>
+                            <p class="dashboard-staff-title">Today's Summary</p>
                         </a>
                     </div>
                     
-                    <h5 class="section-header">Donation Records</h5>
+                    <h5 class="section-header">Mobile Registration Records</h5>
                     
                     <!-- Search Bar -->
                     <div class="search-container">
@@ -708,50 +672,33 @@ $donors = array_slice($donors, $offset, $records_per_page);
                             <thead>
                                 <tr>
                                     <th>No.</th>
-                                    <th>Donation Date</th>
-                                    <th>Surname</th>
+                                    <th>Date</th>
+                                    <th>SURNAME</th>
                                     <th>First Name</th>
-                                    <th>Gender</th>
-                                    <th>Age</th>
-                                    <th>Status</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody id="donorTableBody">
                                 <?php if (!empty($eligibility_records)): ?>
                                     <?php foreach($eligibility_records as $index => $record): ?>
-                                        <?php
-                                        // Calculate remaining days for the table
-                                        $remainingDays = 0;
-                                        if (!empty($record['start_date'])) {
-                                            $donationDate = new DateTime($record['start_date']);
-                                            $today = new DateTime();
-                                            $eligibleDate = clone $donationDate;
-                                            $eligibleDate->modify('+90 days');
-                                            
-                                            if ($today < $eligibleDate) {
-                                                $remainingDays = $today->diff($eligibleDate)->days;
-                                            }
-                                        }
-                                        ?>
                                         <tr class="clickable-row">
                                             <td><?php echo $index + 1; ?></td>
                                             <td><?php echo !empty($record['start_date']) ? date('F j, Y', strtotime($record['start_date'])) : 'N/A'; ?></td>
-                                            <td><?php echo !empty($record['donor_form']['surname']) ? htmlspecialchars($record['donor_form']['surname']) : 'N/A'; ?></td>
+                                            <td><?php echo !empty($record['donor_form']['surname']) ? strtoupper(htmlspecialchars($record['donor_form']['surname'])) : 'N/A'; ?></td>
                                             <td><?php echo !empty($record['donor_form']['first_name']) ? htmlspecialchars($record['donor_form']['first_name']) : 'N/A'; ?></td>
-                                            <td><?php echo !empty($record['donor_form']['sex']) ? htmlspecialchars(ucfirst($record['donor_form']['sex'])) : 'N/A'; ?></td>
-                                            <td><?php echo !empty($record['donor_form']['age']) ? htmlspecialchars($record['donor_form']['age']) : 'N/A'; ?></td>
-                                            <td><?php echo $remainingDays > 0 ? 'Ineligible' : 'Eligible'; ?></td>
                                             <td>
-                                                <button type="button" class="btn btn-info btn-sm view-donor-btn" data-donor-id="<?php echo $record['donor_id']; ?>">
+                                                <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" data-donor-id="<?php echo $record['donor_id']; ?>" title="View Details">
                                                     <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-warning btn-sm edit-donor-btn" data-donor-id="<?php echo $record['donor_id']; ?>" title="Edit">
+                                                    <i class="fas fa-edit"></i>
                                                 </button>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr>
-                                        <td colspan="8" class="text-center">No records found</td>
+                                        <td colspan="6" class="text-center">No records found</td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>
@@ -798,7 +745,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
+    <script>    
     // Make these functions available in the global scope
     window.calculateRemainingDays = function(startDate) {
         if (!startDate) return 0;
@@ -948,7 +895,24 @@ $donors = array_slice($donors, $offset, $records_per_page);
                 fetchDonorInfo(donorId);
             });
         });
+
+        // Add click handlers to all edit buttons
+        document.querySelectorAll('.edit-donor-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const donorId = this.getAttribute('data-donor-id');
+                editDonor(donorId);
+            });
+        });
     });
+
+    // Function to handle edit donor action
+    window.editDonor = function(donorId) {
+        // Add your edit logic here
+        console.log('Editing donor with ID:', donorId);
+        // You can redirect to an edit page or open an edit modal
+        // window.location.href = `/REDCROSS/public/edit-donor.php?donor_id=${donorId}`;
+        alert('Edit functionality will be implemented here for donor ID: ' + donorId);
+    };
     </script>
 </body>
 </html>

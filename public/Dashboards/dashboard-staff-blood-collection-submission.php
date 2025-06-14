@@ -122,21 +122,32 @@ error_log("After filtering, " . count($available_exams) . " physical exams remai
 // Calculate incoming count (available exams that haven't been collected yet)
 $incoming_count = count($available_exams);
 $approved_count = count($approved_collections);
-$declined_count = count($declined_collections);
 
-error_log("Final counts - Incoming: $incoming_count, Approved: $approved_count, Declined: $declined_count");
+// Calculate today's summary count (blood collections submitted today)
+$today = date('Y-m-d');
+$today_count = 0;
+foreach ($blood_collections as $collection) {
+    if (isset($collection['created_at'])) {
+        $collection_date = date('Y-m-d', strtotime($collection['created_at']));
+        if ($collection_date === $today) {
+            $today_count++;
+        }
+    }
+}
+
+error_log("Final counts - Incoming: $incoming_count, Approved: $approved_count, Today: $today_count");
 
 // Handle status filtering
 $status_filter = isset($_GET['status']) ? $_GET['status'] : 'incoming';
 
 // Initialize filtered screenings based on status
 switch ($status_filter) {
-    case 'approved':
+    case 'active':
         // Get physical exam IDs with approved blood collection
         $display_exams = [];
         
         // Get the full details of approved blood collections
-        $approved_url = SUPABASE_URL . '/rest/v1/blood_collection?is_successful=eq.true&select=blood_collection_id,physical_exam_id,physical_examination(donor_id,remarks,blood_bag_type,donor_form(surname,first_name))';
+        $approved_url = SUPABASE_URL . '/rest/v1/blood_collection?is_successful=eq.true&select=blood_collection_id,physical_exam_id,created_at,physical_examination(donor_id,remarks,blood_bag_type,donor_form(surname,first_name))';
         $ch = curl_init($approved_url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
@@ -151,31 +162,33 @@ switch ($status_filter) {
             if (isset($item['physical_examination']) && !empty($item['physical_examination'])) {
                 $exam = $item['physical_examination'];
                 $exam['physical_exam_id'] = $item['physical_exam_id'];
+                $exam['created_at'] = $item['created_at'];
                 $display_exams[] = $exam;
             }
         }
         break;
         
-    case 'declined':
-        // Get physical exam IDs with declined blood collection
+    case 'today':
+        // Get all blood collections submitted today
         $display_exams = [];
         
-        // Get the full details of declined blood collections
-        $declined_url = SUPABASE_URL . '/rest/v1/blood_collection?is_successful=eq.false&select=blood_collection_id,physical_exam_id,physical_examination(donor_id,remarks,blood_bag_type,donor_form(surname,first_name))';
-        $ch = curl_init($declined_url);
+        // Get blood collections from today
+        $today_url = SUPABASE_URL . '/rest/v1/blood_collection?created_at=gte.' . $today . 'T00:00:00&created_at=lt.' . date('Y-m-d', strtotime($today . ' +1 day')) . 'T00:00:00&select=blood_collection_id,physical_exam_id,created_at,physical_examination(donor_id,remarks,blood_bag_type,donor_form(surname,first_name))';
+        $ch = curl_init($today_url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         $response = curl_exec($ch);
         curl_close($ch);
         
-        $declined_data = json_decode($response, true) ?: [];
-        error_log("Fetched " . count($declined_data) . " declined blood collections");
+        $today_data = json_decode($response, true) ?: [];
+        error_log("Fetched " . count($today_data) . " blood collections from today");
         
         // Format the data to match our expected structure
-        foreach ($declined_data as $item) {
+        foreach ($today_data as $item) {
             if (isset($item['physical_examination']) && !empty($item['physical_examination'])) {
                 $exam = $item['physical_examination'];
                 $exam['physical_exam_id'] = $item['physical_exam_id'];
+                $exam['created_at'] = $item['created_at'];
                 $display_exams[] = $exam;
             }
         }
@@ -190,7 +203,7 @@ switch ($status_filter) {
 // STEP 4: Prepare pagination
 $total_records = count($display_exams);
 $total_pages = ceil($total_records / $records_per_page);
-$examinations = array_slice($display_exams, $offset, $records_per_page);
+$display_exams = array_slice($display_exams, $offset, $records_per_page);
 
 // Log execution time
 $end_time = microtime(true);
@@ -482,6 +495,17 @@ $paginated_donors = array_slice($donors, $offset, $records_per_page);
             border-radius: 0;
             overflow: hidden;
             margin-bottom: 1rem;
+            table-layout: fixed;
+        }
+        
+        .dashboard-staff-tables th:nth-child(8),
+        .dashboard-staff-tables td:nth-child(8) {
+            width: 120px;
+        }
+        
+        .dashboard-staff-tables th:nth-child(9),
+        .dashboard-staff-tables td:nth-child(9) {
+            width: 120px;
         }
 
         .dashboard-staff-tables thead th {
@@ -569,6 +593,42 @@ $paginated_donors = array_slice($donors, $offset, $records_per_page);
             background-color: var(--primary-color) !important;
             font-size: 0.95rem;
             padding: 0.3rem 0.6rem;
+            font-weight: 600;
+            border-radius: 4px;
+        }
+        
+        .badge.bg-success {
+            background-color: #28a745 !important;
+            color: white !important;
+            font-size: 0.8rem;
+            padding: 0.25rem 0.5rem;
+            font-weight: 600;
+            border-radius: 4px;
+        }
+        
+        .badge.bg-warning {
+            background-color: #ffc107 !important;
+            color: #212529 !important;
+            font-size: 0.8rem;
+            padding: 0.25rem 0.5rem;
+            font-weight: 600;
+            border-radius: 4px;
+        }
+        
+        .badge.bg-secondary {
+            background-color: #6c757d !important;
+            color: white !important;
+            font-size: 0.8rem;
+            padding: 0.25rem 0.5rem;
+            font-weight: 600;
+            border-radius: 4px;
+        }
+        
+        .badge.bg-danger {
+            background-color: #dc3545 !important;
+            color: white !important;
+            font-size: 0.8rem;
+            padding: 0.25rem 0.5rem;
             font-weight: 600;
             border-radius: 4px;
         }
@@ -722,7 +782,8 @@ $paginated_donors = array_slice($donors, $offset, $records_per_page);
                     <?php if ($user_staff_roles === 'phlebotomist'): ?>
                         <li class="nav-item">
                             <a class="nav-link active" href="dashboard-staff-blood-collection-submission.php">
-                                Blood Collection Submissions
+                                Blood Collection 
+                                Queue
                             </a>
                         </li>
                     <?php endif; ?>
@@ -744,21 +805,21 @@ $paginated_donors = array_slice($donors, $offset, $records_per_page);
                     
                     <!-- Status Cards -->
                     <div class="dashboard-staff-status">
-                        <a href="?status=incoming" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'incoming') ? 'active' : ''; ?>">
+                        <a href="?status=incoming" class="status-card <?php echo (!isset($_GET['status']) || $_GET['status'] === 'incoming') ? 'active' : ''; ?>">
                             <p class="dashboard-staff-count"><?php echo $incoming_count; ?></p>
-                            <p class="dashboard-staff-title">Incoming Registrations</p>
+                            <p class="dashboard-staff-title">Incoming Blood Collection</p>
                         </a>
-                        <a href="?status=approved" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'approved') ? 'active' : ''; ?>">
+                        <a href="?status=active" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'active') ? 'active' : ''; ?>">
                             <p class="dashboard-staff-count"><?php echo $approved_count; ?></p>
-                            <p class="dashboard-staff-title">Approved</p>
+                            <p class="dashboard-staff-title">Active Blood Collections</p>
                         </a>
-                        <a href="?status=declined" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'declined') ? 'active' : ''; ?>">
-                            <p class="dashboard-staff-count"><?php echo $declined_count; ?></p>
-                            <p class="dashboard-staff-title">Declined</p>
+                        <a href="?status=today" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'today') ? 'active' : ''; ?>">
+                            <p class="dashboard-staff-count"><?php echo $today_count; ?></p>
+                            <p class="dashboard-staff-title">Today's Summary</p>
                         </a>
                     </div>
                     
-                    <h5 class="section-header">Donation Records</h5>
+                    <h5 class="section-header">Blood Collection Records</h5>
                     
                     <!-- Search Bar -->
                     <div class="search-container">
@@ -781,13 +842,14 @@ $paginated_donors = array_slice($donors, $offset, $records_per_page);
                         <table class="dashboard-staff-tables table-hover">
                             <thead>
                                 <tr>
-                                    <th>Donation No.</th>
-                                    <th>Last Donation</th>
-                                    <th>Surname</th>
+                                    <th>No.</th>
+                                    <th>Date</th>
+                                    <th>SURNAME</th>
                                     <th>First Name</th>
-                                    <th>Middle Name</th>
-                                    <th>Age</th>
-                                    <th>Total</th>
+                                    <th>Status</th>
+                                    <th>Result</th>
+                                    <th>Declaration</th>
+                                    <th style="text-align: center;">Action</th>
                                 </tr>
                             </thead>
                             <tbody id="bloodCollectionTableBody">
@@ -820,44 +882,50 @@ $paginated_donors = array_slice($donors, $offset, $records_per_page);
                                 $total_pages = ceil($total_records / $records_per_page);
                                 $paginated_donors = array_slice($donors, $offset, $records_per_page);
 
-                                foreach ($paginated_donors as $index => $group) {
-                                    $donor = $group['info'];
-                                    $lastDonation = $group['latest_submission'] ? date('F d, Y', strtotime($group['latest_submission'])) : 'N/A';
-                                    $donationNo = $offset + $index + 1;
+                                foreach ($display_exams as $index => $exam) {
+                                    $donor = $exam['donor_form'] ?? [];
+                                    $created_date = isset($exam['created_at']) ? date('F d, Y', strtotime($exam['created_at'])) : 'N/A';
+                                    $rowNo = $offset + $index + 1;
                                     $surname = $donor['surname'] ?? '';
                                     $firstName = $donor['first_name'] ?? '';
-                                    $middleName = $donor['middle_name'] ?? '';
-                                    $age = $group['age'] ?? '';
-                                    $total = $group['count'];
-                                    // Find the corresponding exam for this donor group (latest submission)
-                                    $exam = null;
-                                    foreach ($display_exams as $e) {
-                                        if (($e['donor_form']['surname'] ?? '') === $surname &&
-                                            ($e['donor_form']['first_name'] ?? '') === $firstName &&
-                                            ($e['donor_form']['middle_name'] ?? '') === $middleName &&
-                                            ($e['donor_form']['birthdate'] ?? '') === ($donor['birthdate'] ?? '') &&
-                                            ($e['created_at'] ?? null) === $group['latest_submission']) {
-                                            $exam = $e;
-                                            break;
-                                        }
+                                    
+                                    // Determine status and result based on current filter
+                                    $status_badge = '';
+                                    $result_badge = '';
+                                    $interviewer_badge = '<span class="badge bg-success">Success</span>'; // Always success
+                                    
+                                    if ($status_filter === 'active') {
+                                        $status_badge = '<span class="badge bg-success">Success</span>';
+                                        $result_badge = '<span class="badge bg-success">Collected</span>';
+                                    } else {
+                                        $status_badge = '<span class="badge bg-warning text-dark">Pending</span>';
+                                        $result_badge = '<span class="badge bg-secondary">Pending</span>';
                                     }
-                                    $data_exam = $exam ? htmlspecialchars(json_encode([
+                                    
+                                    $data_exam = htmlspecialchars(json_encode([
                                         'donor_id' => $exam['donor_id'] ?? '',
                                         'physical_exam_id' => $exam['physical_exam_id'] ?? '',
                                         'created_at' => $exam['created_at'] ?? '',
                                         'surname' => $surname,
-                                        'first_name' => $firstName,
-                                        'middle_name' => $middleName,
-                                        'age' => $age
-                                    ])) : '';
+                                        'first_name' => $firstName
+                                    ]));
+                                    
                                     echo "<tr class='clickable-row' data-examination='{$data_exam}'>
-                                        <td>{$donationNo}</td>
-                                        <td>{$lastDonation}</td>
+                                        <td>{$rowNo}</td>
+                                        <td>{$created_date}</td>
                                         <td>" . htmlspecialchars($surname) . "</td>
                                         <td>" . htmlspecialchars($firstName) . "</td>
-                                        <td>" . htmlspecialchars($middleName) . "</td>
-                                        <td>" . htmlspecialchars($age) . "</td>
-                                        <td><span class='badge bg-primary'>{$total}</span></td>
+                                        <td>{$status_badge}</td>
+                                        <td>{$result_badge}</td>
+                                        <td><span class='badge bg-danger'>Completed</span></td>
+                                        <td>
+                                            <button type='button' class='btn btn-info btn-sm view-donor-btn me-1' data-donor-id='{$exam['donor_id']}' title='View Details'>
+                                                <i class='fas fa-eye'></i>
+                                            </button>
+                                            <button type='button' class='btn btn-warning btn-sm edit-donor-btn' data-donor-id='{$exam['donor_id']}' title='Edit'>
+                                                <i class='fas fa-edit'></i>
+                                            </button>
+                                        </td>
                                     </tr>";
                                 }
                                 ?>
