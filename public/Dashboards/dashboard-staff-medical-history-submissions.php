@@ -71,8 +71,17 @@ if ($response === false || is_null(json_decode($response, true))) {
     error_log("Error fetching data from Supabase: " . curl_error($ch));
     $donors = [];
 } else {
-    $donors = json_decode($response, true) ?: [];
-    error_log("Decoded donors count: " . count($donors));
+    $all_donors = json_decode($response, true) ?: [];
+    error_log("Decoded all donors count: " . count($all_donors));
+    
+    // Filter to only show PRC Portal registration channel donors (excluding Mobile)
+    $donors = [];
+    foreach ($all_donors as $donor) {
+        if (!isset($donor['registration_channel']) || $donor['registration_channel'] !== 'Mobile') {
+            $donors[] = $donor;
+        }
+    }
+    error_log("Filtered PRC Portal donors count: " . count($donors));
 }
 
 // Fetch medical history records to calculate status counts
@@ -153,6 +162,18 @@ if ($response === false || is_null(json_decode($response, true))) {
     error_log("Incoming count: $incoming_count, Approved count: $approved_count, Declined count: $declined_count");
 }
 
+// Calculate today's summary count
+$today = date('Y-m-d');
+$today_count = 0;
+foreach ($donors as $donor) {
+    if (isset($donor['submitted_at'])) {
+        $submission_date = date('Y-m-d', strtotime($donor['submitted_at']));
+        if ($submission_date === $today) {
+            $today_count++;
+        }
+    }
+}
+
 // Handle status filtering
 $status_filter = isset($_GET['status']) ? $_GET['status'] : 'incoming';
 
@@ -176,6 +197,16 @@ if ($status_filter === 'incoming') {
     foreach ($donors as $donor) {
         if (in_array($donor['donor_id'], $donor_with_declined_medical_history)) {
             $filtered_donors[] = $donor;
+        }
+    }
+    $donors = $filtered_donors;
+} elseif ($status_filter === 'today') {
+    foreach ($donors as $donor) {
+        if (isset($donor['submitted_at'])) {
+            $submission_date = date('Y-m-d', strtotime($donor['submitted_at']));
+            if ($submission_date === $today) {
+                $filtered_donors[] = $donor;
+            }
         }
     }
     $donors = $filtered_donors;
@@ -567,7 +598,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
     <div class="container-fluid p-0">
         <!-- Header -->
         <div class="dashboard-home-header">
-            <h4 class="header-title">Staff Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
+            <h4 class="header-title">Interviewer Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
             <button class="register-btn" onclick="showConfirmationModal()">
                 Register Donor
             </button>
@@ -576,7 +607,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
         <div class="row g-0">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block sidebar">
-                <h4>Staff</h4>
+                <h4>Interviewer</h4>
                 <ul class="nav flex-column">
                     
                     <?php if ($user_staff_roles === 'interviewer'): ?>
@@ -590,7 +621,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
                     <?php if ($user_staff_roles === 'reviewer'): ?>
                         <li class="nav-item">
                             <a class="nav-link active" href="dashboard-staff-medical-history-submissions.php">
-                                New Donor
+                                Initial Screening Queue 
                             </a>
                         </li>
                     <?php endif; ?>
@@ -611,8 +642,8 @@ $donors = array_slice($donors, $offset, $records_per_page);
                         </li>
                     <?php endif; ?>
                     <li class="nav-item">
-                            <a class="nav-link" href="dashboard-staff-existing-files/dashboard-staff-existing-reviewer.php">
-                                Existing Donor
+                            <a class="nav-link" href="dashboard-staff-existing-files/dashboard-staff-mobile-registration.php">
+                                Mobile Registration
                             </a>
                         </li>
                     <li class="nav-item">
@@ -628,22 +659,31 @@ $donors = array_slice($donors, $offset, $records_per_page);
             <main class="col-md-9 col-lg-10 main-content">
                 <div class="content-wrapper">
                     <div class="welcome-section">
-                        <h2 class="welcome-title">Welcome, Staff!</h2>
+                        <h2 class="welcome-title">Welcome, Interviewer!</h2>
                     </div>
                     
                     <!-- Status Cards -->
                     <div class="dashboard-staff-status">
-                        <a href="?status=incoming" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'incoming' ? 'active' : ''); ?>">
-                            <p class="dashboard-staff-count"><?php echo $incoming_count; ?></p>
-                            <p class="dashboard-staff-title">Incoming Registrations</p>
+                        <a href="?status=<?php echo $status_filter; ?>" class="status-card active">
+                            <p class="dashboard-staff-count"><?php 
+                                // Show the count based on current filter
+                                if ($status_filter === 'incoming') {
+                                    echo $incoming_count;
+                                } elseif ($status_filter === 'approved') {
+                                    echo $approved_count;
+                                } elseif ($status_filter === 'declined') {
+                                    echo $declined_count;
+                                } elseif ($status_filter === 'today') {
+                                    echo $today_count;
+                                } else {
+                                    echo $total_records;
+                                }
+                            ?></p>
+                            <p class="dashboard-staff-title">Pending</p>
                         </a>
-                        <a href="?status=approved" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'approved' ? 'active' : ''); ?>">
-                            <p class="dashboard-staff-count"><?php echo $approved_count; ?></p>
-                            <p class="dashboard-staff-title">Approved</p>
-                        </a>
-                        <a href="?status=declined" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'declined' ? 'active' : ''); ?>">
-                            <p class="dashboard-staff-count"><?php echo $declined_count; ?></p>
-                            <p class="dashboard-staff-title">Declined</p>
+                        <a href="?status=today" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'today' ? 'active' : ''); ?>">
+                            <p class="dashboard-staff-count"><?php echo $today_count; ?></p>
+                            <p class="dashboard-staff-title">Today's Summary</p>
                         </a>
                     </div>
                     
@@ -668,7 +708,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
                                     <th>First Name</th>
                                     <th>Gender</th>
                                     <th>Age</th>
-                                    <th>Gateway</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody id="donorTableBody">
@@ -681,7 +721,6 @@ $donors = array_slice($donors, $offset, $records_per_page);
                                             $today = new DateTime();
                                             $donor['age'] = $birthDate->diff($today)->y;
                                         }
-                                        $gateway = isset($donor['registration_channel']) ? ($donor['registration_channel'] === 'Mobile' ? 'Mobile' : 'PRC Portal') : 'PRC Portal';
                                         ?>
                                         <tr class="clickable-row" data-donor-id="<?php echo $donor['donor_id']; ?>">
                                             <td><?php 
@@ -696,7 +735,20 @@ $donors = array_slice($donors, $offset, $records_per_page);
                                             <td><?php echo isset($donor['first_name']) ? htmlspecialchars($donor['first_name']) : ''; ?></td>
                                             <td><?php echo !empty($donor['sex']) ? htmlspecialchars(ucfirst($donor['sex'])) : 'N/A'; ?></td>
                                             <td><?php echo isset($donor['age']) ? htmlspecialchars($donor['age']) : ''; ?></td>
-                                            <td><?php echo htmlspecialchars($gateway); ?></td>
+                                            <td>
+                                                <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" 
+                                                        data-donor-id="<?php echo $donor['donor_id']; ?>" 
+                                                        title="View Details"
+                                                        style="width: 35px; height: 30px;">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-warning btn-sm edit-donor-btn" 
+                                                        data-donor-id="<?php echo $donor['donor_id']; ?>" 
+                                                        title="Edit"
+                                                        style="width: 35px; height: 30px;">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                            </td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php else: ?>

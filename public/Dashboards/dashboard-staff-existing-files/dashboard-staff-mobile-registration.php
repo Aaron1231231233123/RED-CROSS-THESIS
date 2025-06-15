@@ -46,11 +46,12 @@ $offset = ($current_page - 1) * $records_per_page;
 // Initialize the donors array
 $donors = [];
 
-// First get eligibility data
-$query_url = SUPABASE_URL . '/rest/v1/eligibility?select=*&order=start_date.desc';
+// Get all donor records
+$query_url = SUPABASE_URL . '/rest/v1/donor_form?select=donor_id,surname,first_name,middle_name,birthdate,age,sex,registration_channel,submitted_at&order=submitted_at.desc';
 
-$ch = curl_init($query_url);
+$ch = curl_init();
 curl_setopt_array($ch, [
+    CURLOPT_URL => $query_url,
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_HTTPHEADER => [
         'apikey: ' . SUPABASE_API_KEY,
@@ -61,133 +62,179 @@ curl_setopt_array($ch, [
 $response = curl_exec($ch);
 curl_close($ch);
 
-if ($response === false || is_null(json_decode($response, true))) {
-    error_log("Error fetching eligibility data from Supabase: " . curl_error($ch));
-    $eligibility_records = [];
-} else {
-    $eligibility_records = json_decode($response, true) ?: [];
-    
-    // Get unique donor IDs
-    $donor_ids = array_unique(array_column($eligibility_records, 'donor_id'));
-    
-    // Now fetch donor_form data for these donor IDs, filtered by Mobile registration channel
-    $donor_query_url = SUPABASE_URL . '/rest/v1/donor_form?select=*&donor_id=in.(' . implode(',', $donor_ids) . ')&registration_channel=eq.Mobile';
-    
-    $ch = curl_init($donor_query_url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => [
-            'apikey: ' . SUPABASE_API_KEY,
-            'Authorization: Bearer ' . SUPABASE_API_KEY
-        ]
-    ]);
-    
-    $donor_response = curl_exec($ch);
-    curl_close($ch);
-    
-    if ($donor_response !== false && !is_null(json_decode($donor_response, true))) {
-        $donor_records = json_decode($donor_response, true) ?: [];
-        
-        // Create a lookup array for donor information
-        $donor_lookup = [];
-        foreach ($donor_records as $donor) {
-            if (isset($donor['donor_id'])) {
-                $donor_lookup[$donor['donor_id']] = $donor;
-            }
-        }
-        
-        // Attach donor information to eligibility records and filter by Mobile registration channel
-        foreach ($eligibility_records as &$record) {
-            if (isset($record['donor_id']) && isset($donor_lookup[$record['donor_id']])) {
-                $donor_info = $donor_lookup[$record['donor_id']];
-                // Only include records with Mobile registration channel
-                if (isset($donor_info['registration_channel']) && $donor_info['registration_channel'] === 'Mobile') {
-                    $record['donor_form'] = $donor_info;
-                }
-            }
-        }
-    }
-    
-            // Filter out duplicate donor_ids, keeping only the latest record, and only include Mobile registrations
-        $unique_donors = [];
-        foreach ($eligibility_records as $record) {
-            // Only process records that have donor_form data (Mobile registrations)
-            if (isset($record['donor_id']) && isset($record['donor_form'])) {
-                $donor_id = $record['donor_id'];
-                if (!isset($unique_donors[$donor_id]) || 
-                    (isset($record['start_date']) && isset($unique_donors[$donor_id]['start_date']) &&
-                    strtotime($record['start_date']) > strtotime($unique_donors[$donor_id]['start_date']))) {
-                    $unique_donors[$donor_id] = $record;
-                }
-            }
-        }
-        $eligibility_records = array_values($unique_donors);
+// Log the final query URL and raw response for debugging
+error_log("Final query URL: " . $query_url);
+error_log("Supabase raw response: " . substr($response, 0, 500) . '...');
 
-    // Add this after the eligibility records are fetched
-    if (!empty($eligibility_records)) {
-        error_log("First record start_date: " . print_r($eligibility_records[0]['start_date'], true));
-        error_log("First record parsed date: " . print_r(date('Y-m-d', strtotime($eligibility_records[0]['start_date'])), true));
+// Check if the response is valid JSON
+if ($response === false || is_null(json_decode($response, true))) {
+    error_log("Error fetching data from Supabase: " . curl_error($ch));
+    $donors = [];
+} else {
+    $all_donors = json_decode($response, true) ?: [];
+    error_log("Decoded all donors count: " . count($all_donors));
+    
+    // Filter to only show Mobile registration channel donors
+    $donors = [];
+    foreach ($all_donors as $donor) {
+        if (isset($donor['registration_channel']) && $donor['registration_channel'] === 'Mobile') {
+            $donors[] = $donor;
+        }
     }
+    error_log("Filtered mobile donors count: " . count($donors));
 }
 
-// Initialize counters for mobile registrations
-$pending_interviews_count = 0;
-$todays_summary_count = 0;
+// Fetch medical history records to calculate status counts
+$medical_history_url = SUPABASE_URL . '/rest/v1/medical_history?select=medical_history_id,donor_id,medical_approval';
+$ch = curl_init($medical_history_url);
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ]
+]);
+$response = curl_exec($ch);
+curl_close($ch);
 
-// Calculate counts after filtering mobile registrations
-$pending_interviews_count = count($eligibility_records); // All mobile registrations are pending interviews
-$todays_summary_count = 0;
+// Initialize counters
+$incoming_count = 0;
+$approved_count = 0;
+$declined_count = 0;
 
-// Count today's submissions
+// Arrays to store donor IDs by status
+$donor_with_medical_history = [];
+$donor_with_approved_medical_history = [];
+$donor_with_declined_medical_history = [];
+
+if ($response === false || is_null(json_decode($response, true))) {
+    error_log("Error fetching medical history data from Supabase");
+} else {
+    $medical_histories = json_decode($response, true) ?: [];
+    error_log("Decoded medical histories count: " . count($medical_histories));
+    
+    // Process medical histories to get counts
+    $incoming_with_null_approval = [];
+
+    foreach ($medical_histories as $history) {
+        if (isset($history['donor_id'])) {
+            if (isset($history['medical_approval'])) {
+                if ($history['medical_approval'] === 'Approved') {
+                    $approved_count++;
+                    $donor_with_approved_medical_history[] = $history['donor_id'];
+                    $donor_with_medical_history[] = $history['donor_id'];
+                } else if ($history['medical_approval'] === null) {
+                    // If medical_approval is null, treat it as incoming
+                    $incoming_with_null_approval[] = $history['donor_id'];
+                } else {
+                    $declined_count++;
+                    $donor_with_declined_medical_history[] = $history['donor_id'];
+                    $donor_with_medical_history[] = $history['donor_id'];
+                }
+            } else {
+                // If medical_approval field is missing, also treat as incoming
+                $incoming_with_null_approval[] = $history['donor_id'];
+            }
+        }
+    }
+    
+    // Remove duplicates
+    $donor_with_medical_history = array_unique($donor_with_medical_history);
+    $donor_with_approved_medical_history = array_unique($donor_with_approved_medical_history);
+    $donor_with_declined_medical_history = array_unique($donor_with_declined_medical_history);
+    $incoming_with_null_approval = array_unique($incoming_with_null_approval);
+    
+    // Calculate incoming count (donors without any medical history or with null approval)
+    $all_donor_ids = array_column($donors, 'donor_id');
+    $processed_donors = array_merge($donor_with_approved_medical_history, $donor_with_declined_medical_history);
+    $incoming_donors = array_diff($all_donor_ids, $processed_donors);
+    $incoming_count = count($incoming_donors);
+    
+    // Update counters to reflect unique donors
+    $approved_count = count($donor_with_approved_medical_history);
+    $declined_count = count($donor_with_declined_medical_history);
+    
+    // Log the detailed counts for debugging
+    error_log("Medical History Counts - Total donors: " . count($all_donor_ids));
+    error_log("Medical History Counts - Approved: $approved_count, Declined: $declined_count, Incoming: $incoming_count");
+    error_log("Medical History Counts - Donors with null approval: " . count($incoming_with_null_approval));
+    error_log("Medical History Counts - Processed donors: " . count($processed_donors));
+    error_log("Incoming count: $incoming_count, Approved count: $approved_count, Declined count: $declined_count");
+}
+
+// Calculate today's summary count
 $today = date('Y-m-d');
-foreach ($eligibility_records as $record) {
-    if (isset($record['start_date']) && date('Y-m-d', strtotime($record['start_date'])) === $today) {
-        $todays_summary_count++;
+$today_count = 0;
+foreach ($donors as $donor) {
+    if (isset($donor['submitted_at'])) {
+        $submission_date = date('Y-m-d', strtotime($donor['submitted_at']));
+        if ($submission_date === $today) {
+            $today_count++;
+        }
     }
 }
 
 // Handle status filtering
-$status_filter = isset($_GET['status']) ? $_GET['status'] : 'pending';
+$status_filter = isset($_GET['status']) ? $_GET['status'] : 'incoming';
 
 // Filter donors based on status if needed
-$filtered_records = [];
-if ($status_filter === 'pending') {
-    // Show all mobile registrations (pending interviews)
-    $filtered_records = $eligibility_records;
-} elseif ($status_filter === 'today') {
-    // Show only today's submissions
-    $today = date('Y-m-d');
-    foreach ($eligibility_records as $record) {
-        if (isset($record['start_date']) && date('Y-m-d', strtotime($record['start_date'])) === $today) {
-            $filtered_records[] = $record;
+$filtered_donors = [];
+if ($status_filter === 'incoming') {
+    foreach ($donors as $donor) {
+        if (in_array($donor['donor_id'], $incoming_donors)) {
+            $filtered_donors[] = $donor;
         }
     }
+    $donors = $filtered_donors;
+} elseif ($status_filter === 'approved') {
+    foreach ($donors as $donor) {
+        if (in_array($donor['donor_id'], $donor_with_approved_medical_history)) {
+            $filtered_donors[] = $donor;
+        }
+    }
+    $donors = $filtered_donors;
+} elseif ($status_filter === 'declined') {
+    foreach ($donors as $donor) {
+        if (in_array($donor['donor_id'], $donor_with_declined_medical_history)) {
+            $filtered_donors[] = $donor;
+        }
+    }
+    $donors = $filtered_donors;
+} elseif ($status_filter === 'today') {
+    foreach ($donors as $donor) {
+        if (isset($donor['submitted_at'])) {
+            $submission_date = date('Y-m-d', strtotime($donor['submitted_at']));
+            if ($submission_date === $today) {
+                $filtered_donors[] = $donor;
+            }
+        }
+    }
+    $donors = $filtered_donors;
 }
-$eligibility_records = $filtered_records;
 
 // Group donors by unique identity (surname, first_name, middle_name, birthdate)
 $donorGroups = [];
-foreach ($eligibility_records as $record) {
-    $key = ($record['donor_form']['surname'] ?? '') . '|' . 
-           ($record['donor_form']['first_name'] ?? '') . '|' . 
-           ($record['donor_form']['middle_name'] ?? '') . '|' . 
-           ($record['donor_form']['birthdate'] ?? '');
+foreach ($donors as $donor) {
+    $key = ($donor['surname'] ?? '') . '|' . 
+           ($donor['first_name'] ?? '') . '|' . 
+           ($donor['middle_name'] ?? '') . '|' . 
+           ($donor['birthdate'] ?? '');
     
     if (!isset($donorGroups[$key])) {
         $donorGroups[$key] = [
-            'info' => $record['donor_form'],
+            'info' => $donor,
             'count' => 1,
-            'latest_submission' => $record['start_date'] ?? null
+            'latest_submission' => $donor['submitted_at'] ?? null
         ];
     } else {
         $donorGroups[$key]['count']++;
         
         // Keep track of the latest submission
-        if (isset($record['start_date']) && 
+        if (isset($donor['submitted_at']) && 
             (!isset($donorGroups[$key]['latest_submission']) || 
-            strtotime($record['start_date']) > strtotime($donorGroups[$key]['latest_submission']))) {
-            $donorGroups[$key]['latest_submission'] = $record['start_date'];
-            $donorGroups[$key]['info'] = $record['donor_form'];
+            $donor['submitted_at'] > $donorGroups[$key]['latest_submission'])) {
+            $donorGroups[$key]['latest_submission'] = $donor['submitted_at'];
+            $donorGroups[$key]['info'] = $donor;
         }
     }
 }
@@ -195,10 +242,10 @@ foreach ($eligibility_records as $record) {
 // Convert back to array for pagination
 $donors = [];
 foreach ($donorGroups as $group) {
-    $donor_info = $group['info'];
-    $donor_info['donation_count'] = $group['count'];
-    $donor_info['latest_submission'] = $group['latest_submission'];
-    $donors[] = $donor_info;
+    $donor = $group['info'];
+    $donor['donation_count'] = $group['count'];
+    $donor['latest_submission'] = $group['latest_submission'];
+    $donors[] = $donor;
 }
 
 // Sort by updated_at (FIFO: oldest first)
@@ -223,7 +270,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mobile Registration - Donor Management</title>
+    <title>Donor Medical History</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
@@ -536,42 +583,6 @@ $donors = array_slice($donors, $offset, $records_per_page);
             font-weight: 600;
             border-radius: 4px;
         }
-
-        .badge.bg-secondary {
-            background-color: #6c757d !important;
-            font-size: 0.85rem;
-            padding: 0.25rem 0.5rem;
-            font-weight: 500;
-        }
-
-        /* Action button styling */
-        .btn-sm {
-            padding: 0.25rem 0.5rem;
-            font-size: 0.875rem;
-            border-radius: 4px;
-        }
-
-        .btn-info {
-            background-color: #17a2b8;
-            border-color: #17a2b8;
-        }
-
-        .btn-warning {
-            background-color: #ffc107;
-            border-color: #ffc107;
-            color: #212529;
-        }
-
-        .btn-info:hover {
-            background-color: #138496;
-            border-color: #117a8b;
-        }
-
-        .btn-warning:hover {
-            background-color: #e0a800;
-            border-color: #d39e00;
-            color: #212529;
-        }
         
         /* Section header */
         .section-header {
@@ -587,7 +598,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
     <div class="container-fluid p-0">
         <!-- Header -->
         <div class="dashboard-home-header">
-            <h4 class="header-title">Staff Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
+            <h4 class="header-title">Interviewer Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
             <button class="register-btn" onclick="showConfirmationModal()">
                 Register Donor
             </button>
@@ -596,21 +607,21 @@ $donors = array_slice($donors, $offset, $records_per_page);
         <div class="row g-0">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block sidebar">
-                <h4>Staff</h4>
+                <h4>Interviewer</h4>
                 <ul class="nav flex-column">
                     
-                <?php if ($user_staff_roles === 'interviewer'): ?>
+                    <?php if ($user_staff_roles === 'interviewer'): ?>
                         <li class="nav-item">
-                            <a class="nav-link" href="../dashboard-staff-donor-submission.php">
-                                Initial Screening Queue
+                            <a class="nav-link active" href="dashboard-staff-donor-submission.php">
+                                System Registration
                             </a>
                         </li>
                     <?php endif; ?>
 
                     <?php if ($user_staff_roles === 'reviewer'): ?>
                         <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-medical-history-submissions.php">
-                                New Donor
+                            <a class="nav-link" href="../dashboard-staff-medical-history-submissions.php">
+                                Initial Screening Queue 
                             </a>
                         </li>
                     <?php endif; ?>
@@ -631,10 +642,12 @@ $donors = array_slice($donors, $offset, $records_per_page);
                         </li>
                     <?php endif; ?>
                     <li class="nav-item">
-                        <a class="nav-link active" href="">Mobile Registration</a>
-                    </li>
+                            <a class="nav-link active" href="*">
+                                Mobile Registration
+                            </a>
+                        </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="dashboard-staff-history.php">Donor History</a>
+                        <a class="nav-link" href="../dashboard-staff-history.php">Donor History</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="../../../assets/php_func/logout.php">Logout</a>
@@ -651,17 +664,30 @@ $donors = array_slice($donors, $offset, $records_per_page);
                     
                     <!-- Status Cards -->
                     <div class="dashboard-staff-status">
-                        <a href="?status=pending" class="status-card <?php echo (!isset($_GET['status']) || $_GET['status'] === 'pending' ? 'active' : ''); ?>">
-                            <p class="dashboard-staff-count"><?php echo $pending_interviews_count; ?></p>
-                            <p class="dashboard-staff-title">Pending Interviews</p>
+                        <a href="?status=<?php echo $status_filter; ?>" class="status-card active">
+                            <p class="dashboard-staff-count"><?php 
+                                // Show the count based on current filter
+                                if ($status_filter === 'incoming') {
+                                    echo $incoming_count;
+                                } elseif ($status_filter === 'approved') {
+                                    echo $approved_count;
+                                } elseif ($status_filter === 'declined') {
+                                    echo $declined_count;
+                                } elseif ($status_filter === 'today') {
+                                    echo $today_count;
+                                } else {
+                                    echo $total_records;
+                                }
+                            ?></p>
+                            <p class="dashboard-staff-title">Pending</p>
                         </a>
                         <a href="?status=today" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'today' ? 'active' : ''); ?>">
-                            <p class="dashboard-staff-count"><?php echo $todays_summary_count; ?></p>
+                            <p class="dashboard-staff-count"><?php echo $today_count; ?></p>
                             <p class="dashboard-staff-title">Today's Summary</p>
                         </a>
                     </div>
                     
-                    <h5 class="section-header">Mobile Registration Records</h5>
+                    <h5 class="section-header">Donation Records</h5>
                     
                     <!-- Search Bar -->
                     <div class="search-container">
@@ -677,35 +703,49 @@ $donors = array_slice($donors, $offset, $records_per_page);
                         <table class="dashboard-staff-tables table-hover">
                             <thead>
                                 <tr>
-                                    <th>No.</th>
-                                    <th>Date</th>
-                                    <th>SURNAME</th>
+                                    <th>Donation Date</th>
+                                    <th>Surname</th>
                                     <th>First Name</th>
+                                    <th>Gender</th>
+                                    <th>Age</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody id="donorTableBody">
-                                <?php if (!empty($eligibility_records)): ?>
-                                    <?php foreach($eligibility_records as $index => $record): ?>
-                                        <tr class="clickable-row">
-                                            <td><?php echo $index + 1; ?></td>
+                                <?php if($donors && is_array($donors)): ?>
+                                    <?php foreach($donors as $index => $donor): ?>
+                                        <?php
+                                        // Calculate age if missing but birthdate is available
+                                        if (empty($donor['age']) && !empty($donor['birthdate'])) {
+                                            $birthDate = new DateTime($donor['birthdate']);
+                                            $today = new DateTime();
+                                            $donor['age'] = $birthDate->diff($today)->y;
+                                        }
+                                        ?>
+                                        <tr class="clickable-row" data-donor-id="<?php echo $donor['donor_id']; ?>">
                                             <td><?php 
-                                                if (!empty($record['start_date'])) {
-                                                    $parsed_date = strtotime($record['start_date']);
-                                                    error_log("Raw start_date: " . $record['start_date']);
-                                                    error_log("Parsed timestamp: " . $parsed_date);
-                                                    echo date('F j, Y', $parsed_date);
+                                                if (isset($donor['latest_submission'])) {
+                                                    $date = new DateTime($donor['latest_submission']);
+                                                    echo $date->format('F d, Y');
                                                 } else {
                                                     echo 'N/A';
                                                 }
                                             ?></td>
-                                            <td><?php echo !empty($record['donor_form']['surname']) ? strtoupper(htmlspecialchars($record['donor_form']['surname'])) : 'N/A'; ?></td>
-                                            <td><?php echo !empty($record['donor_form']['first_name']) ? htmlspecialchars($record['donor_form']['first_name']) : 'N/A'; ?></td>
+                                            <td><?php echo isset($donor['surname']) ? htmlspecialchars($donor['surname']) : ''; ?></td>
+                                            <td><?php echo isset($donor['first_name']) ? htmlspecialchars($donor['first_name']) : ''; ?></td>
+                                            <td><?php echo !empty($donor['sex']) ? htmlspecialchars(ucfirst($donor['sex'])) : 'N/A'; ?></td>
+                                            <td><?php echo isset($donor['age']) ? htmlspecialchars($donor['age']) : ''; ?></td>
                                             <td>
-                                                <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" data-donor-id="<?php echo $record['donor_id']; ?>" title="View Details">
+                                                <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" 
+                                                        data-donor-id="<?php echo $donor['donor_id']; ?>" 
+                                                        title="View Details"
+                                                        style="width: 35px; height: 30px;">
                                                     <i class="fas fa-eye"></i>
                                                 </button>
-                                                <button type="button" class="btn btn-warning btn-sm edit-donor-btn" data-donor-id="<?php echo $record['donor_id']; ?>" title="Edit">
+                                                <button type="button" class="btn btn-warning btn-sm edit-donor-btn" 
+                                                        data-donor-id="<?php echo $donor['donor_id']; ?>" 
+                                                        title="Edit"
+                                                        style="width: 35px; height: 30px;">
                                                     <i class="fas fa-edit"></i>
                                                 </button>
                                             </td>
@@ -713,33 +753,97 @@ $donors = array_slice($donors, $offset, $records_per_page);
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr>
-                                        <td colspan="6" class="text-center">No records found</td>
+                                        <td colspan="6" class="text-center">No donor records found</td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>
                         </table>
+                        
+                        <!-- Pagination Controls -->
+                        <?php if ($total_pages > 1): ?>
+                        <div class="pagination-container">
+                            <nav aria-label="Donor medical history navigation">
+                                <ul class="pagination justify-content-center">
+                                    <!-- Previous button -->
+                                    <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
+                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Previous</a>
+                                    </li>
+                                    
+                                    <!-- Page numbers -->
+                                    <?php for($i = 1; $i <= $total_pages; $i++): ?>
+                                        <li class="page-item <?php echo $current_page == $i ? 'active' : ''; ?>">
+                                            <a class="page-link" href="?page=<?php echo $i; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>"><?php echo $i; ?></a>
+                                        </li>
+                                    <?php endfor; ?>
+                                    
+                                    <!-- Next button -->
+                                    <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
+                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Next</a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </main>
         </div>
     </div>
-
-    <!-- Existing Donor Information Modal -->
-    <div class="modal fade" id="donorModal" tabindex="-1" aria-labelledby="donorModalLabel" aria-hidden="true">
+    </div>
+    <!-- Deferral Status Modal -->
+    <div class="modal fade" id="deferralStatusModal" tabindex="-1" aria-labelledby="deferralStatusModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title" id="donorModalLabel">Existing Donor Information</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
+        <div class="modal-content">
+            <div class="modal-header">
+                    <h5 class="modal-title" id="deferralStatusModalLabel">Donor Status & Donation History</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
                     <div id="deferralStatusContent">
-                        <!-- Content will be dynamically loaded here -->
+                        <div class="d-flex justify-content-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
                     </div>
+            
+                    <div id="screeningInfo" class="mt-4" style="display: none;">
+                        <h6 class="border-bottom pb-2 mb-3">Screening Information</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Interview Date:</strong> <span id="interviewDate">-</span></p>
+                        </div>
+                            <div class="col-md-6">
+                                <p><strong>Body Weight:</strong> <span id="bodyWeight">-</span></p>
+                            </div>
+                            </div>
+                            </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-danger" onclick="proceedToInterviewer()">Proceed to Interviewer</button>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="proceedToMedicalHistory">Proceed to Medical History</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 15px; border: none;">
+                <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
+                    <h5 class="modal-title" id="confirmationModalLabel">
+                        <i class="fas fa-user-plus me-2"></i>
+                        Register New Donor
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-4">
+                    <p class="mb-0" style="font-size: 1.1rem;">Are you sure you want to proceed to the donor registration form?</p>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger px-4" onclick="proceedToDonorForm()">Proceed</button>
                 </div>
             </div>
         </div>
@@ -758,176 +862,434 @@ $donors = array_slice($donors, $offset, $records_per_page);
             </div>
         </div>
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>    
-    // Make these functions available in the global scope
-    window.calculateRemainingDays = function(startDate) {
-        if (!startDate) return 0;
-        
-        const donationDate = new Date(startDate);
-        const today = new Date();
-        
-        // Add 90 days to donation date
-        const eligibleDate = new Date(donationDate);
-        eligibleDate.setDate(eligibleDate.getDate() + 90);
-        
-        // Calculate remaining days
-        if (today < eligibleDate) {
-            const diffTime = eligibleDate - today;
-            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    <script>
+        function showConfirmationModal() {
+            const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+            confirmationModal.show();
         }
-        
-        return 0;
-    };
 
-    window.displayDonorInfo = function(donor, eligibility) {
-        // Calculate remaining days
-        const remainingDays = calculateRemainingDays(eligibility.start_date);
-        
-        // Format the last donation date
-        const lastDonationDate = eligibility.start_date ? new Date(eligibility.start_date).toLocaleDateString() : 'N/A';
-        
-        const donorInfoHTML = `
-            <div class="mb-4">
-                <h6 class="text-danger mb-3">Donor Information</h6>
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <div class="form-group">
-                            <label class="form-label">Name</label>
-                            <input type="text" class="form-control" value="${donor.surname || ''}, ${donor.first_name || ''}" readonly>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="form-group">
-                            <label class="form-label">Birth Date</label>
-                            <input type="text" class="form-control" value="${donor.birthdate ? new Date(donor.birthdate).toLocaleDateString() : ''}" readonly>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="form-group">
-                            <label class="form-label">Age</label>
-                            <input type="text" class="form-control" value="${donor.age || ''}" readonly>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="form-group">
-                            <label class="form-label">Civil Status</label>
-                            <input type="text" class="form-control" value="${donor.civil_status || ''}" readonly>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="form-group">
-                            <label class="form-label">Sex</label>
-                            <input type="text" class="form-control" value="${donor.sex || ''}" readonly>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="form-group">
-                            <label class="form-label">Nationality</label>
-                            <input type="text" class="form-control" value="${donor.nationality || ''}" readonly>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        function proceedToDonorForm() {
+            // Hide confirmation modal
+            const confirmationModal = bootstrap.Modal.getInstance(document.getElementById('confirmationModal'));
+            confirmationModal.hide();
 
-            <div class="mb-4">
-                <h6 class="text-danger mb-3">Eligibility Information</h6>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <div class="form-group">
-                            <label class="form-label">Status</label>
-                            <input type="text" class="form-control" value="${remainingDays > 0 ? 'Ineligible' : 'Eligible'}" readonly>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="form-group">
-                            <label class="form-label">Last Donation Date</label>
-                            <input type="text" class="form-control" value="${lastDonationDate}" readonly>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="form-group">
-                            <label class="form-label">Notes</label>
-                            <input type="text" class="form-control" value="${remainingDays > 0 ? 'Temporarily Deferred - Donation Interval' : 'None'}" readonly>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="form-group">
-                            <label class="form-label">Eligible After</label>
-                            <input type="text" class="form-control" value="${remainingDays > 0 ? remainingDays + ' days' : 'Eligible Now'}" readonly>
-                        </div>
-                    </div>
-                </div>
-            </div>`;
+            // Show loading modal
+            const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+            loadingModal.show();
 
-        document.getElementById('deferralStatusContent').innerHTML = donorInfoHTML;
-    };
-
-    window.fetchDonorInfo = function(donorId) {
-        // Show loading state
-        document.getElementById('deferralStatusContent').innerHTML = '<div class="text-center"><div class="spinner-border text-danger" role="status"><span class="visually-hidden">Loading...</span></div></div>';
-        
-        // Show the modal immediately
-        const donorModal = new bootstrap.Modal(document.getElementById('donorModal'));
-        donorModal.show();
-
-        // Fetch donor information
-        fetch(`/REDCROSS/public/api/get_donor_info.php?donor_id=${encodeURIComponent(donorId)}`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
+            // Redirect after a short delay to show loading animation
+            setTimeout(() => {
+                window.location.href = '../../src/views/forms/donor-form-modal.php';
+            }, 800);
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('searchInput');
+            const searchCategory = document.getElementById('searchCategory');
+            const donorTableBody = document.getElementById('donorTableBody');
+            const deferralStatusModal = new bootstrap.Modal(document.getElementById('deferralStatusModal'));
+            const deferralStatusContent = document.getElementById('deferralStatusContent');
+            const screeningInfo = document.getElementById('screeningInfo');
+            const interviewDateSpan = document.getElementById('interviewDate');
+            const bodyWeightSpan = document.getElementById('bodyWeight');
+            const proceedButton = document.getElementById('proceedToMedicalHistory');
+            
+            let currentDonorId = null;
+            
+            // Store original rows for search reset
+            const originalRows = Array.from(donorTableBody.getElementsByTagName('tr'));
+            
+            // Add click event to all clickable rows
+            document.querySelectorAll('.clickable-row').forEach(row => {
+                row.addEventListener('click', function() {
+                    const donorId = this.getAttribute('data-donor-id');
+                    if (donorId) {
+                        currentDonorId = donorId;
+                        
+                        // Show the modal with loading state
+                        deferralStatusContent.innerHTML = `
+                            <div class="d-flex justify-content-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                    </div>
+                            </div>`;
+                        screeningInfo.style.display = 'none';
+                        deferralStatusModal.show();
+                        
+                        // Fetch donor info and deferral status
+                        fetchDonorStatusInfo(donorId);
+                    }
+                });
+            });
+            
+            // Function to fetch donor status information
+            function fetchDonorStatusInfo(donorId) {
+                // First, fetch donor information
+                fetch(`../../assets/php_func/fetch_donor_info.php?donor_id=${donorId}`)
+                    .then(response => response.json())
+                    .then(donorData => {
+                        // Next, check physical examination table for deferral status
+                        fetch(`../../assets/php_func/check_deferral_status.php?donor_id=${donorId}`)
+                            .then(response => response.json())
+                            .then(deferralData => {
+                                displayDonorInfo(donorData, deferralData);
+                                
+                                // After getting deferral info, fetch screening info
+                                fetch(`../../assets/php_func/fetch_screening_info.php?donor_id=${donorId}`)
+                                    .then(response => response.json())
+                                    .then(screeningData => {
+                                        if (screeningData.success && screeningData.data) {
+                                            screeningInfo.style.display = 'block';
+                                            interviewDateSpan.textContent = screeningData.data.interview_date || '-';
+                                            bodyWeightSpan.textContent = screeningData.data.body_weight ? `${screeningData.data.body_weight} kg` : '-';
+                    } else {
+                                            screeningInfo.style.display = 'none';
+                                        }
+                                    })
+                                    .catch(error => {
+                                        console.error("Error fetching screening info:", error);
+                                        screeningInfo.style.display = 'none';
+                                    });
+                            })
+                            .catch(error => {
+                                console.error("Error checking deferral status:", error);
+                                deferralStatusContent.innerHTML = `<div class="alert alert-danger">Error checking deferral status: ${error.message}</div>`;
+                            });
+                    })
+                    .catch(error => {
+                        console.error("Error fetching donor info:", error);
+                        deferralStatusContent.innerHTML = `<div class="alert alert-danger">Error fetching donor information: ${error.message}</div>`;
+                    });
+            }
+            
+            // Function to display donor and deferral information
+            function displayDonorInfo(donorData, deferralData) {
+                let donorInfoHTML = '';
+                
+                if (donorData && donorData.success) {
+                    const donor = donorData.data;
+                    
+                    // Display basic donor info
+                    donorInfoHTML += `
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">Donor Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6"><strong>Name:</strong> ${donor.surname || ''}, ${donor.first_name || ''} ${donor.middle_name || ''}</div>
+                                    <div class="col-md-3"><strong>Birthdate:</strong> ${donor.birthdate || '-'}</div>
+                                    <div class="col-md-3"><strong>Age:</strong> ${donor.age || '-'}</div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-md-6"><strong>Donation Count:</strong> <span class="badge bg-primary">${donor.donation_count || '1'}</span></div>
+                                    <div class="col-md-6"><strong>Last Donation:</strong> ${formatDate(donor.latest_submission) || 'N/A'}</div>
+                                </div>
+                            </div>
+                        </div>`;
+                    
+                    // Display latest donation details
+                    if (donor.donation_history && donor.donation_history.length > 0) {
+                        const latestDonation = donor.donation_history[0];
+                        donorInfoHTML += `
+                            <div class="card mb-3">
+                                <div class="card-header bg-light">
+                                    <h6 class="mb-0">Latest Donation Details</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6"><strong>Date:</strong> ${formatDate(latestDonation.date) || 'N/A'}</div>
+                                        <div class="col-md-6"><strong>Donation Type:</strong> ${latestDonation.donation_type || 'Unknown'}</div>
+                                    </div>
+                                    <div class="row mt-2">
+                                        <div class="col-md-6"><strong>Blood Type:</strong> ${latestDonation.blood_type || 'Unknown'}</div>
+                                        <div class="col-md-6"><strong>Contact:</strong> ${latestDonation.contact || 'Not provided'}</div>
+                                    </div>
+                                </div>
+                            </div>`;
+                        
+                        // Display medical history if available
+                        if (donor.medical_history) {
+                            const medical = donor.medical_history;
+                            donorInfoHTML += `
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light">
+                                        <h6 class="mb-0">Previous Medical History</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-12">
+                                                <p class="mb-1"><strong>Medical Conditions:</strong> 
+                                                    ${medical.asthma ? '<span class="badge bg-warning me-1">Asthma</span>' : ''}
+                                                    ${medical.allergies ? '<span class="badge bg-warning me-1">Allergies</span>' : ''}
+                                                    ${medical.heart_disease ? '<span class="badge bg-warning me-1">Heart Disease</span>' : ''}
+                                                    ${medical.hepatitis ? '<span class="badge bg-warning me-1">Hepatitis</span>' : ''}
+                                                    ${medical.diabetes ? '<span class="badge bg-warning me-1">Diabetes</span>' : ''}
+                                                    ${medical.kidney_disease ? '<span class="badge bg-warning me-1">Kidney Disease</span>' : ''}
+                                                    ${medical.malaria ? '<span class="badge bg-warning me-1">Malaria</span>' : ''}
+                                                    ${medical.thyroid_disease ? '<span class="badge bg-warning me-1">Thyroid Disease</span>' : ''}
+                                                    ${!medical.asthma && !medical.allergies && !medical.heart_disease && !medical.hepatitis && 
+                                                      !medical.diabetes && !medical.kidney_disease && !medical.malaria && !medical.thyroid_disease ? 
+                                                      'None reported' : ''}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="row mt-2">
+                                            <div class="col-md-6">
+                                                <p class="mb-1"><strong>Blood Transfusion:</strong> ${medical.blood_transfusion ? 'Yes' : 'No'}</p>
+                                                <p class="mb-1"><strong>Surgery History:</strong> ${medical.surgery ? 'Yes' : 'No'}</p>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <p class="mb-1"><strong>Tattoo:</strong> ${medical.tattoo ? 'Yes' : 'No'}</p>
+                                                <p class="mb-1"><strong>Medication:</strong> ${medical.medicine ? 'Yes' : 'No'}</p>
+                                            </div>
+                                        </div>
+                                        <div class="row mt-2">
+                                            <div class="col-12">
+                                                <p class="mb-0"><strong>Notes:</strong> ${medical.notes || 'No additional notes'}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>`;
+                        }
+                        
+                        // Display donation history table
+                        if (donor.donation_history.length > 1) {
+                            let historyRows = '';
+                            donor.donation_history.slice(1).forEach((donation, index) => {
+                                historyRows += `
+                                <tr>
+                                    <td>${index + 2}</td>
+                                    <td>${formatDate(donation.date) || 'N/A'}</td>
+                                    <td>${donation.donation_type || 'Unknown'}</td>
+                                    <td>${donation.blood_type || 'Unknown'}</td>
+                                </tr>`;
+                            });
+                            
+                            donorInfoHTML += `
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light">
+                                        <h6 class="mb-0">Previous Donations</h6>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <div class="table-responsive">
+                                            <table class="table table-bordered table-striped mb-0">
+                                                <thead class="table-dark">
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th>Date</th>
+                                                        <th>Type</th>
+                                                        <th>Blood Type</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    ${historyRows}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>`;
+                        }
+                    }
+                    
+                    // Display eligibility information if available
+                    if (donor.eligibility) {
+                        const eligibility = donor.eligibility;
+                        const endDate = eligibility.end_date ? new Date(eligibility.end_date) : null;
+                        const now = new Date();
+                        
+                        donorInfoHTML += `
+                            <div class="card mb-3">
+                                <div class="card-header bg-light">
+                                    <h6 class="mb-0">Eligibility Information</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6"><strong>Status:</strong> 
+                                            ${(() => {
+                                                const endDate = eligibility.end_date ? new Date(eligibility.end_date) : null;
+                                                const now = new Date();
+                                                
+                                                // Reset time components to compare just the dates
+                                                if (endDate) {
+                                                    endDate.setHours(0, 0, 0, 0);
+                                                    now.setHours(0, 0, 0, 0);
+                                                }
+                                                
+                                                if (endDate && now < endDate) {
+                                                    // Not eligible yet - show warning
+                                                    return `<span class="badge bg-warning" style="font-size: 0.9rem; padding: 0.5rem 0.75rem;">Temporarily Deferred</span>`;
+                                                } else if (endDate && now.getTime() === endDate.getTime()) {
+                                                    // Today is the eligibility date - they are now eligible
+                                                    return `<span class="badge bg-success" style="font-size: 0.9rem; padding: 0.5rem 0.75rem;">Eligible for Donation Today</span>`;
+                                                } else if (eligibility.status === 'approved') {
+                                                    return `<span class="badge bg-success" style="font-size: 0.9rem; padding: 0.5rem 0.75rem;">Eligible for Donation</span>`;
+                                                } else {
+                                                    return `<span class="badge bg-danger" style="font-size: 0.9rem; padding: 0.5rem 0.75rem;">Not Eligible for Donation</span>`;
+                                                }
+                                            })()}
+                                        </div>
+                                        <div class="col-md-6"><strong>Eligible After:</strong> ${eligibility.end_date ? formatDate(eligibility.end_date) : 'N/A'}</div>
+                                    </div>
+                                    <div class="row mt-2">
+                                        <div class="col-12">
+                                            <p class="mb-0"><strong>Notes:</strong> ${eligibility.remarks || 'No additional notes'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>`;
+                    }
                 }
-                return response.json();
-            })
-            .then(data => {
-                if (data.success && data.donor && data.eligibility) {
-                    displayDonorInfo(data.donor, data.eligibility);
+                
+                // Display deferral status if available
+                if (deferralData && deferralData.success) {
+                    if (deferralData.isDeferred) {
+                        const deferralType = deferralData.deferralType || 'Unknown';
+                        const deferralReason = deferralData.reason || 'No reason provided';
+                        const remarks = deferralData.remarks || '';
+                        
+                        let alertClass = 'alert-warning';
+                        let deferralTitle = '';
+                        
+                        // Determine alert class and title based on deferral type
+                        if (deferralType === 'permanently_deferred' || remarks === 'Permanently Deferred') {
+                            alertClass = 'alert-danger';
+                            deferralTitle = 'Permanently Deferred';
+                        } else if (deferralType === 'temporarily_deferred' || remarks === 'Temporarily Deferred') {
+                            alertClass = 'alert-warning';
+                            deferralTitle = 'Temporarily Deferred';
+                        } else {
+                            deferralTitle = 'Deferred';
+                        }
+                        
+                        donorInfoHTML += `
+                            <div class="card mb-3">
+                                <div class="card-header bg-light">
+                                    <h6 class="mb-0">Donor Status</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="alert ${alertClass} mb-0">
+                                        <h6 class="alert-heading mb-2">${deferralTitle} - Not Eligible for Donation</h6>
+                                        <p class="mb-0"><strong>Reason:</strong> ${deferralReason}</p>
+                                        ${remarks ? `<p class="mb-0"><strong>Remarks:</strong> ${remarks}</p>` : ''}
+                                    </div>
+                                </div>
+                            </div>`;
+                    } else if (deferralData.isRefused || deferralData.remarks === 'Refused') {
+                        donorInfoHTML += `
+                            <div class="card mb-3">
+                                <div class="card-header bg-light">
+                                    <h6 class="mb-0">Donor Status</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="alert alert-danger mb-0">
+                                        <h6 class="alert-heading mb-2">Not Eligible - Donor Refused</h6>
+                                        <p class="mb-0"><strong>Reason:</strong> ${deferralData.reason || 'No reason provided'}</p>
+                                        ${deferralData.remarks ? `<p class="mb-0"><strong>Remarks:</strong> ${deferralData.remarks}</p>` : ''}
+                                    </div>
+                                </div>
+                            </div>`;
+                    } else {
+                        donorInfoHTML += `
+                            <div class="card mb-3">
+                                <div class="card-header bg-light">
+                                    <h6 class="mb-0">Donor Status</h6>
+                                </div>
+                                <div class="card-body">
+                                    <p class="mb-0"><strong>Status:</strong> ${deferralData.remarks || 'Accepted'}</p>
+                                    <p class="mb-0">No deferral or refusal records found for this donor.</p>
+                                </div>
+                            </div>`;
+                    }
                 } else {
-                    throw new Error(data.message || 'No donor information available');
+                    donorInfoHTML += `
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">Donor Status</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info mb-0">
+                                    <h6 class="alert-heading mb-2">Status Unknown</h6>
+                                    <p class="mb-0">No physical examination records found for this donor.</p>
+                                    <p class="mb-0">Eligibility status cannot be determined without examination.</p>
+                                </div>
+                            </div>
+                        </div>`;
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                document.getElementById('deferralStatusContent').innerHTML = `
-                    <div class="alert alert-danger">
-                        Error fetching donor information: ${error.message}
-                    </div>`;
+                
+                // Always add eligibility information section, even if no data
+                if (!donorData || !donorData.success || !donorData.data || !donorData.data.eligibility) {
+                    donorInfoHTML += `
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">Eligibility Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6"><strong>Status:</strong> 
+                                        <span class="badge bg-secondary" style="font-size: 0.9rem; padding: 0.5rem 0.75rem;">No Data Available</span>
+                                    </div>
+                                    <div class="col-md-6"><strong>Eligible After:</strong> N/A</div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-12">
+                                        <p class="mb-0"><strong>Notes:</strong> No eligibility information available</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+                }
+                
+                deferralStatusContent.innerHTML = donorInfoHTML;
+            }
+            
+            // Helper function to capitalize first letter
+            function ucfirst(string) {
+                if (!string) return '';
+                return string.charAt(0).toUpperCase() + string.slice(1);
+            }
+            
+            // Format date helper function
+            function formatDate(dateString) {
+                if (!dateString) return null;
+                const date = new Date(dateString);
+                return date.toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric'
+                });
+            }
+            
+            // Handle proceed button click
+            proceedButton.addEventListener('click', function() {
+                if (currentDonorId) {
+                    // Get hashed version of donor ID
+                    fetch(`../../assets/php_func/hash_donor_id.php?donor_id=${currentDonorId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success && data.hash) {
+                                window.location.href = `../../src/views/forms/medical-history.php?hid=${data.hash}`;
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                        });
+                }
             });
-    };
-
-    window.proceedToInterviewer = function() {
-        // Add your logic here to proceed to interviewer
-        console.log('Proceeding to interviewer...');
-    };
-
-    // Add event listeners after DOM is loaded
-    document.addEventListener('DOMContentLoaded', function() {
-        // Add click handlers to all view buttons
-        document.querySelectorAll('.view-donor-btn').forEach(button => {
-            button.addEventListener('click', function() {
-                const donorId = this.getAttribute('data-donor-id');
-                fetchDonorInfo(donorId);
+            
+            // Update placeholder based on selected category
+            searchCategory.addEventListener('change', function() {
+                const category = this.value;
+                let placeholder = 'Search by ';
+                switch(category) {
+                    case 'surname': placeholder += 'surname...'; break;
+                    case 'firstname': placeholder += 'first name...'; break;
+                    case 'age': placeholder += 'age...'; break;
+                    default: placeholder = 'Search donors...';
+                }
+                searchInput.placeholder = placeholder;
+                performSearch();
             });
         });
-
-        // Add click handlers to all edit buttons
-        document.querySelectorAll('.edit-donor-btn').forEach(button => {
-            button.addEventListener('click', function() {
-                const donorId = this.getAttribute('data-donor-id');
-                editDonor(donorId);
-            });
-        });
-    });
-
-    // Function to handle edit donor action
-    window.editDonor = function(donorId) {
-        // Add your edit logic here
-        console.log('Editing donor with ID:', donorId);
-        // You can redirect to an edit page or open an edit modal
-        // window.location.href = `/REDCROSS/public/edit-donor.php?donor_id=${donorId}`;
-        alert('Edit functionality will be implemented here for donor ID: ' + donorId);
-    };
     </script>
 </body>
 </html>

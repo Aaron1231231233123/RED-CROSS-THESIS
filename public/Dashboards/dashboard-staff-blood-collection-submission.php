@@ -901,9 +901,9 @@ foreach ($display_exams as &$exam) {
                                 <?php
                                 if (!empty($display_exams)) {
                                     $counter = ($current_page - 1) * $records_per_page + 1; // Initialize counter with pagination
-                                    foreach ($display_exams as $exam) {
-                                        $donor = $exam['donor_form'] ?? [];
-                                        $created_date = isset($exam['created_at']) ? date('F d, Y', strtotime($exam['created_at'])) : 'N/A';
+                                foreach ($display_exams as $exam) {
+                                    $donor = $exam['donor_form'] ?? [];
+                                    $created_date = isset($exam['created_at']) ? date('F d, Y', strtotime($exam['created_at'])) : 'N/A';
                                     $surname = $donor['surname'] ?? '';
                                     $firstName = $donor['first_name'] ?? '';
                                     
@@ -922,8 +922,8 @@ foreach ($display_exams as &$exam) {
                                         // Status based on is_successful
                                         if (isset($collection['is_successful'])) {
                                             if ($collection['is_successful'] === true) {
-                                                $status_badge = '<span class="badge bg-success">Success</span>';
-                                            } else {
+                                        $status_badge = '<span class="badge bg-success">Success</span>';
+                                    } else {
                                                 $status_badge = '<span class="badge bg-danger">Failed</span>';
                                             }
                                         } else {

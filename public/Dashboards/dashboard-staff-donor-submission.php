@@ -14,8 +14,9 @@ if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] != 3) {
 }
 
 // Initialize counts
-$pending_interviews_count = 0;
-$todays_summary_count = 0;
+$registrations_count = 0;
+$existing_donors_count = 0;
+$ineligible_count = 0;
 
 // --- STEP 1: Get all donors from donor_form table ---
 $all_donors_ch = curl_init();
@@ -163,14 +164,18 @@ if (empty($approved_donor_ids)) {
 
 // Calculate counts for the new card structure
 $incoming_donor_ids = array_diff($all_donor_ids, $screened_donor_ids);
-$pending_interviews_count = count($incoming_donor_ids); // All unscreened donors are pending interviews
+$registrations_count = count($incoming_donor_ids); // All unscreened donors are new registrations
 
-// Count today's submissions
-$today = date('Y-m-d');
-$todays_summary_count = 0;
+// Existing donors are those who have been screened before (approved donors)
+$existing_donors_count = count($approved_donor_ids);
+
+// Ineligible donors are those who have been declined
+$ineligible_count = count($declined_donor_ids);
 
 // We'll calculate today's count from the actual query results later
-error_log("DEBUG - Pending interviews count: $pending_interviews_count");
+error_log("DEBUG - Registrations count: $registrations_count");
+error_log("DEBUG - Existing donors count: $existing_donors_count");
+error_log("DEBUG - Ineligible count: $ineligible_count");
 
 // Add pagination settings
 $records_per_page = 15;
@@ -220,19 +225,30 @@ error_log("Screening form data (direct query): " . json_encode($debug_screening)
 $query_url = SUPABASE_URL . '/rest/v1/donor_form?select=*&order=submitted_at.desc';
 
 // Check if we're filtering by status
-$status_filter = isset($_GET['status']) ? $_GET['status'] : 'pending';
-if ($status_filter === 'pending') {
-    // Show only donors without screening forms (pending interviews)
+$status_filter = isset($_GET['status']) ? $_GET['status'] : 'registrations';
+if ($status_filter === 'registrations') {
+    // Show only donors without screening forms (new registrations)
     if (!empty($screened_donor_ids)) {
         $screened_ids_str = implode(',', $screened_donor_ids);
         $query_url .= '&donor_id=not.in.(' . $screened_ids_str . ')';
     }
-} elseif ($status_filter === 'today') {
-    // Show only today's submissions AND those without screening forms
-    $query_url .= '&submitted_at=gte.' . $today . 'T00:00:00&submitted_at=lt.' . $today . 'T23:59:59';
-    if (!empty($screened_donor_ids)) {
-        $screened_ids_str = implode(',', $screened_donor_ids);
-        $query_url .= '&donor_id=not.in.(' . $screened_ids_str . ')';
+} elseif ($status_filter === 'existing') {
+    // Show only approved donors (existing donors)
+    if (!empty($approved_donor_ids)) {
+        $approved_ids_str = implode(',', $approved_donor_ids);
+        $query_url .= '&donor_id=in.(' . $approved_ids_str . ')';
+    } else {
+        // If no approved donors, show empty result
+        $query_url .= '&donor_id=eq.0';
+    }
+} elseif ($status_filter === 'ineligible') {
+    // Show only declined donors (ineligible)
+    if (!empty($declined_donor_ids)) {
+        $declined_ids_str = implode(',', $declined_donor_ids);
+        $query_url .= '&donor_id=in.(' . $declined_ids_str . ')';
+    } else {
+        // If no declined donors, show empty result
+        $query_url .= '&donor_id=eq.0';
     }
 }
 
@@ -258,13 +274,6 @@ if ($response === false || is_null(json_decode($response, true))) {
 } else {
     $donors = json_decode($response, true) ?: [];
     error_log("Decoded donors count: " . count($donors));
-    
-    // Calculate today's summary count from the full donor list (before pagination)
-    foreach ($donors as $donor) {
-        if (isset($donor['submitted_at']) && date('Y-m-d', strtotime($donor['submitted_at'])) === $today) {
-            $todays_summary_count++;
-        }
-    }
 }
 
 $total_records = count($donors);
@@ -1118,16 +1127,16 @@ select.donor_form_input[disabled] {
 
 
 
-        /* Responsive adjustments */
-        @media (max-width: 991.98px) {
-            .sidebar {
-                position: static;
-                width: 100%;
-                height: auto;
-            }
-            .main-content {
-                margin-left: 0;
-            }
+/* Responsive adjustments */
+@media (max-width: 991.98px) {
+    .sidebar {
+        position: static;
+        width: 100%;
+        height: auto;
+    }
+    .main-content {
+        margin-left: 0;
+    }
             
             .modern-body {
                 padding: 1rem;
@@ -1136,7 +1145,7 @@ select.donor_form_input[disabled] {
             .section-card {
                 padding: 1rem;
             }
-        }
+}
     </style>
 </head>
 <body class="light-mode">
@@ -1158,7 +1167,7 @@ select.donor_form_input[disabled] {
                 <?php if ($user_staff_roles === 'interviewer'): ?>
                         <li class="nav-item">
                             <a class="nav-link active" href="dashboard-staff-donor-submission.php">
-                                Initial Screening Queue
+                                New Donor
                             </a>
                         </li>
                     <?php endif; ?>
@@ -1166,7 +1175,7 @@ select.donor_form_input[disabled] {
                     <?php if ($user_staff_roles === 'reviewer'): ?>
                         <li class="nav-item">
                             <a class="nav-link active" href="dashboard-staff-medical-history-submissions.php">
-                                New Donor
+                                Initial Screening Queue
                             </a>
                         </li>
                     <?php endif; ?>
@@ -1187,13 +1196,19 @@ select.donor_form_input[disabled] {
                         </li>
                     <?php endif; ?>
                     <li class="nav-item">
-                        <a class="nav-link" href="dashboard-staff-existing-files/dashboard-staff-mobile-registration.php">Mobile Registration</a>
+                        <a class="nav-link" href="dashboard-staff-existing-files/dashboard-staff-existing-reviewer.php">
+                            Existing Donor
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="dashboard-staff-history.php">Donor History</a>
+                        <a class="nav-link" href="dashboard-staff-history.php">
+                            Donor History
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="../../assets/php_func/logout.php">Logout</a>
+                        <a class="nav-link" href="../../assets/php_func/logout.php">
+                            Logout
+                        </a>
                     </li>
                 </ul>
             </nav>
@@ -1207,13 +1222,17 @@ select.donor_form_input[disabled] {
                     
                     <!-- Status Cards -->
                     <div class="dashboard-staff-status">
-                        <a href="?status=pending" class="status-card <?php echo (!isset($_GET['status']) || $_GET['status'] === 'pending') ? 'active' : ''; ?>">
-                            <p class="dashboard-staff-count"><?php echo $pending_interviews_count; ?></p>
-                            <p class="dashboard-staff-title">Pending Interviews</p>
+                        <a href="?status=registrations" class="status-card <?php echo (!isset($_GET['status']) || $_GET['status'] === 'registrations') ? 'active' : ''; ?>">
+                            <p class="dashboard-staff-count"><?php echo $registrations_count; ?></p>
+                            <p class="dashboard-staff-title">Registrations</p>
                         </a>
-                        <a href="?status=today" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'today') ? 'active' : ''; ?>">
-                            <p class="dashboard-staff-count"><?php echo $todays_summary_count; ?></p>
-                            <p class="dashboard-staff-title">Today's Summary</p>
+                        <a href="?status=existing" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'existing') ? 'active' : ''; ?>">
+                            <p class="dashboard-staff-count"><?php echo $existing_donors_count; ?></p>
+                            <p class="dashboard-staff-title">Existing Donors</p>
+                        </a>
+                        <a href="?status=ineligible" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'ineligible') ? 'active' : ''; ?>">
+                            <p class="dashboard-staff-count"><?php echo $ineligible_count; ?></p>
+                            <p class="dashboard-staff-title">Ineligible</p>
                         </a>
                     </div>
                     
@@ -1237,6 +1256,7 @@ select.donor_form_input[disabled] {
                                     <th>Date</th>
                                     <th>SURNAME</th>
                                     <th>First Name</th>
+                                    <th>Gateway</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
@@ -1279,6 +1299,10 @@ select.donor_form_input[disabled] {
                                             ?></td>
                                             <td><?php echo !empty($donor['surname']) ? strtoupper(htmlspecialchars($donor['surname'])) : 'N/A'; ?></td>
                                             <td><?php echo !empty($donor['first_name']) ? htmlspecialchars($donor['first_name']) : 'N/A'; ?></td>
+                                            <td><?php 
+                                                $gateway = isset($donor['registration_channel']) ? ($donor['registration_channel'] === 'Mobile' ? 'Mobile' : 'PRC Portal') : 'PRC Portal';
+                                                echo htmlspecialchars($gateway); 
+                                            ?></td>
                                             <td>
                                                 <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" 
                                                         data-donor-id="<?php echo $donor['donor_id']; ?>" 
@@ -1338,78 +1362,58 @@ select.donor_form_input[disabled] {
                 <div class="d-flex align-items-center">
                     <div class="donor-avatar me-3">
                         <i class="fas fa-user-circle fa-2x text-white"></i>
-                    </div>
-                    <div>
+            </div>
+                        <div>
                         <h5 class="modal-title mb-0" id="donorDetailsModalLabel">Donor Information</h5>
                         <small class="text-white-50">Complete donor profile and submission details</small>
-                    </div>
-                </div>
+                        </div>
+                        </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
+                    </div>
             <div class="modal-body modern-body">
-                <!-- Donor ID Cards -->
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <div class="info-card">
-                            <div class="info-card-header">
-                                <i class="fas fa-id-card me-2"></i>
-                                PRC Blood Donor Number
-                            </div>
-                            <div class="info-card-value" name="prc_donor_number">-</div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="info-card">
-                            <div class="info-card-header">
-                                <i class="fas fa-barcode me-2"></i>
-                                DOH NNBNets Barcode
-                            </div>
-                            <div class="info-card-value" name="doh_nnbnets_barcode">-</div>
-                        </div>
-                    </div>
-                </div>
+        
 
                 <!-- Personal Information -->
                 <div class="section-card mb-4">
                     <div class="section-header">
                         <i class="fas fa-user me-2"></i>
                         Personal Information
-                    </div>
+                            </div>
                     <div class="row g-4">
                         <div class="col-md-6">
                             <div class="field-group">
                                 <label class="field-label">Full Name</label>
                                 <div class="field-value">
                                     <span name="surname">-</span>, <span name="first_name">-</span> <span name="middle_name"></span>
-                                </div>
-                            </div>
+                        </div>
+                    </div>
                         </div>
                         <div class="col-md-2">
                             <div class="field-group">
                                 <label class="field-label">Age</label>
                                 <div class="field-value" name="age">-</div>
                             </div>
-                        </div>
+                            </div>
                         <div class="col-md-4">
                             <div class="field-group">
                                 <label class="field-label">Birth Date</label>
                                 <div class="field-value" name="birthdate">-</div>
                             </div>
-                        </div>
+                            </div>
                         <div class="col-md-6">
                             <div class="field-group">
                                 <label class="field-label">Sex</label>
                                 <div class="field-value" name="sex">-</div>
-                            </div>
                         </div>
+                    </div>
                         <div class="col-md-6">
                             <div class="field-group">
                                 <label class="field-label">Civil Status</label>
                                 <div class="field-value" name="civil_status">-</div>
                             </div>
+                            </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
 
                 <!-- Address & Background Information -->
                 <div class="section-card mb-4">
@@ -1422,26 +1426,26 @@ select.donor_form_input[disabled] {
                             <div class="field-group">
                                 <label class="field-label">Permanent Address</label>
                                 <div class="field-value" name="permanent_address">-</div>
-                            </div>
+                        </div>
                         </div>
                         <div class="col-md-6">
                             <div class="field-group">
                                 <label class="field-label">Office Address</label>
                                 <div class="field-value" name="office_address">-</div>
-                            </div>
+                        </div>
                         </div>
                         <div class="col-md-3">
                             <div class="field-group">
                                 <label class="field-label">Nationality</label>
                                 <div class="field-value" name="nationality">-</div>
-                            </div>
                         </div>
+                            </div>
                         <div class="col-md-3">
                             <div class="field-group">
                                 <label class="field-label">Religion</label>
                                 <div class="field-value" name="religion">-</div>
-                            </div>
-                        </div>
+                    </div>
+                    </div>
                         <div class="col-md-3">
                             <div class="field-group">
                                 <label class="field-label">Education</label>
@@ -1483,27 +1487,27 @@ select.donor_form_input[disabled] {
                             </div>
                         </div>
                     </div>
-                </div>
+                    </div>
 
                 <!-- Identification Numbers -->
                 <div class="section-card">
                     <div class="section-header">
                         <i class="fas fa-id-badge me-2"></i>
                         Identification Numbers
-                    </div>
+                        </div>
                     <div class="row g-4">
                         <div class="col-md-4">
                             <div class="field-group">
                                 <label class="field-label">School ID</label>
                                 <div class="field-value" name="id_school">-</div>
-                            </div>
-                        </div>
+                    </div>
+                </div>
                         <div class="col-md-4">
                             <div class="field-group">
                                 <label class="field-label">Company ID</label>
                                 <div class="field-value" name="id_company">-</div>
-                            </div>
-                        </div>
+            </div>
+        </div>
                         <div class="col-md-4">
                             <div class="field-group">
                                 <label class="field-label">PRC ID</label>
@@ -1539,8 +1543,8 @@ select.donor_form_input[disabled] {
                     <i class="fas fa-check me-2"></i>Approve Donor
                 </button>
             </div>
-        </div>
     </div>
+</div>
 </div>
 
     <!-- Confirmation Modal -->
@@ -1805,7 +1809,7 @@ select.donor_form_input[disabled] {
                                 currentDonorData = { donor_id: donorId };
                                 console.log("Using fallback donor_id:", donorId);
                             } else {
-                                showError('Missing donor_id in parsed data. This will cause issues with approval.');
+                            showError('Missing donor_id in parsed data. This will cause issues with approval.');
                                 return;
                             }
                         }
