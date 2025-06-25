@@ -1278,9 +1278,7 @@ select.donor_form_input[disabled] {
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="../../../../assets/php_func/logout.php">
-                            Logout
-                        </a>
+                        <a class="nav-link" href="../../../assets/php_func/logout.php">Logout</a>
                     </li>
                 </ul>
             </nav>
