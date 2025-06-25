@@ -849,6 +849,44 @@ $donors = array_slice($donors, $offset, $records_per_page);
         </div>
     </div>
 
+    <!-- Medical History Modal -->
+    <div class="modal fade" id="medicalHistoryModal" tabindex="-1" aria-labelledby="medicalHistoryModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="medicalHistoryModalLabel">Medical History Form</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="medicalHistoryModalContent">
+                    <div class="d-flex justify-content-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Declaration Form Modal -->
+    <div class="modal fade" id="declarationFormModal" tabindex="-1" aria-labelledby="declarationFormModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="declarationFormModalLabel">Declaration Form</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="declarationFormModalContent">
+                    <div class="d-flex justify-content-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Loading Modal -->
     <div class="modal" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-dialog-centered">
@@ -1262,16 +1300,41 @@ $donors = array_slice($donors, $offset, $records_per_page);
             // Handle proceed button click
             proceedButton.addEventListener('click', function() {
                 if (currentDonorId) {
-                    // Get hashed version of donor ID
-                    fetch(`../../assets/php_func/hash_donor_id.php?donor_id=${currentDonorId}`)
-                        .then(response => response.json())
+                    // Hide the deferral status modal first
+                    deferralStatusModal.hide();
+                    
+                    // Show the medical history modal
+                    const medicalHistoryModal = new bootstrap.Modal(document.getElementById('medicalHistoryModal'));
+                    const modalContent = document.getElementById('medicalHistoryModalContent');
+                    
+                    // Reset modal content to loading state
+                    modalContent.innerHTML = `
+                        <div class="d-flex justify-content-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>`;
+                    
+                    // Show the modal
+                    medicalHistoryModal.show();
+                    
+                    // Load the medical history form content
+                    fetch(`../../src/views/forms/medical-history-modal-content.php?donor_id=${currentDonorId}`)
+                        .then(response => response.text())
                         .then(data => {
-                            if (data.success && data.hash) {
-                                window.location.href = `../../src/views/forms/medical-history.php?hid=${data.hash}`;
-                            }
+                            modalContent.innerHTML = data;
+                            
+                            // After loading content, generate the questions
+                            generateMedicalHistoryQuestions();
                         })
                         .catch(error => {
-                            console.error('Error:', error);
+                            console.error('Error loading medical history form:', error);
+                            modalContent.innerHTML = `
+                                <div class="alert alert-danger">
+                                    <h6>Error Loading Form</h6>
+                                    <p>Unable to load the medical history form. Please try again.</p>
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                </div>`;
                         });
                 }
             });
@@ -1290,6 +1353,612 @@ $donors = array_slice($donors, $offset, $records_per_page);
                 performSearch();
             });
         });
+
+        // Function to generate medical history questions in the modal
+        function generateMedicalHistoryQuestions() {
+            console.log("Starting to generate medical history questions...");
+            
+            // Get data from the JSON script tag
+            const modalDataScript = document.getElementById('modalData');
+            if (!modalDataScript) {
+                console.error("Modal data script not found");
+                return;
+            }
+            
+            let modalData;
+            try {
+                modalData = JSON.parse(modalDataScript.textContent);
+            } catch (e) {
+                console.error("Error parsing modal data:", e);
+                return;
+            }
+            
+            console.log("Modal data:", modalData);
+            
+            const modalMedicalHistoryData = modalData.medicalHistoryData;
+            const modalDonorSex = modalData.donorSex;
+            const modalUserRole = modalData.userRole;
+            const modalIsMale = modalDonorSex === 'male';
+            
+            console.log("User role:", modalUserRole);
+            console.log("Donor sex:", modalDonorSex);
+            console.log("Is male:", modalIsMale);
+            console.log("Medical history data:", modalMedicalHistoryData);
+            
+            // Only make fields required for reviewers (who can edit)
+            const modalIsReviewer = modalUserRole === 'reviewer';
+            const modalRequiredAttr = modalIsReviewer ? 'required' : '';
+            
+            // Define questions by step
+            const questionsByStep = {
+                1: [
+                    { q: 1, text: "Do you feel well and healthy today?" },
+                    { q: 2, text: "Have you ever been refused as a blood donor or told not to donate blood for any reasons?" },
+                    { q: 3, text: "Are you giving blood only because you want to be tested for HIV or the AIDS virus or Hepatitis virus?" },
+                    { q: 4, text: "Are you aware that an HIV/Hepatitis infected person can still transmit the virus despite a negative HIV/Hepatitis test?" },
+                    { q: 5, text: "Have you within the last 12 HOURS had taken liquor, beer or any drinks with alcohol?" },
+                    { q: 6, text: "In the last 3 DAYS have you taken aspirin?" },
+                    { q: 7, text: "In the past 4 WEEKS have you taken any medications and/or vaccinations?" },
+                    { q: 8, text: "In the past 3 MONTHS have you donated whole blood, platelets or plasma?" }
+                ],
+                2: [
+                    { q: 9, text: "Been to any places in the Philippines or countries infected with ZIKA Virus?" },
+                    { q: 10, text: "Had sexual contact with a person who was confirmed to have ZIKA Virus Infection?" },
+                    { q: 11, text: "Had sexual contact with a person who has been to any places in the Philippines or countries infected with ZIKA Virus?" }
+                ],
+                3: [
+                    { q: 12, text: "Received blood, blood products and/or had tissue/organ transplant or graft?" },
+                    { q: 13, text: "Had surgical operation or dental extraction?" },
+                    { q: 14, text: "Had a tattoo applied, ear and body piercing, acupuncture, needle stick Injury or accidental contact with blood?" },
+                    { q: 15, text: "Had sexual contact with high risks individuals or in exchange for material or monetary gain?" },
+                    { q: 16, text: "Engaged in unprotected, unsafe or casual sex?" },
+                    { q: 17, text: "Had jaundice/hepatitis/personal contact with person who had hepatitis?" },
+                    { q: 18, text: "Been incarcerated, Jailed or imprisoned?" },
+                    { q: 19, text: "Spent time or have relatives in the United Kingdom or Europe?" }
+                ],
+                4: [
+                    { q: 20, text: "Travelled or lived outside of your place of residence or outside the Philippines?" },
+                    { q: 21, text: "Taken prohibited drugs (orally, by nose, or by injection)?" },
+                    { q: 22, text: "Used clotting factor concentrates?" },
+                    { q: 23, text: "Had a positive test for the HIV virus, Hepatitis virus, Syphilis or Malaria?" },
+                    { q: 24, text: "Had Malaria or Hepatitis in the past?" },
+                    { q: 25, text: "Had or was treated for genital wart, syphilis, gonorrhea or other sexually transmitted diseases?" }
+                ],
+                5: [
+                    { q: 26, text: "Cancer, blood disease or bleeding disorder (haemophilia)?" },
+                    { q: 27, text: "Heart disease/surgery, rheumatic fever or chest pains?" },
+                    { q: 28, text: "Lung disease, tuberculosis or asthma?" },
+                    { q: 29, text: "Kidney disease, thyroid disease, diabetes, epilepsy?" },
+                    { q: 30, text: "Chicken pox and/or cold sores?" },
+                    { q: 31, text: "Any other chronic medical condition or surgical operations?" },
+                    { q: 32, text: "Have you recently had rash and/or fever? Was/were this/these also associated with arthralgia or arthritis or conjunctivitis?" }
+                ],
+                6: [
+                    { q: 33, text: "Are you currently pregnant or have you ever been pregnant?" },
+                    { q: 34, text: "When was your last childbirth?" },
+                    { q: 35, text: "In the past 1 YEAR, did you have a miscarriage or abortion?" },
+                    { q: 36, text: "Are you currently breastfeeding?" },
+                    { q: 37, text: "When was your last menstrual period?" }
+                ]
+            };
+            
+            // Define remarks options based on question type
+            const modalRemarksOptions = {
+                1: ["None", "Feeling Unwell", "Fatigue", "Fever", "Other Health Issues"],
+                2: ["None", "Low Hemoglobin", "Medical Condition", "Recent Surgery", "Other Refusal Reason"],
+                3: ["None", "HIV Test", "Hepatitis Test", "Other Test Purpose"],
+                4: ["None", "Understood", "Needs More Information"],
+                5: ["None", "Beer", "Wine", "Liquor", "Multiple Types"],
+                6: ["None", "Pain Relief", "Fever", "Other Medication Purpose"],
+                7: ["None", "Antibiotics", "Vitamins", "Vaccines", "Other Medications"],
+                8: ["None", "Red Cross Donation", "Hospital Donation", "Other Donation Type"],
+                9: ["None", "Local Travel", "International Travel", "Specific Location"],
+                10: ["None", "Direct Contact", "Indirect Contact", "Suspected Case"],
+                11: ["None", "Partner Travel History", "Unknown Exposure", "Other Risk"],
+                12: ["None", "Blood Transfusion", "Organ Transplant", "Other Procedure"],
+                13: ["None", "Major Surgery", "Minor Surgery", "Dental Work"],
+                14: ["None", "Tattoo", "Piercing", "Acupuncture", "Blood Exposure"],
+                15: ["None", "High Risk Contact", "Multiple Partners", "Other Risk Factors"],
+                16: ["None", "Unprotected Sex", "Casual Contact", "Other Risk Behavior"],
+                17: ["None", "Personal History", "Family Contact", "Other Exposure"],
+                18: ["None", "Short Term", "Long Term", "Other Details"],
+                19: ["None", "UK Stay", "Europe Stay", "Duration of Stay"],
+                20: ["None", "Local Travel", "International Travel", "Duration"],
+                21: ["None", "Recreational", "Medical", "Other Usage"],
+                22: ["None", "Treatment History", "Current Use", "Other Details"],
+                23: ["None", "HIV", "Hepatitis", "Syphilis", "Malaria"],
+                24: ["None", "Past Infection", "Treatment History", "Other Details"],
+                25: ["None", "Current Infection", "Past Treatment", "Other Details"],
+                26: ["None", "Cancer Type", "Blood Disease", "Bleeding Disorder"],
+                27: ["None", "Heart Disease", "Surgery History", "Current Treatment"],
+                28: ["None", "Active TB", "Asthma", "Other Respiratory Issues"],
+                29: ["None", "Kidney Disease", "Thyroid Issue", "Diabetes", "Epilepsy"],
+                30: ["None", "Recent Infection", "Past Infection", "Other Details"],
+                31: ["None", "Condition Type", "Treatment Status", "Other Details"],
+                32: ["None", "Recent Fever", "Rash", "Joint Pain", "Eye Issues"],
+                33: ["None", "Current Pregnancy", "Past Pregnancy", "Other Details"],
+                34: ["None", "Less than 6 months", "6-12 months ago", "More than 1 year ago"],
+                35: ["None", "Less than 3 months ago", "3-6 months ago", "6-12 months ago"],
+                36: ["None", "Currently Breastfeeding", "Recently Stopped", "Other"],
+                37: ["None", "Within last week", "1-2 weeks ago", "2-4 weeks ago", "More than 1 month ago"]
+            };
+            
+            // Get the field name based on the data structure
+            const getModalFieldName = (count) => {
+                const fields = {
+                    1: 'feels_well', 2: 'previously_refused', 3: 'testing_purpose_only', 4: 'understands_transmission_risk',
+                    5: 'recent_alcohol_consumption', 6: 'recent_aspirin', 7: 'recent_medication', 8: 'recent_donation',
+                    9: 'zika_travel', 10: 'zika_contact', 11: 'zika_sexual_contact', 12: 'blood_transfusion',
+                    13: 'surgery_dental', 14: 'tattoo_piercing', 15: 'risky_sexual_contact', 16: 'unsafe_sex',
+                    17: 'hepatitis_contact', 18: 'imprisonment', 19: 'uk_europe_stay', 20: 'foreign_travel',
+                    21: 'drug_use', 22: 'clotting_factor', 23: 'positive_disease_test', 24: 'malaria_history',
+                    25: 'std_history', 26: 'cancer_blood_disease', 27: 'heart_disease', 28: 'lung_disease',
+                    29: 'kidney_disease', 30: 'chicken_pox', 31: 'chronic_illness', 32: 'recent_fever',
+                    33: 'pregnancy_history', 34: 'last_childbirth', 35: 'recent_miscarriage', 36: 'breastfeeding',
+                    37: 'last_menstruation'
+                };
+                return fields[count];
+            };
+            
+                         // Generate questions for each step
+             for (let step = 1; step <= 6; step++) {
+                 // Skip step 6 for male donors
+                 if (step === 6 && modalIsMale) {
+                     continue;
+                 }
+                 
+                 const stepContainer = document.querySelector(`[data-step-container="${step}"]`);
+                 if (!stepContainer) {
+                     console.error(`Step container ${step} not found`);
+                     continue;
+                 }
+                 
+                 const stepQuestions = questionsByStep[step] || [];
+                 
+                 stepQuestions.forEach(questionData => {
+                     const fieldName = getModalFieldName(questionData.q);
+                     const value = modalMedicalHistoryData ? modalMedicalHistoryData[fieldName] : null;
+                     const remarks = modalMedicalHistoryData ? modalMedicalHistoryData[fieldName + '_remarks'] : null;
+                     
+                     // Create a form group for each question
+                     const questionRow = document.createElement('div');
+                     questionRow.className = 'form-group';
+                     questionRow.innerHTML = `
+                         <div class="question-number">${questionData.q}</div>
+                         <div class="question-text">${questionData.text}</div>
+                         <div class="radio-cell">
+                             <label class="radio-container">
+                                 <input type="radio" name="q${questionData.q}" value="Yes" ${value === true ? 'checked' : ''} ${modalRequiredAttr}>
+                                 <span class="checkmark"></span>
+                             </label>
+                         </div>
+                         <div class="radio-cell">
+                             <label class="radio-container">
+                                 <input type="radio" name="q${questionData.q}" value="No" ${value === false ? 'checked' : ''} ${modalRequiredAttr}>
+                                 <span class="checkmark"></span>
+                             </label>
+                         </div>
+                         <div class="remarks-cell">
+                             <select class="remarks-input" name="q${questionData.q}_remarks" ${modalRequiredAttr}>
+                                 ${modalRemarksOptions[questionData.q].map(option => 
+                                     `<option value="${option}" ${remarks === option ? 'selected' : ''}>${option}</option>`
+                                 ).join('')}
+                             </select>
+                         </div>
+                     `;
+                     
+                     stepContainer.appendChild(questionRow);
+                 });
+             }
+            
+            // Initialize step navigation
+            initializeModalStepNavigation(modalUserRole, modalIsMale);
+            
+            // Make form fields read-only for interviewers and physicians
+            if (modalUserRole === 'interviewer' || modalUserRole === 'physician') {
+                setTimeout(() => {
+                    const radioButtons = document.querySelectorAll('#modalMedicalHistoryForm input[type="radio"]');
+                    const selectFields = document.querySelectorAll('#modalMedicalHistoryForm select.remarks-input');
+                    
+                    radioButtons.forEach(radio => {
+                        radio.disabled = true;
+                    });
+                    
+                    selectFields.forEach(select => {
+                        select.disabled = true;
+                    });
+                    
+                    console.log("Made form fields read-only for role:", modalUserRole);
+                }, 100);
+            }
+        }
+        
+        // Initialize step navigation for the modal
+        function initializeModalStepNavigation(userRole, isMale) {
+            let currentStep = 1;
+            const totalSteps = isMale ? 5 : 6;
+            
+            const stepIndicators = document.querySelectorAll('#modalStepIndicators .step');
+            const stepConnectors = document.querySelectorAll('#modalStepIndicators .step-connector');
+            const formSteps = document.querySelectorAll('#modalMedicalHistoryForm .form-step');
+            const prevButton = document.getElementById('modalPrevButton');
+            const nextButton = document.getElementById('modalNextButton');
+            const errorMessage = document.getElementById('modalValidationError');
+            
+            // Hide step 6 for male donors
+            if (isMale) {
+                const step6 = document.getElementById('modalStep6');
+                const line56 = document.getElementById('modalLine5-6');
+                if (step6) step6.style.display = 'none';
+                if (line56) line56.style.display = 'none';
+            }
+            
+            function updateStepDisplay() {
+                // Hide all steps
+                formSteps.forEach(step => {
+                    step.classList.remove('active');
+                });
+                
+                // Show current step
+                const activeStep = document.querySelector(`#modalMedicalHistoryForm .form-step[data-step="${currentStep}"]`);
+                if (activeStep) {
+                    activeStep.classList.add('active');
+                }
+                
+                // Update step indicators
+                stepIndicators.forEach(indicator => {
+                    const step = parseInt(indicator.getAttribute('data-step'));
+                    
+                    if (step < currentStep) {
+                        indicator.classList.add('completed');
+                        indicator.classList.add('active');
+                    } else if (step === currentStep) {
+                        indicator.classList.add('active');
+                        indicator.classList.remove('completed');
+                    } else {
+                        indicator.classList.remove('active');
+                        indicator.classList.remove('completed');
+                    }
+                });
+                
+                // Update step connectors
+                stepConnectors.forEach((connector, index) => {
+                    if (index + 1 < currentStep) {
+                        connector.classList.add('active');
+                    } else {
+                        connector.classList.remove('active');
+                    }
+                });
+                
+                // Update buttons
+                if (currentStep === 1) {
+                    prevButton.style.display = 'none';
+                } else {
+                    prevButton.style.display = 'block';
+                }
+                
+                if (currentStep === totalSteps) {
+                    if (userRole === 'reviewer') {
+                        nextButton.innerHTML = 'DECLINE';
+                        nextButton.onclick = () => submitModalForm('decline');
+                        
+                        // Add approve button
+                        if (!document.getElementById('modalApproveButton')) {
+                            const approveBtn = document.createElement('button');
+                            approveBtn.className = 'next-button';
+                            approveBtn.innerHTML = 'APPROVE';
+                            approveBtn.id = 'modalApproveButton';
+                            approveBtn.onclick = () => submitModalForm('approve');
+                            nextButton.parentNode.appendChild(approveBtn);
+                        }
+                    } else {
+                        nextButton.innerHTML = 'NEXT';
+                        nextButton.onclick = () => submitModalForm('next');
+                    }
+                } else {
+                    nextButton.innerHTML = 'Next →';
+                    nextButton.onclick = () => {
+                        if (validateCurrentModalStep()) {
+                            currentStep++;
+                            updateStepDisplay();
+                            errorMessage.style.display = 'none';
+                        }
+                    };
+                    
+                    // Remove approve button if it exists
+                    const approveBtn = document.getElementById('modalApproveButton');
+                    if (approveBtn) {
+                        approveBtn.remove();
+                    }
+                }
+            }
+            
+            function validateCurrentModalStep() {
+                const currentStepElement = document.querySelector(`#modalMedicalHistoryForm .form-step[data-step="${currentStep}"]`);
+                if (!currentStepElement) return false;
+                
+                const radioGroups = {};
+                const radios = currentStepElement.querySelectorAll('input[type="radio"]');
+                
+                radios.forEach(radio => {
+                    radioGroups[radio.name] = true;
+                });
+                
+                let allAnswered = true;
+                for (const groupName in radioGroups) {
+                    const answered = document.querySelector(`input[name="${groupName}"]:checked`) !== null;
+                    if (!answered) {
+                        allAnswered = false;
+                        break;
+                    }
+                }
+                
+                if (!allAnswered) {
+                    errorMessage.style.display = 'block';
+                    errorMessage.textContent = 'Please answer all questions before proceeding to the next step.';
+                    return false;
+                }
+                
+                return true;
+            }
+            
+            // Bind event handlers
+            prevButton.addEventListener('click', () => {
+                if (currentStep > 1) {
+                    currentStep--;
+                    updateStepDisplay();
+                    errorMessage.style.display = 'none';
+                }
+            });
+            
+            // Initialize display
+            updateStepDisplay();
+        }
+
+        // Function to handle modal form submission
+        function submitModalForm(action) {
+            let message = '';
+            if (action === 'approve') {
+                message = 'Are you sure you want to approve this donor and proceed to the declaration form?';
+            } else if (action === 'decline') {
+                message = 'Are you sure you want to decline this donor?';
+            } else if (action === 'next') {
+                message = 'Do you want to proceed to the declaration form?';
+            }
+            
+            if (confirm(message)) {
+                document.getElementById('modalSelectedAction').value = action;
+                
+                // Submit the form via AJAX
+                const form = document.getElementById('modalMedicalHistoryForm');
+                const formData = new FormData(form);
+                
+                fetch('../../src/views/forms/medical-history-process.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (action === 'next' || action === 'approve') {
+                            // Close medical history modal and open declaration form modal
+                            const medicalModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModal'));
+                            medicalModal.hide();
+                            
+                            // Get the current donor_id
+                            const donorIdInput = document.querySelector('#modalMedicalHistoryForm input[name="donor_id"]');
+                            const donorId = donorIdInput ? donorIdInput.value : null;
+                            
+                            if (donorId) {
+                                showDeclarationFormModal(donorId);
+                            } else {
+                                alert('Error: Donor ID not found');
+                            }
+                        } else if (action === 'decline') {
+                            // Close modal and refresh the main page for decline only
+                            const modal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModal'));
+                            modal.hide();
+                            window.location.reload();
+                        }
+                    } else {
+                        alert('Error: ' + (data.message || 'Unknown error occurred'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while processing the form.');
+                });
+            }
+        }
+        
+        // Function to show declaration form modal
+        function showDeclarationFormModal(donorId) {
+            console.log('Showing declaration form modal for donor ID:', donorId);
+            
+            const declarationModal = new bootstrap.Modal(document.getElementById('declarationFormModal'));
+            const modalContent = document.getElementById('declarationFormModalContent');
+            
+            // Reset modal content to loading state
+            modalContent.innerHTML = `
+                <div class="d-flex justify-content-center align-items-center" style="min-height: 200px;">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-3 mb-0">Loading Declaration Form...</p>
+                    </div>
+                </div>`;
+            
+            // Show the modal
+            declarationModal.show();
+            
+            // Load the declaration form content
+            fetch(`../../src/views/forms/declaration-form-modal-content.php?donor_id=${donorId}`)
+                .then(response => {
+                    console.log('Declaration form response status:', response.status);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.text();
+                })
+                .then(data => {
+                    console.log('Declaration form content loaded successfully');
+                    modalContent.innerHTML = data;
+                    
+                    // Ensure print function is available globally
+                    window.printDeclaration = function() {
+                        console.log('Print function called');
+                        const printWindow = window.open('', '_blank');
+                        const content = document.querySelector('.declaration-header').outerHTML + 
+                                       document.querySelector('.donor-info').outerHTML + 
+                                       document.querySelector('.declaration-content').outerHTML + 
+                                       document.querySelector('.signature-section').outerHTML;
+                        
+                        printWindow.document.write(`
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <title>Declaration Form - Philippine Red Cross</title>
+                                <style>
+                                    body { 
+                                        font-family: Arial, sans-serif; 
+                                        padding: 20px; 
+                                        line-height: 1.5;
+                                    }
+                                    .declaration-header { 
+                                        text-align: center; 
+                                        margin-bottom: 30px; 
+                                        border-bottom: 2px solid #9c0000;
+                                        padding-bottom: 20px;
+                                    }
+                                    .declaration-header h2, .declaration-header h3 { 
+                                        color: #9c0000; 
+                                        margin: 5px 0; 
+                                        font-weight: bold;
+                                    }
+                                    .donor-info { 
+                                        background-color: #f8f9fa; 
+                                        padding: 20px; 
+                                        margin: 20px 0; 
+                                        border: 1px solid #ddd; 
+                                        border-radius: 8px;
+                                    }
+                                    .donor-info-row { 
+                                        display: flex; 
+                                        margin-bottom: 15px; 
+                                        gap: 20px; 
+                                        flex-wrap: wrap;
+                                    }
+                                    .donor-info-item { 
+                                        flex: 1; 
+                                        min-width: 200px;
+                                    }
+                                    .donor-info-label { 
+                                        font-weight: bold; 
+                                        font-size: 14px; 
+                                        color: #555; 
+                                        margin-bottom: 5px;
+                                    }
+                                    .donor-info-value { 
+                                        font-size: 16px; 
+                                        color: #333; 
+                                    }
+                                    .declaration-content { 
+                                        line-height: 1.8; 
+                                        margin: 30px 0; 
+                                        text-align: justify;
+                                    }
+                                    .declaration-content p { 
+                                        margin-bottom: 20px; 
+                                    }
+                                    .bold { 
+                                        font-weight: bold; 
+                                        color: #9c0000; 
+                                    }
+                                    .signature-section { 
+                                        margin-top: 40px; 
+                                        display: flex; 
+                                        justify-content: space-between; 
+                                        page-break-inside: avoid;
+                                    }
+                                    .signature-box { 
+                                        text-align: center; 
+                                        padding: 15px 0; 
+                                        border-top: 2px solid #333; 
+                                        width: 250px; 
+                                        font-weight: 500;
+                                    }
+                                    @media print {
+                                        body { margin: 0; }
+                                        .declaration-header { page-break-after: avoid; }
+                                        .signature-section { page-break-before: avoid; }
+                                    }
+                                </style>
+                            </head>
+                            <body>${content}</body>
+                            </html>
+                        `);
+                        printWindow.document.close();
+                        printWindow.focus();
+                        setTimeout(() => {
+                            printWindow.print();
+                        }, 500);
+                    };
+                    
+                    // Ensure submit function is available globally
+                    window.submitDeclarationForm = function() {
+                        console.log('Submit declaration form called');
+                        if (confirm('Are you sure you want to complete the donor registration?')) {
+                            const form = document.getElementById('modalDeclarationForm');
+                            if (!form) {
+                                alert('Form not found. Please try again.');
+                                return;
+                            }
+                            
+                            document.getElementById('modalDeclarationAction').value = 'complete';
+                            
+                            // Submit the form via AJAX
+                            const formData = new FormData(form);
+                            
+                            fetch('../../src/views/forms/declaration-form-process.php', {
+                                method: 'POST',
+                                body: formData
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    alert('Donor registration completed successfully!');
+                                    console.log('Registration complete, reloading page...');
+                                    
+                                    // Force complete page reload
+                                    window.location.href = window.location.href;
+                                } else {
+                                    alert('Error: ' + (data.message || 'Unknown error occurred'));
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error:', error);
+                                alert('An error occurred while processing the form.');
+                            });
+                        }
+                    };
+                })
+                .catch(error => {
+                    console.error('Error loading declaration form:', error);
+                    modalContent.innerHTML = `
+                        <div class="alert alert-danger text-center" style="margin: 50px 20px;">
+                            <h5 class="alert-heading">
+                                <i class="fas fa-exclamation-triangle"></i> Error Loading Form
+                            </h5>
+                            <p>Unable to load the declaration form. Please try again.</p>
+                            <hr>
+                            <p class="mb-0">Error details: ${error.message}</p>
+                            <button type="button" class="btn btn-secondary mt-3" data-bs-dismiss="modal">
+                                <i class="fas fa-times"></i> Close
+                            </button>
+                        </div>`;
+                });
+        }
     </script>
 </body>
 </html>
