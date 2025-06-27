@@ -13,6 +13,33 @@ if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] != 3) {
     exit();
 }
 
+// Get interviewer information for the screening form
+$interviewer_name = 'Unknown Interviewer';
+if (isset($_SESSION['user_id'])) {
+    $ch = curl_init(SUPABASE_URL . '/rest/v1/users?select=surname,first_name,middle_name&user_id=eq.' . $_SESSION['user_id']);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ]);
+    
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($http_code === 200) {
+        $interviewer_data = json_decode($response, true);
+        if (is_array($interviewer_data) && !empty($interviewer_data)) {
+            $interviewer = $interviewer_data[0];
+            if (isset($interviewer['surname']) && isset($interviewer['first_name'])) {
+                $interviewer_name = $interviewer['surname'] . ', ' . 
+                                  $interviewer['first_name'] . ' ' . 
+                                  ($interviewer['middle_name'] ?? '');
+            }
+        }
+    }
+}
+
 // Initialize counts
 $registrations_count = 0;
 $existing_donors_count = 0;
@@ -285,108 +312,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
 // Close cURL session
 curl_close($ch);
 
-// Process donor approval if a donor_id was passed
-if (isset($_GET['approve_donor'])) {
-    $donor_id = intval($_GET['approve_donor']);
-    $donor_name = $_GET['donor_name'] ?? '';
-    
-    // Add debugging
-    error_log("APPROVAL PROCESS: Received approve_donor parameter: " . $donor_id);
-    
-    // Store in session
-    $_SESSION['donor_id'] = $donor_id;
-    $_SESSION['donor_name'] = $donor_name;
-    
-    error_log("APPROVAL PROCESS: Setting donor_id in session directly: " . $donor_id);
-    
-    // Ensure user_staff_roles is set - default to 'Interviewer' to guarantee access
-    // The interviewer role should have access to medical histories
-    $_SESSION['user_staff_role'] = 'Interviewer';
-    $_SESSION['user_staff_roles'] = 'Interviewer';
-    $_SESSION['staff_role'] = 'Interviewer';
-    
-    // Try to get the actual role from the database if possible
-    $user_id = $_SESSION['user_id'] ?? 0;
-    
-    // Add extra debugging
-    error_log("APPROVAL PROCESS: User ID for role lookup: " . $user_id);
-    error_log("APPROVAL PROCESS: Initial role settings: " . $_SESSION['user_staff_role']);
-    
-    // Use Supabase API to get the user role
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL => SUPABASE_URL . '/rest/v1/user_roles?user_id=eq.' . $user_id . '&select=role_name',
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => [
-            'apikey: ' . SUPABASE_API_KEY,
-            'Authorization: Bearer ' . SUPABASE_API_KEY
-        ]
-    ]);
-    
-    $response = curl_exec($ch);
-    $curl_error = curl_error($ch);
-    
-    if ($response !== false) {
-        $userData = json_decode($response, true);
-        if (is_array($userData) && !empty($userData)) {
-            // Set multiple role variables to ensure compatibility
-            $_SESSION['user_staff_role'] = $userData[0]['role_name'] ?? 'Interviewer';
-            $_SESSION['staff_role'] = $userData[0]['role_name'] ?? 'Interviewer';
-            $_SESSION['user_staff_roles'] = $userData[0]['role_name'] ?? 'Interviewer';
-            
-            error_log("APPROVAL PROCESS: User role set to: " . $_SESSION['user_staff_role']);
-        } else {
-            error_log("APPROVAL PROCESS: No user role data found or invalid format");
-        }
-    } else {
-        error_log("APPROVAL PROCESS: cURL error fetching user role: " . $curl_error);
-    }
-    
-    curl_close($ch);
-    
-    // Make sure the roles are set to valid values that will pass the check in medical-history.php
-    if (!in_array(strtolower($_SESSION['user_staff_role']), ['interviewer', 'reviewer', 'physician'])) {
-        $_SESSION['user_staff_role'] = 'Interviewer';
-        $_SESSION['user_staff_roles'] = 'Interviewer';
-        $_SESSION['staff_role'] = 'Interviewer';
-        error_log("APPROVAL PROCESS: Role not valid, defaulting to Interviewer");
-    }
-    
-    // Log the session for debugging
-    ob_start();
-    var_dump($_SESSION);
-    $session_dump = ob_get_clean();
-    error_log("APPROVAL PROCESS: Session after setting: " . $session_dump);
-    
-    // Redirect directly to medical history form
-    $redirect_url = "../../src/views/forms/medical-history.php";
-    error_log("APPROVAL PROCESS: Redirecting to: " . $redirect_url);
-    
-    // Ensure no output has been sent before redirect
-    if (!headers_sent($filename, $linenum)) {
-        header("Location: " . $redirect_url);
-        exit();
-    } else {
-        error_log("APPROVAL PROCESS: Headers already sent in $filename on line $linenum");
-        echo "<script>window.location.href = '$redirect_url';</script>";
-        echo "<noscript><meta http-equiv='refresh' content='0;url=$redirect_url'></noscript>";
-        echo "If you are not redirected, <a href='$redirect_url'>click here</a>.";
-        exit();
-    }
-}
-
-// Add this function to handle donor approval
-function storeDonorIdInSession($donorData) {
-    if (is_array($donorData)) {
-        error_log("Storing donor data: " . print_r($donorData, true));
-        if (isset($donorData['donor_id'])) {
-            $_SESSION['donor_id'] = $donorData['donor_id'];
-            $_SESSION['donor_name'] = $donorData['first_name'] . ' ' . $donorData['surname'];
-        } else {
-            error_log("Missing donor_id in donor data: " . print_r($donorData, true));
-        }
-    }
-}
+// Note: Approval is now handled through the screening form modal instead of direct redirect
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -397,6 +323,7 @@ function storeDonorIdInSession($donorData) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="../../assets/js/screening_form_modal.js"></script>
     <style>
         :root {
             --bg-color: #f5f5f5;
@@ -1127,6 +1054,435 @@ select.donor_form_input[disabled] {
 
 
 
+/* Screening Form Modal Styles */
+.screening-modal-content {
+    border: none;
+    border-radius: 15px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.screening-modal-header {
+    background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+    color: white;
+    border-radius: 15px 15px 0 0;
+    padding: 1.5rem;
+    border-bottom: none;
+}
+
+.screening-modal-icon {
+    width: 50px;
+    height: 50px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.screening-modal-body {
+    padding: 0;
+    background-color: #f8f9fa;
+    min-height: 400px;
+}
+
+.screening-modal-footer {
+    background-color: white;
+    border-top: 1px solid #e9ecef;
+    border-radius: 0 0 15px 15px;
+    padding: 1.5rem;
+}
+
+/* Progress Indicator */
+.screening-progress-container {
+    background: white;
+    padding: 20px;
+    border-bottom: 1px solid #e9ecef;
+    position: relative;
+}
+
+.screening-progress-steps {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    z-index: 2;
+}
+
+.screening-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.screening-step-number {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #e9ecef;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    margin-bottom: 8px;
+}
+
+.screening-step-label {
+    font-size: 12px;
+    color: #6c757d;
+    font-weight: 500;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.screening-step.active .screening-step-number,
+.screening-step.completed .screening-step-number {
+    background: #b22222;
+    color: white;
+}
+
+.screening-step.active .screening-step-label,
+.screening-step.completed .screening-step-label {
+    color: #b22222;
+    font-weight: 600;
+}
+
+.screening-progress-line {
+    position: absolute;
+    top: 40%;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #e9ecef;
+    transform: translateY(-50%);
+    z-index: 1;
+}
+
+.screening-progress-fill {
+    height: 100%;
+    background: #b22222;
+    width: 0%;
+    transition: width 0.5s ease;
+}
+
+/* Step Content */
+.screening-step-content {
+    display: none;
+    padding: 30px;
+    animation: fadeIn 0.3s ease;
+}
+
+.screening-step-content.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.screening-step-title {
+    margin-bottom: 25px;
+}
+
+.screening-step-title h6 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 8px;
+}
+
+.screening-step-title p {
+    color: #6c757d;
+    margin-bottom: 0;
+    font-size: 14px;
+}
+
+/* Form Elements */
+.screening-label {
+    display: block;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.screening-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.screening-input:focus {
+    outline: none;
+    border-color: #b22222;
+    box-shadow: 0 0 0 3px rgba(178, 34, 34, 0.1);
+}
+
+.screening-input-group {
+    position: relative;
+}
+
+.screening-input-suffix {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #6c757d;
+    font-weight: 500;
+    pointer-events: none;
+}
+
+/* Donation Categories */
+.screening-donation-categories {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.screening-category-card {
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.3s ease;
+}
+
+.screening-category-card:hover {
+    border-color: #b22222;
+    box-shadow: 0 4px 12px rgba(178, 34, 34, 0.1);
+}
+
+.screening-category-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #b22222;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.screening-donation-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.screening-donation-option {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border: 2px solid #f8f9fa;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: #f8f9fa;
+}
+
+.screening-donation-option:hover {
+    border-color: #b22222;
+    background: white;
+}
+
+.screening-donation-option input {
+    display: none;
+}
+
+.screening-radio-custom {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #e9ecef;
+    border-radius: 50%;
+    margin-right: 12px;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.screening-donation-option input:checked ~ .screening-radio-custom {
+    border-color: #b22222;
+    background: #b22222;
+}
+
+.screening-donation-option input:checked ~ .screening-radio-custom::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+    background: white;
+    border-radius: 50%;
+}
+
+.screening-option-text {
+    font-weight: 500;
+    color: #333;
+    font-size: 14px;
+}
+
+.screening-donation-option input:checked ~ .screening-option-text {
+    color: #b22222;
+    font-weight: 600;
+}
+
+/* Detail Cards */
+.screening-detail-card {
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 20px;
+}
+
+.screening-detail-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #b22222;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #f8f9fa;
+}
+
+/* History Section */
+.screening-history-question {
+    margin-bottom: 25px;
+}
+
+.screening-radio-group {
+    display: flex;
+    gap: 20px;
+}
+
+.screening-radio-option {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    padding: 12px 20px;
+    border: 2px solid #f8f9fa;
+    border-radius: 8px;
+    background: #f8f9fa;
+    transition: all 0.3s ease;
+}
+
+.screening-radio-option:hover {
+    border-color: #b22222;
+    background: white;
+}
+
+.screening-radio-option input {
+    display: none;
+}
+
+.screening-radio-option input:checked ~ .screening-radio-custom {
+    border-color: #b22222;
+    background: #b22222;
+}
+
+.screening-radio-option input:checked ~ .screening-option-text {
+    color: #b22222;
+    font-weight: 600;
+}
+
+.screening-history-table .table-danger th {
+    background-color: #b22222 !important;
+    border-color: #b22222 !important;
+    color: white;
+}
+
+/* Patient Table */
+.screening-patient-table-container {
+    margin-top: 15px;
+}
+
+.screening-patient-table {
+    margin-bottom: 0;
+}
+
+.screening-patient-table .table-danger th {
+    background-color: #b22222 !important;
+    border-color: #b22222 !important;
+    color: white;
+    text-align: center;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 12px 8px;
+}
+
+.screening-patient-table td {
+    padding: 8px;
+    vertical-align: middle;
+}
+
+.screening-patient-table .form-control-sm {
+    font-size: 13px;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    width: 100%;
+}
+
+.screening-patient-table .form-control-sm:focus {
+    border-color: #b22222;
+    box-shadow: 0 0 0 2px rgba(178, 34, 34, 0.1);
+}
+
+/* Review Section */
+.screening-review-card {
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+}
+
+.screening-review-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #b22222;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #f8f9fa;
+}
+
+.screening-review-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.screening-review-item:last-child {
+    border-bottom: none;
+}
+
+.screening-review-label {
+    font-weight: 500;
+    color: #6c757d;
+    font-size: 14px;
+}
+
+.screening-review-value {
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+}
+
+.screening-interviewer-info {
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    padding: 25px;
+}
+
 /* Responsive adjustments */
 @media (max-width: 991.98px) {
     .sidebar {
@@ -1145,6 +1501,51 @@ select.donor_form_input[disabled] {
             .section-card {
                 padding: 1rem;
             }
+            
+                         .donation-options {
+                 flex-direction: column;
+             }
+
+             .mobile-donation-fields input[type="text"] {
+                 max-width: 100%;
+             }
+             
+             .screening-progress-steps {
+                 flex-wrap: wrap;
+                 gap: 10px;
+                 justify-content: center;
+             }
+             
+             .screening-step {
+                 min-width: 60px;
+             }
+             
+             .screening-step-label {
+                 font-size: 10px;
+             }
+             
+             .screening-radio-group {
+                 flex-direction: column;
+                 gap: 10px;
+             }
+             
+             .screening-donation-categories {
+                 gap: 15px;
+             }
+             
+             .screening-patient-table-container {
+                 overflow-x: auto;
+             }
+             
+             .screening-patient-table {
+                 min-width: 600px;
+             }
+             
+             .screening-patient-table th,
+             .screening-patient-table td {
+                 min-width: 120px;
+                 font-size: 12px;
+             }
 }
     </style>
 </head>
@@ -1582,6 +1983,339 @@ select.donor_form_input[disabled] {
             </div>
         </div>
     </div>
+
+    <!-- Screening Form Modal -->
+    <div class="modal fade" id="screeningFormModal" tabindex="-1" aria-labelledby="screeningFormModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content screening-modal-content">
+                <div class="modal-header screening-modal-header">
+                    <div class="d-flex align-items-center">
+                        <div class="screening-modal-icon me-3">
+                            <i class="fas fa-clipboard-list fa-2x text-white"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title mb-0" id="screeningFormModalLabel">Initial Screening Form</h5>
+                            <small class="text-white-50">To be filled up by the interviewer</small>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                
+                <!-- Progress Indicator -->
+                <div class="screening-progress-container">
+                    <div class="screening-progress-steps">
+                        <div class="screening-step active" data-step="1">
+                            <div class="screening-step-number">1</div>
+                            <div class="screening-step-label">Basic Info</div>
+                        </div>
+                        <div class="screening-step" data-step="2">
+                            <div class="screening-step-number">2</div>
+                            <div class="screening-step-label">Donation Type</div>
+                        </div>
+                        <div class="screening-step" data-step="3">
+                            <div class="screening-step-number">3</div>
+                            <div class="screening-step-label">Details</div>
+                        </div>
+                        <div class="screening-step" data-step="4">
+                            <div class="screening-step-number">4</div>
+                            <div class="screening-step-label">History</div>
+                        </div>
+                        <div class="screening-step" data-step="5">
+                            <div class="screening-step-number">5</div>
+                            <div class="screening-step-label">Review</div>
+                        </div>
+                    </div>
+                    <div class="screening-progress-line">
+                        <div class="screening-progress-fill"></div>
+                    </div>
+                </div>
+                
+                <div class="modal-body screening-modal-body">
+                    <form id="screeningForm">
+                        <input type="hidden" name="donor_id" value="">
+                        
+                        <!-- Step 1: Basic Information -->
+                        <div class="screening-step-content active" data-step="1">
+                            <div class="screening-step-title">
+                                <h6><i class="fas fa-info-circle me-2 text-danger"></i>Basic Screening Information</h6>
+                                <p class="text-muted mb-4">Please enter the basic screening measurements</p>
+                            </div>
+                            
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="screening-label">Body Weight (kg)</label>
+                                    <div class="screening-input-group">
+                                        <input type="number" step="0.01" name="body-wt" class="screening-input" required>
+                                        <span class="screening-input-suffix">kg</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="screening-label">Specific Gravity</label>
+                                    <input type="text" name="sp-gr" class="screening-input" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="screening-label">Blood Type</label>
+                                    <select name="blood-type" class="screening-input" required>
+                                        <option value="" disabled selected>Select Blood Type</option>
+                                        <option value="A+">A+</option>
+                                        <option value="A-">A-</option>
+                                        <option value="B+">B+</option>
+                                        <option value="B-">B-</option>
+                                        <option value="O+">O+</option>
+                                        <option value="O-">O-</option>
+                                        <option value="AB+">AB+</option>
+                                        <option value="AB-">AB-</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 2: Donation Type -->
+                        <div class="screening-step-content" data-step="2">
+                            <div class="screening-step-title">
+                                <h6><i class="fas fa-heart me-2 text-danger"></i>Type of Donation</h6>
+                                <p class="text-muted mb-4">Please select the donor's choice of donation type</p>
+                            </div>
+                            
+                            <div class="screening-donation-categories">
+                                <div class="screening-category-card">
+                                    <h6 class="screening-category-title">IN-HOUSE</h6>
+                                    <div class="screening-donation-options">
+                                        <label class="screening-donation-option">
+                                            <input type="radio" name="donation-type" value="walk-in" required>
+                                            <span class="screening-radio-custom"></span>
+                                            <span class="screening-option-text">Walk-in/Voluntary</span>
+                                        </label>
+                                        <label class="screening-donation-option">
+                                            <input type="radio" name="donation-type" value="replacement" required>
+                                            <span class="screening-radio-custom"></span>
+                                            <span class="screening-option-text">Replacement</span>
+                                        </label>
+                                        <label class="screening-donation-option">
+                                            <input type="radio" name="donation-type" value="patient-directed" required>
+                                            <span class="screening-radio-custom"></span>
+                                            <span class="screening-option-text">Patient-Directed</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <div class="screening-category-card">
+                                    <h6 class="screening-category-title">MOBILE BLOOD DONATION</h6>
+                                    <div class="screening-donation-options">
+                                        <label class="screening-donation-option">
+                                            <input type="radio" name="donation-type" value="mobile-walk-in" required>
+                                            <span class="screening-radio-custom"></span>
+                                            <span class="screening-option-text">Walk-in/Voluntary</span>
+                                        </label>
+                                        <label class="screening-donation-option">
+                                            <input type="radio" name="donation-type" value="mobile-replacement" required>
+                                            <span class="screening-radio-custom"></span>
+                                            <span class="screening-option-text">Replacement</span>
+                                        </label>
+                                        <label class="screening-donation-option">
+                                            <input type="radio" name="donation-type" value="mobile-patient-directed" required>
+                                            <span class="screening-radio-custom"></span>
+                                            <span class="screening-option-text">Patient-Directed</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 3: Additional Details -->
+                        <div class="screening-step-content" data-step="3">
+                            <div class="screening-step-title">
+                                <h6><i class="fas fa-edit me-2 text-danger"></i>Additional Details</h6>
+                                <p class="text-muted mb-4">Additional information based on donation type</p>
+                            </div>
+                            
+                            <!-- Mobile Location Fields (shown for any mobile donation type) -->
+                            <div class="screening-mobile-section" id="mobileDonationSection" style="display: none;">
+                                <div class="screening-detail-card">
+                                    <h6 class="screening-detail-title">Mobile Donation Details</h6>
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <label class="screening-label">Place</label>
+                                            <input type="text" name="mobile-place" class="screening-input" placeholder="Enter location">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="screening-label">Organizer</label>
+                                            <input type="text" name="mobile-organizer" class="screening-input" placeholder="Enter organizer">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Patient Details Table (shown for patient-directed donations) -->
+                            <div class="screening-patient-section" id="patientDetailsSection" style="display: none;">
+                                <div class="screening-detail-card">
+                                    <h6 class="screening-detail-title">Patient Information</h6>
+                                    <div class="screening-patient-table-container">
+                                        <table class="table table-bordered screening-patient-table">
+                                            <thead>
+                                                <tr class="table-danger">
+                                                    <th>Patient Name</th>
+                                                    <th>Hospital</th>
+                                                    <th>Blood Type</th>
+                                                    <th>WB/Component</th>
+                                                    <th>No. of units</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td>
+                                                        <input type="text" name="patient-name" class="form-control form-control-sm" placeholder="Enter patient name">
+                                                    </td>
+                                                    <td>
+                                                        <input type="text" name="hospital" class="form-control form-control-sm" placeholder="Enter hospital">
+                                                    </td>
+                                                    <td>
+                                                        <select name="blood-type-patient" class="form-control form-control-sm">
+                                                            <option value="" disabled selected>Select Blood Type</option>
+                                                            <option value="A+">A+</option>
+                                                            <option value="A-">A-</option>
+                                                            <option value="B+">B+</option>
+                                                            <option value="B-">B-</option>
+                                                            <option value="O+">O+</option>
+                                                            <option value="O-">O-</option>
+                                                            <option value="AB+">AB+</option>
+                                                            <option value="AB-">AB-</option>
+                                                        </select>
+                                                    </td>
+                                                    <td>
+                                                        <input type="text" name="wb-component" class="form-control form-control-sm" placeholder="Enter component">
+                                                    </td>
+                                                    <td>
+                                                        <input type="number" name="no-units" class="form-control form-control-sm" placeholder="0" min="0">
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- No Additional Details Message (shown for walk-in/replacement) -->
+                            <div class="screening-no-details" id="noAdditionalDetails">
+                                <div class="screening-detail-card text-center">
+                                    <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                                    <h6>No Additional Details Required</h6>
+                                    <p class="text-muted mb-0">This donation type doesn't require additional information.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 4: Donation History -->
+                        <div class="screening-step-content" data-step="4">
+                            <div class="screening-step-title">
+                                <h6><i class="fas fa-history me-2 text-danger"></i>Donation History</h6>
+                                <p class="text-muted mb-4">Previous donation information (Donor's Opinion)</p>
+                            </div>
+                            
+                            <div class="screening-history-question">
+                                <label class="screening-label mb-3">Has the donor donated blood before?</label>
+                                <div class="screening-radio-group">
+                                    <label class="screening-radio-option">
+                                        <input type="radio" name="history" value="yes" required>
+                                        <span class="screening-radio-custom"></span>
+                                        <span class="screening-option-text">Yes</span>
+                                    </label>
+                                    <label class="screening-radio-option">
+                                        <input type="radio" name="history" value="no" required>
+                                        <span class="screening-radio-custom"></span>
+                                        <span class="screening-option-text">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="screening-history-details" id="historyDetails" style="display: none;">
+                                <div class="screening-detail-card">
+                                    <h6 class="screening-detail-title">Donation History Details</h6>
+                                    <div class="screening-history-table">
+                                        <table class="table table-bordered">
+                                            <thead>
+                                                <tr class="table-danger">
+                                                    <th></th>
+                                                    <th>Red Cross</th>
+                                                    <th>Hospital</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <th class="table-light">No. of times</th>
+                                                    <td><input type="number" name="red-cross" min="0" value="0" class="form-control form-control-sm"></td>
+                                                    <td><input type="number" name="hospital-history" min="0" value="0" class="form-control form-control-sm"></td>
+                                                </tr>
+                                                <tr>
+                                                    <th class="table-light">Date of last donation</th>
+                                                    <td><input type="date" name="last-rc-donation-date" class="form-control form-control-sm"></td>
+                                                    <td><input type="date" name="last-hosp-donation-date" class="form-control form-control-sm"></td>
+                                                </tr>
+                                                <tr>
+                                                    <th class="table-light">Place of last donation</th>
+                                                    <td><input type="text" name="last-rc-donation-place" class="form-control form-control-sm" placeholder="Enter location"></td>
+                                                    <td><input type="text" name="last-hosp-donation-place" class="form-control form-control-sm" placeholder="Enter location"></td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 5: Review -->
+                        <div class="screening-step-content" data-step="5">
+                            <div class="screening-step-title">
+                                <h6><i class="fas fa-check-double me-2 text-danger"></i>Review & Submit</h6>
+                                <p class="text-muted mb-4">Please review all information before submission</p>
+                            </div>
+                            
+                            <div class="screening-review-section">
+                                <div class="screening-review-card">
+                                    <h6 class="screening-review-title">Screening Summary</h6>
+                                    <div class="screening-review-content" id="reviewContent">
+                                        <!-- Content will be populated by JavaScript -->
+                                    </div>
+                                </div>
+                                
+                                <div class="screening-interviewer-info">
+                                    <div class="row g-3 align-items-center">
+                                        <div class="col-md-6">
+                                            <label class="screening-label">Interviewer</label>
+                                            <input type="text" name="interviewer" value="<?php echo htmlspecialchars($interviewer_name ?? 'Interviewer'); ?>" class="screening-input" readonly>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="screening-label">Office</label>
+                                            <input type="text" value="PRC Office" class="screening-input" readonly>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="screening-label">Date</label>
+                                            <input type="text" value="<?php echo date('m/d/Y'); ?>" class="screening-input" readonly>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                
+                <div class="modal-footer screening-modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" id="screeningCancelButton">
+                        <i class="fas fa-times me-2"></i>Cancel
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" id="screeningPrevButton" style="display: none;">
+                        <i class="fas fa-arrow-left me-2"></i>Previous
+                    </button>
+                    <button type="button" class="btn btn-danger" id="screeningNextButton">
+                        <i class="fas fa-arrow-right me-2"></i>Next
+                    </button>
+                    <button type="button" class="btn btn-success" id="screeningSubmitButton" style="display: none;">
+                        <i class="fas fa-check me-2"></i>Submit Screening
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
             const donorDetailsModal = document.getElementById('donorDetailsModal');
@@ -1859,44 +2593,19 @@ select.donor_form_input[disabled] {
                         return;
                     }
                     
-                    // Get donor name if available
-                    let donorName = '';
-                    if (currentDonorData.first_name && currentDonorData.surname) {
-                        donorName = currentDonorData.first_name + ' ' + currentDonorData.surname;
+                    console.log("Opening screening modal for donor ID:", donorId);
+                    
+                    // Close the donor details modal first
+                    const donorModal = bootstrap.Modal.getInstance(document.getElementById('donorDetailsModal'));
+                    if (donorModal) {
+                        donorModal.hide();
                     }
                     
-                    console.log("Processing approval for donor ID:", donorId, "Name:", donorName);
-                    
-                    // Create a form and submit it programmatically
-                    // This is more reliable than using window.location.href
-                    const form = document.createElement('form');
-                    form.method = 'GET';
-                    form.action = 'dashboard-staff-donor-submission.php';
-                    
-                    // Add the approve_donor parameter
-                    const donorInput = document.createElement('input');
-                    donorInput.type = 'hidden';
-                    donorInput.name = 'approve_donor';
-                    donorInput.value = donorId;
-                    form.appendChild(donorInput);
-                    
-                    // Add the donor_name parameter
-                    const nameInput = document.createElement('input');
-                    nameInput.type = 'hidden';
-                    nameInput.name = 'donor_name';
-                    nameInput.value = donorName;
-                    form.appendChild(nameInput);
-                    
-                    // Close modal before submitting
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('donorDetailsModal'));
-                    if (modal) {
-                        modal.hide();
-                    }
-                    
-                    // Add form to the body and submit it
-                    document.body.appendChild(form);
-                    console.log("Submitting form with donor ID:", donorId);
-                    form.submit();
+                    // Wait a moment for the modal to close, then open the screening modal
+                    setTimeout(function() {
+                        // Open the screening form modal
+                        openScreeningModal(currentDonorData);
+                    }, 300);
                 });
             } else {
                 console.error("ERROR: Approve button not found in the DOM!");

@@ -289,6 +289,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <script src="../../assets/js/physical_examination_modal.js"></script>
     <style>
 :root {
             --bg-color: #f5f5f5;
@@ -497,6 +498,876 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             margin: 1.5rem 0;
             width: 100%;
             opacity: 1;
+        }
+
+        /* Physical Examination Modal Styles */
+        .physical-examination-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .physical-examination-modal.show {
+            opacity: 1;
+        }
+
+        .physical-modal-content {
+            background: white;
+            border-radius: 15px;
+            max-width: 900px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            transform: translateY(-20px);
+            transition: transform 0.3s ease;
+        }
+
+        .physical-examination-modal.show .physical-modal-content {
+            transform: translateY(0);
+        }
+
+        .physical-modal-header {
+            background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 15px 15px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .physical-modal-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .physical-close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.3s ease;
+        }
+
+        .physical-close-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Physical Examination Progress Indicator - Matching Screening Modal */
+        .physical-progress-container {
+            background: white !important;
+            padding: 20px !important;
+            border-bottom: 1px solid #e9ecef !important;
+            position: relative !important;
+            display: block !important;
+            visibility: visible !important;
+        }
+
+        .physical-progress-steps {
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            position: relative !important;
+            z-index: 2 !important;
+            visibility: visible !important;
+        }
+
+        .physical-step {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            cursor: pointer !important;
+            transition: all 0.3s ease !important;
+        }
+
+        .physical-step-number {
+            width: 40px !important;
+            height: 40px !important;
+            border-radius: 50% !important;
+            background: #e9ecef !important;
+            color: #6c757d !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-weight: bold !important;
+            font-size: 16px !important;
+            transition: all 0.3s ease !important;
+            margin-bottom: 8px !important;
+            border: none !important;
+            box-sizing: border-box !important;
+        }
+
+        .physical-step-label {
+            font-size: 12px;
+            color: #6c757d;
+            font-weight: 500;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .physical-step.active .physical-step-number,
+        .physical-step.completed .physical-step-number {
+            background: #b22222 !important;
+            color: white !important;
+        }
+
+        .physical-step.active .physical-step-label,
+        .physical-step.completed .physical-step-label {
+            color: #b22222 !important;
+            font-weight: 600 !important;
+        }
+
+        .physical-progress-line {
+            position: absolute;
+            top: 40%;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #e9ecef;
+            transform: translateY(-50%);
+            z-index: 1;
+        }
+
+        .physical-progress-fill {
+            height: 100%;
+            background: #b22222;
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+
+        /* Modal Form */
+        .physical-modal-form {
+            padding: 30px;
+        }
+
+        /* Step Content - Different from Progress Steps */
+        .physical-step-content {
+            display: none !important;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .physical-step-content.active {
+            display: block !important;
+        }
+
+        /* Progress Step Indicators */
+        .physical-step {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            cursor: pointer !important;
+            transition: all 0.3s ease !important;
+        }
+
+        .physical-step-content h4 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.3rem;
+        }
+
+        .physical-step-content p.text-muted {
+            margin-bottom: 25px;
+        }
+
+        /* Initial Screening Summary Styles */
+        .initial-screening-container {
+            padding: 25px;
+        }
+        
+        /* Header Section */
+        .screening-header-info {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 25px;
+            border-left: 4px solid #b22222;
+        }
+        
+        .donor-info-primary {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .donor-name-display {
+            color: #b22222;
+            font-weight: 700;
+            margin: 0;
+            font-size: 1.4rem;
+        }
+        
+        .donor-basic-details {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .info-badge {
+            background: #ffffff;
+            color: #495057;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            border: 1px solid #dee2e6;
+        }
+        
+        .blood-type-badge {
+            background: #b22222;
+            color: white;
+            font-weight: 600;
+            border: 1px solid #b22222;
+        }
+        
+        .screening-date-badge {
+            background: #ffffff;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            color: #495057;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+        }
+        
+        .date-label {
+            color: #6c757d;
+            font-weight: 500;
+            margin-right: 6px;
+            font-size: 0.9rem;
+        }
+        
+        /* Information Sections */
+        .screening-info-grid {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 25px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .info-section {
+            margin-bottom: 30px;
+        }
+        
+        .info-section-right {
+            border-left: 2px solid #f0f0f0;
+            padding-left: 25px;
+        }
+        
+        .section-title {
+            color: #b22222;
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .info-grid {
+            display: grid;
+            gap: 12px;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+        
+        .info-item:last-child {
+            border-bottom: none;
+        }
+        
+        .info-item .label {
+            color: #6c757d;
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+        
+        .info-item .value {
+            color: #212529;
+            font-weight: 600;
+            text-align: right;
+        }
+        
+        /* Address Section */
+        .address-section {
+            margin: 25px 0;
+            padding: 15px 0;
+            border-top: 1px solid #e9ecef;
+        }
+        
+        .address-display {
+            margin-top: 8px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            color: #495057;
+            font-style: italic;
+        }
+        
+        /* Status Section */
+        .exam-status-section {
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid #e9ecef;
+        }
+        
+        .status-verification {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 20px 0;
+        }
+        
+        .status-icon {
+            font-size: 2rem;
+            color: #28a745;
+            margin-bottom: 5px;
+        }
+        
+        .status-text {
+            color: #28a745;
+            font-weight: 600;
+            font-size: 1.1rem;
+            text-align: center;
+        }
+        
+        .status-note {
+            color: #6c757d;
+            font-size: 0.9rem;
+            text-align: center;
+            font-style: italic;
+            max-width: 400px;
+            line-height: 1.4;
+        }
+
+        /* Option Cards */
+        .physical-remarks-options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .physical-blood-bag-options {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .physical-option-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: white;
+            position: relative;
+            overflow: hidden;
+            text-align: center;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .physical-option-card:hover {
+            border-color: #b22222;
+            box-shadow: 0 6px 20px rgba(178, 34, 34, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .physical-option-card input[type="radio"] {
+            display: none;
+        }
+
+        .physical-option-card input[type="radio"]:checked + .physical-option-content {
+            color: #b22222;
+        }
+
+        /* Active Selection Border */
+        .physical-option-card input[type="radio"]:checked {
+            + .physical-option-content {
+                color: #b22222;
+            }
+        }
+
+        .physical-option-card:has(input[type="radio"]:checked) {
+            border-color: #b22222 !important;
+            border-width: 2px;
+            background: white;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .physical-option-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .physical-option-content i {
+            font-size: 1.8rem;
+            color: #b22222;
+            margin-bottom: 5px;
+        }
+
+        /* Fallback for browsers that don't support :has() */
+        .physical-option-card.selected {
+            border-color: #b22222 !important;
+            border-width: 2px;
+            background: white;
+            box-shadow: none;
+            transform: none;
+        }
+
+        /* Reason Section */
+        .physical-reason-section {
+            margin-top: 20px;
+        }
+
+        .physical-reason-section textarea {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            transition: border-color 0.3s ease;
+        }
+
+        .physical-reason-section textarea:focus {
+            border-color: #b22222;
+            box-shadow: 0 0 0 0.2rem rgba(178, 34, 34, 0.25);
+        }
+
+        /* Examination Report Styles */
+        .examination-report {
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 30px;
+            border: 1px solid #e9ecef;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        /* Report Header */
+        .report-header {
+            border-bottom: 2px solid #b22222;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .report-title h5 {
+            color: #b22222;
+            font-weight: 700;
+            margin: 0 0 10px 0;
+            font-size: 1.3rem;
+        }
+        
+        .report-meta {
+            display: flex;
+            justify-content: space-between;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        
+        .report-physician {
+            font-weight: 500;
+        }
+        
+        .report-date {
+            font-style: italic;
+        }
+        
+        /* Report Sections */
+        .report-section {
+            margin-bottom: 30px;
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #495057;
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            padding: 10px 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .section-header i {
+            color: #b22222;
+            font-size: 1.2rem;
+        }
+        
+        .section-content {
+            padding-left: 25px;
+        }
+        
+        /* Vital Signs Grid */
+        .vital-signs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .vital-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .vital-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .vital-value {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #212529;
+        }
+        
+        .vital-unit {
+            color: #6c757d;
+            font-size: 0.85rem;
+            font-style: italic;
+        }
+        
+        /* Examination Findings */
+        .examination-findings {
+            display: grid;
+            gap: 12px;
+        }
+        
+        .finding-row {
+            display: grid;
+            grid-template-columns: 180px 1fr;
+            gap: 15px;
+            padding: 8px 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+        
+        .finding-row:last-child {
+            border-bottom: none;
+        }
+        
+        .finding-label {
+            color: #495057;
+            font-weight: 500;
+        }
+        
+        .finding-value {
+            color: #212529;
+            font-weight: 400;
+        }
+        
+        /* Assessment Content */
+        .assessment-content {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .assessment-result,
+        .assessment-reason,
+        .assessment-collection {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            gap: 15px;
+            padding: 10px 0;
+        }
+        
+        .result-label,
+        .reason-label,
+        .collection-label {
+            color: #495057;
+            font-weight: 500;
+        }
+        
+        .result-value,
+        .reason-value,
+        .collection-value {
+            color: #212529;
+            font-weight: 600;
+        }
+        
+        /* Signature Section */
+        .report-signature {
+            margin-top: 40px;
+            padding-top: 25px;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        .signature-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: end;
+            margin-bottom: 15px;
+        }
+        
+        .signature-line span {
+            color: #495057;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+        
+        .signature-space {
+            flex: 1;
+            border-bottom: 1px solid #6c757d;
+            margin: 0 20px 5px 20px;
+            max-width: 300px;
+        }
+        
+        .signature-note {
+            color: #6c757d;
+            font-size: 0.8rem;
+            font-style: italic;
+            text-align: center;
+            line-height: 1.4;
+        }
+
+        /* Modal Footer */
+        .physical-modal-footer {
+            padding: 1.5rem;
+            border-top: 1px solid #e9ecef;
+            background-color: white;
+            border-radius: 0 0 15px 15px;
+        }
+
+        .physical-nav-buttons {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .physical-nav-buttons .btn {
+            padding: 12px 25px;
+            font-weight: 500;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .physical-cancel-btn {
+            margin-right: auto;
+        }
+
+        /* Toast Messages */
+        .physical-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 8px;
+            padding: 15px 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            z-index: 10000;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            border-left: 4px solid #b22222;
+        }
+
+        .physical-toast.show {
+            transform: translateX(0);
+        }
+
+        .physical-toast-success {
+            border-left-color: #28a745;
+        }
+
+        .physical-toast-error {
+            border-left-color: #dc3545;
+        }
+
+        .physical-toast-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .physical-toast-content i {
+            font-size: 1.2rem;
+        }
+
+        .physical-toast-success i {
+            color: #28a745;
+        }
+
+        .physical-toast-error i {
+            color: #dc3545;
+        }
+
+        /* Form Validation */
+        .form-control.is-invalid {
+            border-color: #dc3545;
+        }
+
+        .form-control.is-valid {
+            border-color: #28a745;
+        }
+
+        .invalid-feedback {
+            color: #dc3545;
+            font-size: 0.875rem;
+            margin-top: 5px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .physical-modal-content {
+                width: 95%;
+                margin: 20px;
+            }
+
+            .physical-progress-container {
+                padding: 20px;
+            }
+
+            .physical-progress-steps {
+                flex-wrap: wrap;
+                gap: 10px;
+                justify-content: center;
+            }
+
+            .physical-step {
+                min-width: 60px;
+            }
+
+            .physical-step-label {
+                font-size: 10px;
+            }
+
+            .physical-remarks-options {
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+            
+            .physical-blood-bag-options {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            .physical-option-card {
+                padding: 15px 10px;
+                min-height: 70px;
+            }
+            
+            .physical-option-content i {
+                font-size: 1.5rem;
+            }
+            
+            .physical-option-content {
+                font-size: 13px;
+            }
+
+            .physical-modal-form {
+                padding: 20px;
+            }
+
+            .physical-nav-buttons {
+                flex-direction: column;
+                gap: 10px;
+                align-items: stretch;
+            }
+
+            .physical-nav-buttons .btn {
+                width: 100%;
+                margin-right: 0 !important;
+            }
+
+            .physical-cancel-btn {
+                order: -1;
+            }
+            
+            /* Examination Report Mobile */
+            .examination-report {
+                padding: 20px;
+            }
+            
+            .report-meta {
+                flex-direction: column;
+                gap: 5px;
+                align-items: flex-start;
+            }
+            
+            .vital-signs-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            
+            .finding-row {
+                grid-template-columns: 1fr;
+                gap: 5px;
+            }
+            
+            .finding-label {
+                font-weight: 600;
+                color: #b22222;
+            }
+            
+            .assessment-result,
+            .assessment-reason,
+            .assessment-collection {
+                grid-template-columns: 1fr;
+                gap: 5px;
+            }
+            
+            .result-label,
+            .reason-label,
+            .collection-label {
+                font-weight: 600;
+                color: #b22222;
+            }
+            
+            .signature-line {
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+            }
+            
+            .signature-space {
+                width: 200px;
+                margin: 0;
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         /* Table Styling */
@@ -1150,6 +2021,464 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         </div>
     </div>
 
+    <!-- Physical Examination Modal -->
+    <div class="physical-examination-modal" id="physicalExaminationModal">
+        <div class="physical-modal-content">
+            <div class="physical-modal-header">
+                <h3><i class="fas fa-stethoscope me-2"></i>Physical Examination Form</h3>
+                <button type="button" class="physical-close-btn" onclick="physicalExaminationModal.closeModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <!-- Progress Indicator -->
+            <div class="physical-progress-container">
+                <div class="physical-progress-steps">
+                    <div class="physical-step active" data-step="1">
+                        <div class="physical-step-number">1</div>
+                        <div class="physical-step-label">Initial Screening</div>
+                    </div>
+                    <div class="physical-step" data-step="2">
+                        <div class="physical-step-number">2</div>
+                        <div class="physical-step-label">Vital Signs</div>
+                    </div>
+                    <div class="physical-step" data-step="3">
+                        <div class="physical-step-number">3</div>
+                        <div class="physical-step-label">Examination</div>
+                    </div>
+                    <div class="physical-step" data-step="4">
+                        <div class="physical-step-number">4</div>
+                        <div class="physical-step-label">Remarks</div>
+                    </div>
+                    <div class="physical-step" data-step="5">
+                        <div class="physical-step-number">5</div>
+                        <div class="physical-step-label">Blood Bag</div>
+                    </div>
+                    <div class="physical-step" data-step="6">
+                        <div class="physical-step-number">6</div>
+                        <div class="physical-step-label">Review</div>
+                    </div>
+                </div>
+                <div class="physical-progress-line">
+                    <div class="physical-progress-fill"></div>
+                </div>
+            </div>
+
+            <form id="physicalExaminationForm" class="physical-modal-form">
+                <input type="hidden" id="physical-donor-id" name="donor_id">
+                <input type="hidden" id="physical-screening-id" name="screening_id">
+
+                <!-- Step 1: Initial Screening Summary -->
+                <div class="physical-step-content active" id="physical-step-1">
+                    <div class="physical-step-inner">
+                        <h4>Step 1: Initial Screening Summary</h4>
+                        <p class="text-muted">Review of screening information and donor details</p>
+                        
+                        <div class="initial-screening-container">
+                            <!-- Header Section with Key Info -->
+                            <div class="screening-header-info">
+                                <div class="row g-3">
+                                    <div class="col-md-8">
+                                        <div class="donor-info-primary">
+                                            <h5 class="donor-name-display" id="donor-name">Loading...</h5>
+                                            <div class="donor-basic-details">
+                                                <span class="info-badge" id="donor-age">-</span>
+                                                <span class="info-badge" id="donor-sex">-</span>
+                                                <span class="info-badge blood-type-badge" id="donor-blood-type">-</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4 text-end">
+                                        <div class="screening-date-badge">
+                                            <i class="fas fa-calendar-alt me-2"></i>
+                                            <span class="date-label">Date Screened:</span>
+                                            <span id="screening-date">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Main Information Grid -->
+                            <div class="screening-info-grid">
+                                <div class="row g-4">
+                                    <div class="col-md-6">
+                                        <div class="info-section">
+                                            <div class="section-title">
+                                                <i class="fas fa-vial me-2"></i>
+                                                Screening Results
+                                            </div>
+                                            <div class="info-grid">
+                                                <div class="info-item">
+                                                    <span class="label">Donation Type</span>
+                                                    <span class="value" id="donation-type">-</span>
+                                                </div>
+                                                <div class="info-item">
+                                                    <span class="label">Body Weight</span>
+                                                    <span class="value" id="body-weight">-</span>
+                                                </div>
+                                                <div class="info-item">
+                                                    <span class="label">Specific Gravity</span>
+                                                    <span class="value" id="specific-gravity">-</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <div class="info-section info-section-right">
+                                            <div class="section-title">
+                                                <i class="fas fa-address-book me-2"></i>
+                                                Contact & Background
+                                            </div>
+                                            <div class="info-grid">
+                                                <div class="info-item">
+                                                    <span class="label">Civil Status</span>
+                                                    <span class="value" id="donor-civil-status">-</span>
+                                                </div>
+                                                <div class="info-item">
+                                                    <span class="label">Mobile</span>
+                                                    <span class="value" id="donor-mobile">-</span>
+                                                </div>
+                                                <div class="info-item">
+                                                    <span class="label">Occupation</span>
+                                                    <span class="value" id="donor-occupation">-</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Address Section -->
+                                <div class="address-section">
+                                    <div class="section-title">
+                                        <i class="fas fa-map-marker-alt me-2"></i>
+                                        Address
+                                    </div>
+                                    <div class="address-display" id="donor-address">-</div>
+                                </div>
+                                
+                                <!-- Ready Status -->
+                                <div class="exam-status-section">
+                                    <div class="status-verification">
+                                        <i class="fas fa-check-circle status-icon"></i>
+                                        <span class="status-text">Ready for Physical Examination</span>
+                                        <span class="status-note">Screening completed successfully. Proceed with vital signs and physical examination.</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Vital Signs -->
+                <div class="physical-step-content" id="physical-step-2">
+                    <div class="physical-step-inner">
+                        <h4>Step 2: Vital Signs</h4>
+                        <p class="text-muted">Please enter the patient's vital signs</p>
+                        
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="physical-blood-pressure" class="form-label">Blood Pressure *</label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="physical-blood-pressure" 
+                                       name="blood_pressure" 
+                                       placeholder="e.g., 120/80" 
+                                       pattern="[0-9]{2,3}/[0-9]{2,3}" 
+                                       title="Format: systolic/diastolic e.g. 120/80" 
+                                       required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="physical-pulse-rate" class="form-label">Pulse Rate (BPM) *</label>
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="physical-pulse-rate" 
+                                       name="pulse_rate" 
+                                       placeholder="BPM" 
+                                       min="40" 
+                                       max="200" 
+                                       required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="physical-body-temp" class="form-label">Body Temperature (°C) *</label>
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="physical-body-temp" 
+                                       name="body_temp" 
+                                       placeholder="°C" 
+                                       step="0.1" 
+                                       min="35" 
+                                       max="42" 
+                                       required>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Physical Examination -->
+                <div class="physical-step-content" id="physical-step-3">
+                    <div class="physical-step-inner">
+                        <h4>Step 3: Physical Examination</h4>
+                        <p class="text-muted">Please enter examination findings</p>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="physical-gen-appearance" class="form-label">General Appearance *</label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="physical-gen-appearance" 
+                                       name="gen_appearance" 
+                                       placeholder="Enter observation" 
+                                       required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="physical-skin" class="form-label">Skin *</label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="physical-skin" 
+                                       name="skin" 
+                                       placeholder="Enter observation" 
+                                       required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="physical-heent" class="form-label">HEENT *</label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="physical-heent" 
+                                       name="heent" 
+                                       placeholder="Enter observation" 
+                                       required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="physical-heart-lungs" class="form-label">Heart and Lungs *</label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="physical-heart-lungs" 
+                                       name="heart_and_lungs" 
+                                       placeholder="Enter observation" 
+                                       required>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 4: Remarks -->
+                <div class="physical-step-content" id="physical-step-4">
+                    <div class="physical-step-inner">
+                        <h4>Step 4: Remarks</h4>
+                        <p class="text-muted">Please select the appropriate remark</p>
+                        
+                        <div class="physical-remarks-section">
+                            <div class="physical-remarks-options">
+                                <label class="physical-option-card">
+                                    <input type="radio" name="remarks" value="Accepted">
+                                    <div class="physical-option-content">
+                                        <i class="fas fa-check-circle"></i>
+                                        <span>Accepted</span>
+                                    </div>
+                                </label>
+                                <label class="physical-option-card">
+                                    <input type="radio" name="remarks" value="Temporarily Deferred">
+                                    <div class="physical-option-content">
+                                        <i class="fas fa-clock"></i>
+                                        <span>Temporarily Deferred</span>
+                                    </div>
+                                </label>
+                                <label class="physical-option-card">
+                                    <input type="radio" name="remarks" value="Permanently Deferred">
+                                    <div class="physical-option-content">
+                                        <i class="fas fa-ban"></i>
+                                        <span>Permanently Deferred</span>
+                                    </div>
+                                </label>
+                                <label class="physical-option-card">
+                                    <input type="radio" name="remarks" value="Refused">
+                                    <div class="physical-option-content">
+                                        <i class="fas fa-times-circle"></i>
+                                        <span>Refused</span>
+                                    </div>
+                                </label>
+                            </div>
+                            
+                            <div class="physical-reason-section" id="physical-reason-section" style="display: none;">
+                                <label for="physical-reason" class="form-label">Reason *</label>
+                                <textarea class="form-control" 
+                                          id="physical-reason" 
+                                          name="reason" 
+                                          rows="4" 
+                                          placeholder="Enter detailed reason"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 5: Blood Bag Selection -->
+                <div class="physical-step-content" id="physical-step-5">
+                    <div class="physical-step-inner">
+                        <h4>Step 5: Blood Bag Selection</h4>
+                        <p class="text-muted">Please select the appropriate blood bag type</p>
+                        
+                        <div class="physical-blood-bag-section">
+                            <div class="physical-blood-bag-options">
+                                <label class="physical-option-card">
+                                    <input type="radio" name="blood_bag_type" value="Single">
+                                    <div class="physical-option-content">
+                                        <i class="fas fa-square"></i>
+                                        <span>Single</span>
+                                    </div>
+                                </label>
+                                <label class="physical-option-card">
+                                    <input type="radio" name="blood_bag_type" value="Multiple">
+                                    <div class="physical-option-content">
+                                        <i class="fas fa-th"></i>
+                                        <span>Multiple</span>
+                                    </div>
+                                </label>
+                                <label class="physical-option-card">
+                                    <input type="radio" name="blood_bag_type" value="Top & Bottom">
+                                    <div class="physical-option-content">
+                                        <i class="fas fa-align-justify"></i>
+                                        <span>Top & Bottom</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 6: Review and Submit -->
+                <div class="physical-step-content" id="physical-step-6">
+                    <div class="physical-step-inner">
+                        <h4>Step 6: Review & Submit</h4>
+                        <p class="text-muted">Please review all information before submitting</p>
+                        
+                        <div class="examination-report">
+                            <!-- Header Section -->
+                            <div class="report-header">
+                                <div class="report-title">
+                                    <h5>Physical Examination Report</h5>
+                                    <div class="report-meta">
+                                        <span class="report-date"><?php echo date('F j, Y'); ?></span>
+                                        <span class="report-physician">Physician: <span id="summary-interviewer">-</span></span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Vital Signs Section -->
+                            <div class="report-section">
+                                <div class="section-header">
+                                    <i class="fas fa-heartbeat"></i>
+                                    <span>Vital Signs</span>
+                                </div>
+                                <div class="section-content">
+                                    <div class="vital-signs-grid">
+                                        <div class="vital-item">
+                                            <span class="vital-label">Blood Pressure</span>
+                                            <span class="vital-value" id="summary-blood-pressure">-</span>
+                                        </div>
+                                        <div class="vital-item">
+                                            <span class="vital-label">Pulse Rate</span>
+                                            <span class="vital-value" id="summary-pulse-rate">-</span>
+                                            <span class="vital-unit">BPM</span>
+                                        </div>
+                                        <div class="vital-item">
+                                            <span class="vital-label">Temperature</span>
+                                            <span class="vital-value" id="summary-body-temp">-</span>
+                                            <span class="vital-unit">°C</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Physical Examination Section -->
+                            <div class="report-section">
+                                <div class="section-header">
+                                    <i class="fas fa-user-md"></i>
+                                    <span>Physical Examination Findings</span>
+                                </div>
+                                <div class="section-content">
+                                    <div class="examination-findings">
+                                        <div class="finding-row">
+                                            <span class="finding-label">General Appearance:</span>
+                                            <span class="finding-value" id="summary-gen-appearance">-</span>
+                                        </div>
+                                        <div class="finding-row">
+                                            <span class="finding-label">Skin:</span>
+                                            <span class="finding-value" id="summary-skin">-</span>
+                                        </div>
+                                        <div class="finding-row">
+                                            <span class="finding-label">HEENT:</span>
+                                            <span class="finding-value" id="summary-heent">-</span>
+                                        </div>
+                                        <div class="finding-row">
+                                            <span class="finding-label">Heart and Lungs:</span>
+                                            <span class="finding-value" id="summary-heart-lungs">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Assessment & Conclusion -->
+                            <div class="report-section">
+                                <div class="section-header">
+                                    <i class="fas fa-clipboard-check"></i>
+                                    <span>Assessment & Conclusion</span>
+                                </div>
+                                <div class="section-content">
+                                    <div class="assessment-content">
+                                        <div class="assessment-result">
+                                            <span class="result-label">Medical Assessment:</span>
+                                            <span class="result-value" id="summary-remarks">-</span>
+                                        </div>
+                                        <div class="assessment-reason" style="display: none;">
+                                            <span class="reason-label">Reason:</span>
+                                            <span class="reason-value" id="summary-reason">-</span>
+                                        </div>
+                                        <div class="assessment-collection">
+                                            <span class="collection-label">Blood Collection:</span>
+                                            <span class="collection-value" id="summary-blood-bag">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Signature Section -->
+                            <div class="report-signature">
+                                <div class="signature-content">
+                                    <div class="signature-line">
+                                        <span>Examining Physician</span>
+                                        <div class="signature-space"></div>
+                                    </div>
+                                    <div class="signature-note">
+                                        This examination was conducted in accordance with Philippine Red Cross standards and protocols.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Navigation -->
+                <div class="physical-modal-footer">
+                    <div class="physical-nav-buttons">
+                        <button type="button" class="btn btn-outline-secondary physical-cancel-btn">
+                            <i class="fas fa-times me-2"></i>Cancel
+                        </button>
+                        <button type="button" class="btn btn-outline-danger physical-prev-btn" style="display: none;">
+                            <i class="fas fa-arrow-left me-2"></i>Previous
+                        </button>
+                        <button type="button" class="btn btn-danger physical-next-btn">
+                            <i class="fas fa-arrow-right me-2"></i>Next
+                        </button>
+                        <button type="button" class="btn btn-success physical-submit-btn" style="display: none;">
+                            <i class="fas fa-check me-2"></i>Submit Physical Examination
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
 
     <script>
         
@@ -1227,29 +2556,24 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 }, 300);
             }
 
-            // Yes Button (Triggers Loading Spinner & Redirects)
+            // Yes Button (Triggers Physical Examination Modal)
             confirmButton.addEventListener("click", function() {
                 closeModal();
-                loadingSpinner.style.display = "block";
                 
                 if (!currentScreeningData || !currentScreeningData.screening_id || !currentScreeningData.donor_form_id) {
                     console.error("Missing required screening data");
                     alert("Error: Missing required screening data. Please try again.");
-                    loadingSpinner.style.display = "none";
                     return;
                 }
                 
-                // Use direct redirection instead of form submission
-                setTimeout(() => {
-                    loadingSpinner.style.display = "none";
-                    
-                    console.log("Redirecting to screening page");
-                    // Direct navigation using window.location with query parameters
-                    window.location.href = '../../src/views/forms/medical-history.php' + 
-                        '?screening_id=' + encodeURIComponent(currentScreeningData.screening_id) + 
-                        '&donor_id=' + encodeURIComponent(currentScreeningData.donor_form_id) + 
-                        '&t=' + new Date().getTime(); // Add timestamp to prevent caching
-                }, 1000);
+                // Open the Physical Examination modal
+                console.log("Opening Physical Examination modal with data:", currentScreeningData);
+                if (window.physicalExaminationModal) {
+                    window.physicalExaminationModal.openModal(currentScreeningData);
+                } else {
+                    console.error("Physical examination modal not initialized");
+                    alert("Error: Modal not properly initialized. Please refresh the page.");
+                }
             });
 
             // No Button (Closes Modal)

@@ -2,16 +2,16 @@
 header('Content-Type: application/json');
 require_once '../conn/db_conn.php';
 
-if (!isset($_GET['donor_id'])) {
-    echo json_encode(['success' => false, 'message' => 'Donor ID is required']);
+if (!isset($_GET['screening_id'])) {
+    echo json_encode(['success' => false, 'message' => 'Screening ID is required']);
     exit();
 }
 
-$donor_id = $_GET['donor_id'];
+$screening_id = $_GET['screening_id'];
 
 try {
-    // Fetch donor form data
-    $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select=*&donor_id=eq.' . $donor_id);
+    // Fetch screening form data
+    $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=*&screening_id=eq.' . $screening_id);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'apikey: ' . SUPABASE_API_KEY,
@@ -31,14 +31,14 @@ try {
                 'data' => $data[0]
             ]);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Donor not found']);
+            echo json_encode(['success' => false, 'message' => 'Screening not found']);
         }
     } else {
-        throw new Exception('Failed to fetch donor data. HTTP Code: ' . $http_code);
+        throw new Exception('Failed to fetch screening data. HTTP Code: ' . $http_code);
     }
 
 } catch (Exception $e) {
-    error_log('Error in get_donor_details.php: ' . $e->getMessage());
+    error_log('Error in get_screening_details.php: ' . $e->getMessage());
     echo json_encode([
         'success' => false,
         'message' => $e->getMessage()
