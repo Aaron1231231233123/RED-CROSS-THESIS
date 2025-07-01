@@ -277,6 +277,7 @@ foreach ($display_exams as &$exam) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <script src="../../assets/js/blood_collection_modal.js"></script>
     <style>
         :root {
             --bg-color: #f5f5f5;
@@ -782,6 +783,839 @@ foreach ($display_exams as &$exam) {
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
+
+        /* Blood Collection Modal Styles */
+        .blood-collection-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .blood-collection-modal.show {
+            opacity: 1;
+        }
+
+        .blood-modal-content {
+            background: white;
+            border-radius: 15px;
+            max-width: 900px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            transform: translateY(-20px);
+            transition: transform 0.3s ease;
+        }
+
+        .blood-collection-modal.show .blood-modal-content {
+            transform: translateY(0);
+        }
+
+        .blood-modal-header {
+            background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 15px 15px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .blood-modal-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .blood-close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.3s ease;
+        }
+
+        .blood-close-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Progress Indicator - Fixed Containment */
+        .blood-progress-container {
+            background: white !important;
+            padding: 20px !important;
+            border-bottom: 1px solid #e9ecef !important;
+            position: relative !important;
+            display: block !important;
+            visibility: visible !important;
+        }
+
+        .blood-progress-steps {
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            position: relative !important;
+            z-index: 2 !important;
+            visibility: visible !important;
+            max-width: 100% !important;
+            margin: 0 auto !important;
+        }
+
+        .blood-step {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            cursor: pointer !important;
+            transition: all 0.3s ease !important;
+        }
+
+        .blood-step-number {
+            width: 40px !important;
+            height: 40px !important;
+            border-radius: 50% !important;
+            background: #e9ecef !important;
+            color: #6c757d !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-weight: bold !important;
+            font-size: 16px !important;
+            transition: all 0.3s ease !important;
+            margin-bottom: 8px !important;
+            border: none !important;
+            box-sizing: border-box !important;
+        }
+
+        .blood-step-label {
+            font-size: 12px;
+            color: #6c757d;
+            font-weight: 500;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .blood-step.active .blood-step-number,
+        .blood-step.completed .blood-step-number {
+            background: #b22222 !important;
+            color: white !important;
+        }
+
+        .blood-step.active .blood-step-label,
+        .blood-step.completed .blood-step-label {
+            color: #b22222 !important;
+            font-weight: 600 !important;
+        }
+
+        .blood-progress-line {
+            position: absolute;
+            top: 40%;
+            left: 20px;
+            right: 20px;
+            height: 2px;
+            background: #e9ecef;
+            transform: translateY(-50%);
+            z-index: 1;
+        }
+
+        .blood-progress-fill {
+            height: 100%;
+            background: #b22222;
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+
+        /* Modal Form */
+        .blood-modal-form {
+            padding: 30px;
+        }
+
+        .blood-step-content {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .blood-step-content.active {
+            display: block;
+        }
+
+        .blood-step-content h4 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.3rem;
+        }
+
+        .blood-step-content p.text-muted {
+            margin-bottom: 25px;
+        }
+
+        /* Collection Overview Styles */
+        .collection-overview {
+            padding: 15px 25px;
+        }
+
+        .donor-section {
+            margin-bottom: 20px;
+        }
+
+        .donor-info-row {
+            padding: 25px 0;
+            border-bottom: 2px solid #f1f3f4;
+        }
+
+        .donor-main-info {
+            width: 100%;
+        }
+
+        .donor-name {
+            color: #721c24;
+            font-weight: 700;
+            margin: 0 0 8px 0;
+            font-size: 1.5rem;
+            letter-spacing: -0.5px;
+        }
+
+        .donor-metadata {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .collection-date {
+            color: #6c757d;
+            font-weight: 500;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .unit-serial-info {
+            color: #721c24;
+            font-weight: 600;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            font-family: 'Courier New', monospace;
+        }
+
+
+
+        .ready-indicator {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 20px 25px;
+            background: #f8fff9;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+        }
+
+        .ready-icon {
+            color: #28a745;
+            font-size: 1.8rem;
+        }
+
+        .ready-text {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .ready-title {
+            color: #28a745;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .ready-subtitle {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+
+        /* Modern Blood Collection Form Styles */
+        .modern-form-container {
+            padding: 25px;
+            background: white;
+            border-radius: 12px;
+        }
+
+        .form-group-modern {
+            margin-bottom: 30px;
+        }
+
+        .form-label-modern {
+            display: flex;
+            align-items: center;
+            font-weight: 600;
+            color: #721c24;
+            margin-bottom: 12px;
+            font-size: 1rem;
+        }
+
+        .form-label-modern i {
+            color: #b22222;
+        }
+
+        .form-row-modern {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .form-input-modern {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .form-input-modern:focus {
+            border-color: #b22222;
+            box-shadow: 0 0 0 3px rgba(178, 34, 34, 0.1);
+            outline: none;
+        }
+
+        .readonly-input {
+            background-color: #f8f9fa !important;
+            color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .form-textarea-modern {
+            width: 100%;
+            min-height: 100px;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            resize: vertical;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        .form-textarea-modern:focus {
+            border-color: #b22222;
+            box-shadow: 0 0 0 3px rgba(178, 34, 34, 0.1);
+            outline: none;
+        }
+
+        /* Blood Bag Grid */
+        .blood-bag-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 15px;
+        }
+
+        .bag-brand-section {
+            border: 2px solid #f0f0f0;
+            border-radius: 12px;
+            padding: 20px;
+            background: #fafafa;
+        }
+
+        .brand-title {
+            color: #721c24;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .bag-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .bag-option {
+            display: block;
+            cursor: pointer;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
+            background: white;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .bag-option:hover {
+            border-color: #b22222;
+            background: #f8f9fa;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(178, 34, 34, 0.15);
+        }
+
+        .bag-option input[type="radio"] {
+            display: none;
+        }
+
+        .bag-option input[type="radio"]:checked + .option-content {
+            color: #b22222;
+        }
+
+        .bag-option:has(input[type="radio"]:checked) {
+            border-color: #b22222;
+            background: #fff5f5;
+            box-shadow: 0 0 0 2px rgba(178, 34, 34, 0.2);
+        }
+
+        .option-content {
+            text-align: center;
+            transition: color 0.3s ease;
+        }
+
+        .option-code {
+            display: block;
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: #721c24;
+            margin-bottom: 2px;
+        }
+
+        .option-name {
+            font-size: 0.85rem;
+            color: #6c757d;
+            font-weight: 500;
+        }
+
+        /* Blood Status Options - Compact Style */
+        .blood-status-options {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .blood-status-card {
+            flex: 1;
+            display: block;
+            cursor: pointer;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px 16px;
+            background: white;
+            transition: all 0.3s ease;
+            text-align: center;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .blood-status-card:hover {
+            border-color: #b22222;
+            box-shadow: 0 2px 8px rgba(178, 34, 34, 0.15);
+            transform: translateY(-1px);
+        }
+
+        .blood-status-card input[type="radio"] {
+            display: none;
+        }
+
+        .blood-status-card input[type="radio"]:checked + .blood-status-content {
+            color: #b22222;
+        }
+
+        .blood-status-card:has(input[type="radio"]:checked) {
+            border-color: #b22222 !important;
+            border-width: 2px;
+            background: white;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .blood-status-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        /* Fallback for browsers that don't support :has() */
+        .blood-status-card.selected {
+            border-color: #b22222 !important;
+            border-width: 2px;
+            background: white;
+            box-shadow: none;
+            transform: none;
+        }
+
+        /* Blood Step Content - Match Physical Exam Style */
+        .blood-step-content h4 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.3rem;
+        }
+
+        .blood-step-content p.text-muted {
+            margin-bottom: 15px;
+        }
+
+        /* Blood Collection Report Styles */
+        .blood-collection-report {
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 30px;
+            border: 1px solid #e9ecef;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        /* Report Header */
+        .blood-report-header {
+            border-bottom: 2px solid #b22222;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .blood-report-title h5 {
+            color: #b22222;
+            font-weight: 700;
+            margin: 0 0 10px 0;
+            font-size: 1.3rem;
+        }
+        
+        .blood-report-meta {
+            display: flex;
+            justify-content: space-between;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        
+        .blood-report-phlebotomist {
+            font-weight: 500;
+        }
+        
+        .blood-report-date {
+            font-style: italic;
+        }
+        
+        /* Report Sections */
+        .blood-report-section {
+            margin-bottom: 30px;
+        }
+        
+        .blood-section-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #495057;
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            padding: 10px 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .blood-section-header i {
+            color: #b22222;
+            font-size: 1.2rem;
+        }
+        
+        .blood-section-content {
+            padding-left: 25px;
+        }
+        
+        /* Process Grid */
+        .blood-process-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .blood-process-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .blood-process-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .blood-process-value {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #212529;
+        }
+        
+        .blood-process-unit {
+            color: #6c757d;
+            font-size: 0.85rem;
+            font-style: italic;
+        }
+        
+        /* Time Grid */
+        .blood-time-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .blood-time-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .blood-time-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .blood-time-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #212529;
+            font-family: 'Courier New', monospace;
+        }
+        
+        /* Results Content */
+        .blood-results-content {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .blood-result-item {
+            display: grid;
+            grid-template-columns: 180px 1fr;
+            gap: 15px;
+            padding: 10px 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+        
+        .blood-result-item:last-child {
+            border-bottom: none;
+        }
+        
+        .blood-result-label {
+            color: #495057;
+            font-weight: 500;
+        }
+        
+        .blood-result-value {
+            color: #212529;
+            font-weight: 600;
+        }
+        
+        /* Signature Section */
+        .blood-report-signature {
+            margin-top: 40px;
+            padding-top: 25px;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        .blood-signature-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: end;
+            margin-bottom: 15px;
+        }
+        
+        .blood-signature-line span {
+            color: #495057;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+        
+        .blood-signature-space {
+            flex: 1;
+            border-bottom: 1px solid #6c757d;
+            margin: 0 20px 5px 20px;
+            max-width: 300px;
+        }
+        
+        .blood-signature-note {
+            color: #6c757d;
+            font-size: 0.8rem;
+            font-style: italic;
+            text-align: center;
+            line-height: 1.4;
+        }
+
+        /* Helper Text */
+        .form-text {
+            margin-top: 5px;
+            font-size: 0.85rem;
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        /* Progress Line Improvements */
+        .blood-progress-steps {
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .blood-bag-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .form-row-modern {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+
+            .bag-options {
+                grid-template-columns: 1fr;
+            }
+
+            .blood-status-options {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .blood-progress-steps {
+                flex-wrap: wrap;
+                gap: 5px;
+                justify-content: center;
+            }
+
+            .blood-step-label {
+                font-size: 10px;
+            }
+
+            /* Blood Collection Report Mobile */
+            .blood-collection-report {
+                padding: 20px;
+            }
+            
+            .blood-report-meta {
+                flex-direction: column;
+                gap: 5px;
+                align-items: flex-start;
+            }
+            
+            .blood-process-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            
+            .blood-time-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            
+            .blood-result-item {
+                grid-template-columns: 1fr;
+                gap: 5px;
+            }
+            
+            .blood-result-label {
+                font-weight: 600;
+                color: #b22222;
+            }
+            
+            .blood-signature-line {
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+            }
+            
+            .blood-signature-space {
+                width: 200px;
+                margin: 0;
+            }
+        }
+
+        /* Modal Footer */
+        .blood-modal-footer {
+            padding: 1.5rem;
+            border-top: 1px solid #e9ecef;
+            background-color: white;
+            border-radius: 0 0 15px 15px;
+        }
+
+        .blood-nav-buttons {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .blood-nav-buttons .btn {
+            padding: 12px 25px;
+            font-weight: 500;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .blood-cancel-btn {
+            margin-right: auto;
+        }
+
+        /* Toast Messages */
+        .blood-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 8px;
+            padding: 15px 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            z-index: 10000;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            border-left: 4px solid #b22222;
+        }
+
+        .blood-toast.show {
+            transform: translateX(0);
+        }
+
+        .blood-toast-success {
+            border-left-color: #28a745;
+        }
+
+        .blood-toast-error {
+            border-left-color: #dc3545;
+        }
+
+        .blood-toast-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .blood-toast-content i {
+            font-size: 1.2rem;
+        }
+
+        .blood-toast-success i {
+            color: #28a745;
+        }
+
+        .blood-toast-error i {
+            color: #dc3545;
+        }
     </style>
 </head>
 <body class="light-mode">
@@ -1061,6 +1895,415 @@ foreach ($display_exams as &$exam) {
             </div>
         </div>
     </div>
+
+    <!-- Blood Collection Modal -->
+    <div class="blood-collection-modal" id="bloodCollectionModal">
+        <div class="blood-modal-content">
+            <div class="blood-modal-header">
+                <h3><i class="fas fa-tint me-2"></i>Blood Collection Form</h3>
+                <button type="button" class="blood-close-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <!-- Progress Indicator -->
+            <div class="blood-progress-container">
+                <div class="blood-progress-steps">
+                    <div class="blood-step active" data-step="1">
+                        <div class="blood-step-number">1</div>
+                        <div class="blood-step-label">Collection Details</div>
+                    </div>
+                    <div class="blood-step" data-step="2">
+                        <div class="blood-step-number">2</div>
+                        <div class="blood-step-label">Blood Bag</div>
+                    </div>
+                    <div class="blood-step" data-step="3">
+                        <div class="blood-step-number">3</div>
+                        <div class="blood-step-label">Collection Process</div>
+                    </div>
+                    <div class="blood-step" data-step="4">
+                        <div class="blood-step-number">4</div>
+                        <div class="blood-step-label">Results</div>
+                    </div>
+                    <div class="blood-step" data-step="5">
+                        <div class="blood-step-number">5</div>
+                        <div class="blood-step-label">Review & Submit</div>
+                    </div>
+                </div>
+                <div class="blood-progress-line">
+                    <div class="blood-progress-fill"></div>
+                </div>
+            </div>
+
+            <form id="bloodCollectionForm" class="blood-modal-form">
+                <!-- Step 1: Collection Details -->
+                <div class="blood-step-content active" id="blood-step-1">
+                    <h4>Step 1: Collection Details</h4>
+                    <p class="text-muted">Donor information and readiness verification</p>
+                    
+                    <div class="collection-overview">
+                        <!-- Donor Information Section -->
+                        <div class="donor-section">
+                            <div class="donor-info-row">
+                                <div class="donor-main-info">
+                                    <h4 class="donor-name" id="blood-donor-name-display">Loading...</h4>
+                                                                <div class="donor-metadata">
+                                <span class="collection-date">
+                                    <i class="fas fa-calendar-alt me-2"></i>
+                                    <span id="blood-collection-date-display">Today's Date</span>
+                                </span>
+                                <span class="unit-serial-info">
+                                    <i class="fas fa-barcode me-2"></i>
+                                    <span>Serial: </span>
+                                    <span id="blood-unit-serial-display">Generating...</span>
+                                </span>
+                            </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <!-- Status Section -->
+                        <div class="ready-indicator">
+                            <div class="ready-icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div class="ready-text">
+                                <span class="ready-title">Ready for Blood Collection</span>
+                                <span class="ready-subtitle">Physical examination completed successfully</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Blood Bag Selection -->
+                <div class="blood-step-content" id="blood-step-2">
+                    <h4>Step 2: Blood Bag Selection</h4>
+                    <p class="text-muted">Select the appropriate blood bag type</p>
+                    
+                    <div class="modern-form-container">
+                        <!-- Blood Bag Selection -->
+                        <div class="form-group-modern">
+                            <label class="form-label-modern">
+                                <i class="fas fa-vial me-2"></i>
+                                Blood Bag Type
+                            </label>
+                            <div class="blood-bag-grid">
+                                <!-- KARMI Options -->
+                                <div class="bag-brand-section">
+                                    <h6 class="brand-title">KARMI</h6>
+                                    <div class="bag-options">
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="S-KARMI" required>
+                                            <div class="option-content">
+                                                <span class="option-code">S</span>
+                                                <span class="option-name">Single</span>
+                                            </div>
+                                        </label>
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="D-KARMI" required>
+                                            <div class="option-content">
+                                                <span class="option-code">D</span>
+                                                <span class="option-name">Double</span>
+                                            </div>
+                                        </label>
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="T-KARMI" required>
+                                            <div class="option-content">
+                                                <span class="option-code">T</span>
+                                                <span class="option-name">Triple</span>
+                                            </div>
+                                        </label>
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="Q-KARMI" required>
+                                            <div class="option-content">
+                                                <span class="option-code">Q</span>
+                                                <span class="option-name">Quadruple</span>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- TERUMO Options -->
+                                <div class="bag-brand-section">
+                                    <h6 class="brand-title">TERUMO</h6>
+                                    <div class="bag-options">
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="S-TERUMO" required>
+                                            <div class="option-content">
+                                                <span class="option-code">S</span>
+                                                <span class="option-name">Single</span>
+                                            </div>
+                                        </label>
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="D-TERUMO" required>
+                                            <div class="option-content">
+                                                <span class="option-code">D</span>
+                                                <span class="option-name">Double</span>
+                                            </div>
+                                        </label>
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="T-TERUMO" required>
+                                            <div class="option-content">
+                                                <span class="option-code">T</span>
+                                                <span class="option-name">Triple</span>
+                                            </div>
+                                        </label>
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="Q-TERUMO" required>
+                                            <div class="option-content">
+                                                <span class="option-code">Q</span>
+                                                <span class="option-name">Quadruple</span>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- SPECIAL BAG Options -->
+                                <div class="bag-brand-section">
+                                    <h6 class="brand-title">SPECIAL BAG</h6>
+                                    <div class="bag-options">
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="FK T&B-SPECIAL BAG" required>
+                                            <div class="option-content">
+                                                <span class="option-code">FK</span>
+                                                <span class="option-name">T&B</span>
+                                            </div>
+                                        </label>
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="TRM T&B-SPECIAL BAG" required>
+                                            <div class="option-content">
+                                                <span class="option-code">TRM</span>
+                                                <span class="option-name">T&B</span>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Collection Process -->
+                <div class="blood-step-content" id="blood-step-3">
+                    <h4>Step 3: Collection Process</h4>
+                    <p class="text-muted">Record collection details and timing</p>
+                    
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label for="blood-amount-taken" class="form-label">Amount Collected (Units) *</label>
+                            <input type="number" 
+                                   class="form-control" 
+                                   id="blood-amount-taken" 
+                                   name="amount_taken" 
+                                   min="1" 
+                                   max="10" 
+                                   step="1" 
+                                   placeholder="Enter units" 
+                                   required>
+                            <div class="form-text">Standard: 1 unit (450mL)</div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="blood-start-time" class="form-label">Start Time *</label>
+                            <input type="time" 
+                                   class="form-control" 
+                                   id="blood-start-time" 
+                                   name="start_time" 
+                                   required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="blood-end-time" class="form-label">End Time *</label>
+                            <input type="time" 
+                                   class="form-control" 
+                                   id="blood-end-time" 
+                                   name="end_time" 
+                                   required>
+                            <div class="form-text">Must be at least 5 minutes after start time</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 4: Collection Results -->
+                <div class="blood-step-content" id="blood-step-4">
+                    <h4>Step 4: Collection Results</h4>
+                    <p class="text-muted">Indicate collection outcome</p>
+                    
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label">Collection Status *</label>
+                            <div class="blood-status-options">
+                                <label class="blood-status-card">
+                                    <input type="radio" name="is_successful" value="YES" required>
+                                    <div class="blood-status-content">
+                                        <span>Successful</span>
+                                    </div>
+                                </label>
+                                <label class="blood-status-card">
+                                    <input type="radio" name="is_successful" value="NO" required>
+                                    <div class="blood-status-content">
+                                        <span>Failed</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hidden unit serial number for form submission -->
+                    <input type="hidden" id="blood-unit-serial" name="unit_serial_number">
+
+                    <!-- Reaction Section (Show only if failed) -->
+                    <div class="blood-reaction-section" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="blood-donor-reaction" class="form-label">Donor Reaction</label>
+                                <textarea class="form-control" 
+                                          id="blood-donor-reaction" 
+                                          name="donor_reaction" 
+                                          rows="4" 
+                                          placeholder="Describe any reactions observed"></textarea>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="blood-management-done" class="form-label">Management Done</label>
+                                <textarea class="form-control" 
+                                          id="blood-management-done" 
+                                          name="management_done" 
+                                          rows="4" 
+                                          placeholder="Describe procedures performed"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 5: Review & Submit -->
+                <div class="blood-step-content" id="blood-step-5">
+                    <h4>Step 5: Review & Submit</h4>
+                    <p class="text-muted">Review all information before submitting</p>
+                    
+                    <div class="blood-collection-report">
+                        <!-- Report Header -->
+                        <div class="blood-report-header">
+                            <div class="blood-report-title">
+                                <h5>Blood Collection Report</h5>
+                                <div class="blood-report-meta">
+                                    <span class="blood-report-date"><?php echo date('F j, Y'); ?></span>
+                                    <span class="blood-report-phlebotomist">Phlebotomist: <span id="summary-phlebotomist">Current User</span></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Collection Process Section -->
+                        <div class="blood-report-section">
+                            <div class="blood-section-header">
+                                <i class="fas fa-vial"></i>
+                                <span>Collection Process</span>
+                            </div>
+                            <div class="blood-section-content">
+                                <div class="blood-process-grid">
+                                    <div class="blood-process-item">
+                                        <span class="blood-process-label">Blood Bag Type</span>
+                                        <span class="blood-process-value" id="summary-blood-bag">-</span>
+                                    </div>
+                                    <div class="blood-process-item">
+                                        <span class="blood-process-label">Amount Collected</span>
+                                        <span class="blood-process-value" id="summary-amount">-</span>
+                                        <span class="blood-process-unit">units</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Time Records Section -->
+                        <div class="blood-report-section">
+                            <div class="blood-section-header">
+                                <i class="fas fa-clock"></i>
+                                <span>Time Records</span>
+                            </div>
+                            <div class="blood-section-content">
+                                <div class="blood-time-grid">
+                                    <div class="blood-time-item">
+                                        <span class="blood-time-label">Start Time</span>
+                                        <span class="blood-time-value" id="summary-start-time">-</span>
+                                    </div>
+                                    <div class="blood-time-item">
+                                        <span class="blood-time-label">End Time</span>
+                                        <span class="blood-time-value" id="summary-end-time">-</span>
+                                    </div>
+                                    <div class="blood-time-item">
+                                        <span class="blood-time-label">Duration</span>
+                                        <span class="blood-time-value" id="summary-duration">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Collection Results Section -->
+                        <div class="blood-report-section">
+                            <div class="blood-section-header">
+                                <i class="fas fa-clipboard-check"></i>
+                                <span>Collection Results</span>
+                            </div>
+                            <div class="blood-section-content">
+                                <div class="blood-results-content">
+                                    <div class="blood-result-item">
+                                        <span class="blood-result-label">Collection Status:</span>
+                                        <span class="blood-result-value" id="summary-successful">-</span>
+                                    </div>
+                                    <div class="blood-result-item">
+                                        <span class="blood-result-label">Unit Serial Number:</span>
+                                        <span class="blood-result-value" id="summary-serial-number">-</span>
+                                    </div>
+                                    <div class="blood-result-item" id="summary-reaction-section" style="display: none;">
+                                        <span class="blood-result-label">Donor Reaction:</span>
+                                        <span class="blood-result-value" id="summary-reaction">-</span>
+                                    </div>
+                                    <div class="blood-result-item" id="summary-management-section" style="display: none;">
+                                        <span class="blood-result-label">Management Done:</span>
+                                        <span class="blood-result-value" id="summary-management">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Signature Section -->
+                        <div class="blood-report-signature">
+                            <div class="blood-signature-content">
+                                <div class="blood-signature-line">
+                                    <span>Collected by</span>
+                                    <div class="blood-signature-space"></div>
+                                </div>
+                                <div class="blood-signature-note">
+                                    This collection was performed in accordance with Philippine Red Cross standards and protocols.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Navigation -->
+                <div class="blood-modal-footer">
+                    <div class="blood-nav-buttons">
+                        <button type="button" class="btn btn-outline-secondary blood-cancel-btn">
+                            <i class="fas fa-times me-2"></i>Cancel
+                        </button>
+                        <button type="button" class="btn btn-outline-danger blood-prev-btn" style="display: none;">
+                            <i class="fas fa-arrow-left me-2"></i>Previous
+                        </button>
+                        <button type="button" class="btn btn-danger blood-next-btn">
+                            <i class="fas fa-arrow-right me-2"></i>Next
+                        </button>
+                        <button type="button" class="btn btn-success blood-submit-btn" style="display: none;">
+                            <i class="fas fa-check me-2"></i>Submit Blood Collection
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+    </div>
+
     <script>
         function showConfirmationModal() {
             const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
@@ -1118,7 +2361,7 @@ foreach ($display_exams as &$exam) {
                 }, 300);
             }
 
-            // Yes Button (Triggers Loading Spinner & Redirects)
+            // Yes Button (Opens Blood Collection Modal)
             confirmButton.addEventListener("click", function() {
                 if (!currentCollectionData) {
                     console.error('No collection data available');
@@ -1126,44 +2369,15 @@ foreach ($display_exams as &$exam) {
                 }
 
                 closeModal();
-                loadingSpinner.style.display = "block";
                 
-                // Create a form to POST donor_id and physical_exam_id to blood-collection-form.php
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = '../../src/views/forms/blood-collection-form.php';
-
-                // Add donor_id and physical_exam_id as hidden inputs
-                const donorIdInput = document.createElement('input');
-                donorIdInput.type = 'hidden';
-                donorIdInput.name = 'donor_id';
-                donorIdInput.value = currentCollectionData.donor_id;
-
-                const physicalExamIdInput = document.createElement('input');
-                physicalExamIdInput.type = 'hidden';
-                physicalExamIdInput.name = 'physical_exam_id';
-                physicalExamIdInput.value = currentCollectionData.physical_exam_id;
-                
-                // Add role_id=3 (staff) as hidden input
-                const roleIdInput = document.createElement('input');
-                roleIdInput.type = 'hidden';
-                roleIdInput.name = 'role_id';
-                roleIdInput.value = '3';
-                
-                // Add a flag indicating we're coming from the staff dashboard
-                const fromDashboardInput = document.createElement('input');
-                fromDashboardInput.type = 'hidden';
-                fromDashboardInput.name = 'from_dashboard';
-                fromDashboardInput.value = 'staff_blood_collection';
-
-                form.appendChild(donorIdInput);
-                form.appendChild(physicalExamIdInput);
-                form.appendChild(roleIdInput);
-                form.appendChild(fromDashboardInput);
-                document.body.appendChild(form);
-
-                // Only submit this form to open the blood collection form for user input
-                form.submit();
+                // Open the Blood Collection modal
+                console.log("Opening Blood Collection modal with data:", currentCollectionData);
+                if (window.bloodCollectionModal) {
+                    window.bloodCollectionModal.openModal(currentCollectionData);
+                } else {
+                    console.error("Blood collection modal not initialized");
+                    alert("Error: Modal not properly initialized. Please refresh the page.");
+                }
             });
 
             // No Button (Closes Modal)
