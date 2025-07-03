@@ -129,7 +129,7 @@ foreach ($physical_exam_records as $exam) {
     if (!isset($donor_latest_exams[$donor_id]) || 
         strtotime($exam['created_at']) > strtotime($donor_latest_exams[$donor_id]['created_at'])) {
         $donor_latest_exams[$donor_id] = $exam;
-    }
+    }   
 }
 
 

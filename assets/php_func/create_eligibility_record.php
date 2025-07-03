@@ -146,6 +146,34 @@ function createEligibilityRecord($data) {
             $data['screening_id'] = $screeningId;
         }
         
+        // Check if eligibility record already exists for this donor
+        $checkCurl = curl_init();
+        curl_setopt_array($checkCurl, [
+            CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility?donor_id=eq." . $data['donor_id'] . "&select=eligibility_id,status",
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                "apikey: " . SUPABASE_API_KEY,
+                "Authorization: Bearer " . SUPABASE_API_KEY,
+                "Content-Type: application/json"
+            ],
+        ]);
+        
+        $checkResponse = curl_exec($checkCurl);
+        $checkErr = curl_error($checkCurl);
+        curl_close($checkCurl);
+        
+        if (!$checkErr) {
+            $existingEligibility = json_decode($checkResponse, true);
+            if (is_array($existingEligibility) && !empty($existingEligibility)) {
+                error_log("Eligibility record already exists for donor_id: " . $data['donor_id']);
+                return [
+                    "success" => false, 
+                    "message" => "Eligibility record already exists for this donor",
+                    "existing_eligibility_id" => $existingEligibility[0]['eligibility_id']
+                ];
+            }
+        }
+        
         // Now create the eligibility record
         $insertCurl = curl_init();
         curl_setopt_array($insertCurl, [

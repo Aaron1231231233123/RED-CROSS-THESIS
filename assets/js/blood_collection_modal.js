@@ -514,7 +514,20 @@ class BloodCollectionModal {
                     window.location.reload(); // Refresh the page to show updated data
                 }, 2000);
             } else {
-                throw new Error(result.error || 'Failed to record blood collection');
+                // Handle specific error types
+                const errorMessage = result.error || result.message || 'Failed to record blood collection';
+                
+                if (errorMessage.includes('already exists')) {
+                    this.showToast('This record has already been processed. Refreshing page...', 'warning');
+                    
+                    // Close modal and refresh for duplicate errors
+                    setTimeout(() => {
+                        this.closeModal();
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    throw new Error(errorMessage);
+                }
             }
 
         } catch (error) {

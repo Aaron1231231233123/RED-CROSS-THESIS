@@ -56,7 +56,12 @@ if (isset($data['donor_id']) && !empty($data['donor_id'])) {
                         error_log("Donor status is now: " . $result['status']);
                     }
                 } else {
-                    error_log("Failed to create/update eligibility record: " . ($result['error'] ?? 'Unknown error'));
+                    $errorMessage = $result['error'] ?? $result['message'] ?? 'Unknown error';
+                    if (strpos($errorMessage, 'already exists') !== false) {
+                        error_log("Eligibility record already exists for donor ID: $donor_id - skipping creation");
+                    } else {
+                        error_log("Failed to create/update eligibility record: " . $errorMessage);
+                    }
                 }
             }
             

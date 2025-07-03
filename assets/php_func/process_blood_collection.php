@@ -6,18 +6,49 @@ header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['success' => false, 'error' => 'Method not allowed']);
+    echo json_encode(['success' => false, 'message' => 'Method not allowed']);
     exit;
 }
 
-try {
-    // Get JSON input
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    if (!$input) {
-        throw new Exception('Invalid JSON input');
-    }
+$input = json_decode(file_get_contents('php://input'), true);
 
+if (!$input) {
+    echo json_encode(['success' => false, 'message' => 'Invalid JSON data']);
+    exit;
+}
+
+$physical_exam_id = $input['physical_exam_id'] ?? null;
+
+if (!$physical_exam_id) {
+    echo json_encode(['success' => false, 'message' => 'Physical exam ID is required']);
+    exit;
+}
+
+// Check if eligibility record already exists for this physical exam
+$ch_check_eligibility = curl_init(SUPABASE_URL . '/rest/v1/eligibility?physical_exam_id=eq.' . $physical_exam_id . '&select=eligibility_id,donor_id');
+curl_setopt($ch_check_eligibility, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch_check_eligibility, CURLOPT_HTTPHEADER, [
+    'apikey: ' . SUPABASE_API_KEY,
+    'Authorization: Bearer ' . SUPABASE_API_KEY
+]);
+
+$existing_eligibility_response = curl_exec($ch_check_eligibility);
+$existing_eligibility_http_code = curl_getinfo($ch_check_eligibility, CURLINFO_HTTP_CODE);
+curl_close($ch_check_eligibility);
+
+if ($existing_eligibility_http_code === 200) {
+    $existing_eligibility = json_decode($existing_eligibility_response, true);
+    if (!empty($existing_eligibility)) {
+        echo json_encode([
+            'success' => false, 
+            'message' => 'Eligibility record already exists for this physical examination',
+            'existing_eligibility_id' => $existing_eligibility[0]['eligibility_id']
+        ]);
+        exit;
+    }
+}
+
+try {
     // Validate required fields
     $required_fields = [
         'physical_exam_id',
