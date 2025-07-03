@@ -1747,25 +1747,13 @@ foreach ($display_exams as $index => $exam) {
                                     $displayed_donors = []; // Final safety check for duplicates
                                     
                                     foreach ($display_exams as $exam) {
-                                        // Debug: Track each exam being processed
-                                        if (isset($_GET['debug']) && $_GET['debug'] == '1') {
-                                            $debug_name = ($exam['donor_form']['surname'] ?? 'NULL') . ', ' . ($exam['donor_form']['first_name'] ?? 'NULL');
-                                            echo "<!-- PROCESSING: Donor ID {$exam['donor_id']} - {$debug_name} - Exam ID {$exam['physical_exam_id']} -->\n";
-                                        }
-                                        
                                         // Validate exam data integrity
                                         if (empty($exam['physical_exam_id']) || empty($exam['donor_id'])) {
-                                            if (isset($_GET['debug']) && $_GET['debug'] == '1') {
-                                                echo "<!-- SKIPPED: Missing exam or donor ID -->\n";
-                                            }
                                             continue; // Skip invalid records
                                         }
                                         
                                         // Final duplicate check based on donor_id
                                         if (isset($displayed_donors[$exam['donor_id']])) {
-                                            if (isset($_GET['debug']) && $_GET['debug'] == '1') {
-                                                echo "<!-- SKIPPED: Donor ID {$exam['donor_id']} already displayed -->\n";
-                                            }
                                             continue; // Skip if this donor is already displayed
                                         }
                                         $displayed_donors[$exam['donor_id']] = true;
@@ -1775,9 +1763,6 @@ foreach ($display_exams as $index => $exam) {
                                         
                                         // Validate donor form data
                                         if (empty($donor_form) || !is_array($donor_form)) {
-                                            if (isset($_GET['debug']) && $_GET['debug'] == '1') {
-                                                echo "<!-- SKIPPED: Donor ID {$exam['donor_id']} - Invalid donor form data -->\n";
-                                            }
                                             continue; // Skip if donor form data is missing or invalid
                                         }
                                         
@@ -1786,9 +1771,6 @@ foreach ($display_exams as $index => $exam) {
                                         
                                         // Skip if both names are "Unknown" (indicating missing data)
                                         if ($surname === 'Unknown' && $first_name === 'Unknown') {
-                                            if (isset($_GET['debug']) && $_GET['debug'] == '1') {
-                                                echo "<!-- SKIPPED: Donor ID {$exam['donor_id']} - Both names are Unknown -->\n";
-                                            }
                                             continue;
                                         }
                                         
@@ -1834,17 +1816,10 @@ foreach ($display_exams as $index => $exam) {
                                         ];
                                         $data_exam = htmlspecialchars(json_encode($modal_data, JSON_UNESCAPED_UNICODE));
                                         
-                                        // Debug: Output what we're about to display
-                                        if (isset($_GET['debug']) && $_GET['debug'] == '1') {
-                                            echo "<!-- ✅ DISPLAYING ROW {$counter}: Donor ID {$donor_id} - {$surname}, {$first_name} - Exam ID {$physical_exam_id} -->\n";
-                                        }
-                                        
-                                        $debug_visible = (isset($_GET['debug']) && $_GET['debug'] == '1') ? " [ID:{$donor_id}]" : "";
-                                        
                                         echo "<tr class='clickable-row' data-examination='{$data_exam}'>
                                             <td>{$counter}</td>
                                             <td>{$created_date}</td>
-                                            <td>{$surname}{$debug_visible}</td>
+                                            <td>{$surname}</td>
                                             <td>{$first_name}</td>
                                             <td>{$status}</td>
                                             <td>{$result}</td>
@@ -1862,12 +1837,6 @@ foreach ($display_exams as $index => $exam) {
                                     }
                                 } else {
                                     echo '<tr><td colspan="8" class="text-center text-muted">No records found for current filter</td></tr>';
-                                }
-                                
-                                // Debug: Show actual rows displayed if debug mode is enabled
-                                if (isset($_GET['debug']) && $_GET['debug'] == '1') {
-                                    $actual_displayed = isset($displayed_donors) ? count($displayed_donors) : 0;
-                                    echo "<!-- TABLE DISPLAY DEBUG: Actual rows displayed: {$actual_displayed} -->";
                                 }
                                 ?>
                             </tbody>
@@ -2404,7 +2373,6 @@ foreach ($display_exams as $index => $exam) {
                 document.querySelectorAll(".clickable-row").forEach(row => {
                     row.addEventListener("click", function() {
                         currentCollectionData = JSON.parse(this.dataset.examination);
-                        console.log("Selected physical exam data:", currentCollectionData); // Debug log
                         confirmationDialog.classList.remove("hide");
                         confirmationDialog.classList.add("show");
                         confirmationDialog.style.display = "block";
@@ -2433,7 +2401,6 @@ foreach ($display_exams as $index => $exam) {
                 closeModal();
                 
                 // Open the Blood Collection modal
-                console.log("Opening Blood Collection modal with data:", currentCollectionData);
                 if (window.bloodCollectionModal) {
                     window.bloodCollectionModal.openModal(currentCollectionData);
                 } else {
@@ -2483,5 +2450,4 @@ foreach ($display_exams as $index => $exam) {
         });
     </script>
 </body>
-</html>
 </html>

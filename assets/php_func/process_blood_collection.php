@@ -82,6 +82,24 @@ try {
     if (!empty($existing_unit)) {
         throw new Exception('This unit serial number is already in use. Please use a unique serial number.');
     }
+    
+    // Check if blood collection already exists for this physical exam
+    $physical_exam_check_ch = curl_init();
+    curl_setopt_array($physical_exam_check_ch, [
+        CURLOPT_URL => SUPABASE_URL . '/rest/v1/blood_collection?physical_exam_id=eq.' . urlencode($input['physical_exam_id']),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY
+        ]
+    ]);
+    $physical_exam_check_response = curl_exec($physical_exam_check_ch);
+    curl_close($physical_exam_check_ch);
+
+    $existing_collection = json_decode($physical_exam_check_response, true);
+    if (!empty($existing_collection)) {
+        throw new Exception('Blood collection already exists for this physical examination.');
+    }
 
     // Convert times to proper timestamp format
     $today = date('Y-m-d');
@@ -173,6 +191,30 @@ try {
         $blood_collection_id = $collection_response[0]['blood_collection_id'] ?? null;
         
         if ($blood_collection_id) {
+            // Check if eligibility record already exists for this physical exam
+            $eligibility_check_ch = curl_init();
+            curl_setopt_array($eligibility_check_ch, [
+                CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility?physical_exam_id=eq." . urlencode($input['physical_exam_id']),
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY
+                ]
+            ]);
+            $eligibility_check_response = curl_exec($eligibility_check_ch);
+            curl_close($eligibility_check_ch);
+            
+            $existing_eligibility = json_decode($eligibility_check_response, true);
+            if (!empty($existing_eligibility)) {
+                // Eligibility record already exists, don't create another
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Blood collection recorded successfully (eligibility already exists)',
+                    'blood_collection_id' => $blood_collection_id
+                ]);
+                exit;
+            }
+            
             // Create eligibility record
             $screening_ch = curl_init();
             curl_setopt_array($screening_ch, [

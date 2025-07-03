@@ -4,6 +4,7 @@ class BloodCollectionModal {
         this.currentStep = 1;
         this.totalSteps = 5;
         this.bloodCollectionData = null;
+        this.isSubmitting = false; // Prevent duplicate submissions
         this.init();
     }
 
@@ -37,7 +38,25 @@ class BloodCollectionModal {
 
         if (prevBtn) prevBtn.addEventListener('click', () => this.previousStep());
         if (nextBtn) nextBtn.addEventListener('click', () => this.nextStep());
-        if (submitBtn) submitBtn.addEventListener('click', () => this.submitForm());
+        if (submitBtn) {
+            // Add debounced click handler to prevent rapid double-clicks
+            let submitTimeout = null;
+            submitBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Clear any existing timeout
+                if (submitTimeout) {
+                    clearTimeout(submitTimeout);
+                }
+                
+                // Add a small delay to prevent rapid clicks
+                submitTimeout = setTimeout(() => {
+                    this.submitForm();
+                    submitTimeout = null;
+                }, 300);
+            });
+        }
         if (cancelBtn) cancelBtn.addEventListener('click', () => this.closeModal());
         if (closeBtn) closeBtn.addEventListener('click', () => this.closeModal());
 
@@ -161,8 +180,10 @@ class BloodCollectionModal {
                        (today.getMonth() + 1).toString().padStart(2, '0') + 
                        today.getDate().toString().padStart(2, '0');
         
-        // Generate random sequence for demo (in real implementation, should be sequential)
-        const sequence = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
+        // Generate more unique sequence using timestamp + random
+        const timestamp = Date.now().toString().slice(-4); // Last 4 digits of timestamp
+        const random = Math.floor(Math.random() * 99).toString().padStart(2, '0');
+        const sequence = timestamp + random;
         const serialNumber = `BC-${dateStr}-${sequence}`;
         
         const serialInput = document.getElementById('blood-unit-serial');
@@ -180,6 +201,12 @@ class BloodCollectionModal {
     openModal(collectionData) {
         this.bloodCollectionData = collectionData;
         this.currentStep = 1;
+        
+        // Reset submission flag when opening modal
+        this.isSubmitting = false;
+        
+        // Generate new serial number for each modal opening
+        this.generateUnitSerialNumber();
         
         // Populate summary data
         this.populateSummary();
@@ -446,15 +473,24 @@ class BloodCollectionModal {
     }
 
     async submitForm() {
+        // Prevent duplicate submissions
+        if (this.isSubmitting) {
+            console.log('Form is already being submitted, ignoring duplicate request');
+            return;
+        }
+
         try {
+            this.isSubmitting = true;
+            
             const formData = this.getFormData();
             
             // Validate final data
             if (!this.validateFormData(formData)) {
+                this.isSubmitting = false;
                 return;
             }
 
-            // Show loading
+            // Show loading and disable submit button immediately
             this.showLoading(true);
 
             const response = await fetch('../../assets/php_func/process_blood_collection.php', {
@@ -469,6 +505,10 @@ class BloodCollectionModal {
 
             if (result.success) {
                 this.showToast('Blood collection recorded successfully!', 'success');
+                
+                // Disable all form interaction to prevent further submissions
+                this.disableAllFormInteraction();
+                
                 setTimeout(() => {
                     this.closeModal();
                     window.location.reload(); // Refresh the page to show updated data
@@ -480,7 +520,7 @@ class BloodCollectionModal {
         } catch (error) {
             console.error('Error submitting form:', error);
             this.showToast(error.message || 'Error recording blood collection', 'error');
-        } finally {
+            this.isSubmitting = false; // Reset flag on error to allow retry
             this.showLoading(false);
         }
     }
@@ -526,7 +566,16 @@ class BloodCollectionModal {
         const form = document.getElementById('bloodCollectionForm');
         if (form) {
             form.reset();
+            
+            // Re-enable all form elements
+            const formElements = form.querySelectorAll('input, select, textarea, button');
+            formElements.forEach(element => {
+                element.disabled = false;
+            });
         }
+        
+        // Reset submission flag
+        this.isSubmitting = false;
         
         // Reset progress
         this.currentStep = 1;
@@ -543,6 +592,22 @@ class BloodCollectionModal {
             option.classList.remove('selected');
         });
         
+        // Re-enable and reset navigation buttons
+        const navButtons = document.querySelectorAll('.blood-prev-btn, .blood-next-btn, .blood-submit-btn, .blood-cancel-btn');
+        navButtons.forEach(btn => {
+            btn.disabled = false;
+            btn.style.opacity = '';
+            btn.style.cursor = '';
+        });
+        
+        // Reset submit button appearance
+        const submitBtn = document.querySelector('.blood-submit-btn');
+        if (submitBtn) {
+            submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submit Blood Collection';
+            submitBtn.classList.remove('btn-outline-success');
+            submitBtn.classList.add('btn-success');
+        }
+        
         // Generate new serial number
         this.generateUnitSerialNumber();
     }
@@ -557,6 +622,33 @@ class BloodCollectionModal {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submit Blood Collection';
             }
+        }
+    }
+
+    disableAllFormInteraction() {
+        // Disable all form elements
+        const form = document.getElementById('bloodCollectionForm');
+        if (form) {
+            const formElements = form.querySelectorAll('input, select, textarea, button');
+            formElements.forEach(element => {
+                element.disabled = true;
+            });
+        }
+
+        // Disable navigation buttons
+        const navButtons = document.querySelectorAll('.blood-prev-btn, .blood-next-btn, .blood-submit-btn, .blood-cancel-btn');
+        navButtons.forEach(btn => {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            btn.style.cursor = 'not-allowed';
+        });
+
+        // Update submit button to show success state
+        const submitBtn = document.querySelector('.blood-submit-btn');
+        if (submitBtn) {
+            submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submitted Successfully';
+            submitBtn.classList.remove('btn-success');
+            submitBtn.classList.add('btn-outline-success');
         }
     }
 
