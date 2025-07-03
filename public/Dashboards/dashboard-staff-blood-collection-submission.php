@@ -13,7 +13,7 @@ $offset = ($current_page - 1) * $records_per_page;
 
 // Start timing for performance measurement
 $start_time = microtime(true);
-error_log("Starting blood collection submission query at " . date('H:i:s'));
+
 
 // STEP 1: Get all blood collection records to identify physical exams that already have blood collection
 $blood_collection_url = SUPABASE_URL . '/rest/v1/blood_collection?select=physical_exam_id,is_successful,donor_reaction,management_done,status,blood_bag_type,amount_taken,created_at';
@@ -62,19 +62,13 @@ foreach ($blood_collections as $collection) {
             }
         }
         
-        // Log the type and value for debugging
-        error_log("Blood collection physical_exam_id: " . $collection['physical_exam_id'] . 
-                  " (Type: " . gettype($collection['physical_exam_id']) . ")");
     }
 }
 
-// Dump the collected physical exam IDs for debugging
-error_log("Physical exam IDs with blood collection: " . implode(", ", $collected_physical_exam_ids));
-error_log("Found " . count($collected_physical_exam_ids) . " physical exams that already have blood collection");
-error_log("Approved collections: " . count($approved_collections) . ", Declined collections: " . count($declined_collections));
+// STEP 2: Separate queries to avoid JOIN issues
+// Query 1: Get physical examinations
+$physical_exam_url = SUPABASE_URL . '/rest/v1/physical_examination?remarks=eq.Accepted&select=physical_exam_id,donor_id,remarks,blood_bag_type,created_at&order=created_at.desc';
 
-// STEP 2: Get physical examination records with "Accepted" remarks only
-$physical_exam_url = SUPABASE_URL . '/rest/v1/physical_examination?remarks=eq.Accepted&select=physical_exam_id,donor_id,remarks,blood_bag_type,created_at,donor_form(surname,first_name,middle_name,birthdate,age)&order=created_at.desc';
 $ch = curl_init($physical_exam_url);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
@@ -82,47 +76,76 @@ $response = curl_exec($ch);
 $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
-// Check for errors in the physical examination query
 if ($http_code !== 200) {
     error_log("Error fetching physical examinations. HTTP code: " . $http_code);
-    error_log("Response: " . $response);
-    $physical_exams = [];
+    $physical_exam_records = [];
 } else {
-    $physical_exams = json_decode($response, true) ?: [];
+    $physical_exam_records = json_decode($response, true) ?: [];
 }
 
-// Log all physical exam IDs for debugging
-$all_physical_exam_ids = [];
-foreach ($physical_exams as $exam) {
-    if (isset($exam['physical_exam_id'])) {
-        $all_physical_exam_ids[] = $exam['physical_exam_id'];
+// Query 2: Get all donor_form records
+$donor_form_url = SUPABASE_URL . '/rest/v1/donor_form?select=donor_id,surname,first_name,middle_name,birthdate,age';
+
+$ch2 = curl_init($donor_form_url);
+curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch2, CURLOPT_HTTPHEADER, $headers);
+$donor_response = curl_exec($ch2);
+$donor_http_code = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
+curl_close($ch2);
+
+if ($donor_http_code !== 200) {
+    error_log("Error fetching donor forms. HTTP code: " . $donor_http_code);
+    $donor_records = [];
+} else {
+    $donor_records = json_decode($donor_response, true) ?: [];
+}
+
+// Create donor lookup array
+$donor_lookup = [];
+foreach ($donor_records as $donor) {
+    $donor_id = $donor['donor_id'];
+    $donor_lookup[$donor_id] = $donor;
+}
+
+// Manually combine physical_examination with correct donor_form data and deduplicate by donor
+$all_physical_exams = [];
+$donor_latest_exams = []; // Track the latest exam per donor
+
+foreach ($physical_exam_records as $exam) {
+    $donor_id = $exam['donor_id'];
+    
+    // Skip if donor_id is empty or null
+    if (empty($donor_id)) {
+        continue;
+    }
+    
+    if (isset($donor_lookup[$donor_id])) {
+        $exam['donor_form'] = $donor_lookup[$donor_id];
+    } else {
+        $exam['donor_form'] = null;
+    }
+    
+    // Check if this is the latest exam for this donor
+    if (!isset($donor_latest_exams[$donor_id]) || 
+        strtotime($exam['created_at']) > strtotime($donor_latest_exams[$donor_id]['created_at'])) {
+        $donor_latest_exams[$donor_id] = $exam;
     }
 }
-error_log("All physical exam IDs: " . implode(", ", $all_physical_exam_ids));
-error_log("Found " . count($physical_exams) . " physical exams with 'Accepted' status");
 
-// STEP 3: Filter out physical exams that already have blood collection
+
+
+// Use only the latest exam per donor
+$physical_exams = array_values($donor_latest_exams);
+
+// Filter out physical exams that already have blood collection
 $available_exams = [];
 foreach ($physical_exams as $exam) {
-    if (isset($exam['physical_exam_id'])) {
-        // Log the type and value for debugging
-        error_log("Physical exam ID: " . $exam['physical_exam_id'] . 
-                  " (Type: " . gettype($exam['physical_exam_id']) . ")");
-        
-        // Normalize to string for comparison
-        $exam_id_string = (string)$exam['physical_exam_id'];
-        
-        // Check if this physical_exam_id is in the collected list
-        if (!in_array($exam_id_string, $collected_physical_exam_ids)) {
-            $available_exams[] = $exam;
-            error_log("Including exam ID " . $exam['physical_exam_id'] . " (not collected yet)");
-        } else {
-            error_log("Excluding exam ID " . $exam['physical_exam_id'] . " (already has blood collection)");
-        }
+    if (!in_array($exam['physical_exam_id'], $collected_physical_exam_ids)) {
+        $available_exams[] = $exam;
     }
 }
 
-error_log("After filtering, " . count($available_exams) . " physical exams remain available for blood collection");
+
 
 // Calculate incoming count (available exams that haven't been collected yet)
 $incoming_count = count($available_exams);
@@ -140,74 +163,66 @@ foreach ($blood_collections as $collection) {
     }
 }
 
-error_log("Final counts - Incoming: $incoming_count, Approved: $approved_count, Today: $today_count");
-
 // Handle status filtering
 $status_filter = isset($_GET['status']) ? $_GET['status'] : 'incoming';
 
 // Initialize filtered screenings based on status
 switch ($status_filter) {
     case 'active':
-        // Get physical exam IDs with approved blood collection
-        $display_exams = [];
-        
-        // Get the full details of approved blood collections
-        $approved_url = SUPABASE_URL . '/rest/v1/blood_collection?is_successful=eq.true&select=blood_collection_id,physical_exam_id,created_at,physical_examination(donor_id,remarks,blood_bag_type,donor_form(surname,first_name))';
-        $ch = curl_init($approved_url);
+        // Get approved blood collections with physical_exam_id list
+        $approved_collections_url = SUPABASE_URL . '/rest/v1/blood_collection?is_successful=eq.true&select=physical_exam_id,created_at&order=created_at.desc';
+        $ch = curl_init($approved_collections_url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         $response = curl_exec($ch);
         curl_close($ch);
         
-        $approved_data = json_decode($response, true) ?: [];
-        error_log("Fetched " . count($approved_data) . " approved blood collections");
+        $approved_collections = json_decode($response, true) ?: [];
         
-        // Format the data to match our expected structure
-        foreach ($approved_data as $item) {
-            if (isset($item['physical_examination']) && !empty($item['physical_examination'])) {
-                $exam = $item['physical_examination'];
-                $exam['physical_exam_id'] = $item['physical_exam_id'];
-                $exam['created_at'] = $item['created_at'];
-                
-                // Add blood collection data if available
-                $exam_id = (string)$item['physical_exam_id'];
-                if (isset($blood_collection_data[$exam_id])) {
-                    $exam['blood_collection'] = $blood_collection_data[$exam_id];
-                }
-                
+        // Get unique physical_exam_ids that were successfully collected
+        $approved_exam_ids = [];
+        foreach ($approved_collections as $collection) {
+            if (!empty($collection['physical_exam_id'])) {
+                $approved_exam_ids[] = $collection['physical_exam_id'];
+            }
+        }
+        
+        // Filter from the main physical exams data to maintain consistency
+        $display_exams = [];
+        
+        foreach ($physical_exams as $exam) {
+            // Only include exams that have successful blood collections
+            if (in_array($exam['physical_exam_id'], $approved_exam_ids)) {
                 $display_exams[] = $exam;
             }
         }
         break;
         
     case 'today':
-        // Get all blood collections submitted today
-        $display_exams = [];
-        
-        // Get blood collections from today
-        $today_url = SUPABASE_URL . '/rest/v1/blood_collection?created_at=gte.' . $today . 'T00:00:00&created_at=lt.' . date('Y-m-d', strtotime($today . ' +1 day')) . 'T00:00:00&select=blood_collection_id,physical_exam_id,created_at,physical_examination(donor_id,remarks,blood_bag_type,donor_form(surname,first_name))';
-        $ch = curl_init($today_url);
+        // Get today's blood collections with physical_exam_id list
+        $today_collections_url = SUPABASE_URL . '/rest/v1/blood_collection?created_at=gte.' . $today . 'T00:00:00&created_at=lt.' . date('Y-m-d', strtotime($today . ' +1 day')) . 'T00:00:00&select=physical_exam_id,created_at&order=created_at.desc';
+        $ch = curl_init($today_collections_url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         $response = curl_exec($ch);
         curl_close($ch);
         
-        $today_data = json_decode($response, true) ?: [];
-        error_log("Fetched " . count($today_data) . " blood collections from today");
+        $today_collections = json_decode($response, true) ?: [];
         
-        // Format the data to match our expected structure
-        foreach ($today_data as $item) {
-            if (isset($item['physical_examination']) && !empty($item['physical_examination'])) {
-                $exam = $item['physical_examination'];
-                $exam['physical_exam_id'] = $item['physical_exam_id'];
-                $exam['created_at'] = $item['created_at'];
-                
-                // Add blood collection data if available
-                $exam_id = (string)$item['physical_exam_id'];
-                if (isset($blood_collection_data[$exam_id])) {
-                    $exam['blood_collection'] = $blood_collection_data[$exam_id];
-                }
-                
+        // Get unique physical_exam_ids collected today
+        $today_exam_ids = [];
+        foreach ($today_collections as $collection) {
+            if (!empty($collection['physical_exam_id'])) {
+                $today_exam_ids[] = $collection['physical_exam_id'];
+            }
+        }
+        
+        // Filter from the main physical exams data to maintain consistency
+        $display_exams = [];
+        
+        foreach ($physical_exams as $exam) {
+            // Only include exams that have blood collections today
+            if (in_array($exam['physical_exam_id'], $today_exam_ids)) {
                 $display_exams[] = $exam;
             }
         }
@@ -215,11 +230,12 @@ switch ($status_filter) {
         
     case 'incoming':
     default:
+        // Use available exams directly since deduplication is already done at source
         $display_exams = $available_exams;
         break;
 }
 
-// STEP 4: Sort display exams by created_at (FIFO: oldest first)
+// Sort display exams by created_at (FIFO: oldest first)
 usort($display_exams, function($a, $b) {
     $a_time = isset($a['updated_at']) ? strtotime($a['updated_at']) : (isset($a['created_at']) ? strtotime($a['created_at']) : 0);
     $b_time = isset($b['updated_at']) ? strtotime($b['updated_at']) : (isset($b['created_at']) ? strtotime($b['created_at']) : 0);
@@ -240,29 +256,20 @@ $offset = ($current_page - 1) * $records_per_page;
 // Slice the array to get only the records for the current page
 $display_exams = array_slice($display_exams, $offset, $records_per_page);
 
-// Log execution time
+// Calculate execution time
 $end_time = microtime(true);
 $execution_time = ($end_time - $start_time);
-error_log("Query execution time: " . number_format($execution_time, 4) . " seconds");
 
-// Debug output (remove in production)
-if (isset($_GET['debug']) && $_GET['debug'] === '1') {
-    echo "<pre>";
-    echo "Found " . count($physical_exams) . " 'Accepted' physical exams<br>";
-    echo "Found " . count($collected_physical_exam_ids) . " physical exams with blood collection<br>";
-    echo "Available for collection: " . count($available_exams) . " physical exams<br>";
-    echo "Showing " . count($examinations) . " records on this page<br>";
-    echo "</pre>";
-}
+
 
 // Calculate age for each physical examination
-foreach ($display_exams as &$exam) {
+foreach ($display_exams as $index => $exam) {
     if (isset($exam['donor_form'])) {
         // Calculate age if not present but birthdate is available
         if (empty($exam['donor_form']['age']) && !empty($exam['donor_form']['birthdate'])) {
             $birthDate = new DateTime($exam['donor_form']['birthdate']);
             $today = new DateTime();
-            $exam['donor_form']['age'] = $birthDate->diff($today)->y;
+            $display_exams[$index]['donor_form']['age'] = $birthDate->diff($today)->y;
         }
     }
 }
@@ -1678,8 +1685,10 @@ foreach ($display_exams as &$exam) {
             <!-- Main Content -->
             <main class="col-md-9 col-lg-10 main-content">
                 <div class="content-wrapper">
+
+                    
                     <div class="welcome-section">
-                        <h2 class="welcome-title">Welcome, Phlebotomist!</h2>
+                        <h2 class="welcome-title">Blood Collection Management</h2>
                     </div>
                     
                     <!-- Status Cards -->
@@ -1712,11 +1721,9 @@ foreach ($display_exams as &$exam) {
                     
                    
                     <div class="table-responsive">
-                        <?php if (!empty($debug_info)): ?>
-                            <div class="alert alert-info">
-                                <?php echo htmlspecialchars($debug_info); ?>
-                            </div>
-                        <?php endif; ?>
+
+                        
+
                         
                         <table class="dashboard-staff-tables table-hover">
                             <thead>
@@ -1733,86 +1740,134 @@ foreach ($display_exams as &$exam) {
                             </thead>
                             <tbody id="bloodCollectionTableBody">
                                 <?php
+                                
+                                // Use actual database data from $display_exams
                                 if (!empty($display_exams)) {
-                                    $counter = ($current_page - 1) * $records_per_page + 1; // Initialize counter with pagination
-                                foreach ($display_exams as $exam) {
-                                    $donor = $exam['donor_form'] ?? [];
-                                    $created_date = isset($exam['created_at']) ? date('F d, Y', strtotime($exam['created_at'])) : 'N/A';
-                                    $surname = $donor['surname'] ?? '';
-                                    $firstName = $donor['first_name'] ?? '';
+                                    $counter = 1;
+                                    $displayed_donors = []; // Final safety check for duplicates
                                     
-                                    // Determine status and result based on blood collection data
-                                    $status_badge = '';
-                                    $result_badge = '';
-                                    $declaration_badge = '<span class="badge bg-success">Success</span>'; // Always success
-                                    
-                                    // Check if blood collection data exists
-                                    $exam_id = (string)($exam['physical_exam_id'] ?? '');
-                                    $has_collection_data = isset($blood_collection_data[$exam_id]);
-                                    
-                                    if ($has_collection_data) {
-                                        $collection = $blood_collection_data[$exam_id];
+                                    foreach ($display_exams as $exam) {
+                                        // Debug: Track each exam being processed
+                                        if (isset($_GET['debug']) && $_GET['debug'] == '1') {
+                                            $debug_name = ($exam['donor_form']['surname'] ?? 'NULL') . ', ' . ($exam['donor_form']['first_name'] ?? 'NULL');
+                                            echo "<!-- PROCESSING: Donor ID {$exam['donor_id']} - {$debug_name} - Exam ID {$exam['physical_exam_id']} -->\n";
+                                        }
                                         
-                                        // Status based on is_successful
-                                        if (isset($collection['is_successful'])) {
-                                            if ($collection['is_successful'] === true) {
-                                        $status_badge = '<span class="badge bg-success">Success</span>';
-                                    } else {
-                                                $status_badge = '<span class="badge bg-danger">Failed</span>';
+                                        // Validate exam data integrity
+                                        if (empty($exam['physical_exam_id']) || empty($exam['donor_id'])) {
+                                            if (isset($_GET['debug']) && $_GET['debug'] == '1') {
+                                                echo "<!-- SKIPPED: Missing exam or donor ID -->\n";
                                             }
-                                        } else {
-                                            $status_badge = '<span class="badge bg-warning">In Progress</span>';
+                                            continue; // Skip invalid records
                                         }
                                         
-                                        // Result based on collection details - using database fields
-                                        if (isset($collection['is_successful']) && $collection['is_successful'] === true) {
-                                            // Use status field if available, otherwise default to "Collected"
-                                            $result_text = !empty($collection['status']) ? ucfirst($collection['status']) : 'Collected';
-                                            $result_badge = '<span class="badge bg-success">' . $result_text . '</span>';
-                                        } elseif (isset($collection['is_successful']) && $collection['is_successful'] === false) {
-                                            // Use donor_reaction if available, otherwise "Failed"
-                                            $result_text = !empty($collection['donor_reaction']) ? ucfirst($collection['donor_reaction']) : 'Failed';
-                                            $result_badge = '<span class="badge bg-danger">' . $result_text . '</span>';
-                                        } else {
-                                            // Use status field or default to "Processing"
-                                            $result_text = !empty($collection['status']) ? ucfirst($collection['status']) : 'Processing';
-                                            $result_badge = '<span class="badge bg-warning">' . $result_text . '</span>';
+                                        // Final duplicate check based on donor_id
+                                        if (isset($displayed_donors[$exam['donor_id']])) {
+                                            if (isset($_GET['debug']) && $_GET['debug'] == '1') {
+                                                echo "<!-- SKIPPED: Donor ID {$exam['donor_id']} already displayed -->\n";
+                                            }
+                                            continue; // Skip if this donor is already displayed
                                         }
-                                    } else {
-                                        // No collection data yet
-                                        $status_badge = '<span class="badge bg-secondary">Pending</span>';
-                                        $result_badge = '<span class="badge bg-secondary">N/A</span>';
-                                    }
-                                    
-                                    $data_exam = htmlspecialchars(json_encode([
-                                        'donor_id' => $exam['donor_id'] ?? '',
-                                        'physical_exam_id' => $exam['physical_exam_id'] ?? '',
-                                        'created_at' => $exam['created_at'] ?? '',
-                                        'surname' => $surname,
-                                        'first_name' => $firstName
-                                    ]));
-                                    
-                                    echo "<tr class='clickable-row' data-examination='{$data_exam}'>
-                                        <td>{$counter}</td>
-                                        <td>{$created_date}</td>
-                                        <td>" . htmlspecialchars($surname) . "</td>
-                                        <td>" . htmlspecialchars($firstName) . "</td>
-                                        <td>{$status_badge}</td>
-                                        <td>{$result_badge}</td>
-                                        <td>{$declaration_badge}</td>
-                                        <td>
-                                            <button type='button' class='btn btn-info btn-sm view-donor-btn me-1' data-donor-id='{$exam['donor_id']}' title='View Details'>
-                                                <i class='fas fa-eye'></i>
-                                            </button>
-                                            <button type='button' class='btn btn-warning btn-sm edit-donor-btn' data-donor-id='{$exam['donor_id']}' title='Edit'>
-                                                <i class='fas fa-edit'></i>
-                                            </button>
-                                        </td>
-                                    </tr>";
-                                    $counter++; // Increment counter for next row
+                                        $displayed_donors[$exam['donor_id']] = true;
+                                        
+                                        // Get donor information with better null handling
+                                        $donor_form = $exam['donor_form'] ?? [];
+                                        
+                                        // Validate donor form data
+                                        if (empty($donor_form) || !is_array($donor_form)) {
+                                            if (isset($_GET['debug']) && $_GET['debug'] == '1') {
+                                                echo "<!-- SKIPPED: Donor ID {$exam['donor_id']} - Invalid donor form data -->\n";
+                                            }
+                                            continue; // Skip if donor form data is missing or invalid
+                                        }
+                                        
+                                        $surname = htmlspecialchars(trim($donor_form['surname'] ?? 'Unknown'));
+                                        $first_name = htmlspecialchars(trim($donor_form['first_name'] ?? 'Unknown'));
+                                        
+                                        // Skip if both names are "Unknown" (indicating missing data)
+                                        if ($surname === 'Unknown' && $first_name === 'Unknown') {
+                                            if (isset($_GET['debug']) && $_GET['debug'] == '1') {
+                                                echo "<!-- SKIPPED: Donor ID {$exam['donor_id']} - Both names are Unknown -->\n";
+                                            }
+                                            continue;
+                                        }
+                                        
+                                        $physical_exam_id = $exam['physical_exam_id'];
+                                        $donor_id = $exam['donor_id'];
+                                        $created_at = $exam['created_at'];
+                                        
+                                        // Format the date
+                                        $created_date = date('F d, Y', strtotime($created_at));
+                                        
+                                        // Determine status and result based on current filter and blood collection data
+                                        switch($status_filter) {
+                                            case 'incoming':
+                                                $status = '<span class="badge bg-warning">Pending Collection</span>';
+                                                $result = '<span class="badge bg-secondary">Awaiting</span>';
+                                                break;
+                                                
+                                            case 'active':
+                                                $status = '<span class="badge bg-success">Collected</span>';
+                                                $result = '<span class="badge bg-success">Successful</span>';
+                                                break;
+                                                
+                                            case 'today':
+                                                $status = '<span class="badge bg-success">Collected Today</span>';
+                                                $result = '<span class="badge bg-success">Successful</span>';
+                                                break;
+                                                
+                                            default:
+                                                $status = '<span class="badge bg-secondary">Unknown</span>';
+                                                $result = '<span class="badge bg-secondary">N/A</span>';
+                                        }
+                                        
+                                        // Create data for modal with consistent structure
+                                        $modal_data = [
+                                            'donor_id' => $donor_id,
+                                            'physical_exam_id' => $physical_exam_id,
+                                            'created_at' => $created_at,
+                                            'surname' => $donor_form['surname'] ?? 'Unknown',
+                                            'first_name' => $donor_form['first_name'] ?? 'Unknown',
+                                            'middle_name' => $donor_form['middle_name'] ?? '',
+                                            'birthdate' => $donor_form['birthdate'] ?? '',
+                                            'age' => $donor_form['age'] ?? ''
+                                        ];
+                                        $data_exam = htmlspecialchars(json_encode($modal_data, JSON_UNESCAPED_UNICODE));
+                                        
+                                        // Debug: Output what we're about to display
+                                        if (isset($_GET['debug']) && $_GET['debug'] == '1') {
+                                            echo "<!-- ✅ DISPLAYING ROW {$counter}: Donor ID {$donor_id} - {$surname}, {$first_name} - Exam ID {$physical_exam_id} -->\n";
+                                        }
+                                        
+                                        $debug_visible = (isset($_GET['debug']) && $_GET['debug'] == '1') ? " [ID:{$donor_id}]" : "";
+                                        
+                                        echo "<tr class='clickable-row' data-examination='{$data_exam}'>
+                                            <td>{$counter}</td>
+                                            <td>{$created_date}</td>
+                                            <td>{$surname}{$debug_visible}</td>
+                                            <td>{$first_name}</td>
+                                            <td>{$status}</td>
+                                            <td>{$result}</td>
+                                            <td><span class=\"badge bg-success\">Accepted</span></td>
+                                            <td>
+                                                <button type='button' class='btn btn-info btn-sm view-donor-btn me-1' data-donor-id='{$donor_id}' title='View Details'>
+                                                    <i class='fas fa-eye'></i>
+                                                </button>
+                                                <button type='button' class='btn btn-warning btn-sm edit-donor-btn' data-donor-id='{$donor_id}' title='Edit'>
+                                                    <i class='fas fa-edit'></i>
+                                                </button>
+                                            </td>
+                                        </tr>";
+                                        $counter++;
                                     }
                                 } else {
-                                    echo '<tr><td colspan="8" class="text-center">No blood collection records found</td></tr>';
+                                    echo '<tr><td colspan="8" class="text-center text-muted">No records found for current filter</td></tr>';
+                                }
+                                
+                                // Debug: Show actual rows displayed if debug mode is enabled
+                                if (isset($_GET['debug']) && $_GET['debug'] == '1') {
+                                    $actual_displayed = isset($displayed_donors) ? count($displayed_donors) : 0;
+                                    echo "<!-- TABLE DISPLAY DEBUG: Actual rows displayed: {$actual_displayed} -->";
                                 }
                                 ?>
                             </tbody>
@@ -2330,13 +2385,20 @@ foreach ($display_exams as &$exam) {
             let cancelButton = document.getElementById("cancelButton");
             let confirmButton = document.getElementById("confirmButton");
             const searchInput = document.getElementById('searchInput');
-            const searchCategory = document.getElementById('searchCategory');
             const bloodCollectionTableBody = document.getElementById('bloodCollectionTableBody');
             let currentCollectionData = null;
 
-            // Store original rows for search reset
-            const originalRows = Array.from(bloodCollectionTableBody.getElementsByTagName('tr'));
+            // Check if elements exist before proceeding
+            if (!confirmationDialog || !loadingSpinner || !cancelButton || !confirmButton || !searchInput || !bloodCollectionTableBody) {
+                console.error('Required elements not found on page');
+                return;
+            }
 
+            // FIXED: Don't cache rows - always use current table contents
+            
+            // Clear search box to ensure no filters are applied
+            searchInput.value = '';
+            
             // Attach click event to all rows
             function attachRowClickHandlers() {
                 document.querySelectorAll(".clickable-row").forEach(row => {
@@ -2383,56 +2445,26 @@ foreach ($display_exams as &$exam) {
             // No Button (Closes Modal)
             cancelButton.addEventListener("click", closeModal);
 
-            // Search functionality
+            // FIXED: Search functionality - always use current table rows
             function performSearch() {
                 const searchTerm = searchInput.value.toLowerCase().trim();
-                const category = searchCategory.value;
+                
+                // Get current table rows (not cached ones)
+                const currentRows = Array.from(bloodCollectionTableBody.getElementsByTagName('tr'));
                 
                 if (!searchTerm) {
-                    originalRows.forEach(row => row.style.display = '');
+                    currentRows.forEach(row => row.style.display = '');
                     return;
                 }
 
-                originalRows.forEach(row => {
+                currentRows.forEach(row => {
                     const cells = Array.from(row.getElementsByTagName('td'));
-                    let shouldShow = false;
-
-                    if (category === 'all') {
-                        shouldShow = cells.some(cell => 
-                            cell.textContent.toLowerCase().includes(searchTerm)
-                        );
-                    } else {
-                        const columnIndex = {
-                            'surname': 1,
-                            'firstname': 2,
-                            'remarks': 3,
-                            'blood_bag_type': 4
-                        }[category];
-
-                        if (columnIndex !== undefined) {
-                            const cellText = cells[columnIndex].textContent.toLowerCase();
-                            shouldShow = cellText.includes(searchTerm);
-                        }
-                    }
-
+                    const shouldShow = cells.some(cell => 
+                        cell.textContent.toLowerCase().includes(searchTerm)
+                    );
                     row.style.display = shouldShow ? '' : 'none';
                 });
             }
-
-            // Update placeholder based on selected category
-            searchCategory.addEventListener('change', function() {
-                const category = this.value;
-                let placeholder = 'Search by ';
-                switch(category) {
-                    case 'surname': placeholder += 'surname...'; break;
-                    case 'firstname': placeholder += 'first name...'; break;
-                    case 'remarks': placeholder += 'physical exam remarks...'; break;
-                    case 'blood_bag_type': placeholder += 'blood bag type...'; break;
-                    default: placeholder = 'Search records...';
-                }
-                searchInput.placeholder = placeholder;
-                performSearch();
-            });
 
             // Debounce function
             function debounce(func, wait) {
@@ -2448,8 +2480,8 @@ foreach ($display_exams as &$exam) {
 
             // Event listeners
             searchInput.addEventListener('input', debouncedSearch);
-            searchCategory.addEventListener('change', debouncedSearch);
         });
     </script>
 </body>
+</html>
 </html>

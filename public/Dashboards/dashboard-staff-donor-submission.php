@@ -1553,7 +1553,7 @@ select.donor_form_input[disabled] {
     <div class="container-fluid p-0">
         <!-- Header -->
         <div class="dashboard-home-header">
-            <h4 class="header-title">Interviewer Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
+            <h4 class="header-title">Staff Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
             <button class="register-btn" onclick="showConfirmationModal()">
                 Register Donor
             </button>
@@ -1618,7 +1618,7 @@ select.donor_form_input[disabled] {
             <main class="col-md-9 col-lg-10 main-content">
                 <div class="content-wrapper">
                     <div class="welcome-section">
-                        <h2 class="welcome-title">Welcome, Interviewer!</h2>
+                        <h2 class="welcome-title">Welcome, Staff!</h2>
                     </div>
                     
                     <!-- Status Cards -->
@@ -1877,12 +1877,6 @@ select.donor_form_input[disabled] {
                         </div>
                         <div class="col-md-4">
                             <div class="field-group">
-                                <label class="field-label">Telephone</label>
-                                <div class="field-value" name="telephone">-</div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="field-group">
                                 <label class="field-label">Email Address</label>
                                 <div class="field-value" name="email">-</div>
                             </div>
@@ -1890,51 +1884,6 @@ select.donor_form_input[disabled] {
                     </div>
                     </div>
 
-                <!-- Identification Numbers -->
-                <div class="section-card">
-                    <div class="section-header">
-                        <i class="fas fa-id-badge me-2"></i>
-                        Identification Numbers
-                        </div>
-                    <div class="row g-4">
-                        <div class="col-md-4">
-                            <div class="field-group">
-                                <label class="field-label">School ID</label>
-                                <div class="field-value" name="id_school">-</div>
-                    </div>
-                </div>
-                        <div class="col-md-4">
-                            <div class="field-group">
-                                <label class="field-label">Company ID</label>
-                                <div class="field-value" name="id_company">-</div>
-            </div>
-        </div>
-                        <div class="col-md-4">
-                            <div class="field-group">
-                                <label class="field-label">PRC ID</label>
-                                <div class="field-value" name="id_prc">-</div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="field-group">
-                                <label class="field-label">Driver's License</label>
-                                <div class="field-value" name="id_drivers">-</div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="field-group">
-                                <label class="field-label">SSS/GSIS/BIR</label>
-                                <div class="field-value" name="id_sss_gsis_bir">-</div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="field-group">
-                                <label class="field-label">Others</label>
-                                <div class="field-value" name="id_others">-</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
             <div class="modal-footer modern-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
