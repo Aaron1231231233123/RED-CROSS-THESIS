@@ -157,12 +157,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Get interviewer name
             $interviewer_name = getInterviewerName($_SESSION['user_id']);
             
-            echo json_encode([
-                'success' => true,
-                'message' => 'Physical examination submitted successfully',
-                'interviewer_name' => $interviewer_name,
-                'action_performed' => $should_update ? 'updated' : 'created'
-            ]);
+            // Check if this is an accepted examination (don't update eligibility table)
+            $is_accepted = isset($data['is_accepted_examination']) && $data['is_accepted_examination'] === true;
+            $remarks = isset($data['remarks']) ? trim($data['remarks']) : '';
+            
+            if ($is_accepted || strtolower($remarks) === 'accepted') {
+                // For accepted examinations, only update physical_examination table
+                // Do NOT create eligibility record
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Physical examination submitted successfully (Accepted)',
+                    'interviewer_name' => $interviewer_name,
+                    'action_performed' => $should_update ? 'updated' : 'created',
+                    'eligibility_updated' => false,
+                    'note' => 'Eligibility table not updated for accepted examinations'
+                ]);
+            } else {
+                // For non-accepted examinations (deferrals/refused), you would handle eligibility here
+                // But those are handled by the defer modal, not this endpoint
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Physical examination submitted successfully',
+                    'interviewer_name' => $interviewer_name,
+                    'action_performed' => $should_update ? 'updated' : 'created',
+                    'eligibility_updated' => false,
+                    'note' => 'Non-accepted examinations should use defer endpoint'
+                ]);
+            }
         } else {
             throw new Exception("Failed to submit physical examination. HTTP Code: $http_code");
         }

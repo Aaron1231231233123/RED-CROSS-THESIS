@@ -2,7 +2,7 @@
 class PhysicalExaminationModal {
     constructor() {
         this.currentStep = 1;
-        this.totalSteps = 6;
+        this.totalSteps = 5; // Updated to 5 steps since we removed remarks
         this.formData = {};
         this.screeningData = null;
         
@@ -50,13 +50,8 @@ class PhysicalExaminationModal {
             }
         });
         
-        // Remarks radio button change
+        // Blood bag type radio button change
         document.addEventListener('change', (e) => {
-            if (e.target.name === 'remarks') {
-                this.handleRemarksChange(e.target.value);
-                this.updateOptionCardSelection(e.target);
-            }
-            
             if (e.target.name === 'blood_bag_type') {
                 this.updateOptionCardSelection(e.target);
             }
@@ -121,7 +116,7 @@ class PhysicalExaminationModal {
                 this.showStep(this.currentStep);
                 
                 // Update summary if we're at the review step
-                if (this.currentStep === 6) {
+                if (this.currentStep === 5) {
                     this.updateSummary();
                 }
             }
@@ -142,7 +137,7 @@ class PhysicalExaminationModal {
             this.updateProgressIndicator();
             this.showStep(step);
             
-            if (step === 6) {
+            if (step === 5) {
                 this.updateSummary();
             }
         }
@@ -211,16 +206,7 @@ class PhysicalExaminationModal {
             
             // Additional step-specific validation
             if (this.currentStep === 4) {
-                // Validate remarks selection
-                const remarksSelected = document.querySelector('input[name="remarks"]:checked');
-                if (!remarksSelected) {
-                    this.showToast('Please select a remarks option', 'error');
-                    isValid = false;
-                }
-            }
-            
-            if (this.currentStep === 5) {
-                // Validate blood bag type selection
+                // Validate blood bag type selection (step 4 is now blood bag selection)
                 const bloodBagSelected = document.querySelector('input[name="blood_bag_type"]:checked');
                 if (!bloodBagSelected) {
                     this.showToast('Please select a blood bag type', 'error');
@@ -305,27 +291,10 @@ class PhysicalExaminationModal {
         // Validate the field
         this.validateField(field);
         
-        // Handle special cases
-        if (field.name === 'remarks') {
-            this.handleRemarksChange(field.value);
-        }
+        // Handle special cases (none for now)
     }
     
-    handleRemarksChange(value) {
-        const reasonSection = document.getElementById('physical-reason-section');
-        const reasonField = document.getElementById('physical-reason');
-        
-        if (reasonSection && reasonField) {
-            if (value === 'Accepted') {
-                reasonSection.style.display = 'none';
-                reasonField.removeAttribute('required');
-                reasonField.value = '';
-            } else {
-                reasonSection.style.display = 'block';
-                reasonField.setAttribute('required', '');
-            }
-        }
-    }
+
     
     updateOptionCardSelection(radioInput) {
         // Remove selected class from all cards in the same group
@@ -431,19 +400,8 @@ class PhysicalExaminationModal {
         document.getElementById('summary-heart-lungs').textContent = 
             document.getElementById('physical-heart-lungs').value || 'Not specified';
         
-        // Update remarks and reason
-        const selectedRemarks = document.querySelector('input[name="remarks"]:checked');
-        document.getElementById('summary-remarks').textContent = 
-            selectedRemarks ? selectedRemarks.value : 'Not selected';
-        
-        const reasonValue = document.getElementById('physical-reason').value;
-        const reasonSummary = document.getElementById('summary-reason');
-        if (reasonValue.trim()) {
-            reasonSummary.textContent = reasonValue;
-            reasonSummary.parentElement.style.display = 'block';
-        } else {
-            reasonSummary.parentElement.style.display = 'none';
-        }
+        // Auto-set remarks as "Accepted" since donor passed physical examination
+        // (No UI element needed - this is handled automatically)
         
         // Update blood bag type
         const selectedBloodBag = document.querySelector('input[name="blood_bag_type"]:checked');
@@ -476,6 +434,12 @@ class PhysicalExaminationModal {
                 data.donor_id = this.screeningData.donor_form_id;
                 data.screening_id = this.screeningData.screening_id;
             }
+            
+            // Auto-set remarks as "Accepted" since donor passed physical examination
+            data.remarks = 'Accepted';
+            
+            // Flag to indicate this is an accepted examination (don't update eligibility table)
+            data.is_accepted_examination = true;
             
             // Submit to server
             const response = await fetch('../../assets/php_func/process_physical_examination.php', {

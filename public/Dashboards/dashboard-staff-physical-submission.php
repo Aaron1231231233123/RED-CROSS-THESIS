@@ -866,13 +866,6 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         }
 
         /* Option Cards */
-        .physical-remarks-options {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
         .physical-blood-bag-options {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -949,22 +942,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             transform: none;
         }
 
-        /* Reason Section */
-        .physical-reason-section {
-            margin-top: 20px;
-        }
 
-        .physical-reason-section textarea {
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 15px;
-            transition: border-color 0.3s ease;
-        }
-
-        .physical-reason-section textarea:focus {
-            border-color: #b22222;
-            box-shadow: 0 0 0 0.2rem rgba(178, 34, 34, 0.25);
-        }
 
         /* Examination Report Styles */
         .examination-report {
@@ -1033,15 +1011,16 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         /* Vital Signs Grid */
         .vital-signs-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(3, 1fr);
             gap: 20px;
             margin-bottom: 15px;
         }
         
         .vital-item {
             display: flex;
-            flex-direction: column;
-            gap: 5px;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
         }
         
         .vital-label {
@@ -1060,6 +1039,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             color: #6c757d;
             font-size: 0.85rem;
             font-style: italic;
+            margin-left: 2px;
         }
         
         /* Examination Findings */
@@ -1180,6 +1160,24 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             margin-right: auto;
         }
 
+        .physical-defer-btn {
+            border-color: #dc3545;
+            color: #dc3545;
+            background-color: white;
+        }
+
+        .physical-defer-btn:hover {
+            background-color: #dc3545;
+            color: white;
+            border-color: #dc3545;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+        }
+
+        .physical-defer-btn:focus {
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+        }
+
         /* Toast Messages */
         .physical-toast {
             position: fixed;
@@ -1265,11 +1263,6 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 font-size: 10px;
             }
 
-            .physical-remarks-options {
-                grid-template-columns: 1fr 1fr;
-                gap: 10px;
-            }
-            
             .physical-blood-bag-options {
                 grid-template-columns: 1fr;
                 gap: 10px;
@@ -1304,7 +1297,11 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             }
 
             .physical-cancel-btn {
-                order: -1;
+                order: 1;
+            }
+
+            .physical-defer-btn {
+                order: 2;
             }
             
             /* Examination Report Mobile */
@@ -1319,8 +1316,28 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             }
             
             .vital-signs-grid {
-                grid-template-columns: 1fr;
-                gap: 15px;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 10px;
+            }
+            
+            .vital-item {
+                text-align: center;
+                flex-direction: row;
+                gap: 4px;
+                font-size: 0.85rem;
+            }
+            
+            .vital-label {
+                font-size: 0.75rem;
+            }
+            
+            .vital-value {
+                font-size: 0.9rem;
+                font-weight: 600;
+            }
+            
+            .vital-unit {
+                font-size: 0.75rem;
             }
             
             .finding-row {
@@ -1665,6 +1682,414 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         .observation-text .vitals {
             color: #28a745;
             font-weight: 500;
+        }
+
+        /* Defer Modal Styling */
+        .deferral-options {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .deferral-card {
+            position: relative;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            background: #ffffff;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .deferral-card:hover {
+            border-color: #dc3545;
+            background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(220, 53, 69, 0.15);
+        }
+
+        .deferral-card input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .deferral-label {
+            display: flex;
+            align-items: center;
+            padding: 16px 20px;
+            cursor: pointer;
+            width: 100%;
+            margin: 0;
+            transition: all 0.3s ease;
+        }
+
+        .deferral-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(220, 53, 69, 0.1);
+            margin-right: 16px;
+            font-size: 1.4rem;
+            transition: all 0.3s ease;
+        }
+
+        .deferral-content {
+            flex: 1;
+        }
+
+        .deferral-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .deferral-desc {
+            font-size: 0.9rem;
+            color: #6c757d;
+            line-height: 1.3;
+        }
+
+        .deferral-card:has(input:checked) {
+            border-color: #dc3545;
+            background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%);
+            box-shadow: 0 8px 25px rgba(220, 53, 69, 0.2);
+        }
+
+        .deferral-card:has(input:checked) .deferral-icon {
+            background: #dc3545;
+            color: white;
+            transform: scale(1.1);
+        }
+
+        .deferral-card:has(input:checked) .deferral-title {
+            color: #dc3545;
+        }
+
+        /* Duration Options Styling */
+        .duration-container {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #e9ecef;
+        }
+
+        .duration-quick-options {
+            margin-bottom: 16px;
+        }
+
+        .duration-option {
+            background: #ffffff;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 16px 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        .duration-option:hover {
+            border-color: #007bff;
+            background: linear-gradient(135deg, #e3f2fd 0%, #ffffff 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 123, 255, 0.15);
+        }
+
+        .duration-option.active {
+            border-color: #007bff;
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 123, 255, 0.3);
+        }
+
+        .duration-number {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .duration-unit {
+            font-size: 0.85rem;
+            font-weight: 500;
+            opacity: 0.8;
+        }
+
+        .custom-option {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+            color: white;
+            border-color: #6c757d;
+        }
+
+        .custom-option:hover {
+            background: linear-gradient(135deg, #495057 0%, #343a40 100%);
+            border-color: #495057;
+        }
+
+        .custom-option.active {
+            background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+            border-color: #28a745;
+        }
+
+        /* Custom Duration Input Styling */
+        .custom-duration-container {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #e9ecef;
+            border-left: 4px solid #28a745;
+        }
+
+        .custom-duration-container .input-group {
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .custom-duration-container .form-control {
+            border-radius: 8px 0 0 8px;
+            border: 2px solid #e9ecef;
+            padding: 12px 16px;
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        .custom-duration-container .form-control:focus {
+            border-color: #28a745;
+            box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+        }
+
+        .custom-duration-container .input-group-text {
+            background: #28a745;
+            color: white;
+            border: 2px solid #28a745;
+            border-radius: 0 8px 8px 0;
+            font-weight: 600;
+        }
+
+        /* Custom styling for duration section */
+        #durationSection {
+            opacity: 0;
+            max-height: 0;
+            overflow: hidden;
+            transition: all 0.4s ease;
+        }
+
+        #durationSection.show {
+            opacity: 1;
+            max-height: 500px;
+        }
+
+        #customDurationSection {
+            opacity: 0;
+            max-height: 0;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        #customDurationSection.show {
+            opacity: 1;
+            max-height: 200px;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Duration summary styling */
+        #durationSummary {
+            border-left: 4px solid #17a2b8;
+            background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+            animation: fadeIn 0.4s ease;
+        }
+
+        #durationSummary #summaryText {
+            font-weight: 600;
+            color: #0c5460;
+        }
+
+        /* Modal form controls */
+        .modal-body .form-control, .modal-body .form-select {
+            border-radius: 8px;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s ease;
+            padding: 12px 16px;
+        }
+
+        .modal-body .form-control:focus, .modal-body .form-select:focus {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+        }
+
+        /* Toast notification for defer actions */
+        .defer-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 12px;
+            padding: 16px 20px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            z-index: 10000;
+            transform: translateX(100%);
+            transition: transform 0.4s ease;
+            border-left: 5px solid #dc3545;
+            min-width: 300px;
+        }
+
+        .defer-toast.show {
+            transform: translateX(0);
+        }
+
+        .defer-toast-success {
+            border-left-color: #28a745;
+        }
+
+        .defer-toast-error {
+            border-left-color: #dc3545;
+        }
+
+        .defer-toast-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .defer-toast-content i {
+            font-size: 1.3rem;
+        }
+
+        .defer-toast-success i {
+            color: #28a745;
+        }
+
+        .defer-toast-error i {
+            color: #dc3545;
+        }
+
+        .defer-toast-text {
+            flex: 1;
+        }
+
+        .defer-toast-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+            font-size: 0.95rem;
+        }
+
+        .defer-toast-message {
+            font-size: 0.85rem;
+            color: #6c757d;
+            line-height: 1.3;
+        }
+
+        /* Ensure defer modal appears above physical examination modal */
+        #deferDonorModal {
+            z-index: 10050 !important;
+        }
+
+        #deferDonorModal .modal-backdrop {
+            z-index: 10049 !important;
+        }
+
+        .modal-backdrop.show {
+            z-index: 10049 !important;
+        }
+
+        /* Mobile Responsive Styles for Defer Modal */
+        @media (max-width: 768px) {
+            .deferral-card {
+                margin-bottom: 8px;
+            }
+            
+            .deferral-label {
+                padding: 12px 16px;
+            }
+            
+            .deferral-icon {
+                width: 40px;
+                height: 40px;
+                margin-right: 12px;
+                font-size: 1.2rem;
+            }
+            
+            .deferral-title {
+                font-size: 1rem;
+            }
+            
+            .deferral-desc {
+                font-size: 0.85rem;
+            }
+            
+            .duration-container {
+                padding: 16px;
+            }
+            
+            .duration-option {
+                height: 70px;
+                padding: 12px 8px;
+            }
+            
+            .duration-number {
+                font-size: 1.2rem;
+            }
+            
+            .duration-unit {
+                font-size: 0.8rem;
+            }
+            
+            .custom-duration-container {
+                padding: 16px;
+            }
+            
+            .custom-duration-container .form-control {
+                font-size: 1rem;
+                padding: 10px 12px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            #deferDonorModal .modal-dialog {
+                margin: 0.5rem;
+            }
+            
+            #deferDonorModal .modal-content {
+                border-radius: 12px;
+            }
+            
+            .duration-quick-options .row {
+                margin: 0 -4px;
+            }
+            
+            .duration-quick-options .col-6 {
+                padding: 0 4px;
+                margin-bottom: 8px;
+            }
+            
+            .deferral-label {
+                flex-direction: column;
+                text-align: center;
+                padding: 16px 12px;
+            }
+            
+            .deferral-icon {
+                margin-right: 0;
+                margin-bottom: 8px;
+            }
         }
     </style>
 </head>
@@ -2021,6 +2446,176 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         </div>
     </div>
 
+    <!-- Defer Donor Modal -->
+    <div class="modal fade" id="deferDonorModal" tabindex="-1" aria-labelledby="deferDonorModalLabel" aria-hidden="true" style="z-index: 10050;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 15px; border: none;">
+                <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
+                    <h5 class="modal-title" id="deferDonorModalLabel">
+                        <i class="fas fa-ban me-2"></i>
+                        Defer Donor
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-4">
+                    <form id="deferDonorForm">
+                        <input type="hidden" id="defer-donor-id" name="donor_id">
+                        <input type="hidden" id="defer-screening-id" name="screening_id">
+                        
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Specify reason for deferral and duration.</label>
+                        </div>
+
+                        <!-- Deferral Type Selection -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold mb-3">Deferral Type *</label>
+                            <div class="deferral-options">
+                                <div class="deferral-card" data-type="temporary">
+                                    <input class="form-check-input" type="radio" name="deferral_type" id="tempDefer" value="Temporary Deferral" required>
+                                    <label class="deferral-label" for="tempDefer">
+                                        <div class="deferral-icon text-primary">
+                                            <i class="fas fa-clock"></i>
+                                        </div>
+                                        <div class="deferral-content">
+                                            <div class="deferral-title">Temporary Deferral</div>
+                                            <div class="deferral-desc">Donor can donate after specified period</div>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                <div class="deferral-card" data-type="permanent">
+                                    <input class="form-check-input" type="radio" name="deferral_type" id="permDefer" value="Permanent Deferral" required>
+                                    <label class="deferral-label" for="permDefer">
+                                        <div class="deferral-icon text-danger">
+                                            <i class="fas fa-ban"></i>
+                                        </div>
+                                        <div class="deferral-content">
+                                            <div class="deferral-title">Permanent Deferral</div>
+                                            <div class="deferral-desc">Donor cannot donate in the future</div>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                <div class="deferral-card" data-type="refuse">
+                                    <input class="form-check-input" type="radio" name="deferral_type" id="refuse" value="Refuse" required>
+                                    <label class="deferral-label" for="refuse">
+                                        <div class="deferral-icon text-warning">
+                                            <i class="fas fa-times-circle"></i>
+                                        </div>
+                                        <div class="deferral-content">
+                                            <div class="deferral-title">Refuse</div>
+                                            <div class="deferral-desc">Reject donation for this session only</div>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Duration Selection (only for Temporary Deferral) -->
+                        <div class="mb-4 duration-container" id="durationSection" style="display: none;">
+                            <label class="form-label fw-semibold mb-3">
+                                <i class="fas fa-calendar-alt me-2 text-primary"></i>Deferral Duration *
+                            </label>
+                            
+                            <!-- Quick Duration Options -->
+                            <div class="duration-quick-options mb-3">
+                                <div class="row g-2">
+                                    <div class="col-6 col-md-3">
+                                        <div class="duration-option" data-days="7">
+                                            <div class="duration-number">7</div>
+                                            <div class="duration-unit">Days</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="duration-option" data-days="14">
+                                            <div class="duration-number">14</div>
+                                            <div class="duration-unit">Days</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="duration-option" data-days="30">
+                                            <div class="duration-number">1</div>
+                                            <div class="duration-unit">Month</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="duration-option" data-days="90">
+                                            <div class="duration-number">3</div>
+                                            <div class="duration-unit">Months</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="duration-option" data-days="180">
+                                            <div class="duration-number">6</div>
+                                            <div class="duration-unit">Months</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="duration-option" data-days="365">
+                                            <div class="duration-number">1</div>
+                                            <div class="duration-unit">Year</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="duration-option custom-option" data-days="custom">
+                                            <div class="duration-number"><i class="fas fa-edit"></i></div>
+                                            <div class="duration-unit">Custom</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Hidden select for form submission -->
+                            <select class="form-select d-none" id="deferralDuration" name="duration">
+                                <option value="">Select duration...</option>
+                                <option value="7">7 days</option>
+                                <option value="14">14 days</option>
+                                <option value="21">21 days</option>
+                                <option value="30">1 month (30 days)</option>
+                                <option value="60">2 months (60 days)</option>
+                                <option value="90">3 months (90 days)</option>
+                                <option value="180">6 months (180 days)</option>
+                                <option value="365">1 year (365 days)</option>
+                                <option value="custom">Custom duration...</option>
+                            </select>
+                        </div>
+
+                        <!-- Custom Duration Input -->
+                        <div class="mb-4 custom-duration-container" id="customDurationSection" style="display: none;">
+                            <label for="customDuration" class="form-label fw-semibold">
+                                <i class="fas fa-keyboard me-2 text-primary"></i>Custom Duration (days) *
+                            </label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="customDuration" name="custom_duration" min="1" max="3650" placeholder="Enter number of days">
+                                <span class="input-group-text">days</span>
+                            </div>
+                            <div class="form-text">Enter duration between 1 and 3650 days (approximately 10 years)</div>
+                        </div>
+
+                        <!-- Disapproval Reason -->
+                        <div class="mb-4">
+                            <label for="disapprovalReason" class="form-label fw-semibold">Disapproval Reason *</label>
+                            <textarea class="form-control" id="disapprovalReason" name="disapproval_reason" rows="4" 
+                                    placeholder="Please provide detailed reason for deferral..." required></textarea>
+                        </div>
+
+                        <!-- Duration Summary Display -->
+                        <div class="alert alert-info" id="durationSummary" style="display: none;">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Deferral Summary:</strong> <span id="summaryText"></span>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger px-4" id="submitDeferral">
+                        <i class="fas fa-ban me-2"></i>Submit Deferral
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Physical Examination Modal -->
     <div class="physical-examination-modal" id="physicalExaminationModal">
         <div class="physical-modal-content">
@@ -2048,14 +2643,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     </div>
                     <div class="physical-step" data-step="4">
                         <div class="physical-step-number">4</div>
-                        <div class="physical-step-label">Remarks</div>
+                        <div class="physical-step-label">Blood Bag</div>
                     </div>
                     <div class="physical-step" data-step="5">
                         <div class="physical-step-number">5</div>
-                        <div class="physical-step-label">Blood Bag</div>
-                    </div>
-                    <div class="physical-step" data-step="6">
-                        <div class="physical-step-number">6</div>
                         <div class="physical-step-label">Review</div>
                     </div>
                 </div>
@@ -2262,60 +2853,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     </div>
                 </div>
 
-                <!-- Step 4: Remarks -->
+                <!-- Step 4: Blood Bag Selection -->
                 <div class="physical-step-content" id="physical-step-4">
                     <div class="physical-step-inner">
-                        <h4>Step 4: Remarks</h4>
-                        <p class="text-muted">Please select the appropriate remark</p>
-                        
-                        <div class="physical-remarks-section">
-                            <div class="physical-remarks-options">
-                                <label class="physical-option-card">
-                                    <input type="radio" name="remarks" value="Accepted">
-                                    <div class="physical-option-content">
-                                        <i class="fas fa-check-circle"></i>
-                                        <span>Accepted</span>
-                                    </div>
-                                </label>
-                                <label class="physical-option-card">
-                                    <input type="radio" name="remarks" value="Temporarily Deferred">
-                                    <div class="physical-option-content">
-                                        <i class="fas fa-clock"></i>
-                                        <span>Temporarily Deferred</span>
-                                    </div>
-                                </label>
-                                <label class="physical-option-card">
-                                    <input type="radio" name="remarks" value="Permanently Deferred">
-                                    <div class="physical-option-content">
-                                        <i class="fas fa-ban"></i>
-                                        <span>Permanently Deferred</span>
-                                    </div>
-                                </label>
-                                <label class="physical-option-card">
-                                    <input type="radio" name="remarks" value="Refused">
-                                    <div class="physical-option-content">
-                                        <i class="fas fa-times-circle"></i>
-                                        <span>Refused</span>
-                                    </div>
-                                </label>
-                            </div>
-                            
-                            <div class="physical-reason-section" id="physical-reason-section" style="display: none;">
-                                <label for="physical-reason" class="form-label">Reason *</label>
-                                <textarea class="form-control" 
-                                          id="physical-reason" 
-                                          name="reason" 
-                                          rows="4" 
-                                          placeholder="Enter detailed reason"></textarea>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Step 5: Blood Bag Selection -->
-                <div class="physical-step-content" id="physical-step-5">
-                    <div class="physical-step-inner">
-                        <h4>Step 5: Blood Bag Selection</h4>
+                        <h4>Step 4: Blood Bag Selection</h4>
                         <p class="text-muted">Please select the appropriate blood bag type</p>
                         
                         <div class="physical-blood-bag-section">
@@ -2346,10 +2887,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     </div>
                 </div>
 
-                <!-- Step 6: Review and Submit -->
-                <div class="physical-step-content" id="physical-step-6">
+                <!-- Step 5: Review and Submit -->
+                <div class="physical-step-content" id="physical-step-5">
                     <div class="physical-step-inner">
-                        <h4>Step 6: Review & Submit</h4>
+                        <h4>Step 5: Review & Submit</h4>
                         <p class="text-muted">Please review all information before submitting</p>
                         
                         <div class="examination-report">
@@ -2373,16 +2914,16 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                 <div class="section-content">
                                     <div class="vital-signs-grid">
                                         <div class="vital-item">
-                                            <span class="vital-label">Blood Pressure</span>
+                                            <span class="vital-label">Blood Pressure:</span>
                                             <span class="vital-value" id="summary-blood-pressure">-</span>
                                         </div>
                                         <div class="vital-item">
-                                            <span class="vital-label">Pulse Rate</span>
+                                            <span class="vital-label">Pulse Rate:</span>
                                             <span class="vital-value" id="summary-pulse-rate">-</span>
                                             <span class="vital-unit">BPM</span>
                                         </div>
                                         <div class="vital-item">
-                                            <span class="vital-label">Temperature</span>
+                                            <span class="vital-label">Temperature:</span>
                                             <span class="vital-value" id="summary-body-temp">-</span>
                                             <span class="vital-unit">°C</span>
                                         </div>
@@ -2428,11 +2969,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                     <div class="assessment-content">
                                         <div class="assessment-result">
                                             <span class="result-label">Medical Assessment:</span>
-                                            <span class="result-value" id="summary-remarks">-</span>
-                                        </div>
-                                        <div class="assessment-reason" style="display: none;">
-                                            <span class="reason-label">Reason:</span>
-                                            <span class="reason-value" id="summary-reason">-</span>
+                                            <span class="result-value">Accepted for Blood Collection</span>
                                         </div>
                                         <div class="assessment-collection">
                                             <span class="collection-label">Blood Collection:</span>
@@ -2463,6 +3000,9 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     <div class="physical-nav-buttons">
                         <button type="button" class="btn btn-outline-secondary physical-cancel-btn">
                             <i class="fas fa-times me-2"></i>Cancel
+                        </button>
+                        <button type="button" class="btn btn-outline-danger physical-defer-btn">
+                            <i class="fas fa-ban me-2"></i>Defer Donor
                         </button>
                         <button type="button" class="btn btn-outline-danger physical-prev-btn" style="display: none;">
                             <i class="fas fa-arrow-left me-2"></i>Previous
@@ -2543,6 +3083,8 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         alert('Edit functionality will be implemented for screening ID: ' + screeningId);
                     });
                 });
+
+
             }
 
             attachButtonClickHandlers();
@@ -2570,6 +3112,9 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 console.log("Opening Physical Examination modal with data:", currentScreeningData);
                 if (window.physicalExaminationModal) {
                     window.physicalExaminationModal.openModal(currentScreeningData);
+                    
+                    // Initialize defer button after modal opens
+                    initializePhysicalExamDeferButton();
                 } else {
                     console.error("Physical examination modal not initialized");
                     alert("Error: Modal not properly initialized. Please refresh the page.");
@@ -2647,7 +3192,424 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             // Event listeners
             searchInput.addEventListener('input', debouncedSearch);
             searchCategory.addEventListener('change', debouncedSearch);
+
+            // Defer modal will be initialized when opened
         });
+
+        // Physical Examination Modal Defer Functionality
+        function initializePhysicalExamDeferButton() {
+            // Use a timeout to ensure the modal is fully loaded
+            setTimeout(() => {
+                const physicalDeferBtn = document.querySelector('.physical-defer-btn');
+                console.log('Looking for defer button:', physicalDeferBtn);
+                
+                if (physicalDeferBtn) {
+                    // Remove any existing event listeners
+                    physicalDeferBtn.removeEventListener('click', handleDeferClick);
+                    
+                    // Add the event listener
+                    physicalDeferBtn.addEventListener('click', handleDeferClick);
+                    console.log('Defer button initialized successfully');
+                } else {
+                    console.error('Physical defer button not found in DOM');
+                }
+            }, 500);
+        }
+
+        function handleDeferClick(e) {
+            e.preventDefault();
+            console.log('Defer button clicked');
+            
+            // Get current screening data from the physical examination modal
+            const donorId = document.getElementById('physical-donor-id')?.value;
+            const screeningId = document.getElementById('physical-screening-id')?.value;
+            
+            console.log('Donor ID:', donorId, 'Screening ID:', screeningId);
+            
+            if (!donorId || !screeningId) {
+                showDeferToast('Error', 'Unable to get donor information. Please try again.', 'error');
+                return;
+            }
+            
+            const screeningData = {
+                donor_form_id: donorId,
+                screening_id: screeningId
+            };
+            
+            openDeferModal(screeningData);
+        }
+
+        // Defer Modal Functions
+        function openDeferModal(screeningData) {
+            // Set the hidden fields
+            document.getElementById('defer-donor-id').value = screeningData.donor_form_id || '';
+            document.getElementById('defer-screening-id').value = screeningData.screening_id || '';
+            
+            // Reset form
+            document.getElementById('deferDonorForm').reset();
+            
+            // Hide conditional sections
+            const durationSection = document.getElementById('durationSection');
+            const customDurationSection = document.getElementById('customDurationSection');
+            
+            durationSection.classList.remove('show');
+            customDurationSection.classList.remove('show');
+            durationSection.style.display = 'none';
+            customDurationSection.style.display = 'none';
+            document.getElementById('durationSummary').style.display = 'none';
+            
+            // Reset all visual elements
+            document.querySelectorAll('.deferral-card').forEach(card => {
+                card.classList.remove('active');
+            });
+            
+            document.querySelectorAll('.duration-option').forEach(option => {
+                option.classList.remove('active');
+            });
+            
+            // Reset custom duration display
+            const customOption = document.querySelector('.duration-option[data-days="custom"]');
+            if (customOption) {
+                const numberDiv = customOption.querySelector('.duration-number');
+                numberDiv.innerHTML = '<i class="fas fa-edit"></i>';
+                const unitDiv = customOption.querySelector('.duration-unit');
+                unitDiv.textContent = 'Custom';
+            }
+            
+            // Clear any validation states
+            document.querySelectorAll('.form-control').forEach(control => {
+                control.classList.remove('is-invalid', 'is-valid');
+            });
+            
+            // Show the modal
+            const deferModal = new bootstrap.Modal(document.getElementById('deferDonorModal'));
+            deferModal.show();
+            
+            // Re-initialize defer modal functionality when it opens
+            setTimeout(() => {
+                initializeDeferModal();
+            }, 200);
+        }
+
+        function initializeDeferModal() {
+            const deferralTypeRadios = document.querySelectorAll('input[name="deferral_type"]');
+            const durationSection = document.getElementById('durationSection');
+            const customDurationSection = document.getElementById('customDurationSection');
+            const durationSelect = document.getElementById('deferralDuration');
+            const customDurationInput = document.getElementById('customDuration');
+            const submitBtn = document.getElementById('submitDeferral');
+            const durationSummary = document.getElementById('durationSummary');
+            const summaryText = document.getElementById('summaryText');
+            const durationOptions = document.querySelectorAll('.duration-option');
+
+            // Handle deferral type change
+            deferralTypeRadios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    console.log('Deferral type changed to:', this.value);
+                    if (this.value === 'Temporary Deferral') {
+                        durationSection.style.display = 'block';
+                        setTimeout(() => {
+                            durationSection.classList.add('show');
+                            durationSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        }, 50);
+                    } else {
+                        durationSection.classList.remove('show');
+                        customDurationSection.classList.remove('show');
+                        setTimeout(() => {
+                            if (!durationSection.classList.contains('show')) {
+                                durationSection.style.display = 'none';
+                            }
+                            if (!customDurationSection.classList.contains('show')) {
+                                customDurationSection.style.display = 'none';
+                            }
+                        }, 400);
+                        durationSummary.style.display = 'none';
+                        // Clear duration selections
+                        durationOptions.forEach(opt => opt.classList.remove('active'));
+                        durationSelect.value = '';
+                        customDurationInput.value = '';
+                    }
+                    updateSummary();
+                });
+            });
+
+            // Also handle clicks on the deferral cards directly
+            document.querySelectorAll('.deferral-card').forEach(card => {
+                card.addEventListener('click', function() {
+                    const radio = this.querySelector('input[type="radio"]');
+                    if (radio) {
+                        radio.checked = true;
+                        // Trigger the change event
+                        radio.dispatchEvent(new Event('change'));
+                    }
+                });
+            });
+
+            // Handle duration option clicks
+            durationOptions.forEach(option => {
+                option.addEventListener('click', function() {
+                    // Remove active class from all options
+                    durationOptions.forEach(opt => opt.classList.remove('active'));
+                    
+                    // Add active class to clicked option
+                    this.classList.add('active');
+                    
+                    const days = this.getAttribute('data-days');
+                    
+                    if (days === 'custom') {
+                        durationSelect.value = 'custom';
+                        customDurationSection.style.display = 'block';
+                        setTimeout(() => {
+                            customDurationSection.classList.add('show');
+                            customDurationSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            customDurationInput.focus();
+                        }, 50);
+                    } else {
+                        durationSelect.value = days;
+                        customDurationSection.classList.remove('show');
+                        setTimeout(() => {
+                            if (!customDurationSection.classList.contains('show')) {
+                                customDurationSection.style.display = 'none';
+                            }
+                        }, 300);
+                        customDurationInput.value = '';
+                    }
+                    
+                    updateSummary();
+                });
+            });
+
+            // Handle custom duration input
+            customDurationInput.addEventListener('input', function() {
+                updateSummary();
+                
+                // Update the custom option to show the entered value
+                const customOption = document.querySelector('.duration-option[data-days="custom"]');
+                if (customOption && this.value) {
+                    const numberDiv = customOption.querySelector('.duration-number');
+                    numberDiv.innerHTML = this.value;
+                    const unitDiv = customOption.querySelector('.duration-unit');
+                    unitDiv.textContent = this.value == 1 ? 'Day' : 'Days';
+                } else if (customOption) {
+                    const numberDiv = customOption.querySelector('.duration-number');
+                    numberDiv.innerHTML = '<i class="fas fa-edit"></i>';
+                    const unitDiv = customOption.querySelector('.duration-unit');
+                    unitDiv.textContent = 'Custom';
+                }
+            });
+
+            // Handle form submission
+            submitBtn.addEventListener('click', function() {
+                if (validateDeferForm()) {
+                    submitDeferral();
+                }
+            });
+
+            function updateSummary() {
+                const selectedType = document.querySelector('input[name="deferral_type"]:checked');
+                const durationValue = durationSelect.value;
+                const customDuration = customDurationInput.value;
+                
+                if (!selectedType) {
+                    durationSummary.style.display = 'none';
+                    return;
+                }
+
+                let summaryMessage = '';
+                
+                if (selectedType.value === 'Temporary Deferral') {
+                    let days = 0;
+                    if (durationValue && durationValue !== 'custom') {
+                        days = parseInt(durationValue);
+                    } else if (durationValue === 'custom' && customDuration) {
+                        days = parseInt(customDuration);
+                    }
+                    
+                    if (days > 0) {
+                        const endDate = new Date();
+                        endDate.setDate(endDate.getDate() + days);
+                        
+                        const dayText = days === 1 ? 'day' : 'days';
+                        summaryMessage = `Donor will be deferred for ${days} ${dayText} until ${endDate.toLocaleDateString()}.`;
+                    }
+                } else if (selectedType.value === 'Permanent Deferral') {
+                    summaryMessage = 'Donor will be permanently deferred from future donations.';
+                } else if (selectedType.value === 'Refuse') {
+                    summaryMessage = 'Donor donation will be refused for this session.';
+                }
+
+                if (summaryMessage) {
+                    summaryText.textContent = summaryMessage;
+                    durationSummary.style.display = 'block';
+                } else {
+                    durationSummary.style.display = 'none';
+                }
+            }
+        }
+
+        function validateDeferForm() {
+            const selectedType = document.querySelector('input[name="deferral_type"]:checked');
+            const durationValue = document.getElementById('deferralDuration').value;
+            const customDuration = document.getElementById('customDuration').value;
+            const disapprovalReason = document.getElementById('disapprovalReason').value.trim();
+
+            if (!selectedType) {
+                showDeferToast('Validation Error', 'Please select a deferral type.', 'error');
+                // Scroll to deferral type section
+                document.querySelector('.deferral-options').scrollIntoView({ behavior: 'smooth' });
+                return false;
+            }
+
+            if (selectedType.value === 'Temporary Deferral') {
+                if (!durationValue) {
+                    showDeferToast('Validation Error', 'Please select a duration for temporary deferral.', 'error');
+                    document.getElementById('durationSection').scrollIntoView({ behavior: 'smooth' });
+                    return false;
+                }
+                
+                if (durationValue === 'custom' && (!customDuration || customDuration < 1)) {
+                    showDeferToast('Validation Error', 'Please enter a valid custom duration (minimum 1 day).', 'error');
+                    document.getElementById('customDuration').focus();
+                    return false;
+                }
+
+                if (durationValue === 'custom' && customDuration > 3650) {
+                    showDeferToast('Validation Error', 'Custom duration cannot exceed 3650 days (10 years).', 'error');
+                    document.getElementById('customDuration').focus();
+                    return false;
+                }
+            }
+
+            if (!disapprovalReason) {
+                showDeferToast('Validation Error', 'Please provide a reason for the deferral.', 'error');
+                document.getElementById('disapprovalReason').scrollIntoView({ behavior: 'smooth' });
+                document.getElementById('disapprovalReason').focus();
+                return false;
+            }
+
+            if (disapprovalReason.length < 10) {
+                showDeferToast('Validation Error', 'Please provide a more detailed reason (minimum 10 characters).', 'error');
+                document.getElementById('disapprovalReason').focus();
+                return false;
+            }
+
+            return true;
+        }
+
+        function submitDeferral() {
+            const formData = new FormData(document.getElementById('deferDonorForm'));
+            
+            // Calculate final duration
+            const selectedType = document.querySelector('input[name="deferral_type"]:checked').value;
+            let finalDuration = null;
+            
+            if (selectedType === 'Temporary Deferral') {
+                const durationValue = document.getElementById('deferralDuration').value;
+                if (durationValue === 'custom') {
+                    finalDuration = document.getElementById('customDuration').value;
+                } else {
+                    finalDuration = durationValue;
+                }
+            }
+
+            // Prepare data for submission
+            const submitData = {
+                donor_id: formData.get('donor_id'),
+                screening_id: formData.get('screening_id'),
+                deferral_type: selectedType,
+                duration: finalDuration,
+                disapproval_reason: formData.get('disapproval_reason'),
+                action: 'create_eligibility_defer'
+            };
+
+            // Show loading state
+            const submitBtn = document.getElementById('submitDeferral');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+            submitBtn.disabled = true;
+
+            // Submit to backend
+            fetch('../../assets/php_func/create_eligibility.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(submitData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showDeferToast('Success', 'Deferral has been successfully recorded.', 'success');
+                    
+                    // Close defer modal
+                    const deferModal = bootstrap.Modal.getInstance(document.getElementById('deferDonorModal'));
+                    deferModal.hide();
+                    
+                    // Close physical examination modal if it's open
+                    const physicalModal = document.getElementById('physicalExaminationModal');
+                    if (physicalModal && physicalModal.style.display !== 'none') {
+                        if (window.physicalExaminationModal) {
+                            window.physicalExaminationModal.closeModal();
+                        }
+                    }
+                    
+                    // Refresh the page after a short delay
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    showDeferToast('Error', data.message || 'Failed to record deferral.', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showDeferToast('Error', 'An error occurred while processing the deferral.', 'error');
+            })
+            .finally(() => {
+                // Reset button state
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            });
+        }
+
+        function showDeferToast(title, message, type = 'success') {
+            // Remove existing toasts
+            document.querySelectorAll('.defer-toast').forEach(toast => {
+                toast.remove();
+            });
+
+            // Create toast element
+            const toast = document.createElement('div');
+            toast.className = `defer-toast defer-toast-${type}`;
+            
+            const icon = type === 'success' ? 'fas fa-check-circle' : 'fas fa-exclamation-circle';
+            
+            toast.innerHTML = `
+                <div class="defer-toast-content">
+                    <i class="${icon}"></i>
+                    <div class="defer-toast-text">
+                        <div class="defer-toast-title">${title}</div>
+                        <div class="defer-toast-message">${message}</div>
+                    </div>
+                </div>
+            `;
+
+            // Add to page
+            document.body.appendChild(toast);
+
+            // Show toast
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 100);
+
+            // Auto-hide toast
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    toast.remove();
+                }, 400);
+            }, 4000);
+        }
     </script>
 </body>
 </html>

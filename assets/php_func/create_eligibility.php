@@ -4,11 +4,25 @@ include_once '../conn/db_conn.php';
 
 // Set headers
 header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST');
+header('Access-Control-Allow-Headers: Content-Type');
 
 // Enable error reporting for debugging
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
+
+// Handle preflight request
+if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+    exit(0);
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['success' => false, 'message' => 'Method not allowed']);
+    exit;
+}
 
 // Helper function to log errors
 function logError($message) {
@@ -186,6 +200,226 @@ function createEligibilityRecord($data) {
     }
 }
 
+/**
+ * Create eligibility record for defer action
+ * Used when deferring a donor
+ */
+function createDeferEligibilityRecord($data) {
+    try {
+        // Validate required fields
+        if (!isset($data['donor_id']) || !isset($data['screening_id']) || 
+            !isset($data['deferral_type']) || !isset($data['disapproval_reason'])) {
+            return logError('Missing required fields for defer action');
+        }
+        
+        $donor_id = $data['donor_id'];
+        $screening_id = $data['screening_id'];
+        $deferral_type = $data['deferral_type'];
+        $disapproval_reason = $data['disapproval_reason'];
+        $duration = isset($data['duration']) ? (int)$data['duration'] : null;
+        
+        // Calculate end date for temporary deferrals
+        $end_date = null;
+        if ($deferral_type === 'Temporary Deferral' && $duration) {
+            $end_date = date('Y-m-d H:i:s', strtotime("+{$duration} days"));
+        }
+        
+        // Determine status based on deferral type
+        $status = 'temporary deferred';
+        if ($deferral_type === 'Permanent Deferral') {
+            $status = 'permanently deferred';
+        } elseif ($deferral_type === 'Refuse') {
+            $status = 'refused';
+        }
+        
+        // Get screening information
+        $ch_screening = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=*&screening_id=eq.' . $screening_id);
+        curl_setopt($ch_screening, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch_screening, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY
+        ]);
+        
+        $screening_response = curl_exec($ch_screening);
+        $screening_http_code = curl_getinfo($ch_screening, CURLINFO_HTTP_CODE);
+        curl_close($ch_screening);
+        
+        if ($screening_http_code !== 200) {
+            return logError('Failed to fetch screening information');
+        }
+        
+        $screening_data = json_decode($screening_response, true);
+        if (empty($screening_data)) {
+            return logError('Screening record not found');
+        }
+        
+        $screening_record = $screening_data[0];
+        
+        // Get medical history ID if exists
+        $medical_history_id = null;
+        $ch_medical = curl_init(SUPABASE_URL . '/rest/v1/medical_history?select=medical_history_id&donor_form_id=eq.' . $donor_id);
+        curl_setopt($ch_medical, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch_medical, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY
+        ]);
+        
+        $medical_response = curl_exec($ch_medical);
+        $medical_http_code = curl_getinfo($ch_medical, CURLINFO_HTTP_CODE);
+        curl_close($ch_medical);
+        
+        if ($medical_http_code === 200) {
+            $medical_data = json_decode($medical_response, true);
+            if (!empty($medical_data)) {
+                $medical_history_id = $medical_data[0]['medical_history_id'] ?? null;
+                error_log("Found medical history ID: $medical_history_id");
+            }
+        }
+        
+        // Create physical examination record for ALL deferral types
+        $physical_exam_id = null;
+        
+        // Set appropriate remarks based on deferral type
+        $remarks = '';
+        if ($deferral_type === 'Temporary Deferral') {
+            $remarks = 'Temporarily Deferred';
+        } elseif ($deferral_type === 'Permanent Deferral') {
+            $remarks = 'Permanently Deferred';
+        } elseif ($deferral_type === 'Refuse') {
+            $remarks = 'Refused';
+        }
+        
+        // Create a physical examination record with appropriate remarks
+        $physical_exam_data = [
+            'donor_id' => $donor_id,
+            'blood_pressure' => null,
+            'pulse_rate' => null,
+            'body_temp' => null,
+            'gen_appearance' => null,
+            'skin' => null,
+            'heart_and_lungs' => null,
+            'remarks' => $remarks,
+            'reason' => $disapproval_reason,
+            'blood_bag_type' => null,
+            'disapproval_reason' => $disapproval_reason,
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s')
+        ];
+        
+        // Insert physical examination record
+        $ch_physical = curl_init(SUPABASE_URL . '/rest/v1/physical_examination');
+        curl_setopt($ch_physical, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch_physical, CURLOPT_POST, true);
+        curl_setopt($ch_physical, CURLOPT_POSTFIELDS, json_encode($physical_exam_data));
+        curl_setopt($ch_physical, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=representation'
+        ]);
+        
+        $physical_response = curl_exec($ch_physical);
+        $physical_http_code = curl_getinfo($ch_physical, CURLINFO_HTTP_CODE);
+        curl_close($ch_physical);
+        
+        if ($physical_http_code === 201) {
+            $created_physical = json_decode($physical_response, true);
+            if (!empty($created_physical)) {
+                $physical_exam_id = $created_physical[0]['physical_exam_id'] ?? null;
+                error_log("Created physical examination record with ID: $physical_exam_id for deferral type: $deferral_type");
+            }
+        } else {
+            error_log("Failed to create physical examination record: HTTP $physical_http_code - $physical_response");
+        }
+
+        // Create eligibility record
+        $eligibility_data = [
+            'donor_id' => $donor_id,
+            'medical_history_id' => $medical_history_id, // Include medical history ID
+            'screening_id' => $screening_id,
+            'physical_exam_id' => $physical_exam_id, // Now set for all deferral types
+            'blood_collection_id' => null,
+            'blood_type' => $screening_record['blood_type'] ?? null,
+            'donation_type' => $screening_record['donation_type'] ?? null,
+            'blood_bag_type' => null,
+            'amount_collected' => null,
+            'collection_successful' => false,
+            'donor_reaction' => null,
+            'management_done' => null,
+            'collection_start_time' => null,
+            'collection_end_time' => null,
+            'unit_serial_number' => null,
+            'disapproval_reason' => $disapproval_reason,
+            'start_date' => date('Y-m-d H:i:s'),
+            'end_date' => $end_date,
+            'status' => $status,
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s')
+        ];
+        
+        // Insert eligibility record
+        $ch_insert = curl_init(SUPABASE_URL . '/rest/v1/eligibility');
+        curl_setopt($ch_insert, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch_insert, CURLOPT_POST, true);
+        curl_setopt($ch_insert, CURLOPT_POSTFIELDS, json_encode($eligibility_data));
+        curl_setopt($ch_insert, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=representation'
+        ]);
+        
+        $insert_response = curl_exec($ch_insert);
+        $insert_http_code = curl_getinfo($ch_insert, CURLINFO_HTTP_CODE);
+        curl_close($ch_insert);
+        
+        if ($insert_http_code !== 201) {
+            error_log("Eligibility insert failed: HTTP $insert_http_code - $insert_response");
+            return logError('Failed to create eligibility record: ' . $insert_response);
+        }
+        
+        $created_eligibility = json_decode($insert_response, true);
+        
+        // Update screening form with disapproval reason
+        $update_screening_data = [
+            'disapproval_reason' => $disapproval_reason,
+            'updated_at' => date('Y-m-d H:i:s')
+        ];
+        
+        $ch_update = curl_init(SUPABASE_URL . '/rest/v1/screening_form?screening_id=eq.' . $screening_id);
+        curl_setopt($ch_update, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch_update, CURLOPT_CUSTOMREQUEST, 'PATCH');
+        curl_setopt($ch_update, CURLOPT_POSTFIELDS, json_encode($update_screening_data));
+        curl_setopt($ch_update, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json'
+        ]);
+        
+        $update_response = curl_exec($ch_update);
+        $update_http_code = curl_getinfo($ch_update, CURLINFO_HTTP_CODE);
+        curl_close($ch_update);
+        
+        if ($update_http_code !== 204) {
+            error_log("Screening update failed: HTTP $update_http_code - $update_response");
+        }
+        
+        // Log the successful operation
+        error_log("Defer eligibility record created successfully for donor_id: $donor_id, type: $deferral_type, status: $status, duration: " . ($duration ?: 'N/A') . ", medical_history_id: " . ($medical_history_id ?: 'N/A') . ", physical_exam_id: " . ($physical_exam_id ?: 'N/A'));
+        
+        return [
+            'success' => true,
+            'message' => 'Deferral recorded successfully',
+            'eligibility_id' => $created_eligibility[0]['eligibility_id'] ?? null,
+            'end_date' => $end_date,
+            'status' => $status
+        ];
+        
+    } catch (Exception $e) {
+        return logError("Exception in defer action: " . $e->getMessage());
+    }
+}
+
 // Process incoming request
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -202,7 +436,14 @@ if ($method === 'POST') {
     // Debug log incoming data
     error_log("Received data: " . json_encode($data));
     
-    $result = createEligibilityRecord($data);
+    // Check if this is a defer action
+    if (isset($data['action']) && $data['action'] === 'create_eligibility_defer') {
+        $result = createDeferEligibilityRecord($data);
+    } else {
+        // Default to the original eligibility creation
+        $result = createEligibilityRecord($data);
+    }
+    
     echo json_encode($result);
 } else {
     echo json_encode(["success" => false, "error" => "Only POST method is allowed"]);
