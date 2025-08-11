@@ -934,6 +934,152 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
     }
 
+    /* Uniform Button Styles */
+    .btn-sm {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+        border-radius: 0.25rem;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .btn-info {
+        background-color: #0dcaf0;
+        border-color: #0dcaf0;
+        color: #000;
+    }
+
+    .btn-info:hover {
+        background-color: #31d2f2;
+        border-color: #25cff2;
+        color: #000;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(13, 202, 240, 0.3);
+    }
+
+    .btn-info:active,
+    .btn-info.active {
+        background-color: #0aa2c0;
+        border-color: #0a96b0;
+        color: #000;
+        transform: translateY(0);
+        box-shadow: 0 2px 4px rgba(13, 202, 240, 0.4);
+    }
+
+    .btn-warning {
+        background-color: #ffc107;
+        border-color: #ffc107;
+        color: #000;
+    }
+
+    .btn-warning:hover {
+        background-color: #ffcd39;
+        border-color: #ffc720;
+        color: #000;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(255, 193, 7, 0.3);
+    }
+
+    .btn-warning:active,
+    .btn-warning.active {
+        background-color: #e0a800;
+        border-color: #d39e00;
+        color: #000;
+        transform: translateY(0);
+        box-shadow: 0 2px 4px rgba(255, 193, 7, 0.4);
+    }
+
+    .btn-success {
+        background-color: #198754;
+        border-color: #198754;
+        color: #fff;
+    }
+
+    .btn-success:hover {
+        background-color: #20c997;
+        border-color: #1ab394;
+        color: #fff;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(25, 135, 84, 0.3);
+    }
+
+    .btn-success:active,
+    .btn-success.active {
+        background-color: #146c43;
+        border-color: #13653f;
+        color: #fff;
+        transform: translateY(0);
+        box-shadow: 0 2px 4px rgba(25, 135, 84, 0.4);
+    }
+
+    .btn-danger {
+        background-color: #dc3545;
+        border-color: #dc3545;
+        color: #fff;
+    }
+
+    .btn-danger:hover {
+        background-color: #e35d6a;
+        border-color: #e04653;
+        color: #fff;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+    }
+
+    .btn-danger:active,
+    .btn-danger.active {
+        background-color: #b02a37;
+        border-color: #a52834;
+        color: #fff;
+        transform: translateY(0);
+        box-shadow: 0 2px 4px rgba(220, 53, 69, 0.4);
+    }
+
+    .btn-secondary {
+        background-color: #6c757d;
+        border-color: #6c757d;
+        color: #fff;
+    }
+
+    .btn-secondary:hover {
+        background-color: #808a93;
+        border-color: #7a8288;
+        color: #fff;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3);
+    }
+
+    .btn-secondary:active,
+    .btn-secondary.active {
+        background-color: #545b62;
+        border-color: #4e555b;
+        color: #fff;
+        transform: translateY(0);
+        box-shadow: 0 2px 4px rgba(108, 117, 125, 0.4);
+    }
+
+    .btn-primary {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+        color: #fff;
+    }
+
+    .btn-primary:hover {
+        background-color: #3d8bfd;
+        border-color: #2680fd;
+        color: #fff;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(13, 110, 253, 0.3);
+    }
+
+    .btn-primary:active,
+    .btn-primary.active {
+        background-color: #0b5ed7;
+        border-color: #0a58ca;
+        color: #fff;
+        transform: translateY(0);
+        box-shadow: 0 2px 4px rgba(13, 110, 253, 0.4);
+    }
+
     </style>
 </head>
 <body>
@@ -1546,7 +1692,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             loadingModal.show();
             
             setTimeout(() => {
-                window.location.href = '../../src/views/forms/donor-form-modal.php';
+                // Pass current page as source parameter for proper redirect back
+                const currentPage = encodeURIComponent(window.location.pathname + window.location.search);
+                window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + currentPage;
             }, 1500);
         };
 

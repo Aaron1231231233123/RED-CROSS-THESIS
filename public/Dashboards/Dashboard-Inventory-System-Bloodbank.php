@@ -863,7 +863,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <a href="dashboard-Inventory-System-list-of-donations.php?status=declined" class="nav-link">Declined</a>
                             </div>
                         </div>
-                        <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
+                        <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link active">
                             <span><i class="fas fa-tint"></i>Blood Bank</span>
                         </a>
                         <a class="nav-link" data-bs-toggle="collapse" href="#hospitalRequestsCollapse" role="button" aria-expanded="false" aria-controls="hospitalRequestsCollapse">
@@ -1501,7 +1501,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 loadingModal.show();
                 
                 setTimeout(() => {
-                    window.location.href = '../../src/views/forms/donor-form-modal.php';
+                    // Pass current page as source parameter for proper redirect back
+                    const currentPage = encodeURIComponent(window.location.pathname + window.location.search);
+                    window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + currentPage;
                 }, 1500);
             };
             

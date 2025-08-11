@@ -1,34 +1,105 @@
 <?php
 // donor-form-modal.php
+session_start();
+require_once '../../../assets/conn/db_conn.php';
+
+// Get user staff role for role-based redirects
+$user_staff_roles = '';
+if (isset($_SESSION['user_id']) && isset($_SESSION['role_id']) && $_SESSION['role_id'] == 3) {
+    $user_id = $_SESSION['user_id'];
+    $url = SUPABASE_URL . "/rest/v1/user_roles?select=user_staff_roles&user_id=eq." . urlencode($user_id);
+    
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY,
+        'Content-Type: application/json',
+        'Prefer: return=minimal'
+    ));
+    
+    $response = curl_exec($ch);
+    curl_close($ch);
+    
+    if ($response) {
+        $data = json_decode($response, true);
+        if (!empty($data) && isset($data[0]['user_staff_roles'])) {
+            $user_staff_roles = strtolower(trim($data[0]['user_staff_roles']));
+        }
+    }
+}
+
+// Determine the correct dashboard based on user staff role
+function getDashboardByRole($role) {
+    switch($role) {
+        case 'reviewer':
+            return '/REDCROSS/public/Dashboards/dashboard-staff-medical-history-submissions.php';
+        case 'interviewer':
+            return '/REDCROSS/public/Dashboards/dashboard-staff-donor-submission.php';
+        case 'physician':
+            return '/REDCROSS/public/Dashboards/dashboard-staff-physical-submission.php';
+        case 'phlebotomist':
+            return '/REDCROSS/public/Dashboards/dashboard-staff-blood-collection-submission.php';
+        default:
+            return '/REDCROSS/public/Dashboards/dashboard-Inventory-System.php'; // Admin fallback
+    }
+}
 
 // Store the referrer URL to use it for the close button
 $referrer = '';
 
-// Check HTTP_REFERER first
-if (isset($_SERVER['HTTP_REFERER'])) {
-    $referrer = $_SERVER['HTTP_REFERER'];
-}
-
-// If no referrer or it's not from a dashboard, check for a passed parameter
-if (!$referrer || !stripos($referrer, 'dashboard')) {
+// For staff users (role_id 3), use role-based redirect
+if (isset($_SESSION['role_id']) && $_SESSION['role_id'] == 3 && !empty($user_staff_roles)) {
+    $referrer = getDashboardByRole($user_staff_roles);
+} else {
+    // For admin users (role_id 1) or other users, use HTTP_REFERER or parameters
+    
+    // First, check for passed source parameter
     if (isset($_GET['source'])) {
         $referrer = $_GET['source'];
     }
-}
-
-// Default fallback
-if (!$referrer) {
-    $referrer = '../../public/Dashboards/dashboard-Inventory-System.php';
+    // Then check HTTP_REFERER
+    else if (isset($_SERVER['HTTP_REFERER'])) {
+        $referrer = $_SERVER['HTTP_REFERER'];
+        
+        // Make sure it's a dashboard page and convert to proper path if needed
+        if (stripos($referrer, 'dashboard') !== false) {
+            // Extract just the filename and parameters from the full URL
+            $parsed_url = parse_url($referrer);
+            $path_parts = pathinfo($parsed_url['path']);
+            $filename = $path_parts['basename'];
+            $query = isset($parsed_url['query']) ? '?' . $parsed_url['query'] : '';
+            
+            // Convert to absolute path
+            $referrer = '/REDCROSS/public/Dashboards/' . $filename . $query;
+        }
+    }
+    
+    // Default fallback for admin
+    if (!$referrer) {
+        if (isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1) {
+            $referrer = '/REDCROSS/public/Dashboards/dashboard-Inventory-System.php';
+        } else {
+            $referrer = '/REDCROSS/public/login.php';
+        }
+    }
 }
 
 // Store the referrer in a session variable to maintain it across form submissions
-session_start();
-if (!isset($_SESSION['donor_form_referrer'])) {
+// Always update the referrer if we have a valid one, to prevent stale values
+if (!empty($referrer)) {
     $_SESSION['donor_form_referrer'] = $referrer;
-} else {
+} else if (isset($_SESSION['donor_form_referrer'])) {
     // Use the stored referrer if available
     $referrer = $_SESSION['donor_form_referrer'];
 }
+
+// Debug logging (remove in production)
+error_log("Debug - User role_id: " . (isset($_SESSION['role_id']) ? $_SESSION['role_id'] : 'not set'));
+error_log("Debug - User staff role: " . $user_staff_roles);
+error_log("Debug - HTTP_REFERER: " . (isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'not set'));
+error_log("Debug - GET source: " . (isset($_GET['source']) ? $_GET['source'] : 'not set'));
+error_log("Debug - Final referrer: " . $referrer);
 
 // Clean up abandoned donor form data (older than 30 minutes)
 if (isset($_SESSION['donor_form_data']) && isset($_SESSION['donor_form_timestamp'])) {
@@ -165,6 +236,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
     <title>Blood Donor Form</title>
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         :root {
             --primary: #a00000;
@@ -419,6 +492,132 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
             cursor: pointer;
             font-weight: bold;
         }
+        
+        /* Duplicate check indicator styles */
+        #duplicateCheckIndicator {
+            margin-top: 5px;
+            padding: 5px 10px;
+            background-color: rgba(160, 0, 0, 0.1);
+            border-left: 3px solid var(--primary);
+            border-radius: 3px;
+            font-size: 0.875rem;
+        }
+        
+        /* Duplicate modal custom styles - Clean Red Cross Theme */
+        #duplicateDonorModal .modal-content {
+            border-radius: 8px;
+            border: none;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+        
+        /* Red Cross themed header - Fixed */
+        #duplicateDonorModal .modal-header {
+            background: linear-gradient(135deg, #dc3545 0%, #a00000 100%) !important;
+            border-bottom: none !important;
+            padding: 1rem 1.5rem !important;
+            color: white !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+        }
+        
+        #duplicateDonorModal .modal-title {
+            color: white !important;
+            font-size: 1.25rem !important;
+            font-weight: bold !important;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            margin: 0 !important;
+            flex: 1 !important;
+            text-align: center !important;
+        }
+        
+        #duplicateDonorModal .modal-close {
+            position: absolute !important;
+            top: 10px !important;
+            right: 15px !important;
+            font-size: 24px !important;
+            cursor: pointer !important;
+            color: white !important;
+            text-decoration: none !important;
+        }
+        
+        #duplicateDonorModal .modal-close:hover {
+            color: rgba(255, 255, 255, 0.8) !important;
+            text-decoration: none !important;
+        }
+        
+        /* Badge styling improvements */
+        #duplicateDonorModal .badge {
+            font-size: 0.875rem !important;
+            font-weight: 600 !important;
+            padding: 0.5rem 1rem !important;
+            border-radius: 20px !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.5px !important;
+        }
+        
+        #duplicateDonorModal .badge.bg-warning {
+            background-color: #ff6b35 !important;
+            color: white !important;
+            border: none !important;
+        }
+        
+        #duplicateDonorModal .btn-close-white {
+            filter: invert(1) grayscale(100%) brightness(200%);
+        }
+        
+        /* Contact info section styling */
+        #duplicateDonorModal .contact-info-section {
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            padding: 15px;
+            border: 1px solid #e9ecef;
+        }
+        
+        #duplicateDonorModal .contact-item {
+            padding: 8px 0;
+        }
+        
+        #duplicateDonorModal .contact-icon {
+            width: 35px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        
+        #duplicateDonorModal .contact-icon i {
+            font-size: 1.1rem;
+        }
+        
+        #duplicateDonorModal .contact-details {
+            min-width: 0; /* Allow flex item to shrink */
+        }
+        
+        #duplicateDonorModal .contact-value {
+            font-size: 0.95rem;
+            color: #333;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        
+        /* Force all alert elements to not be yellow */
+        #duplicateDonorModal .alert-warning,
+        #duplicateDonorModal .bg-warning,
+        #duplicateDonorModal .text-warning {
+            background-color: #f8f9fa !important;
+            color: #212529 !important;
+            border-color: #dee2e6 !important;
+        }
+        
+        #duplicateDonorModal .btn-danger {
+            background-color: var(--primary);
+            border-color: var(--primary);
+        }
+        
+        #duplicateDonorModal .btn-danger:hover,
+        #duplicateDonorModal .btn-danger:focus {
+            background-color: var(--primary-dark);
+            border-color: var(--primary-dark);
+        }
     </style>
 </head>
 <body>
@@ -652,6 +851,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
 
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Duplicate Donor Check JavaScript -->
+<script src="../../../assets/js/duplicate_donor_check.js"></script>
+
+<script>
+// Initialize the duplicate donor checker for this form (manual trigger only)
+document.addEventListener('DOMContentLoaded', function() {
+    // Create duplicate donor checker but disable auto-check
+    if (typeof DuplicateDonorChecker !== 'undefined') {
+        window.duplicateDonorChecker = new DuplicateDonorChecker({
+            apiEndpoint: '../../../assets/php_func/check_duplicate_donor.php',
+            enableAutoCheck: false, // Disable automatic checking
+            debounceDelay: 0 // No debounce needed for manual trigger
+        });
+        console.log('Duplicate donor checker initialized for manual trigger');
+    } else {
+        console.error('DuplicateDonorChecker class not found');
+    }
+});
+</script>
 
 <script>
     function calculateAge() {
@@ -705,6 +923,57 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
             return;
         }
         
+        // Duplicate check when moving from section 2 (Profile Details) to section 3
+        if (currentSection === 2) {
+            // Check if we have the required data for duplicate check
+            const surname = document.getElementById('surname').value.trim();
+            const firstName = document.getElementById('first_name').value.trim();
+            const middleName = document.getElementById('middle_name').value.trim();
+            const birthdate = document.getElementById('birthdate').value;
+            
+            if (surname && firstName && birthdate) {
+                // Trigger duplicate check
+                if (window.duplicateDonorChecker) {
+                    console.log('Triggering duplicate check before proceeding to section 3');
+                    
+                    // Show loading indicator
+                    const nextButton = event.target || document.querySelector('#section2 .btn-primary');
+                    const originalText = nextButton.innerHTML;
+                    nextButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Checking...';
+                    nextButton.disabled = true;
+                    
+                    // Perform duplicate check
+                    window.duplicateDonorChecker.performCheck(false).then((isDuplicate) => {
+                        // Restore button
+                        nextButton.innerHTML = originalText;
+                        nextButton.disabled = false;
+                        
+                        if (!isDuplicate) {
+                            // No duplicate found, proceed to next section
+                            proceedToNextSection(currentSection);
+                        }
+                        // If duplicate found, modal will handle it and user can choose to proceed
+                    }).catch((error) => {
+                        console.error('Duplicate check failed:', error);
+                        // Restore button
+                        nextButton.innerHTML = originalText;
+                        nextButton.disabled = false;
+                        
+                        // Ask user if they want to proceed anyway
+                        if (confirm('Unable to check for duplicates. Do you want to proceed anyway?')) {
+                            proceedToNextSection(currentSection);
+                        }
+                    });
+                    return; // Stop here, let the duplicate checker handle the flow
+                }
+            }
+        }
+        
+        // Continue with normal flow for other sections
+        proceedToNextSection(currentSection);
+    }
+    
+    function proceedToNextSection(currentSection) {
         // Special validation for section 3 (permanent address)
         if (currentSection === 3) {
             const barangay = document.getElementById('barangay').value.trim();
@@ -812,6 +1081,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
             localStorage.setItem("donorFormSubmitted", "true");
         }
         
+        // Check if duplicate check has been completed or acknowledged
+        const form = document.getElementById('donorForm');
+        const duplicateChecked = form.getAttribute('data-duplicate-checked') === 'true';
+        const duplicateAcknowledged = form.getAttribute('data-duplicate-acknowledged') === 'true';
+        
+        // If duplicate check system is available and neither condition is met, 
+        // the duplicate checker will handle the submission
+        if (window.duplicateDonorChecker && !duplicateChecked && !duplicateAcknowledged) {
+            // The duplicate checker will handle this submission
+            return true;
+        }
+        
         return true; // Allow the form to submit
     }
     
@@ -889,40 +1170,47 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
             }
         }
         
-        // Determine the dashboard URL based on user role
-        const userRole = "<?php echo isset($_SESSION['user_staff_roles']) ? strtolower($_SESSION['user_staff_roles']) : ''; ?>";
+        // Use the PHP-determined referrer URL for consistency
+        const userRole = "<?php echo $user_staff_roles; ?>";
+        const roleId = "<?php echo isset($_SESSION['role_id']) ? $_SESSION['role_id'] : ''; ?>";
+        const phpReferrer = "<?php echo $_SESSION['donor_form_referrer']; ?>";
+        
         console.log("User role for redirect:", userRole);
+        console.log("Role ID:", roleId);
+        console.log("PHP Referrer:", phpReferrer);
         
         let dashboardUrl = "";
         
-        // Redirect based on user role
-        switch (userRole) {
-            case 'reviewer':
-                dashboardUrl = "../../public/Dashboards/dashboard-staff-medical-history-submissions.php";
-                break;
-            case 'interviewer':
-                dashboardUrl = "../../public/Dashboards/dashboard-staff-donor-submission.php";
-                break;
-            case 'physician':
-                dashboardUrl = "../../public/Dashboards/dashboard-staff-physical-submission.php";
-                break;
-            case 'phlebotomist':
-                dashboardUrl = "../../public/Dashboards/dashboard-staff-blood-collection-submission.php";
-                break;
-            default:
-                // Check if we have a stored referrer as fallback
-                if (typeof(Storage) !== "undefined" && localStorage.getItem("donorFormReferrer")) {
-                    dashboardUrl = localStorage.getItem("donorFormReferrer");
-                } else {
-                    // Default fallback if no specific role or referrer
-                    dashboardUrl = "../../public/Dashboards/dashboard-staff-donor-submission.php";
-                }
-                break;
+        // For staff users (role_id 3), use role-based redirect
+        if (roleId === '3' && userRole) {
+            switch (userRole) {
+                case 'reviewer':
+                    dashboardUrl = "/REDCROSS/public/Dashboards/dashboard-staff-medical-history-submissions.php";
+                    break;
+                case 'interviewer':
+                    dashboardUrl = "/REDCROSS/public/Dashboards/dashboard-staff-donor-submission.php";
+                    break;
+                case 'physician':
+                    dashboardUrl = "/REDCROSS/public/Dashboards/dashboard-staff-physical-submission.php";
+                    break;
+                case 'phlebotomist':
+                    dashboardUrl = "/REDCROSS/public/Dashboards/dashboard-staff-blood-collection-submission.php";
+                    break;
+                default:
+                    dashboardUrl = phpReferrer || "/REDCROSS/public/Dashboards/dashboard-staff-donor-submission.php";
+                    break;
+            }
+        } else {
+            // For admin users (role_id 1) or others, use the PHP-determined referrer
+            dashboardUrl = phpReferrer || "/REDCROSS/public/Dashboards/dashboard-Inventory-System.php";
         }
         
         console.log("Redirecting to:", dashboardUrl);
         window.location.href = dashboardUrl;
     }
+    
+    // Make goBackToDashboard globally accessible for duplicate modal
+    window.goBackToDashboard = goBackToDashboard;
     
     // Auto-calculate age on page load if birthdate already exists
     document.addEventListener('DOMContentLoaded', function() {
