@@ -1602,7 +1602,7 @@ select.donor_form_input[disabled] {
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="dashboard-staff-history.php">
+                        <a class="nav-link" href="dashboard-staff-history/dashboard-staff-history.php">
                             Donor History
                         </a>
                     </li>

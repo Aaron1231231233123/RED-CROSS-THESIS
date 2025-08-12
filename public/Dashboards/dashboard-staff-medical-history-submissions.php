@@ -647,7 +647,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
                             </a>
                         </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="dashboard-staff-history.php">Donor History</a>
+                        <a class="nav-link" href="dashboard-staff-history/dashboard-medical-review-history.php">Medical Review History</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="../../assets/php_func/logout.php">Logout</a>

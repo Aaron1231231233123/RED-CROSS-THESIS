@@ -2141,7 +2141,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         </li>
                     <?php endif; ?>
                     <li class="nav-item">
-                        <a class="nav-link" href="dashboard-staff-history.php">Donor History</a>
+                        <a class="nav-link" href="dashboard-staff-history/dashboard-physical-history.php">Physical History</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="../../assets/php_func/logout.php">Logout</a>

@@ -1501,9 +1501,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 loadingModal.show();
                 
                 setTimeout(() => {
-                    // Pass current page as source parameter for proper redirect back
-                    const currentPage = encodeURIComponent(window.location.pathname + window.location.search);
-                    window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + currentPage;
+                    window.location.href = '../../src/views/forms/donor-form-modal.php';
                 }, 1500);
             };
             

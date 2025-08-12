@@ -1674,7 +1674,7 @@ foreach ($display_exams as $index => $exam) {
                         </li>
                     <?php endif; ?>
                     <li class="nav-item">
-                        <a class="nav-link" href="dashboard-staff-history.php">Donor History</a>
+                        <a class="nav-link" href="dashboard-staff-history/dashboard-blood-collection-history.php">Blood Collection History</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="../../assets/php_func/logout.php">Logout</a>
