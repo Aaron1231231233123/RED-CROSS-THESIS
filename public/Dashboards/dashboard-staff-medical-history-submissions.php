@@ -369,11 +369,95 @@ $donors = array_slice($donors, $offset, $records_per_page);
             background: var(--hover-bg);
             color: var(--active-color) !important;
             border-left-color: var(--active-color);
+            border-radius: 4px !important;
         }
 
         .nav-link.active{
             background-color: var(--active-color);
             color: white !important;
+            border-radius: 4px !important;
+        }   
+        
+        /* Dropdown Menu Styles */
+        .dropdown-menu-custom {
+            margin-bottom: 0.5rem;
+        }
+        
+        .dropdown-toggle-custom {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 16px;
+            width: 100%;
+            text-align: left;
+            border-radius: 4px;
+            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+        
+        .dropdown-toggle-custom:hover {
+            background: var(--primary-dark);
+            color: white;
+            font-weight: bold;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .dropdown-toggle-custom:focus {
+            box-shadow: none;
+            background: var(--primary-dark);
+            color: white;
+            outline: none;
+        }
+        
+        .dropdown-menu-items {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            padding: 0;
+            margin: 0;
+            list-style: none;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .dropdown-menu-items.show {
+            max-height: 300px;
+        }
+        
+        .dropdown-item-custom {
+            padding: 10px 20px;
+            color: #333;
+            text-decoration: none;
+            display: block;
+            border-bottom: 1px solid #f0f0f0;
+            transition: all 0.2s ease;
+        }
+        
+        .dropdown-item-custom:hover {
+            background: #f8f9fa;
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: bold;
+            padding-left: 25px;
+        }
+        
+        .dropdown-item-custom:last-child {
+            border-bottom: none;
+        }
+        
+        .dropdown-item-custom.active {
+            background: #f8f9fa;
+            color: var(--primary-color);
+            font-weight: 600;
+            border-left: 4px solid var(--primary-color);
         }
 
         /* Main Content */
@@ -608,44 +692,29 @@ $donors = array_slice($donors, $offset, $records_per_page);
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block sidebar">
                 <h4>Interviewer</h4>
+                
+                <!-- Medical Screening Queue Dropdown -->
+                <div class="dropdown-menu-custom mb-3">
+                    <button class="dropdown-toggle-custom" type="button" id="medicalScreeningToggle">
+                        <span>Medical Screening Queue</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="dropdown-menu-items" id="medicalScreeningMenu">
+                        <?php if ($user_staff_roles === 'interviewer'): ?>
+                            <li><a class="dropdown-item-custom" href="dashboard-staff-donor-submission.php">System Registration</a></li>
+                        <?php endif; ?>
+                        
+                        <?php if ($user_staff_roles === 'reviewer'): ?>
+                            <li><a class="dropdown-item-custom active" href="dashboard-staff-medical-history-submissions.php">Initial Screening Queue</a></li>
+                        <?php endif; ?>
+                        
+                        <li><a class="dropdown-item-custom" href="dashboard-staff-existing-files/dashboard-staff-mobile-registration.php">Mobile Registration</a></li>
+                    </div>
+                </div>
+                
                 <ul class="nav flex-column">
                     
-                    <?php if ($user_staff_roles === 'interviewer'): ?>
-                        <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-donor-submission.php">
-                                System Registration
-                            </a>
-                        </li>
-                    <?php endif; ?>
 
-                    <?php if ($user_staff_roles === 'reviewer'): ?>
-                        <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-medical-history-submissions.php">
-                                Initial Screening Queue 
-                            </a>
-                        </li>
-                    <?php endif; ?>
-                    
-                    <?php if ($user_staff_roles === 'physician'): ?>
-                        <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-physical-submission.php">
-                                Physical Exam Submissions
-                            </a>
-                        </li>
-                    <?php endif; ?>
-                    
-                    <?php if ($user_staff_roles === 'phlebotomist'): ?>
-                        <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-blood-collection-submission.php">
-                                Blood Collection Submissions
-                            </a>
-                        </li>
-                    <?php endif; ?>
-                    <li class="nav-item">
-                            <a class="nav-link" href="dashboard-staff-existing-files/dashboard-staff-mobile-registration.php">
-                                Mobile Registration
-                            </a>
-                        </li>
                     <li class="nav-item">
                         <a class="nav-link" href="dashboard-staff-history/dashboard-medical-review-history.php">Medical Review History</a>
                     </li>
@@ -831,7 +900,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
     <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content" style="border-radius: 15px; border: none;">
-                <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
+                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
                     <h5 class="modal-title" id="confirmationModalLabel">
                         <i class="fas fa-user-plus me-2"></i>
                         Register New Donor
@@ -843,7 +912,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
                 </div>
                 <div class="modal-footer border-0">
                     <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger px-4" onclick="proceedToDonorForm()">Proceed</button>
+                    <button type="button" class="btn px-4" style="background-color: #b22222; border-color: #b22222; color: white;" onclick="proceedToDonorForm()">Proceed</button>
                 </div>
             </div>
         </div>
@@ -892,7 +961,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content" style="background: transparent; border: none; box-shadow: none;">
                 <div class="modal-body text-center">
-                    <div class="spinner-border text-danger" style="width: 3.5rem; height: 3.5rem;" role="status">
+                    <div class="spinner-border" style="width: 3.5rem; height: 3.5rem; color: #b22222;" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
                     <p class="text-white mt-3 mb-0">Please wait...</p>
@@ -1959,6 +2028,83 @@ $donors = array_slice($donors, $offset, $records_per_page);
                         </div>`;
                 });
         }
+        
+        // Add loading functionality for data processing
+        function showProcessingModal(message = 'Processing medical history data...') {
+            const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+            const loadingText = document.querySelector('#loadingModal p');
+            if (loadingText) {
+                loadingText.textContent = message;
+            }
+            loadingModal.show();
+        }
+        
+        function hideProcessingModal() {
+            const loadingModal = bootstrap.Modal.getInstance(document.getElementById('loadingModal'));
+            if (loadingModal) {
+                loadingModal.hide();
+            }
+        }
+        
+        // Make functions globally available
+        window.showProcessingModal = showProcessingModal;
+        window.hideProcessingModal = hideProcessingModal;
+        
+        // Show loading when medical history forms are submitted
+        document.addEventListener('submit', function(e) {
+            if (e.target && (e.target.classList.contains('medical-form') || e.target.id.includes('medical'))) {
+                showProcessingModal('Submitting medical history data...');
+            }
+        });
+        
+        // Show loading for medical history AJAX calls
+        const originalFetch = window.fetch;
+        window.fetch = function(...args) {
+            const url = args[0];
+            if (typeof url === 'string' && (url.includes('medical') || url.includes('approval'))) {
+                showProcessingModal('Processing medical data...');
+            }
+            return originalFetch.apply(this, args).finally(() => {
+                setTimeout(hideProcessingModal, 500);
+            });
+        };
+        
+        // Dropdown functionality for Medical Screening Queue
+        document.addEventListener('DOMContentLoaded', function() {
+            const dropdownToggle = document.getElementById('medicalScreeningToggle');
+            const dropdownMenu = document.getElementById('medicalScreeningMenu');
+            const chevronIcon = dropdownToggle?.querySelector('i');
+            
+            if (dropdownToggle && dropdownMenu) {
+                dropdownToggle.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const isShown = dropdownMenu.classList.contains('show');
+                    
+                    if (isShown) {
+                        // Collapse the dropdown
+                        dropdownMenu.classList.remove('show');
+                        chevronIcon.classList.remove('fa-chevron-up');
+                        chevronIcon.classList.add('fa-chevron-down');
+                    } else {
+                        // Expand the dropdown
+                        dropdownMenu.classList.add('show');
+                        chevronIcon.classList.remove('fa-chevron-down');
+                        chevronIcon.classList.add('fa-chevron-up');
+                    }
+                });
+                
+                // Close dropdown when clicking outside
+                document.addEventListener('click', function(e) {
+                    if (!dropdownToggle.contains(e.target) && !dropdownMenu.contains(e.target)) {
+                        dropdownMenu.classList.remove('show');
+                        chevronIcon.classList.remove('fa-chevron-up');
+                        chevronIcon.classList.add('fa-chevron-down');
+                    }
+                });
+            }
+        });
     </script>
 </body>
 </html>

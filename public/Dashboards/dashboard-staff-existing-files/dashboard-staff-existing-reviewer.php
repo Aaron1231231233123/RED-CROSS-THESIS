@@ -563,11 +563,13 @@ function storeDonorIdInSession($donorData) {
             background: var(--hover-bg);
             color: var(--active-color) !important;
             border-left-color: var(--active-color);
+            border-radius: 4px !important;
         }
 
         .nav-link.active{
             background-color: var(--active-color);
             color: white !important;
+            border-radius: 4px !important;
         }
 
         /* Main Content */
@@ -787,6 +789,11 @@ function storeDonorIdInSession($donorData) {
             font-weight: 500;
         }
 
+        /* Global Button Styling */
+        .btn {
+            border-radius: 4px !important;
+        }
+
         /* Action button styling */
         .btn-sm {
             padding: 0.25rem 0.5rem;
@@ -832,7 +839,7 @@ function storeDonorIdInSession($donorData) {
             height: 50px;
             border-radius: 50%;
             border: 8px solid #ddd;
-            border-top: 8px solid #d9534f;
+            border-top: 8px solid #b22222;
             animation: rotateSpinner 1s linear infinite;
             display: none;
             z-index: 10000;
@@ -913,12 +920,12 @@ function storeDonorIdInSession($donorData) {
         }
 
         .confirm-action {
-            background: #d9534f;
+            background: #b22222;
             color: white;
         }
 
         .confirm-action:hover {
-            background: #c9302c;
+            background: #8b0000;
         }
 
 
@@ -1755,7 +1762,7 @@ select.donor_form_input[disabled] {
     <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content" style="border-radius: 15px; border: none;">
-                <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
+                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
                     <h5 class="modal-title" id="confirmationModalLabel">
                         <i class="fas fa-user-plus me-2"></i>
                         Register New Donor
@@ -1767,7 +1774,7 @@ select.donor_form_input[disabled] {
                 </div>
                 <div class="modal-footer border-0">
                     <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger px-4" onclick="proceedToDonorForm()">Proceed</button>
+                    <button type="button" class="btn px-4" style="background-color: #b22222; border-color: #b22222; color: white;" onclick="proceedToDonorForm()">Proceed</button>
                 </div>
             </div>
         </div>
@@ -1778,7 +1785,7 @@ select.donor_form_input[disabled] {
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content" style="background: transparent; border: none; box-shadow: none;">
                 <div class="modal-body text-center">
-                    <div class="spinner-border text-danger" style="width: 3.5rem; height: 3.5rem;" role="status">
+                    <div class="spinner-border" style="width: 3.5rem; height: 3.5rem; color: #b22222;" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
                     <p class="text-white mt-3 mb-0" style="font-size: 1.1rem;">Please wait...</p>

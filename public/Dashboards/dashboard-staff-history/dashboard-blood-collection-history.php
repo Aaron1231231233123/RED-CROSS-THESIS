@@ -147,13 +147,15 @@ foreach ($blood_collections as $blood_info) {
     $donor_id = $donor_info['donor_id'];
     $donors_with_blood[$donor_id] = true; // Mark this donor as processed
     
-    // Determine volume for blood collection
-    $volume = 'Collection Failed'; // Default
-    if (isset($blood_info['amount_taken']) && !empty($blood_info['amount_taken'])) {
+    // Determine volume for blood collection - improved logic
+    $volume = '1 unit'; // Default for any blood collection record
+    if (isset($blood_info['amount_taken']) && !empty($blood_info['amount_taken']) && $blood_info['amount_taken'] > 0) {
         $units = $blood_info['amount_taken'];
         $volume = $units . ' unit' . ($units > 1 ? 's' : '');
-    } elseif (isset($blood_info['is_successful']) && $blood_info['is_successful'] === true) {
-        $volume = '1 unit';
+    } elseif (isset($blood_info['is_successful']) && $blood_info['is_successful'] === false) {
+        $volume = 'Collection Failed';
+    } elseif (isset($blood_info['status']) && strtolower($blood_info['status']) === 'failed') {
+        $volume = 'Collection Failed';
     }
     
     $history_entry = [
@@ -332,11 +334,13 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
             background: var(--hover-bg);
             color: var(--active-color) !important;
             border-left-color: var(--active-color);
+            border-radius: 4px !important;
         }
 
         .nav-link.active{
             background-color: var(--active-color);
             color: white !important;
+            border-radius: 4px !important;
         }
 
         /* Main Content */
@@ -487,19 +491,24 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
             margin-bottom: 1.25rem;
             color: #333;
         }
+
+        /* Global Button Styling */
+        .btn {
+            border-radius: 4px !important;
+        }
     </style>
 </head>
 <body class="light-mode">
     <div class="container-fluid p-0">
         <!-- Header -->
         <div class="dashboard-home-header">
-            <h4 class="header-title">Staff Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
+            <h4 class="header-title">Phlebotomist Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
         </div>
 
         <div class="row g-0">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block sidebar">
-                <h4>Staff</h4>
+                <h4>Phlebotomist</h4>
                 <ul class="nav flex-column">
                     
                 <?php if ($user_staff_roles === 'interviewer'): ?>
@@ -650,7 +659,7 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
     <div class="modal fade" id="bloodCollectionModal" tabindex="-1" aria-labelledby="bloodCollectionModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl">
             <div class="modal-content" style="border: none; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); height: 80vh; display: flex; flex-direction: column;">
-                <div class="modal-header border-0" id="bloodCollectionHeader" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); border-radius: 12px 12px 0 0; padding: 1rem 1.5rem; flex-shrink: 0;">
+                <div class="modal-header border-0" id="bloodCollectionHeader" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); border-radius: 12px 12px 0 0; padding: 1rem 1.5rem; flex-shrink: 0;">
                     <div class="d-flex align-items-center w-100">
                         <div class="status-icon me-2" style="width: 40px; height: 40px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
                             <i class="fas fa-tint" style="font-size: 1.2rem; color: white;"></i>
@@ -675,22 +684,22 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
                     </div>
 
                     <!-- Status Banner -->
-                    <div class="status-banner mb-2 p-3" id="statusBanner" style="background: linear-gradient(90deg, #e8f5e8 0%, #f0f9ff 100%); border-radius: 8px; border-left: 4px solid #28a745;">
+                    <div class="status-banner mb-2 p-3" id="statusBanner" style="background: linear-gradient(90deg, #f8e6e6 0%, #f0d0d0 100%); border-radius: 8px; border-left: 4px solid #b22222;">
                         <div class="row align-items-center">
                             <div class="col-md-8">
                                 <div class="d-flex align-items-center mb-2">
-                                    <i class="fas fa-check-circle text-success me-2" style="font-size: 1.2rem;" id="statusIcon"></i>
-                                    <strong class="text-success" id="statusText">Collection Successful</strong>
+                                    <i class="fas fa-check-circle me-2" style="font-size: 1.2rem; color: #b22222;" id="statusIcon"></i>
+                                    <strong style="color: #b22222;" id="statusText">Collection Successful</strong>
                                 </div>
                                 <p class="text-muted mb-2" id="statusDescription">Blood collection completed without complications</p>
                                 <div class="collection-summary">
                                     <strong class="text-dark">Result:</strong> 
-                                    <span class="text-success" id="collectionResult">Successfully collected blood for donation</span>
+                                    <span style="color: #b22222;" id="collectionResult">Successfully collected blood for donation</span>
                                 </div>
                             </div>
                             <div class="col-md-4 text-center">
-                                <div class="result-icon" style="width: 60px; height: 60px; background: rgba(40, 167, 69, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;" id="resultIcon">
-                                    <i class="fas fa-tint" style="font-size: 1.5rem; color: #28a745;"></i>
+                                <div class="result-icon" style="width: 60px; height: 60px; background: rgba(178, 34, 34, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;" id="resultIcon">
+                                    <i class="fas fa-tint" style="font-size: 1.5rem; color: #b22222;"></i>
                                 </div>
                                 <small class="text-muted mt-1 d-block" id="resultText">Collection Complete</small>
                             </div>
@@ -712,7 +721,7 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
                             <div class="col-md-6">
                                 <div class="info-item mb-2" style="background: #f8f9fa; padding: 0.75rem; border-radius: 6px; border: 1px solid #e9ecef;">
                                     <label class="detail-label small">Amount Collected</label>
-                                    <div class="detail-value highlight small" id="bloodModalAmount">1 unit</div>
+                                    <div class="detail-value highlight small" id="bloodModalAmount" style="color: #b22222; font-weight: 600;">1 unit</div>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -808,7 +817,7 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
     <div class="modal fade" id="physicalExamModal" tabindex="-1" aria-labelledby="physicalExamModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content" style="border: none; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); height: 75vh; display: flex; flex-direction: column;">
-                <div class="modal-header border-0" style="background: linear-gradient(135deg, #ffc107 0%, #ff8c00 100%); border-radius: 12px 12px 0 0; padding: 1rem 1.5rem; flex-shrink: 0;">
+                <div class="modal-header border-0" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); border-radius: 12px 12px 0 0; padding: 1rem 1.5rem; flex-shrink: 0;">
                     <div class="d-flex align-items-center w-100">
                         <div class="status-icon me-2" style="width: 40px; height: 40px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
                             <i class="fas fa-stethoscope" style="font-size: 1.2rem; color: white;"></i>
@@ -828,17 +837,17 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
                             <span class="text-muted small">75% Complete</span>
                         </div>
                         <div class="progress" style="height: 8px; border-radius: 4px;">
-                            <div class="progress-bar bg-warning" role="progressbar" style="width: 75%"></div>
+                            <div class="progress-bar" role="progressbar" style="width: 75%; background-color: #b22222;"></div>
                         </div>
                     </div>
 
                     <!-- Current Status -->
-                    <div class="status-banner mb-4 p-4" style="background: linear-gradient(90deg, #fff3cd 0%, #ffeaa7 100%); border-radius: 12px; border-left: 5px solid #ffc107;">
+                    <div class="status-banner mb-4 p-4" style="background: linear-gradient(90deg, #f8e6e6 0%, #f0d0d0 100%); border-radius: 12px; border-left: 5px solid #b22222;">
                         <div class="row align-items-center">
                             <div class="col-md-8">
                                 <div class="d-flex align-items-center mb-2">
-                                    <i class="fas fa-check-circle text-warning me-2" style="font-size: 1.2rem;"></i>
-                                    <strong class="text-warning">Physical Examination Complete</strong>
+                                    <i class="fas fa-check-circle me-2" style="font-size: 1.2rem; color: #b22222;"></i>
+                                    <strong style="color: #b22222;">Physical Examination Complete</strong>
                                 </div>
                                 <p class="text-muted mb-2">This donor has successfully completed their physical examination and is now ready for blood collection.</p>
                                 <div class="next-step">
@@ -847,8 +856,8 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
                                 </div>
                             </div>
                             <div class="col-md-4 text-center">
-                                <div class="next-icon" style="width: 80px; height: 80px; background: rgba(255, 193, 7, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
-                                    <i class="fas fa-tint" style="font-size: 2rem; color: #ffc107;"></i>
+                                <div class="next-icon" style="width: 80px; height: 80px; background: rgba(178, 34, 34, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+                                    <i class="fas fa-tint" style="font-size: 2rem; color: #b22222;"></i>
                                 </div>
                                 <small class="text-muted mt-2 d-block">Ready for Collection</small>
                             </div>
@@ -891,7 +900,7 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
     <div class="modal fade" id="screeningOnlyModal" tabindex="-1" aria-labelledby="screeningOnlyModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content" style="border: none; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); height: 70vh; display: flex; flex-direction: column;">
-                <div class="modal-header border-0" style="background: linear-gradient(135deg, #17a2b8 0%, #20c997 100%); border-radius: 12px 12px 0 0; padding: 1rem 1.5rem; flex-shrink: 0;">
+                <div class="modal-header border-0" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); border-radius: 12px 12px 0 0; padding: 1rem 1.5rem; flex-shrink: 0;">
                     <div class="d-flex align-items-center w-100">
                         <div class="status-icon me-2" style="width: 40px; height: 40px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
                             <i class="fas fa-clipboard-check" style="font-size: 1.2rem; color: white;"></i>
@@ -911,17 +920,17 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
                             <span class="text-muted small">50% Complete</span>
                         </div>
                         <div class="progress" style="height: 8px; border-radius: 4px;">
-                            <div class="progress-bar bg-info" role="progressbar" style="width: 50%"></div>
+                            <div class="progress-bar" role="progressbar" style="width: 50%; background-color: #b22222;"></div>
                         </div>
                     </div>
 
                     <!-- Current Status -->
-                    <div class="status-banner mb-4 p-4" style="background: linear-gradient(90deg, #d1ecf1 0%, #bee5eb 100%); border-radius: 12px; border-left: 5px solid #17a2b8;">
+                    <div class="status-banner mb-4 p-4" style="background: linear-gradient(90deg, #f8e6e6 0%, #f0d0d0 100%); border-radius: 12px; border-left: 5px solid #b22222;">
                         <div class="row align-items-center">
                             <div class="col-md-8">
                                 <div class="d-flex align-items-center mb-2">
-                                    <i class="fas fa-check-circle text-info me-2" style="font-size: 1.2rem;"></i>
-                                    <strong class="text-info">Screening Phase Complete</strong>
+                                    <i class="fas fa-check-circle me-2" style="font-size: 1.2rem; color: #b22222;"></i>
+                                    <strong style="color: #b22222;">Screening Phase Complete</strong>
                                 </div>
                                 <p class="text-muted mb-2">This donor has successfully completed their initial screening form and medical history review.</p>
                                 <div class="next-step">
@@ -930,8 +939,8 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
                                 </div>
                             </div>
                             <div class="col-md-4 text-center">
-                                <div class="next-icon" style="width: 80px; height: 80px; background: rgba(23, 162, 184, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
-                                    <i class="fas fa-user-md" style="font-size: 2rem; color: #17a2b8;"></i>
+                                <div class="next-icon" style="width: 80px; height: 80px; background: rgba(178, 34, 34, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+                                    <i class="fas fa-user-md" style="font-size: 2rem; color: #b22222;"></i>
                                 </div>
                                 <small class="text-muted mt-2 d-block">Waiting for Physician</small>
                             </div>
@@ -1071,12 +1080,12 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
                 // Set dynamic styling based on success/failure
                 if (isSuccessful) {
                     modalContent.classList.remove('failed-collection');
-                    header.style.background = 'linear-gradient(135deg, #28a745 0%, #20c997 100%)';
+                    header.style.background = 'linear-gradient(135deg, #b22222 0%, #8b0000 100%)';
                     document.getElementById('bloodCollectionModalLabel').textContent = 'Blood Collection Complete';
                     document.getElementById('bloodCollectionSubtitle').textContent = 'Collection successfully processed';
                 } else {
                     modalContent.classList.add('failed-collection');
-                    header.style.background = 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)';
+                    header.style.background = 'linear-gradient(135deg, #b22222 0%, #8b0000 100%)';
                     document.getElementById('bloodCollectionModalLabel').textContent = 'Blood Collection Failed';
                     document.getElementById('bloodCollectionSubtitle').textContent = 'Collection was unsuccessful';
                 }
@@ -1085,11 +1094,13 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
                 const progressBar = document.getElementById('bloodProgressBar');
                 const progressText = document.getElementById('bloodProgressText');
                 if (isSuccessful) {
-                    progressBar.className = 'progress-bar bg-success';
+                    progressBar.className = 'progress-bar';
+                    progressBar.style.backgroundColor = '#b22222';
                     progressBar.style.width = '100%';
                     progressText.textContent = '100% Complete';
                 } else {
-                    progressBar.className = 'progress-bar bg-danger';
+                    progressBar.className = 'progress-bar';
+                    progressBar.style.backgroundColor = '#b22222';
                     progressBar.style.width = '75%';
                     progressText.textContent = '75% Complete (Failed)';
                 }
@@ -1104,24 +1115,26 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
                 const resultText = document.getElementById('resultText');
                 
                 if (isSuccessful) {
-                    statusIcon.className = 'fas fa-check-circle text-success me-2';
+                    statusIcon.className = 'fas fa-check-circle me-2';
+                    statusIcon.style.color = '#b22222';
                     statusText.textContent = 'Collection Successful';
-                    statusText.className = 'text-success';
+                    statusText.style.color = '#b22222';
                     statusDescription.textContent = 'Blood collection completed without complications';
                     collectionResult.textContent = 'Successfully collected blood for donation';
-                    collectionResult.className = 'text-success';
-                    resultIcon.style.background = 'rgba(40, 167, 69, 0.1)';
-                    resultIcon.querySelector('i').style.color = '#28a745';
+                    collectionResult.style.color = '#b22222';
+                    resultIcon.style.background = 'rgba(178, 34, 34, 0.1)';
+                    resultIcon.querySelector('i').style.color = '#b22222';
                     resultText.textContent = 'Collection Complete';
                 } else {
-                    statusIcon.className = 'fas fa-exclamation-triangle text-danger me-2';
+                    statusIcon.className = 'fas fa-exclamation-triangle me-2';
+                    statusIcon.style.color = '#b22222';
                     statusText.textContent = 'Collection Failed';
-                    statusText.className = 'text-danger';
+                    statusText.style.color = '#b22222';
                     statusDescription.textContent = 'Blood collection was unsuccessful';
                     collectionResult.textContent = 'Collection process encountered complications';
-                    collectionResult.className = 'text-danger';
-                    resultIcon.style.background = 'rgba(220, 53, 69, 0.1)';
-                    resultIcon.querySelector('i').style.color = '#dc3545';
+                    collectionResult.style.color = '#b22222';
+                    resultIcon.style.background = 'rgba(178, 34, 34, 0.1)';
+                    resultIcon.querySelector('i').style.color = '#b22222';
                     resultText.textContent = 'Collection Failed';
                 }
                 
@@ -1149,6 +1162,8 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
                 if (data.amount_collected && data.amount_collected !== 'N/A' && isSuccessful) {
                     amountElement.textContent = data.amount_collected + ' unit' + (data.amount_collected > 1 ? 's' : '');
                     amountElement.className = 'detail-value highlight';
+                    amountElement.style.color = '#b22222';
+                    amountElement.style.fontWeight = '600';
                 } else {
                     amountElement.textContent = 'No units collected';
                     amountElement.className = 'detail-value';

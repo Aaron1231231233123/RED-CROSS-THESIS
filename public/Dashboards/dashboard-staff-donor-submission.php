@@ -124,12 +124,12 @@ $declined_count = count($declined_donor_ids);
 error_log("DEBUG - Screening IDs map created: " . count($screening_ids_map));
 error_log("DEBUG - Declined donor count: " . $declined_count);
 
-// --- STEP 3: Get physical examination data to find approved donors ---
-$physical_ch = curl_init();
+// --- STEP 3: STRICT FILTERING - Get ONLY explicitly approved medical history records ---
+$medical_history_ch = curl_init();
 
-// Simple query to get all donor IDs from physical examination
-curl_setopt_array($physical_ch, [
-    CURLOPT_URL => SUPABASE_URL . '/rest/v1/physical_examination?select=donor_id',
+// Ultra-strict query: ONLY get records where medical_approval is explicitly 'Approved' (excludes NULL automatically)
+curl_setopt_array($medical_history_ch, [
+    CURLOPT_URL => SUPABASE_URL . '/rest/v1/medical_history?select=donor_id,medical_approval&medical_approval=eq.Approved',
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_HTTPHEADER => [
         'apikey: ' . SUPABASE_API_KEY,
@@ -137,66 +137,115 @@ curl_setopt_array($physical_ch, [
     ]
 ]);
 
-$physical_response = curl_exec($physical_ch);
-curl_close($physical_ch);
+$medical_history_response = curl_exec($medical_history_ch);
+curl_close($medical_history_ch);
 
-error_log("DEBUG - Physical Exam Query: " . SUPABASE_URL . '/rest/v1/physical_examination?select=donor_id');
-error_log("DEBUG - Physical Exam Sample Response: " . substr($physical_response, 0, 100));
+error_log("DEBUG - STRICT Medical History Query: " . SUPABASE_URL . '/rest/v1/medical_history?select=donor_id,medical_approval&medical_approval=eq.Approved');
+error_log("DEBUG - Medical History Sample Response: " . substr($medical_history_response, 0, 200));
 
 $approved_donor_ids = [];
 
-if ($physical_response !== false) {
-    $physical_data = json_decode($physical_response, true);
+if ($medical_history_response !== false) {
+    $medical_history_data = json_decode($medical_history_response, true);
     
-    if (is_array($physical_data)) {
-        error_log("DEBUG - Found " . count($physical_data) . " physical examination records");
+    if (is_array($medical_history_data)) {
+        error_log("DEBUG - Found " . count($medical_history_data) . " strictly approved medical history records");
         
-        // Log first record to check format
-        if (!empty($physical_data)) {
-            error_log("DEBUG - First physical exam record: " . json_encode($physical_data[0]));
+        // Log all records for debugging
+        foreach ($medical_history_data as $index => $record) {
+            error_log("DEBUG - Medical history record #" . ($index + 1) . ": " . json_encode($record));
         }
         
-        foreach ($physical_data as $record) {
-            if (isset($record['donor_id'])) {
-                $donor_id = $record['donor_id'];
-                
-                // Skip if donor was declined
-                if (in_array($donor_id, $declined_donor_ids)) {
-                    continue;
+        foreach ($medical_history_data as $record) {
+            if (isset($record['donor_id']) && isset($record['medical_approval'])) {
+                // Triple-check: medical_approval must be exactly 'Approved' and not NULL
+                if ($record['medical_approval'] === 'Approved' && $record['medical_approval'] !== null) {
+                    $donor_id = intval($record['donor_id']);
+                    
+                    // Skip if donor was declined in screening
+                    if (in_array($donor_id, $declined_donor_ids)) {
+                        error_log("DEBUG - Skipping approved donor ID " . $donor_id . " (declined in screening)");
+                        continue;
+                    }
+                    
+                    // Add to approved list ONLY if all conditions are met
+                    $approved_donor_ids[] = $donor_id;
+                    error_log("DEBUG - CONFIRMED approved donor ID: " . $donor_id . " with medical_approval: '" . $record['medical_approval'] . "'");
+                } else {
+                    error_log("DEBUG - REJECTED donor ID " . $record['donor_id'] . " with medical_approval: " . json_encode($record['medical_approval']));
                 }
-                
-                // Otherwise add to approved list
-                $approved_donor_ids[] = $donor_id;
+            } else {
+                error_log("DEBUG - INVALID record structure: " . json_encode($record));
             }
         }
     } else {
-        error_log("DEBUG - Error parsing physical examination data: not an array");
+        error_log("DEBUG - Error: medical history response is not an array: " . json_encode($medical_history_data));
     }
+} else {
+    error_log("DEBUG - FAILED to fetch medical history data - cURL error: " . curl_error($medical_history_ch));
 }
 
-// Ensure unique donor IDs and count
-$approved_donor_ids = array_values(array_unique($approved_donor_ids));
 
-// DEBUGGING: If we didn't find any approved donors, add some test values
-if (empty($approved_donor_ids)) {
-    error_log("DEBUG - No approved donors found naturally, adding test IDs for debugging");
-    // Add the first 3 donors from all_donor_ids as test approved donors if they aren't declined
-    foreach(array_slice($all_donor_ids, 0, 3) as $test_id) {
-        if (!in_array($test_id, $declined_donor_ids)) {
-            $approved_donor_ids[] = $test_id;
-            error_log("DEBUG - Added test approved donor ID: " . $test_id);
+
+// FINAL VERIFICATION: Remove duplicates and confirm approved donor list
+if (!empty($approved_donor_ids)) {
+    $approved_donor_ids = array_values(array_unique($approved_donor_ids));
+    error_log("DEBUG - FINAL approved donor count: " . count($approved_donor_ids));
+    error_log("DEBUG - FINAL approved donor IDs: [" . implode(',', $approved_donor_ids) . "]");
+    error_log("DEBUG - These are the ONLY donor IDs that should appear in 'existing' status");
+    
+    // Log each approved donor for verification
+    foreach ($approved_donor_ids as $id) {
+        error_log("DEBUG - APPROVED DONOR CONFIRMED: ID " . $id);
+    }
+} else {
+    error_log("DEBUG - WARNING: Zero approved donors found - all have NULL or non-'Approved' medical_approval");
+    $approved_donor_ids = []; // Force empty array
+}
+
+// Calculate counts for the new card structure - excluding NULL medical_approval donors
+$incoming_donor_ids = array_diff($all_donor_ids, $screened_donor_ids);
+
+// Filter out donors with NULL medical_approval from registrations count
+$filtered_incoming_donors = [];
+foreach ($incoming_donor_ids as $donor_id) {
+    // Check if this donor has NULL medical_approval
+    $check_ch = curl_init();
+    curl_setopt_array($check_ch, [
+        CURLOPT_URL => SUPABASE_URL . '/rest/v1/medical_history?select=medical_approval&donor_id=eq.' . $donor_id,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY
+        ]
+    ]);
+    
+    $check_response = curl_exec($check_ch);
+    curl_close($check_ch);
+    
+    if ($check_response !== false) {
+        $medical_data = json_decode($check_response, true);
+        
+        // Only count if no medical history (new registration) OR if medical_approval is not NULL
+        if (empty($medical_data)) {
+            // No medical history = new registration, include it
+            $filtered_incoming_donors[] = $donor_id;
+        } elseif (!empty($medical_data)) {
+            $medical_approval = $medical_data[0]['medical_approval'] ?? null;
+            // Only include if medical_approval is not NULL
+            if ($medical_approval !== null) {
+                $filtered_incoming_donors[] = $donor_id;
+            }
         }
     }
 }
 
-// Calculate counts for the new card structure
-$incoming_donor_ids = array_diff($all_donor_ids, $screened_donor_ids);
-$registrations_count = count($incoming_donor_ids); // All unscreened donors are new registrations
+$registrations_count = count($filtered_incoming_donors);
 
-// Existing donors are those who have been screened before (approved donors)
+// Existing donors are those who have approved medical history
 $existing_donors_count = count($approved_donor_ids);
 
-// Ineligible donors are those who have been declined
+// Ineligible donors are those who have been declined in screening
 $ineligible_count = count($declined_donor_ids);
 
 // We'll calculate today's count from the actual query results later
@@ -248,7 +297,7 @@ $debug_screening = [
 ];
 error_log("Screening form data (direct query): " . json_encode($debug_screening));
 
-// Now get donor forms that are NOT in the processed list
+// Now get donor forms with strict filtering based on status
 $query_url = SUPABASE_URL . '/rest/v1/donor_form?select=*&order=submitted_at.desc';
 
 // Check if we're filtering by status
@@ -260,13 +309,16 @@ if ($status_filter === 'registrations') {
         $query_url .= '&donor_id=not.in.(' . $screened_ids_str . ')';
     }
 } elseif ($status_filter === 'existing') {
-    // Show only approved donors (existing donors)
+    // ULTIMATE STRICT FILTER: Show ONLY donors with explicitly approved medical history
     if (!empty($approved_donor_ids)) {
         $approved_ids_str = implode(',', $approved_donor_ids);
         $query_url .= '&donor_id=in.(' . $approved_ids_str . ')';
+        error_log("DEBUG - EXISTING FILTER: Approved donor IDs: " . $approved_ids_str);
+        error_log("DEBUG - EXISTING FILTER: Query URL: " . $query_url);
     } else {
-        // If no approved donors, show empty result
-        $query_url .= '&donor_id=eq.0';
+        // Absolutely no approved donors - force completely empty result
+        $query_url .= '&donor_id=eq.999999999';
+        error_log("DEBUG - EXISTING FILTER: Zero approved donors, using impossible ID filter");
     }
 } elseif ($status_filter === 'ineligible') {
     // Show only declined donors (ineligible)
@@ -275,7 +327,7 @@ if ($status_filter === 'registrations') {
         $query_url .= '&donor_id=in.(' . $declined_ids_str . ')';
     } else {
         // If no declined donors, show empty result
-        $query_url .= '&donor_id=eq.0';
+        $query_url .= '&donor_id=eq.999999999'; // Use extremely high number to ensure no matches
     }
 }
 
@@ -301,6 +353,48 @@ if ($response === false || is_null(json_decode($response, true))) {
 } else {
     $donors = json_decode($response, true) ?: [];
     error_log("Decoded donors count: " . count($donors));
+    
+    // Simple restriction: Check each donor's medical_approval status directly
+    if (!empty($donors)) {
+        $filtered_donors = [];
+        
+        foreach ($donors as $donor) {
+            $donor_id = $donor['donor_id'] ?? null;
+            
+            if ($donor_id) {
+                // Query medical_history for this specific donor
+                $check_ch = curl_init();
+                curl_setopt_array($check_ch, [
+                    CURLOPT_URL => SUPABASE_URL . '/rest/v1/medical_history?select=medical_approval&donor_id=eq.' . $donor_id,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_HTTPHEADER => [
+                        'apikey: ' . SUPABASE_API_KEY,
+                        'Authorization: Bearer ' . SUPABASE_API_KEY
+                    ]
+                ]);
+                
+                $check_response = curl_exec($check_ch);
+                curl_close($check_ch);
+                
+                if ($check_response !== false) {
+                    $medical_data = json_decode($check_response, true);
+                    
+                    // Only include donor if medical_approval is 'Approved' (not NULL)
+                    if (is_array($medical_data) && !empty($medical_data)) {
+                        $medical_approval = $medical_data[0]['medical_approval'] ?? null;
+                        
+                        if ($medical_approval === 'Approved') {
+                            $filtered_donors[] = $donor;
+                        }
+                        // Skip if medical_approval is NULL or anything else
+                    }
+                    // Skip if no medical history record found
+                }
+            }
+        }
+        
+        $donors = $filtered_donors;
+    }
 }
 
 $total_records = count($donors);
@@ -418,11 +512,13 @@ curl_close($ch);
             background: var(--hover-bg);
             color: var(--active-color) !important;
             border-left-color: var(--active-color);
+            border-radius: 4px !important;
         }
 
         .nav-link.active{
             background-color: var(--active-color);
             color: white !important;
+            border-radius: 4px !important;
         }
 
         /* Main Content */
@@ -1502,9 +1598,9 @@ select.donor_form_input[disabled] {
                 padding: 1rem;
             }
             
-                         .donation-options {
-                 flex-direction: column;
-             }
+    .donation-options {
+                flex-direction: column;
+            }
 
              .mobile-donation-fields input[type="text"] {
                  max-width: 100%;
@@ -1547,6 +1643,11 @@ select.donor_form_input[disabled] {
                  font-size: 12px;
              }
 }
+
+        /* Global Button Styling */
+        .btn {
+            border-radius: 4px !important;
+        }
     </style>
 </head>
 <body class="light-mode">
@@ -1901,7 +2002,7 @@ select.donor_form_input[disabled] {
     <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content" style="border-radius: 15px; border: none;">
-                <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
+                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
                     <h5 class="modal-title" id="confirmationModalLabel">
                         <i class="fas fa-user-plus me-2"></i>
                         Register New Donor
@@ -1913,7 +2014,7 @@ select.donor_form_input[disabled] {
                 </div>
                 <div class="modal-footer border-0">
                     <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger px-4" onclick="proceedToDonorForm()">Proceed</button>
+                    <button type="button" class="btn px-4" style="background-color: #b22222; border-color: #b22222; color: white;" onclick="proceedToDonorForm()">Proceed</button>
                 </div>
             </div>
         </div>
@@ -1924,7 +2025,7 @@ select.donor_form_input[disabled] {
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content" style="background: transparent; border: none; box-shadow: none;">
                 <div class="modal-body text-center">
-                    <div class="spinner-border text-danger" style="width: 3.5rem; height: 3.5rem;" role="status">
+                    <div class="spinner-border" style="width: 3.5rem; height: 3.5rem; color: #b22222;" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
                     <p class="text-white mt-3 mb-0" style="font-size: 1.1rem;">Please wait...</p>
@@ -2559,6 +2660,60 @@ select.donor_form_input[disabled] {
             } else {
                 console.error("ERROR: Approve button not found in the DOM!");
             }
+            
+            // Add loading functionality for data processing
+            function showProcessingModal(message = 'Processing donor data...') {
+                const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+                const loadingText = document.querySelector('#loadingModal p');
+                if (loadingText) {
+                    loadingText.textContent = message;
+                }
+                loadingModal.show();
+            }
+            
+            function hideProcessingModal() {
+                const loadingModal = bootstrap.Modal.getInstance(document.getElementById('loadingModal'));
+                if (loadingModal) {
+                    loadingModal.hide();
+                }
+            }
+            
+            // Make functions globally available
+            window.showProcessingModal = showProcessingModal;
+            window.hideProcessingModal = hideProcessingModal;
+            
+            // Show loading when screening form is submitted
+            document.addEventListener('submit', function(e) {
+                if (e.target && e.target.id === 'screeningForm') {
+                    showProcessingModal('Submitting screening form data...');
+                }
+            });
+            
+            // Show loading for donor approval process
+            if (approveButton) {
+                const originalApproveHandler = approveButton.onclick;
+                approveButton.onclick = function() {
+                    showProcessingModal('Processing donor approval...');
+                    setTimeout(() => {
+                        if (originalApproveHandler) {
+                            originalApproveHandler.call(this);
+                        }
+                        hideProcessingModal();
+                    }, 1000);
+                };
+            }
+            
+            // Show loading for any donor-related AJAX calls
+            const originalFetch = window.fetch;
+            window.fetch = function(...args) {
+                const url = args[0];
+                if (typeof url === 'string' && (url.includes('screening') || url.includes('donor'))) {
+                    showProcessingModal('Processing data...');
+                }
+                return originalFetch.apply(this, args).finally(() => {
+                    setTimeout(hideProcessingModal, 500);
+                });
+            };
         });
 
         // Simple modal functions (isolated from other code)

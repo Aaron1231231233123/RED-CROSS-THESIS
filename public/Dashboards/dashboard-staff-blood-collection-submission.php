@@ -379,11 +379,13 @@ foreach ($display_exams as $index => $exam) {
             background: var(--hover-bg);
             color: var(--active-color) !important;
             border-left-color: var(--active-color);
+            border-radius: 4px !important;
         }
 
         .nav-link.active{
             background-color: var(--active-color);
             color: white !important;
+            border-radius: 4px !important;
         }
 
         /* Main Content */
@@ -1623,6 +1625,11 @@ foreach ($display_exams as $index => $exam) {
         .blood-toast-error i {
             color: #dc3545;
         }
+
+        /* Global Button Styling */
+        .btn {
+            border-radius: 4px !important;
+        }
     </style>
 </head>
 <body class="light-mode">
@@ -1888,7 +1895,7 @@ foreach ($display_exams as $index => $exam) {
     <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content" style="border-radius: 15px; border: none;">
-                <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
+                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
                     <h5 class="modal-title" id="confirmationModalLabel">
                         <i class="fas fa-user-plus me-2"></i>
                         Register New Donor
@@ -1900,7 +1907,7 @@ foreach ($display_exams as $index => $exam) {
                 </div>
                 <div class="modal-footer border-0">
                     <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger px-4" onclick="proceedToDonorForm()">Proceed</button>
+                    <button type="button" class="btn px-4" style="background-color: #b22222; border-color: #b22222; color: white;" onclick="proceedToDonorForm()">Proceed</button>
                 </div>
             </div>
         </div>
@@ -1911,7 +1918,7 @@ foreach ($display_exams as $index => $exam) {
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content" style="background: transparent; border: none; box-shadow: none;">
                 <div class="modal-body text-center">
-                    <div class="spinner-border text-danger" style="width: 3.5rem; height: 3.5rem;" role="status">
+                    <div class="spinner-border" style="width: 3.5rem; height: 3.5rem; color: #b22222;" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
                     <p class="text-white mt-3 mb-0">Please wait...</p>
@@ -2447,6 +2454,46 @@ foreach ($display_exams as $index => $exam) {
 
             // Event listeners
             searchInput.addEventListener('input', debouncedSearch);
+            
+            // Add loading functionality for data processing
+            function showProcessingModal(message = 'Processing blood collection data...') {
+                const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+                const loadingText = document.querySelector('#loadingModal p');
+                if (loadingText) {
+                    loadingText.textContent = message;
+                }
+                loadingModal.show();
+            }
+            
+            function hideProcessingModal() {
+                const loadingModal = bootstrap.Modal.getInstance(document.getElementById('loadingModal'));
+                if (loadingModal) {
+                    loadingModal.hide();
+                }
+            }
+            
+            // Make functions globally available
+            window.showProcessingModal = showProcessingModal;
+            window.hideProcessingModal = hideProcessingModal;
+            
+            // Show loading when blood collection form is submitted
+            document.addEventListener('submit', function(e) {
+                if (e.target && e.target.id === 'bloodCollectionForm') {
+                    showProcessingModal('Submitting blood collection data...');
+                }
+            });
+            
+            // Show loading for any blood collection related AJAX calls
+            const originalFetch = window.fetch;
+            window.fetch = function(...args) {
+                const url = args[0];
+                if (typeof url === 'string' && url.includes('blood_collection')) {
+                    showProcessingModal('Processing blood collection...');
+                }
+                return originalFetch.apply(this, args).finally(() => {
+                    setTimeout(hideProcessingModal, 500); // Small delay for user feedback
+                });
+            };
         });
     </script>
 </body>
