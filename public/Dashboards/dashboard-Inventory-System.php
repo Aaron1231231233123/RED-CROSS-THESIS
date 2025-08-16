@@ -395,7 +395,7 @@ error_log("Blood In Stock Count: " . $bloodInStockCount);
 error_log("Blood By Type: " . json_encode($bloodByType));
 
 // --- Pending Donors Alert Setup ---
-include_once __DIR__ . '/modules/donation_pending.php';
+include_once __DIR__ . '/module/donation_pending.php';
 $pendingDonorsCount = isset($pendingDonations) && is_array($pendingDonations) ? count($pendingDonations) : 0;
 
 $maxCapacity = 800;

@@ -12,22 +12,22 @@ $pageTitle = "Loading...";
 try {
     switch ($status) {
         case 'pending':
-            include_once 'modules/donation_pending.php';
+            include_once 'module/donation_pending.php';
             $donations = $pendingDonations ?? [];
             $pageTitle = "Pending Donations";
             break;
         case 'approved':
-            include_once 'modules/donation_approved.php';
+            include_once 'module/donation_approved.php';
             $donations = $approvedDonations ?? [];
             $pageTitle = "Approved Donations";
             break;
         case 'declined':
-            include_once 'modules/donation_declined.php';
+            include_once 'module/donation_declined.php';
             $donations = $declinedDonations ?? [];
             $pageTitle = "Declined Donations";
             break;
         default:
-            include_once 'modules/donation_pending.php';
+            include_once 'module/donation_pending.php';
             $donations = $pendingDonations ?? [];
             $pageTitle = "Pending Donations";
             break;
@@ -214,9 +214,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 }
 
 #bloodDonationsCollapse .nav-link:hover {
-    background-color: #dc3545;
-    color: white;
+    background-color: #f8f9fa;
+    color: #dc3545;
 }
+
 
 #bloodDonationsCollapse .nav-link.active {
     background-color: #dc3545;
