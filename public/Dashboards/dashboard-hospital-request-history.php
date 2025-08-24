@@ -285,7 +285,7 @@ function updateBloodRequestAndInventory($request_id) {
 
         // Update request status
         $request_update_data = json_encode([
-            'status' => 'Confirmed',
+            'status' => 'Printed',
             'last_updated' => date('Y-m-d H:i:s')
         ]);
         
@@ -1369,11 +1369,11 @@ function markAsConfirmed(requestId) {
                         <div class="modal-dialog">
                             <div class="modal-content">
                                 <div class="modal-header bg-success text-white">
-                                    <h5 class="modal-title">Request Confirmed Successfully</h5>
+                                    <h5 class="modal-title">Request Printed Successfully</h5>
                                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                                 </div>
                                 <div class="modal-body">
-                                    <h6>Request has been confirmed and units have been deducted from inventory.</h6>
+                                    <h6>Request has been printed and units have been deducted from inventory.</h6>
                                     <p class="mb-0 mt-3"><strong>Details:</strong></p>
                                     <pre class="bg-light p-3 mt-2 rounded">${data.detailed_message}</pre>
                                     <div class="mt-3 mb-2"><strong>Units Deducted:</strong></div>
@@ -1399,7 +1399,7 @@ function markAsConfirmed(requestId) {
                 const modal = new bootstrap.Modal(modalContainer.querySelector('.modal'));
                 modal.show();
                 // Update the button
-                button.innerHTML = 'Confirmed <i class="bi bi-check-circle-fill"></i>';
+                button.innerHTML = 'Printed <i class="bi bi-check-circle-fill"></i>';
                 button.classList.remove('btn-success');
                 button.classList.add('btn-secondary');
                 button.disabled = true;

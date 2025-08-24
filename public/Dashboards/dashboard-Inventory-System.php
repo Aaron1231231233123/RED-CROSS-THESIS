@@ -116,111 +116,15 @@ if (isset($bloodRequestsResponse['data']) && is_array($bloodRequestsResponse['da
 }
 
 // ----------------------------------------------------
-// PART 2: GET BLOOD RECEIVED COUNT
+// SHARED: GET DECLINED DONOR IDS (for reuse across parts)
 // ----------------------------------------------------
-// This represents the number of approved donations (donors from the approved dropdown)
-$bloodReceivedCount = 0;
-
-// First, get all donors with non-accepted remarks in physical examination
-$declinedDonorIdsForApproved = [];
-
-// Query physical examination for non-accepted remarks
-$physicalExamQueryApproved = curl_init();
-curl_setopt_array($physicalExamQueryApproved, [
-    CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?remarks=neq.Accepted&select=donor_id,donor_form_id",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        "apikey: " . SUPABASE_API_KEY,
-        "Authorization: Bearer " . SUPABASE_API_KEY,
-        "Content-Type: application/json"
-    ],
-]);
-
-$physicalExamResponseApproved = curl_exec($physicalExamQueryApproved);
-curl_close($physicalExamQueryApproved);
-
-if ($physicalExamResponseApproved) {
-    $physicalExamRecordsApproved = json_decode($physicalExamResponseApproved, true);
-    if (is_array($physicalExamRecordsApproved)) {
-        foreach ($physicalExamRecordsApproved as $record) {
-            if (!empty($record['donor_id'])) {
-                $declinedDonorIdsForApproved[] = $record['donor_id'];
-            }
-            if (!empty($record['donor_form_id'])) {
-                $declinedDonorIdsForApproved[] = $record['donor_form_id'];
-            }
-        }
-    }
-}
-
-// Remove duplicates
-$declinedDonorIdsForApproved = array_unique($declinedDonorIdsForApproved);
-
-// Now get approved eligibility records
-$approvedDonationsResponse = supabaseRequest("eligibility?status=eq.approved&select=eligibility_id,donor_id");
-// Track counted donor_ids for blood received
-$seenApprovedDonorIds = [];
-if (isset($approvedDonationsResponse['data']) && is_array($approvedDonationsResponse['data'])) {
-    // Filter out donors with non-accepted physical examination remarks
-    foreach ($approvedDonationsResponse['data'] as $donation) {
-        if (!in_array($donation['donor_id'], $declinedDonorIdsForApproved)) {
-            // Double-check physical examination remarks for this donor
-            $physicalExamCheckApproved = curl_init();
-            curl_setopt_array($physicalExamCheckApproved, [
-                CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?donor_id=eq." . $donation['donor_id'] . "&select=remarks",
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER => [
-                    "apikey: " . SUPABASE_API_KEY,
-                    "Authorization: Bearer " . SUPABASE_API_KEY,
-                    "Content-Type: application/json"
-                ],
-            ]);
-            
-            $physicalExamCheckResponseApproved = curl_exec($physicalExamCheckApproved);
-            curl_close($physicalExamCheckApproved);
-            
-            $skipDonorApproved = false;
-            if ($physicalExamCheckResponseApproved) {
-                $physicalExamCheckRecordsApproved = json_decode($physicalExamCheckResponseApproved, true);
-                if (is_array($physicalExamCheckRecordsApproved) && !empty($physicalExamCheckRecordsApproved)) {
-                    foreach ($physicalExamCheckRecordsApproved as $examRecord) {
-                        $remarks = $examRecord['remarks'] ?? '';
-                        if ($remarks !== 'Accepted' && !empty($remarks)) {
-                            $skipDonorApproved = true;
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            if (!$skipDonorApproved) {
-                // Only count each donor_id once
-                if (!in_array($donation['donor_id'], $seenApprovedDonorIds)) {
-                    $bloodReceivedCount++;
-                    $seenApprovedDonorIds[] = $donation['donor_id'];
-                }
-            }
-        }
-    }
-}
-
-// ----------------------------------------------------
-// PART 3: GET BLOOD IN STOCK COUNT
-// ----------------------------------------------------
-// This represents the current total units in the blood bank
-$bloodInStockCount = 0;
-$today = date('Y-m-d');
-
-// Fetch blood inventory data from eligibility table
-$bloodInventory = [];
-
-// First, get all donors with non-accepted remarks in physical examination
+// Get all donors with non-accepted remarks in physical examination
 $declinedDonorIds = [];
 
-// Query physical examination for non-accepted remarks (anything that's not "Accepted")
+// Query physical examination for non-accepted remarks
 $physicalExamQuery = curl_init();
 curl_setopt_array($physicalExamQuery, [
-    CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?remarks=neq.Accepted&select=donor_id,donor_form_id,remarks",
+    CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?remarks=neq.Accepted&select=donor_id,donor_form_id",
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_HTTPHEADER => [
         "apikey: " . SUPABASE_API_KEY,
@@ -236,7 +140,6 @@ if ($physicalExamResponse) {
     $physicalExamRecords = json_decode($physicalExamResponse, true);
     if (is_array($physicalExamRecords)) {
         foreach ($physicalExamRecords as $record) {
-            // Add both donor_id and donor_form_id to exclusion list for comprehensive matching
             if (!empty($record['donor_id'])) {
                 $declinedDonorIds[] = $record['donor_id'];
             }
@@ -249,6 +152,63 @@ if ($physicalExamResponse) {
 
 // Remove duplicates
 $declinedDonorIds = array_unique($declinedDonorIds);
+
+// ----------------------------------------------------
+// PART 2: GET BLOOD RECEIVED COUNT (OPTIMIZED)
+// ----------------------------------------------------
+// This represents the number of approved donations (donors from the approved dropdown)
+$bloodReceivedCount = 0;
+
+// Get all declined donor IDs in one query (reuse from PART 1)
+$declinedDonorIdsForApproved = $declinedDonorIds; // Reuse the already fetched declined IDs
+
+// Now get approved eligibility records
+$approvedDonationsResponse = supabaseRequest("eligibility?status=eq.approved&select=eligibility_id,donor_id");
+$seenApprovedDonorIds = [];
+
+if (isset($approvedDonationsResponse['data']) && is_array($approvedDonationsResponse['data'])) {
+    // Filter out donors with non-accepted physical examination remarks
+    foreach ($approvedDonationsResponse['data'] as $donation) {
+        if (!in_array($donation['donor_id'], $declinedDonorIdsForApproved)) {
+            // Only count each donor_id once
+            if (!in_array($donation['donor_id'], $seenApprovedDonorIds)) {
+                $bloodReceivedCount++;
+                $seenApprovedDonorIds[] = $donation['donor_id'];
+            }
+        }
+    }
+}
+
+// ----------------------------------------------------
+// PART 3: GET BLOOD IN STOCK COUNT (OPTIMIZED)
+// ----------------------------------------------------
+// This represents the current total units in the blood bank
+$bloodInStockCount = 0;
+$today = date('Y-m-d');
+
+// OPTIMIZED: Get all blood collection data in one query
+$bloodCollectionQuery = curl_init();
+curl_setopt_array($bloodCollectionQuery, [
+    CURLOPT_URL => SUPABASE_URL . "/rest/v1/blood_collection?select=blood_collection_id,amount_taken",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        "apikey: " . SUPABASE_API_KEY,
+        "Authorization: Bearer " . SUPABASE_API_KEY,
+        "Content-Type: application/json"
+    ],
+]);
+$bloodCollectionResponse = curl_exec($bloodCollectionQuery);
+curl_close($bloodCollectionQuery);
+$bloodCollectionData = json_decode($bloodCollectionResponse, true) ?: [];
+
+// Create lookup array for blood collection data
+$bloodCollectionLookup = [];
+foreach ($bloodCollectionData as $collection) {
+    $bloodCollectionLookup[$collection['blood_collection_id']] = $collection;
+}
+
+// Fetch blood inventory data from eligibility table
+$bloodInventory = [];
 
 // Query eligibility table for valid blood units
 $eligibilityData = querySQL(
@@ -272,46 +232,13 @@ if (is_array($eligibilityData) && !empty($eligibilityData)) {
         }
         $seenInventoryDonorIds[] = $item['donor_id'];
         
-        // Double-check physical examination remarks for this specific donor
-        $physicalExamCheck = curl_init();
-        curl_setopt_array($physicalExamCheck, [
-            CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?donor_id=eq." . $item['donor_id'] . "&select=remarks",
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => [
-                "apikey: " . SUPABASE_API_KEY,
-                "Authorization: Bearer " . SUPABASE_API_KEY,
-                "Content-Type: application/json"
-            ],
-        ]);
-        
-        $physicalExamCheckResponse = curl_exec($physicalExamCheck);
-        curl_close($physicalExamCheck);
-        
-        // Skip this donor if they have non-accepted remarks
-        $skipDonor = false;
-        if ($physicalExamCheckResponse) {
-            $physicalExamCheckRecords = json_decode($physicalExamCheckResponse, true);
-            if (is_array($physicalExamCheckRecords) && !empty($physicalExamCheckRecords)) {
-                foreach ($physicalExamCheckRecords as $examRecord) {
-                    $remarks = $examRecord['remarks'] ?? '';
-                    if ($remarks !== 'Accepted' && !empty($remarks)) {
-                        $skipDonor = true;
-                        break;
-                    }
-                }
-            }
-        }
-        
-        if ($skipDonor) {
+        // Skip if no blood collection data
+        if (empty($item['blood_collection_id']) || !isset($bloodCollectionLookup[$item['blood_collection_id']])) {
             continue;
         }
         
-        // Get blood collection data to get amount_taken
-        $bloodCollectionData = null;
-        if (!empty($item['blood_collection_id'])) {
-            $bloodCollectionData = querySQL('blood_collection', '*', ['blood_collection_id' => 'eq.' . $item['blood_collection_id']]);
-            $bloodCollectionData = isset($bloodCollectionData[0]) ? $bloodCollectionData[0] : null;
-        }
+        // Get blood collection data from lookup
+        $bloodCollectionData = $bloodCollectionLookup[$item['blood_collection_id']];
         
         // Calculate expiration date (35 days from collection)
         $collectionDate = new DateTime($item['collection_start_time']);
@@ -319,7 +246,7 @@ if (is_array($eligibilityData) && !empty($eligibilityData)) {
         $expirationDate->modify('+35 days');
         
         // Only include bags with amount_taken > 0 and not expired
-        $amount_taken = $bloodCollectionData && isset($bloodCollectionData['amount_taken']) ? intval($bloodCollectionData['amount_taken']) : 0;
+        $amount_taken = isset($bloodCollectionData['amount_taken']) ? intval($bloodCollectionData['amount_taken']) : 0;
         $isExpired = (new DateTime() > $expirationDate);
         
         // Create blood bag entry
@@ -1430,19 +1357,25 @@ h6 {
                         <h5 class="mb-4" style="font-weight: 600;">Available Blood per Unit</h5>
                         <div class="row g-4">
                             <!-- Blood Type Cards -->
+                            <?php
+                            // OPTIMIZED: Calculate blood type counts in one pass
+                            $bloodTypeCounts = [
+                                'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
+                                'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
+                            ];
+                            
+                            foreach ($bloodInventory as $bag) {
+                                if ($bag['status'] == 'Valid' && is_numeric($bag['bags']) && isset($bloodTypeCounts[$bag['blood_type']])) {
+                                    $bloodTypeCounts[$bag['blood_type']] += floatval($bag['bags']);
+                                }
+                            }
+                            ?>
+                            
                             <div class="col-md-3">
                                 <div class="card inventory-system-blood-card blood-type-o-pos">
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type O+</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'O+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></p>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['O+']; ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -1450,15 +1383,7 @@ h6 {
                                 <div class="card inventory-system-blood-card blood-type-a-pos">
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type A+</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'A+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></p>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['A+']; ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -1466,15 +1391,7 @@ h6 {
                                 <div class="card inventory-system-blood-card blood-type-b-pos">
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type B+</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'B+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></p>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['B+']; ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -1482,15 +1399,7 @@ h6 {
                                 <div class="card inventory-system-blood-card blood-type-ab-pos">
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type AB+</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'AB+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></p>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['AB+']; ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -1500,15 +1409,7 @@ h6 {
                                 <div class="card inventory-system-blood-card blood-type-o-neg">
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type O-</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'O-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></p>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['O-']; ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -1516,15 +1417,7 @@ h6 {
                                 <div class="card inventory-system-blood-card blood-type-a-neg">
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type A-</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'A-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></p>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['A-']; ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -1532,15 +1425,7 @@ h6 {
                                 <div class="card inventory-system-blood-card blood-type-b-neg">
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type B-</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'B-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></p>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['B-']; ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -1548,15 +1433,7 @@ h6 {
                                 <div class="card inventory-system-blood-card blood-type-ab-neg">
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type AB-</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'AB-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></p>
+                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['AB-']; ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -1722,7 +1599,7 @@ if ($statusClass === 'critical') {
                     <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 
                     <?php
-                    // STEP 1: Get ALL successful collections (no time filter)
+                    // OPTIMIZED: Get ALL successful collections and donor data in fewer queries
                     $eligibilityResponse = supabaseRequest("eligibility?select=eligibility_id,donor_id,blood_type,collection_successful&collection_successful=eq.true");
                     
                     $eligibilityData = [];
@@ -1733,54 +1610,36 @@ if ($statusClass === 'critical') {
                     // Count ALL successful collections
                     $totalDonorCount = count($eligibilityData);
 
+                    // OPTIMIZED: Get all donor addresses in one query
+                    $donorIds = array_column($eligibilityData, 'donor_id');
+                    $donorIdsString = implode(',', $donorIds);
+                    
+                    $donorFormQuery = curl_init();
+                    curl_setopt_array($donorFormQuery, [
+                        CURLOPT_URL => SUPABASE_URL . "/rest/v1/donor_form?select=donor_id,permanent_address,office_address&donor_id=in.(" . $donorIdsString . ")",
+                        CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_HTTPHEADER => [
+                            "apikey: " . SUPABASE_API_KEY,
+                            "Authorization: Bearer " . SUPABASE_API_KEY,
+                            "Content-Type: application/json"
+                        ],
+                    ]);
+                    
+                    $donorFormResponse = curl_exec($donorFormQuery);
+                    curl_close($donorFormQuery);
+                    $donorFormData = json_decode($donorFormResponse, true) ?: [];
+
+                    // Create lookup array for donor data
+                    $donorLookup = [];
+                    foreach ($donorFormData as $donor) {
+                        $donorLookup[$donor['donor_id']] = $donor;
+                    }
+
                     // STEP 2: Track two separate sets of data:
                     // 1. City counts for Top Donors - using ALL eligibility data
                     // 2. Full address data for heatmap - using filtered data if needed
                     $cityDonorCounts = []; // For Top Donors list - NO TIME FILTER
                     $heatmapData = []; // For the heatmap
-
-                    // Process Top Donor Locations first - using ALL eligibility data
-                    foreach ($eligibilityData as $eligibility) {
-                        // Get donor's address data for city counting
-                        $donorFormResponse = supabaseRequest(
-                            'donor_form?select=permanent_address,office_address&donor_id=eq.' . $eligibility['donor_id']
-                        );
-
-                        if (isset($donorFormResponse['data']) && !empty($donorFormResponse['data'])) {
-                            $donorForm = $donorFormResponse['data'][0];
-                            
-                            // Get the address (office first, then permanent)
-                            $address = !empty($donorForm['office_address']) ? $donorForm['office_address'] : $donorForm['permanent_address'];
-                            
-                            // For Top Donors: Extract city name
-                            $iloiloCities = [
-                                'Oton', 'Pavia', 'Leganes', 'Santa Barbara', 'San Miguel', 
-                                'Cabatuan', 'Maasin', 'Janiuay', 'Pototan', 'Dumangas',
-                                'Zarraga', 'New Lucena', 'Alimodian', 'Leon', 'Tubungan',
-                                'Iloilo City'
-                            ];
-
-                            $cityFound = false;
-                            foreach ($iloiloCities as $cityName) {
-                                if (stripos($address, $cityName) !== false) {
-                                    if (!isset($cityDonorCounts[$cityName])) {
-                                        $cityDonorCounts[$cityName] = 0;
-                                    }
-                                    $cityDonorCounts[$cityName]++;
-                                    $cityFound = true;
-                                    break;
-                                }
-                            }
-
-                            // If no city was found in the address, count it as unidentified
-                            if (!$cityFound) {
-                                if (!isset($cityDonorCounts['Unidentified Location'])) {
-                                    $cityDonorCounts['Unidentified Location'] = 0;
-                                }
-                                $cityDonorCounts['Unidentified Location']++;
-                            }
-                        }
-                    }
 
                     // Function to clean and standardize address
                     function standardizeAddress($address) {
@@ -1830,20 +1689,47 @@ if ($statusClass === 'critical') {
                         return $address;
                     }
 
-                    // Now process heatmap data separately
+                    // Process Top Donor Locations and heatmap data in one pass
                     foreach ($eligibilityData as $eligibility) {
-                        $donorFormResponse = supabaseRequest(
-                            'donor_form?select=permanent_address&donor_id=eq.' . $eligibility['donor_id']
-                        );
+                        $donor = $donorLookup[$eligibility['donor_id']] ?? null;
+                        
+                        if ($donor) {
+                            // Get the address (office first, then permanent)
+                            $address = !empty($donor['office_address']) ? $donor['office_address'] : $donor['permanent_address'];
+                            
+                            // For Top Donors: Extract city name
+                            $iloiloCities = [
+                                'Oton', 'Pavia', 'Leganes', 'Santa Barbara', 'San Miguel', 
+                                'Cabatuan', 'Maasin', 'Janiuay', 'Pototan', 'Dumangas',
+                                'Zarraga', 'New Lucena', 'Alimodian', 'Leon', 'Tubungan',
+                                'Iloilo City'
+                            ];
 
-                        if (isset($donorFormResponse['data']) && !empty($donorFormResponse['data'])) {
-                            $donorForm = $donorFormResponse['data'][0];
+                            $cityFound = false;
+                            foreach ($iloiloCities as $cityName) {
+                                if (stripos($address, $cityName) !== false) {
+                                    if (!isset($cityDonorCounts[$cityName])) {
+                                        $cityDonorCounts[$cityName] = 0;
+                                    }
+                                    $cityDonorCounts[$cityName]++;
+                                    $cityFound = true;
+                                    break;
+                                }
+                            }
+
+                            // If no city was found in the address, count it as unidentified
+                            if (!$cityFound) {
+                                if (!isset($cityDonorCounts['Unidentified Location'])) {
+                                    $cityDonorCounts['Unidentified Location'] = 0;
+                                }
+                                $cityDonorCounts['Unidentified Location']++;
+                            }
                             
                             // For Heatmap: Use permanent address
-                            if (!empty($donorForm['permanent_address'])) {
-                                $standardizedAddress = standardizeAddress($donorForm['permanent_address']);
+                            if (!empty($donor['permanent_address'])) {
+                                $standardizedAddress = standardizeAddress($donor['permanent_address']);
                                 $heatmapData[] = [
-                                    'original_address' => $donorForm['permanent_address'],
+                                    'original_address' => $donor['permanent_address'],
                                     'address' => $standardizedAddress
                                 ];
                             }
@@ -1878,95 +1764,173 @@ if ($statusClass === 'critical') {
                     const cityDonorCounts = <?php echo json_encode($cityDonorCounts); ?>;
                     const heatmapData = <?php echo json_encode($heatmapData); ?>;
 
-                    // Function to geocode address using Nominatim with fallback attempts
-                    async function geocodeAddress(location) {
-                        const addresses = [
-                            location.address,
-                            // Try without specific landmarks
-                            location.address.replace(/,([^,]*Hospital[^,]*),/, ','),
-                            // Try just the municipality and province
-                            location.address.split(',').slice(-3).join(',')
-                        ];
+                                         // OPTIMIZED: Pre-defined coordinates for common Iloilo locations
+                     const locationCoordinates = {
+                         'Iloilo City': { lat: 10.7202, lng: 122.5621 },
+                         'Oton': { lat: 10.6933, lng: 122.4733 },
+                         'Pavia': { lat: 10.7750, lng: 122.5444 },
+                         'Leganes': { lat: 10.7833, lng: 122.5833 },
+                         'Santa Barbara': { lat: 10.8167, lng: 122.5333 },
+                         'San Miguel': { lat: 10.7833, lng: 122.4667 },
+                         'Cabatuan': { lat: 10.8833, lng: 122.4833 },
+                         'Maasin': { lat: 10.8833, lng: 122.4333 },
+                         'Janiuay': { lat: 10.9500, lng: 122.5000 },
+                         'Pototan': { lat: 10.9500, lng: 122.6333 },
+                         'Dumangas': { lat: 10.8333, lng: 122.7167 },
+                         'Zarraga': { lat: 10.8167, lng: 122.6000 },
+                         'New Lucena': { lat: 10.8833, lng: 122.6000 },
+                         'Alimodian': { lat: 10.8167, lng: 122.4333 },
+                         'Leon': { lat: 10.7833, lng: 122.3833 },
+                         'Tubungan': { lat: 10.7833, lng: 122.3333 }
+                     };
 
-                        for (const address of addresses) {
-                            try {
-                                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&countrycodes=ph`);
-                                const data = await response.json();
-                                
-                                if (data && data.length > 0) {
-                                    // Filter results to prioritize Iloilo locations
-                                    const iloiloResults = data.filter(result => 
-                                        result.display_name.toLowerCase().includes('iloilo')
-                                    );
-                                    
-                                    const result = iloiloResults.length > 0 ? iloiloResults[0] : data[0];
-                                    
-                                    return {
-                                        lat: parseFloat(result.lat),
-                                        lng: parseFloat(result.lon),
-                                        display_name: result.display_name
-                                    };
-                                }
-                            } catch (error) {
-                                console.error('Geocoding error:', error);
-                                continue;
-                            }
-                            // Add delay between attempts
-                            await delay(1000);
-                        }
-                        return null;
-                    }
+                     // OPTIMIZED: Function to get coordinates with caching and fallback
+                     async function getCoordinates(location) {
+                         // First, try to extract city name from address
+                         const address = location.address.toLowerCase();
+                         
+                         // Check if we have pre-defined coordinates for this location
+                         for (const [city, coords] of Object.entries(locationCoordinates)) {
+                             if (address.includes(city.toLowerCase())) {
+                                 return {
+                                     lat: coords.lat,
+                                     lng: coords.lng,
+                                     display_name: `${city}, Iloilo, Philippines`,
+                                     source: 'predefined'
+                                 };
+                             }
+                         }
 
-                    // Function to add delay between geocoding requests
-                    function delay(ms) {
-                        return new Promise(resolve => setTimeout(resolve, ms));
-                    }
+                         // If no pre-defined coordinates, use geocoding as fallback
+                         return await geocodeAddress(location);
+                     }
 
-                    // Process all addresses and update map
-                    async function processAddresses() {
-                        markers.clearLayers();
-                        if (heatLayer) {
-                            map.removeLayer(heatLayer);
-                        }
+                     // OPTIMIZED: Function to geocode address using Nominatim with fallback attempts
+                     async function geocodeAddress(location) {
+                         const addresses = [
+                             location.address,
+                             // Try without specific landmarks
+                             location.address.replace(/,([^,]*Hospital[^,]*),/, ','),
+                             // Try just the municipality and province
+                             location.address.split(',').slice(-3).join(',')
+                         ];
 
-                        const points = [];
-                        for (const location of heatmapData) {
-                            // Add delay to respect Nominatim's usage policy
-                            await delay(1000);
-                            
-                            const coords = await geocodeAddress(location);
-                            if (coords) {
-                                points.push([coords.lat, coords.lng, 0.8]);
-                                
-                                // Add marker with popup showing both original and geocoded address
-                                const marker = L.marker([coords.lat, coords.lng])
-                                    .bindPopup(`
-                                        <strong>Original Address:</strong><br>
-                                        ${location.original_address}<br><br>
-                                        <strong>Geocoded Address:</strong><br>
-                                        ${coords.display_name}
-                                    `);
-                                markers.addLayer(marker);
-                            } else {
-                                console.warn('Failed to geocode address:', location.address);
-                            }
-                        }
+                         for (const address of addresses) {
+                             try {
+                                 const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&countrycodes=ph&limit=1`);
+                                 const data = await response.json();
+                                 
+                                 if (data && data.length > 0) {
+                                     // Filter results to prioritize Iloilo locations
+                                     const iloiloResults = data.filter(result => 
+                                         result.display_name.toLowerCase().includes('iloilo')
+                                     );
+                                     
+                                     const result = iloiloResults.length > 0 ? iloiloResults[0] : data[0];
+                                     
+                                     return {
+                                         lat: parseFloat(result.lat),
+                                         lng: parseFloat(result.lon),
+                                         display_name: result.display_name,
+                                         source: 'geocoded'
+                                     };
+                                 }
+                             } catch (error) {
+                                 console.error('Geocoding error:', error);
+                                 continue;
+                             }
+                             // Reduced delay for faster processing
+                             await delay(500);
+                         }
+                         return null;
+                     }
 
-                        if (points.length > 0) {
-                            heatLayer = L.heatLayer(points, {
-                                radius: 35,
-                                blur: 20,
-                                maxZoom: 13,
-                                minOpacity: 0.4,
-                                gradient: {
-                                    0.2: 'blue',
-                                    0.4: 'lime',
-                                    0.6: 'orange',
-                                    0.8: 'red'
-                                }
-                            }).addTo(map);
-                        }
-                    }
+                     // Function to add delay between geocoding requests
+                     function delay(ms) {
+                         return new Promise(resolve => setTimeout(resolve, ms));
+                     }
+
+                     // OPTIMIZED: Process addresses with batching and caching
+                     async function processAddresses() {
+                         markers.clearLayers();
+                         if (heatLayer) {
+                             map.removeLayer(heatLayer);
+                         }
+
+                         const points = [];
+                         const batchSize = 5; // Process 5 addresses at a time
+                         const totalLocations = heatmapData.length;
+                         
+                         // Show loading indicator
+                         const loadingDiv = document.createElement('div');
+                         loadingDiv.innerHTML = '<div class="text-center p-3"><i class="fas fa-spinner fa-spin"></i> Loading map data...</div>';
+                         document.getElementById('map').appendChild(loadingDiv);
+
+                         for (let i = 0; i < totalLocations; i += batchSize) {
+                             const batch = heatmapData.slice(i, i + batchSize);
+                             
+                             // Process batch in parallel
+                             const batchPromises = batch.map(async (location) => {
+                                 const coords = await getCoordinates(location);
+                                 if (coords) {
+                                     return {
+                                         coords: coords,
+                                         location: location
+                                     };
+                                 }
+                                 return null;
+                             });
+
+                             const batchResults = await Promise.all(batchPromises);
+                             
+                             // Add results to points array
+                             batchResults.forEach(result => {
+                                 if (result) {
+                                     points.push([result.coords.lat, result.coords.lng, 0.8]);
+                                     
+                                     // Add marker with popup
+                                     const marker = L.marker([result.coords.lat, result.coords.lng])
+                                         .bindPopup(`
+                                             <strong>Original Address:</strong><br>
+                                             ${result.location.original_address}<br><br>
+                                             <strong>Geocoded Address:</strong><br>
+                                             ${result.coords.display_name}<br><br>
+                                             <small><em>Source: ${result.coords.source}</em></small>
+                                         `);
+                                     markers.addLayer(marker);
+                                 }
+                             });
+
+                             // Update progress
+                             const progress = Math.min(((i + batchSize) / totalLocations) * 100, 100);
+                             loadingDiv.innerHTML = `<div class="text-center p-3"><i class="fas fa-spinner fa-spin"></i> Loading map data... ${Math.round(progress)}%</div>`;
+
+                             // Small delay between batches to respect rate limits
+                             if (i + batchSize < totalLocations) {
+                                 await delay(200);
+                             }
+                         }
+
+                         // Remove loading indicator
+                         if (loadingDiv.parentNode) {
+                             loadingDiv.parentNode.removeChild(loadingDiv);
+                         }
+
+                         if (points.length > 0) {
+                             heatLayer = L.heatLayer(points, {
+                                 radius: 35,
+                                 blur: 20,
+                                 maxZoom: 13,
+                                 minOpacity: 0.4,
+                                 gradient: {
+                                     0.2: 'blue',
+                                     0.4: 'lime',
+                                     0.6: 'orange',
+                                     0.8: 'red'
+                                 }
+                             }).addTo(map);
+                         }
+                     }
 
                     function updateTopDonorLocations() {
                         // Update Top Donors list - this is independent of filters

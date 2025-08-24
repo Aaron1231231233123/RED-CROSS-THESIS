@@ -142,8 +142,8 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
 
 // Fetch handover requests
 function fetchHandoverRequests() {
-    // Get requests with status Accepted OR Picked up OR Declined using explicit OR conditions
-    $endpoint = "blood_requests?or=(status.eq.Accepted,status.eq.Confirmed,status.eq.Declined)&order=request_id.desc";
+    // Get requests with status Accepted OR Printed OR Confirmed OR Declined using explicit OR conditions
+    $endpoint = "blood_requests?or=(status.eq.Accepted,status.eq.Printed,status.eq.Confirmed,status.eq.Declined)&order=request_id.desc";
     $response = supabaseRequest($endpoint);
     
     // Debug log the response
@@ -534,7 +534,7 @@ $handover_requests = fetchHandoverRequests();
 $filter_status = isset($_GET['status']) ? strtolower($_GET['status']) : '';
 if ($filter_status === 'accepted') {
     $handover_requests = array_filter($handover_requests, function($req) {
-        return isset($req['status']) && $req['status'] === 'Accepted';
+        return isset($req['status']) && ($req['status'] === 'Accepted' || $req['status'] === 'Printed');
     });
 } elseif ($filter_status === 'handedover') {
     $handover_requests = array_filter($handover_requests, function($req) {
@@ -1110,7 +1110,17 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <tbody>
                                 <?php if (empty($handover_requests)): ?>
                                 <tr>
-                                    <td colspan="9" class="text-center">No handover requests found</td>
+                                    <td colspan="<?php 
+                                        $colspan = 6; // No., Patient Name, Blood Type, Units, Hospital, Actions
+                                        if ($filter_status === 'handedover') {
+                                            $colspan += 1; // + Pickup Date column
+                                        } elseif ($filter_status === 'declined') {
+                                            $colspan += 1; // + Reason column
+                                        } else {
+                                            $colspan += 2; // + Doctor, Reason columns
+                                        }
+                                        echo $colspan;
+                                    ?>" class="text-center">No handover requests found</td>
                                 </tr>
                                 <?php else: ?>
                                     <?php $rowNum = 1; foreach ($handover_requests as $request): ?>
@@ -1138,7 +1148,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             </button>
                                             <?php 
                                             // Show appropriate action buttons based on status
-                                            if ($status === 'Accepted'): 
+                                            if ($status === 'Printed'): 
                                             ?>
                                             <button type="button" class="btn btn-sm btn-primary update-status" data-request-id="<?php echo $request['request_id']; ?>" title="Update to Delivering">
                                                 <i class="fas fa-truck"></i>

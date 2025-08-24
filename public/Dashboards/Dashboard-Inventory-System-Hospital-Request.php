@@ -148,13 +148,13 @@ $status = isset($_GET['status']) ? strtolower($_GET['status']) : 'requests';
 
 function fetchBloodRequestsByStatus($status) {
     if ($status === 'accepted') {
-        $endpoint = "blood_requests?status=eq.Accepted&order=is_asap.desc,requested_on.desc";
+        $endpoint = "blood_requests?or=(status.eq.Accepted,status.eq.Printed)&order=is_asap.desc,requested_on.desc";
     } elseif ($status === 'handedover') {
         $endpoint = "blood_requests?status=eq.Confirmed&order=is_asap.desc,requested_on.desc";
     } elseif ($status === 'declined') {
         $endpoint = "blood_requests?status=eq.Declined&order=is_asap.desc,requested_on.desc";
-    } else { // 'requests' or any other value defaults to pending + rescheduled
-        $endpoint = "blood_requests?or=(status.eq.Pending,status.eq.Rescheduled)&order=is_asap.desc,requested_on.desc";
+    } else { // 'requests' or any other value defaults to pending + rescheduled + printed
+        $endpoint = "blood_requests?or=(status.eq.Pending,status.eq.Rescheduled,status.eq.Printed)&order=is_asap.desc,requested_on.desc";
     }
     $response = supabaseRequest($endpoint);
     if ($response['code'] >= 200 && $response['code'] < 300) {
@@ -514,6 +514,53 @@ if (isset($_POST['reschedule_request']) && isset($_POST['request_id'])) {
     } else {
         echo json_encode(['success' => false, 'error' => 'Request not found.']);
         exit;
+    }
+}
+
+// Handle request handover (mark as completed)
+if (isset($_POST['handover_request'])) {
+    $request_id = $_POST['request_id'];
+    
+    if (empty($request_id)) {
+        $error_message = "Invalid request ID. Please try again.";
+    } else {
+        // First verify that the request exists
+        $verifyEndpoint = "blood_requests?request_id=eq.$request_id&select=*";
+        $verifyResponse = supabaseRequest($verifyEndpoint);
+        
+        if ($verifyResponse['code'] >= 200 && $verifyResponse['code'] < 300) {
+            if (empty($verifyResponse['data'])) {
+                $error_message = "Request ID not found. Please try again.";
+            } else {
+                // Request exists, update its status to 'Completed'
+                $updateEndpoint = "blood_requests?request_id=eq.$request_id";
+                
+                $data = [
+                    'status' => 'Completed',
+                    'last_updated' => 'now'
+                ];
+                
+                $response = supabaseRequest($updateEndpoint, 'PATCH', $data);
+                
+                if ($response['code'] >= 200 && $response['code'] < 300) {
+                    // Success! Redirect to prevent form resubmission
+                    header("Location: Dashboard-Inventory-System-Hospital-Request.php?handover_success=1");
+                    exit();
+                } else {
+                    // Format a better error message for debugging
+                    $error_message = "Failed to hand over request. Error code: " . $response['code'];
+                    if (isset($response['error'])) {
+                        $error_message .= " - " . $response['error'];
+                    }
+                    error_log("Failed to hand over request #$request_id: " . json_encode($response));
+                }
+            }
+        } else {
+            $error_message = "Could not verify request. Please try again. Error: ";
+            if (isset($verifyResponse['error'])) {
+                $error_message .= $verifyResponse['error'];
+            }
+        }
     }
 }
 ?>
@@ -1271,6 +1318,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             </div>
             <?php endif; ?>
             
+            <?php if (isset($_GET['handover_success'])): ?>
+            <div class="alert alert-success alert-dismissible fade show mt-2" role="alert">
+                <strong>Success!</strong> The blood request has been marked as completed (handed over).
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+            
             <div class="container-fluid p-3 email-container">
                 <h2 class="text-left">
                     <?php
@@ -1364,6 +1418,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         echo '<span class="badge bg-warning text-dark">Pending</span>';
                                     } elseif ($status_val === 'rescheduled') {
                                         echo '<span class="badge bg-info text-dark">Rescheduled</span>';
+                                    } elseif ($status_val === 'printed') {
+                                        echo '<span class="badge bg-info text-dark">Printed</span>';
+                                    } elseif ($status_val === 'accepted') {
+                                        echo '<span class="badge bg-primary">Approved</span>';
                                     }
                                     ?>
                                 </td>
@@ -1383,7 +1441,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             '<?php echo htmlspecialchars($request['patient_diagnosis']); ?>',
                                             '<?php echo htmlspecialchars($hospital_name); ?>',
                                             '<?php echo htmlspecialchars($request['physician_name']); ?>',
-                                            '<?php echo htmlspecialchars($priority_display); ?>'
+                                            '<?php echo htmlspecialchars($priority_display); ?>',
+                                            '<?php echo htmlspecialchars($request['status']); ?>'
                                         )">
                                         <i class="fas fa-eye"></i>
                                     </button>
@@ -1464,6 +1523,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 </button>
                                 <button type="button" class="btn btn-success" id="modalAcceptButton">
                                     <i class="fas fa-check-circle"></i> Accept Request
+                                </button>
+                                <button type="button" class="btn btn-primary" id="handOverButton" style="display: none;">
+                                    <i class="fas fa-truck"></i> Hand Over
                                 </button>
                             </div>
                         </form>
@@ -1552,7 +1614,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
     <script>
     // Add this function to populate the modal fields (must be global for inline onclick)
-    function loadRequestDetails(request_id, patientName, bloodType, component, rhFactor, unitsNeeded, diagnosis, hospital, physician, priority) {
+    function loadRequestDetails(request_id, patientName, bloodType, component, rhFactor, unitsNeeded, diagnosis, hospital, physician, priority, status) {
         console.log('loadRequestDetails called with:', arguments);
         document.getElementById('modalRequestId').value = request_id;
         document.getElementById('patientName').value = patientName;
@@ -1564,6 +1626,33 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         document.getElementById('hospital').value = hospital;
         document.getElementById('physician').value = physician;
         document.getElementById('priority').value = priority;
+        
+        // Handle button visibility based on status
+        const acceptButton = document.getElementById('modalAcceptButton');
+        const handOverButton = document.getElementById('handOverButton');
+        
+        if (acceptButton && handOverButton) {
+            // Show Accept button for Pending and Rescheduled statuses
+            if (['Pending', 'Rescheduled'].includes(status)) {
+                acceptButton.style.display = 'inline-block';
+                handOverButton.style.display = 'none';
+            }
+            // Show Hand Over button only for Printed status
+            else if (status === 'Printed') {
+                acceptButton.style.display = 'none';
+                handOverButton.style.display = 'inline-block';
+            }
+            // Hide both buttons for Accepted status (Approved requests)
+            else if (status === 'Accepted') {
+                acceptButton.style.display = 'none';
+                handOverButton.style.display = 'none';
+            }
+            // Hide both buttons for other statuses (Completed, Declined, etc.)
+            else {
+                acceptButton.style.display = 'none';
+                handOverButton.style.display = 'none';
+            }
+        }
     }
 
     document.addEventListener('DOMContentLoaded', function() {
@@ -1761,6 +1850,32 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             form.appendChild(accept);
             document.body.appendChild(form);
             form.submit();
+        });
+
+        // Hand Over button logic
+        document.getElementById('handOverButton').addEventListener('click', function() {
+            // Get the request_id from the hidden field
+            var requestId = document.getElementById('modalRequestId').value;
+            
+            // Show confirmation dialog
+            if (confirm('Are you sure you want to mark this request as completed (handed over)?')) {
+                // Create a hidden form and submit it
+                var form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '';
+                var input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'request_id';
+                input.value = requestId;
+                form.appendChild(input);
+                var handover = document.createElement('input');
+                handover.type = 'hidden';
+                handover.name = 'handover_request';
+                handover.value = '1';
+                form.appendChild(handover);
+                document.body.appendChild(form);
+                form.submit();
+            }
         });
 
         // Decline button in the request details modal

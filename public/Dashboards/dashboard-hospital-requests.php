@@ -12,7 +12,7 @@ function fetchBloodRequests($user_id) {
         'Authorization: Bearer ' . SUPABASE_API_KEY
     ];
     
-    $url = SUPABASE_URL . '/rest/v1/blood_requests?user_id=eq.' . $user_id . '&or=(status.eq.Pending,status.eq.Rescheduled)&order=requested_on.desc';
+    $url = SUPABASE_URL . '/rest/v1/blood_requests?user_id=eq.' . $user_id . '&or=(status.eq.Pending,status.eq.Rescheduled,status.eq.Printed)&order=requested_on.desc';
     
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -467,8 +467,10 @@ th {
                                                 $status = $request['status'];
                                                 if ($status === 'Approved' || $status === 'Accepted') {
                                                     echo '<span class="badge bg-primary">Approved</span>';
-                                                } elseif ($status === 'Completed' || $status === 'Confirmed' || $status === 'Printed') {
+                                                } elseif ($status === 'Printed') {
                                                     echo '<span class="badge bg-info text-dark">Printed</span>';
+                                                } elseif ($status === 'Completed' || $status === 'Confirmed') {
+                                                    echo '<span class="badge bg-success">Completed</span>';
                                                 } elseif ($status === 'Pending') {
                                                     echo '<span class="badge bg-warning text-dark">Pending</span>';
                                                 } elseif ($status === 'Declined') {
@@ -494,7 +496,8 @@ th {
                                                         data-rh-factor="<?php echo htmlspecialchars($request['rh_factor']); ?>"
                                                         data-component="Whole Blood"
                                                         data-units="<?php echo htmlspecialchars($request['units_requested']); ?>"
-                                                        data-when-needed="<?php echo htmlspecialchars($request['when_needed']); ?>">
+                                                        data-when-needed="<?php echo htmlspecialchars($request['when_needed']); ?>"
+                                                        data-status="<?php echo htmlspecialchars($request['status']); ?>">
                                                         <i class="fas fa-eye"></i> View
                                                     </button>
                                                 <?php endif; ?>
@@ -708,6 +711,12 @@ th {
 
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-info print-btn" id="printRequestBtn" style="display: none;">
+                            <i class="fas fa-print"></i> Print Request
+                        </button>
+                        <button type="button" class="btn btn-success handover-btn" id="handoverRequestBtn" style="display: none;">
+                            <i class="fas fa-truck"></i> Hand Over
+                        </button>
                     </div>
                 </form>
             </div>
@@ -892,64 +901,7 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         });
 
-        document.addEventListener('DOMContentLoaded', function() {
-            // Handle view button clicks
-            const viewButtons = document.querySelectorAll('.view-btn');
-            if (viewButtons) {
-                viewButtons.forEach(button => {
-                    button.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        
-                        // Get data from button attributes
-                        const data = this.dataset;
-                        
-                        try {
-                            // Store request ID
-                            const editRequestId = document.getElementById('editRequestId');
-                            if (editRequestId) editRequestId.value = data.requestId;
-                            
-                            // Populate view modal with request data
-                            const elements = {
-                                'reorderPatientName': data.patientName,
-                                'reorderAge': data.patientAge,
-                                'reorderGender': data.patientGender,
-                                'reorderDiagnosis': data.patientDiagnosis,
-                                'reorderBloodType': data.bloodType,
-                                'reorderRH': data.rhFactor,
-                                'reorderComponent': data.component,
-                                'reorderUnits': data.units,
-                                'reorderWhenNeeded': data.whenNeeded
-                            };
 
-                            // Set values for each element if it exists
-                            Object.entries(elements).forEach(([id, value]) => {
-                                const element = document.getElementById(id);
-                                if (element) {
-                                    if (id === 'reorderWhenNeeded' && value) {
-                                        // Format date for datetime-local input
-                                        const date = new Date(value);
-                                        if (!isNaN(date.getTime())) {
-                                            element.value = date.toISOString().slice(0, 16);
-                                        }
-                                    } else {
-                                        element.value = value || '';
-                                    }
-                                }
-                            });
-
-                            // Show the view modal
-                            const modal = document.getElementById('bloodReorderModal');
-                            if (modal) {
-                                const bsModal = new bootstrap.Modal(modal);
-                                bsModal.show();
-                            }
-                        } catch (error) {
-                            console.error('Error displaying view modal:', error);
-                        }
-                    });
-                });
-            }
-        });
 
 
 
@@ -1291,6 +1243,216 @@ document.addEventListener("DOMContentLoaded", function () {
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
     }
+
+    // Handle Print and Handover functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        let currentRequestId = null;
+        let currentStatus = null;
+
+        // Update the view button click handler to show appropriate buttons
+        document.querySelectorAll('.view-btn').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                // Get data from button attributes
+                const data = this.dataset;
+                currentRequestId = data.requestId;
+                currentStatus = data.status;
+                
+                try {
+                    // Store request ID
+                    const editRequestId = document.getElementById('editRequestId');
+                    if (editRequestId) editRequestId.value = data.requestId;
+                    
+                    // Populate view modal with request data
+                    const elements = {
+                        'reorderPatientName': data.patientName,
+                        'reorderAge': data.patientAge,
+                        'reorderGender': data.patientGender,
+                        'reorderDiagnosis': data.patientDiagnosis,
+                        'reorderBloodType': data.bloodType,
+                        'reorderRH': data.rhFactor,
+                        'reorderComponent': data.component,
+                        'reorderUnits': data.units,
+                        'reorderWhenNeeded': data.whenNeeded
+                    };
+
+                    // Set values for each element if it exists
+                    Object.entries(elements).forEach(([id, value]) => {
+                        const element = document.getElementById(id);
+                        if (element) {
+                            if (id === 'reorderWhenNeeded' && value) {
+                                // Format date for datetime-local input
+                                const date = new Date(value);
+                                if (!isNaN(date.getTime())) {
+                                    element.value = date.toISOString().slice(0, 16);
+                                }
+                            } else {
+                                element.value = value || '';
+                            }
+                        }
+                    });
+
+                    // Show/hide buttons based on current status
+                    const printBtn = document.getElementById('printRequestBtn');
+                    const handoverBtn = document.getElementById('handoverRequestBtn');
+                    
+                    if (printBtn && handoverBtn) {
+                        // Show print button for Pending, Approved, and Rescheduled statuses
+                        if (['Pending', 'Approved', 'Rescheduled'].includes(currentStatus)) {
+                            printBtn.style.display = 'inline-block';
+                        } else {
+                            printBtn.style.display = 'none';
+                        }
+                        
+                        // Show handover button only for Printed status
+                        if (currentStatus === 'Printed') {
+                            handoverBtn.style.display = 'inline-block';
+                        } else {
+                            handoverBtn.style.display = 'none';
+                        }
+                    }
+
+                    // Show the view modal
+                    const modal = document.getElementById('bloodReorderModal');
+                    if (modal) {
+                        const bsModal = new bootstrap.Modal(modal);
+                        bsModal.show();
+                    }
+                } catch (error) {
+                    console.error('Error displaying view modal:', error);
+                }
+            });
+        });
+
+        // Handle Print button click
+        document.getElementById('printRequestBtn').addEventListener('click', function() {
+            if (!currentRequestId) {
+                alert('No request selected for printing.');
+                return;
+            }
+
+            // Show loading state
+            const originalText = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Printing...';
+
+            // Update status to 'Printed'
+            const requestData = {
+                status: 'Printed'
+            };
+            console.log('Sending print request with data:', requestData);
+            console.log('Request ID:', currentRequestId);
+            
+            fetch(`${SUPABASE_URL}/rest/v1/blood_requests?request_id=eq.${currentRequestId}`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${SUPABASE_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        throw new Error(`Error ${response.status}: ${text}`);
+                    });
+                }
+                return response.text();
+            })
+            .then(result => {
+                console.log('Request printed successfully:', result);
+                console.log('Response status:', result);
+                
+                // Verify the status was actually updated by fetching the request again
+                fetch(`${SUPABASE_URL}/rest/v1/blood_requests?request_id=eq.${currentRequestId}&select=status`, {
+                    headers: {
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': `Bearer ${SUPABASE_KEY}`
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Current status after update:', data);
+                    if (data && data[0]) {
+                        console.log('Actual status in database:', data[0].status);
+                    }
+                })
+                .catch(err => console.error('Error fetching updated status:', err));
+                
+                alert('Request has been marked as printed successfully!');
+                
+                // Close modal and reload page
+                const modal = bootstrap.Modal.getInstance(document.getElementById('bloodReorderModal'));
+                modal.hide();
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Error printing request:', error);
+                alert('Error printing request: ' + error.message);
+            })
+            .finally(() => {
+                // Restore button state
+                this.disabled = false;
+                this.innerHTML = originalText;
+            });
+        });
+
+        // Handle Hand Over button click
+        document.getElementById('handoverRequestBtn').addEventListener('click', function() {
+            if (!currentRequestId) {
+                alert('No request selected for handover.');
+                return;
+            }
+
+            // Show loading state
+            const originalText = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Processing...';
+
+            // Update status to 'Completed'
+            fetch(`${SUPABASE_URL}/rest/v1/blood_requests?request_id=eq.${currentRequestId}`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${SUPABASE_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify({
+                    status: 'Completed'
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        throw new Error(`Error ${response.status}: ${text}`);
+                    });
+                }
+                return response.text();
+            })
+            .then(result => {
+                console.log('Request handed over successfully:', result);
+                alert('Request has been marked as completed (handed over) successfully!');
+                
+                // Close modal and reload page
+                const modal = bootstrap.Modal.getInstance(document.getElementById('bloodReorderModal'));
+                modal.hide();
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Error handing over request:', error);
+                alert('Error handing over request: ' + error.message);
+            })
+            .finally(() => {
+                // Restore button state
+                this.disabled = false;
+                this.innerHTML = originalText;
+            });
+        });
+    });
     </script>
 </body>
 </html>

@@ -232,7 +232,7 @@ function checkAndDeductBloodBags($request_id, $units_requested) {
     }
     // Update the request status
     $request_update_data = json_encode([
-        'status' => 'Confirmed',
+        'status' => 'Printed',
         'last_updated' => date('Y-m-d H:i:s')
     ]);
     $update_url = SUPABASE_URL . '/rest/v1/blood_requests';

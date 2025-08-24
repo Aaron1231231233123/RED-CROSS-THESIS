@@ -71,19 +71,14 @@ function querySQL($table, $select = "*", $filters = null) {
     return json_decode($response, true);
 }
 
-// Fetch blood inventory data from eligibility table
+// OPTIMIZED: Fetch blood inventory data with fewer queries
 $bloodInventory = [];
 
-// Add this to track counted collections
-$seenCollections = [];
-
-// First, get all donors with non-accepted remarks in physical examination
+// Get all declined donor IDs in one query
 $declinedDonorIds = [];
-
-// Query physical examination for non-accepted remarks (anything that's not "Accepted")
 $physicalExamQuery = curl_init();
 curl_setopt_array($physicalExamQuery, [
-    CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?remarks=neq.Accepted&select=donor_id,donor_form_id,remarks",
+    CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?remarks=neq.Accepted&select=donor_id,donor_form_id",
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_HTTPHEADER => [
         "apikey: " . SUPABASE_API_KEY,
@@ -99,7 +94,6 @@ if ($physicalExamResponse) {
     $physicalExamRecords = json_decode($physicalExamResponse, true);
     if (is_array($physicalExamRecords)) {
         foreach ($physicalExamRecords as $record) {
-            // Add both donor_id and donor_form_id to exclusion list for comprehensive matching
             if (!empty($record['donor_id'])) {
                 $declinedDonorIds[] = $record['donor_id'];
             }
@@ -109,9 +103,49 @@ if ($physicalExamResponse) {
         }
     }
 }
-
-// Remove duplicates
 $declinedDonorIds = array_unique($declinedDonorIds);
+
+// OPTIMIZED: Get all blood collection data in one query
+$bloodCollectionQuery = curl_init();
+curl_setopt_array($bloodCollectionQuery, [
+    CURLOPT_URL => SUPABASE_URL . "/rest/v1/blood_collection?select=blood_collection_id,amount_taken",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        "apikey: " . SUPABASE_API_KEY,
+        "Authorization: Bearer " . SUPABASE_API_KEY,
+        "Content-Type: application/json"
+    ],
+]);
+$bloodCollectionResponse = curl_exec($bloodCollectionQuery);
+curl_close($bloodCollectionQuery);
+$bloodCollectionData = json_decode($bloodCollectionResponse, true) ?: [];
+
+// Create lookup array for blood collection data
+$bloodCollectionLookup = [];
+foreach ($bloodCollectionData as $collection) {
+    $bloodCollectionLookup[$collection['blood_collection_id']] = $collection;
+}
+
+// OPTIMIZED: Get all donor data in one query
+$donorQuery = curl_init();
+curl_setopt_array($donorQuery, [
+    CURLOPT_URL => SUPABASE_URL . "/rest/v1/donor_form?select=donor_id,surname,first_name,middle_name,birthdate,sex,civil_status",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        "apikey: " . SUPABASE_API_KEY,
+        "Authorization: Bearer " . SUPABASE_API_KEY,
+        "Content-Type: application/json"
+    ],
+]);
+$donorResponse = curl_exec($donorQuery);
+curl_close($donorQuery);
+$donorData = json_decode($donorResponse, true) ?: [];
+
+// Create lookup array for donor data
+$donorLookup = [];
+foreach ($donorData as $donor) {
+    $donorLookup[$donor['donor_id']] = $donor;
+}
 
 // Query eligibility table for valid blood units
 $eligibilityData = querySQL(
@@ -120,6 +154,9 @@ $eligibilityData = querySQL(
     ['collection_successful' => 'eq.true', 'order' => 'collection_start_time.desc']
 );
 
+// Track seen collections to avoid duplicates
+$seenCollections = [];
+
 if (is_array($eligibilityData) && !empty($eligibilityData)) {
     foreach ($eligibilityData as $item) {
         // Skip if no serial number or if donor is in declined list
@@ -127,57 +164,20 @@ if (is_array($eligibilityData) && !empty($eligibilityData)) {
             continue;
         }
         
-        // Double-check physical examination remarks for this specific donor
-        $physicalExamCheck = curl_init();
-        curl_setopt_array($physicalExamCheck, [
-            CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?donor_id=eq." . $item['donor_id'] . "&select=remarks",
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => [
-                "apikey: " . SUPABASE_API_KEY,
-                "Authorization: Bearer " . SUPABASE_API_KEY,
-                "Content-Type: application/json"
-            ],
-        ]);
-        
-        $physicalExamCheckResponse = curl_exec($physicalExamCheck);
-        curl_close($physicalExamCheck);
-        
-        // Skip this donor if they have non-accepted remarks
-        $skipDonor = false;
-        if ($physicalExamCheckResponse) {
-            $physicalExamCheckRecords = json_decode($physicalExamCheckResponse, true);
-            if (is_array($physicalExamCheckRecords) && !empty($physicalExamCheckRecords)) {
-                foreach ($physicalExamCheckRecords as $examRecord) {
-                    $remarks = $examRecord['remarks'] ?? '';
-                    if ($remarks !== 'Accepted' && !empty($remarks)) {
-                        $skipDonor = true;
-                        break;
-                    }
-                }
-            }
-        }
-        
-        if ($skipDonor) {
+        // Skip if no blood collection data
+        if (empty($item['blood_collection_id']) || !isset($bloodCollectionLookup[$item['blood_collection_id']])) {
             continue;
         }
         
-        // Get blood collection data to get amount_taken
-        $bloodCollectionData = null;
-        if (!empty($item['blood_collection_id'])) {
-            $bloodCollectionData = querySQL('blood_collection', '*', ['blood_collection_id' => 'eq.' . $item['blood_collection_id']]);
-            $bloodCollectionData = isset($bloodCollectionData[0]) ? $bloodCollectionData[0] : null;
-        }
-        
-        // --- FIX: Only count each blood_collection_id once ---
-        if (!$bloodCollectionData || !isset($bloodCollectionData['blood_collection_id'])) {
-            continue;
-        }
-        $collectionId = $bloodCollectionData['blood_collection_id'];
+        // Skip duplicates
+        $collectionId = $item['blood_collection_id'];
         if (in_array($collectionId, $seenCollections)) {
-            continue; // Skip duplicate
+            continue;
         }
         $seenCollections[] = $collectionId;
-        // --- END FIX ---
+        
+        // Get blood collection data from lookup
+        $bloodCollectionData = $bloodCollectionLookup[$collectionId];
         
         // Calculate expiration date (35 days from collection)
         $collectionDate = new DateTime($item['collection_start_time']);
@@ -190,7 +190,7 @@ if (is_array($eligibilityData) && !empty($eligibilityData)) {
             'donor_id' => $item['donor_id'],
             'serial_number' => $item['unit_serial_number'],
             'blood_type' => $item['blood_type'],
-            'bags' => $bloodCollectionData && isset($bloodCollectionData['amount_taken']) ? $bloodCollectionData['amount_taken'] : 'N/A',
+            'bags' => isset($bloodCollectionData['amount_taken']) ? $bloodCollectionData['amount_taken'] : 'N/A',
             'bag_type' => $item['blood_bag_type'] ?: 'Standard',
             'collection_date' => $collectionDate->format('Y-m-d'),
             'expiration_date' => $expirationDate->format('Y-m-d'),
@@ -199,15 +199,9 @@ if (is_array($eligibilityData) && !empty($eligibilityData)) {
             'eligibility_end_date' => $item['end_date'],
         ];
         
-        // --- FIX: Always define $donor ---
-        $donor = null;
-        $donorData = querySQL('donor_form', '*', ['donor_id' => 'eq.' . $item['donor_id']]);
-        if (isset($donorData[0])) {
-            $donor = $donorData[0];
-        }
-        // --- END FIX ---
+        // Get donor information from lookup
+        $donor = $donorLookup[$item['donor_id']] ?? null;
         
-        // Add donor information if available
         if ($donor) {
             // Calculate age based on birthdate
             $age = '';
@@ -964,6 +958,20 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     
                     <h5 class="mt-4 mb-3">Available Blood per Unit</h5>
                     
+                    <?php
+                    // OPTIMIZED: Calculate blood type counts in one pass
+                    $bloodTypeCounts = [
+                        'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
+                        'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
+                    ];
+                    
+                    foreach ($bloodInventory as $bag) {
+                        if ($bag['status'] == 'Valid' && is_numeric($bag['bags']) && isset($bloodTypeCounts[$bag['blood_type']])) {
+                            $bloodTypeCounts[$bag['blood_type']] += floatval($bag['bags']);
+                        }
+                    }
+                    ?>
+                    
                     <div class="row mb-4">
                         <!-- Blood Type Cards -->
                         <div class="col-md-3 mb-3">
@@ -971,15 +979,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: A+</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'A+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></span>
+                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['A+']; ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -990,15 +990,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: A-</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'A-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></span>
+                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['A-']; ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -1009,15 +1001,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: B+</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'B+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></span>
+                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['B+']; ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -1028,15 +1012,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: B-</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'B-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></span>
+                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['B-']; ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -1047,15 +1023,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: O+</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'O+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></span>
+                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['O+']; ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -1066,15 +1034,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: O-</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'O-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></span>
+                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['O-']; ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -1085,15 +1045,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: AB+</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'AB+' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></span>
+                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['AB+']; ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -1104,15 +1056,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: AB-</h5>
                                     <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php 
-                                            $count = 0;
-                                            foreach ($bloodInventory as $bag) {
-                                                if ($bag['blood_type'] == 'AB-' && $bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-                                                    $count += floatval($bag['bags']);
-                                                }
-                                            }
-                                            echo (int)$count;
-                                        ?></span>
+                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['AB-']; ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -1518,92 +1462,101 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 searchCategory.addEventListener('change', searchTable);
             }
             
-            // Function to search the blood inventory table
+            // OPTIMIZED: Function to search the blood inventory table with debouncing
+            let searchTimeout;
             function searchTable() {
                 const searchInput = document.getElementById('searchInput').value.toLowerCase();
                 const searchCategory = document.getElementById('searchCategory').value;
                 const table = document.getElementById('bloodInventoryTable');
                 const rows = table.querySelectorAll('tbody tr');
                 
-                // Check if no results message already exists
-                let noResultsRow = document.getElementById('noResultsRow');
-                if (noResultsRow) {
-                    noResultsRow.remove();
-                }
+                // Clear previous timeout
+                clearTimeout(searchTimeout);
                 
-                let visibleRows = 0;
-                const totalRows = rows.length;
-                
-                rows.forEach(row => {
-                    let shouldShow = false;
-                    if (searchInput.trim() === '') {
-                        shouldShow = true;
-                    } else {
-                        const cells = row.querySelectorAll('td');
-                        if (cells.length === 0) return;
-                        
-                        if (searchCategory === 'all') {
-                            // Search all columns
-                            Array.from(cells).some(cell => {
-                                if (cell.textContent.toLowerCase().includes(searchInput)) {
-                                    shouldShow = true;
-                                    return true;
-                                }
-                                return false;
-                            });
-                        } else if (searchCategory === 'serial') {
-                            // Search serial number column
-                            if (cells[0].textContent.toLowerCase().includes(searchInput)) {
-                                shouldShow = true;
-                            }
-                        } else if (searchCategory === 'blood_type') {
-                            // Search blood type column
-                            if (cells[1].textContent.toLowerCase().includes(searchInput)) {
-                                shouldShow = true;
-                            }
-                        } else if (searchCategory === 'component') {
-                            // Search bag type column
-                            if (cells[3].textContent.toLowerCase().includes(searchInput)) {
-                                shouldShow = true;
-                            }
-                        } else if (searchCategory === 'date') {
-                            // Search date columns
-                            const collectionDate = cells[4].textContent.toLowerCase();
-                            const expirationDate = cells[5].textContent.toLowerCase();
-                            // Create a regex for flexible date matching
-                            const datePattern = new RegExp(searchInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-                            if (datePattern.test(collectionDate) || datePattern.test(expirationDate)) {
-                                shouldShow = true;
-                            }
-                        }
+                // Debounce search for better performance
+                searchTimeout = setTimeout(() => {
+                    // Check if no results message already exists
+                    let noResultsRow = document.getElementById('noResultsRow');
+                    if (noResultsRow) {
+                        noResultsRow.remove();
                     }
                     
-                    row.style.display = shouldShow ? '' : 'none';
-                    if (shouldShow) visibleRows++;
-                });
-                
-                // Show "No results" message if no matches
-                if (visibleRows === 0 && totalRows > 0) {
-                    const tbody = table.querySelector('tbody');
-                    const colspan = table.querySelector('thead tr').children.length;
+                    let visibleRows = 0;
+                    const totalRows = rows.length;
                     
-                    noResultsRow = document.createElement('tr');
-                    noResultsRow.id = 'noResultsRow';
-                    noResultsRow.innerHTML = `
-                        <td colspan="${colspan}" class="text-center">
-                            <div class="alert alert-info m-2">
-                                No matching inventory items found
-                                <button class="btn btn-outline-primary btn-sm ms-2" onclick="clearSearch()">
-                                    Clear Search
-                                </button>
-                            </div>
-                        </td>
-                    `;
-                    tbody.appendChild(noResultsRow);
-                }
-                
-                // Update search results info
-                updateSearchInfo(visibleRows, totalRows);
+                    // OPTIMIZED: Use more efficient iteration
+                    for (let i = 0; i < rows.length; i++) {
+                        const row = rows[i];
+                        let shouldShow = false;
+                        
+                        if (searchInput.trim() === '') {
+                            shouldShow = true;
+                        } else {
+                            const cells = row.querySelectorAll('td');
+                            if (cells.length === 0) continue;
+                            
+                            if (searchCategory === 'all') {
+                                // Search all columns
+                                for (let j = 0; j < cells.length; j++) {
+                                    if (cells[j].textContent.toLowerCase().includes(searchInput)) {
+                                        shouldShow = true;
+                                        break;
+                                    }
+                                }
+                            } else if (searchCategory === 'serial') {
+                                // Search serial number column
+                                if (cells[0].textContent.toLowerCase().includes(searchInput)) {
+                                    shouldShow = true;
+                                }
+                            } else if (searchCategory === 'blood_type') {
+                                // Search blood type column
+                                if (cells[1].textContent.toLowerCase().includes(searchInput)) {
+                                    shouldShow = true;
+                                }
+                            } else if (searchCategory === 'component') {
+                                // Search bag type column
+                                if (cells[3].textContent.toLowerCase().includes(searchInput)) {
+                                    shouldShow = true;
+                                }
+                            } else if (searchCategory === 'date') {
+                                // Search date columns
+                                const collectionDate = cells[2].textContent.toLowerCase();
+                                const expirationDate = cells[3].textContent.toLowerCase();
+                                // Create a regex for flexible date matching
+                                const datePattern = new RegExp(searchInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+                                if (datePattern.test(collectionDate) || datePattern.test(expirationDate)) {
+                                    shouldShow = true;
+                                }
+                            }
+                        }
+                        
+                        row.style.display = shouldShow ? '' : 'none';
+                        if (shouldShow) visibleRows++;
+                    }
+                    
+                    // Show "No results" message if no matches
+                    if (visibleRows === 0 && totalRows > 0) {
+                        const tbody = table.querySelector('tbody');
+                        const colspan = table.querySelector('thead tr').children.length;
+                        
+                        noResultsRow = document.createElement('tr');
+                        noResultsRow.id = 'noResultsRow';
+                        noResultsRow.innerHTML = `
+                            <td colspan="${colspan}" class="text-center">
+                                <div class="alert alert-info m-2">
+                                    No matching inventory items found
+                                    <button class="btn btn-outline-primary btn-sm ms-2" onclick="clearSearch()">
+                                        Clear Search
+                                    </button>
+                                </div>
+                            </td>
+                        `;
+                        tbody.appendChild(noResultsRow);
+                    }
+                    
+                    // Update search results info
+                    updateSearchInfo(visibleRows, totalRows);
+                }, 150); // 150ms debounce delay
             }
             
             // Function to update search results info

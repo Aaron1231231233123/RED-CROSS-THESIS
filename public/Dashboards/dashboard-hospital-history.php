@@ -184,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             'Prefer: return=minimal'
         ];
         $update_data = json_encode([
-            'status' => 'Confirmed',
+            'status' => 'Printed',
             'last_updated' => date('Y-m-d H:i:s')
         ]);
         $update_url = SUPABASE_URL . '/rest/v1/blood_requests?request_id=eq.' . $request_id;
@@ -213,7 +213,7 @@ if (!empty($blood_requests)) {
         $total_units += $request['units_requested'];
         
         // Count picked up units
-        if ($request['status'] === 'Confirmed') {
+        if ($request['status'] === 'Printed') {
             $total_picked_up += $request['units_requested'];
         }
         
