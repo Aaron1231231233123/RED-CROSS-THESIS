@@ -19,8 +19,11 @@ if (!isset($_GET['donor_id']) || empty($_GET['donor_id'])) {
 $donor_id = intval($_GET['donor_id']);
 
 try {
-    // Fetch donor information from donor_form table
-    $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select=donor_id,surname,first_name,middle_name,birthdate,age,sex,submitted_at&donor_id=eq.' . $donor_id);
+    // Fetch donor information from donor_form table (expanded fields)
+    $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select='
+        . 'donor_id,surname,first_name,middle_name,birthdate,age,sex,civil_status,permanent_address,'
+        . 'nationality,occupation,telephone,mobile,email,submitted_at'
+        . '&donor_id=eq.' . $donor_id);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'apikey: ' . SUPABASE_API_KEY,
@@ -44,7 +47,7 @@ try {
                    ($current_donor['middle_name'] ?? '') . '|' . 
                    ($current_donor['birthdate'] ?? '');
                    
-            $ch2 = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select=donor_id,submitted_at,blood_type,donor_contact,donation_type&order=submitted_at.desc');
+            $ch2 = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select=donor_id,submitted_at,blood_type,telephone,mobile,donation_type&order=submitted_at.desc');
             curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch2, CURLOPT_HTTPHEADER, [
                 'apikey: ' . SUPABASE_API_KEY,
@@ -75,7 +78,7 @@ try {
                         'date' => $donor['submitted_at'],
                         'blood_type' => $donor['blood_type'] ?? 'Unknown',
                         'donation_type' => $donor['donation_type'] ?? 'Unknown',
-                        'contact' => $donor['donor_contact'] ?? 'Not provided'
+                        'contact' => ($donor['mobile'] ?? ($donor['telephone'] ?? 'Not provided'))
                     ];
                     
                     if (!$latest_submission || $donor['submitted_at'] > $latest_submission) {

@@ -356,17 +356,65 @@ if ($http_code === 200) {
         gap: 10px;
     }
     
-    .prev-button,
-    .next-button,
-    .submit-button {
-        padding: 8px 20px;
-        border-radius: 5px;
-        cursor: pointer;
-        font-weight: bold;
-        font-size: 15px;
-        z-index: 10;
-        transition: background-color 0.3s ease;
-    }
+         .prev-button,
+     .next-button,
+     .submit-button,
+     .edit-button {
+         padding: 8px 20px;
+         border-radius: 5px;
+         cursor: pointer;
+         font-weight: bold;
+         font-size: 15px;
+         z-index: 10;
+         transition: background-color 0.3s ease;
+     }
+     
+           .edit-button {
+          background-color: white;
+          color: #007bff;
+          border: 2px solid #007bff;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          font-weight: bold;
+          padding: 10px 20px;
+          border-radius: 6px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          transition: all 0.3s ease;
+      }
+      
+      .edit-button:hover {
+          background-color: #007bff;
+          color: white;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+      }
+     
+     .edit-button::before {
+         content: "✏️";
+         font-size: 14px;
+     }
+     
+     .edit-button.no-icon::before {
+         content: none;
+     }
+     
+           .save-button {
+          background-color: #28a745;
+          color: white;
+          border: none;
+          font-weight: bold;
+          padding: 10px 25px;
+          border-radius: 6px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          transition: all 0.3s ease;
+      }
+      
+      .save-button:hover {
+          background-color: #218838;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+      }
     
     .prev-button {
         background-color: #f5f5f5;
@@ -415,10 +463,51 @@ if ($http_code === 200) {
         20%, 40%, 60%, 80% { transform: translateX(5px); }
     }
     
-    .question-highlight {
-        color: #ff0000 !important;
-        font-weight: bold;
-    }
+         .question-highlight {
+         color: #ff0000 !important;
+         font-weight: bold;
+     }
+     
+     /* Custom confirmation modal styling */
+     #customConfirmModal .modal-content {
+         border-radius: 10px;
+         border: none;
+         box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+     }
+     
+     #customConfirmModal .modal-header {
+         border-radius: 10px 10px 0 0;
+         border-bottom: 1px solid rgba(255,255,255,0.2);
+     }
+     
+     #customConfirmModal .modal-body {
+         padding: 25px;
+         font-size: 16px;
+         line-height: 1.5;
+     }
+     
+     #customConfirmModal .modal-footer {
+         border-top: 1px solid #e9ecef;
+         padding: 20px 25px;
+     }
+     
+     #customConfirmModal .btn {
+         padding: 10px 25px;
+         border-radius: 6px;
+         font-weight: 600;
+         transition: all 0.3s ease;
+     }
+     
+     #customConfirmModal .btn-primary {
+         background-color: #9c0000;
+         border-color: #9c0000;
+     }
+     
+     #customConfirmModal .btn-primary:hover {
+         background-color: #8b0000;
+         border-color: #8b0000;
+         transform: translateY(-1px);
+     }
 </style>
 
 <div class="step-indicators" id="modalStepIndicators">
@@ -523,22 +612,222 @@ if ($http_code === 200) {
         </div>
     </div>
     
-    <div class="error-message" id="modalValidationError">Please answer all questions before proceeding to the next step.</div>
-</form>
+         <div class="error-message" id="modalValidationError">Please answer all questions before proceeding to the next step.</div>
+ </form>
+ 
+ <!-- Custom Confirmation Modal (namespaced) -->
+ <div class="modal fade" id="mhCustomConfirmModal" tabindex="-1" aria-labelledby="mhCustomConfirmModalLabel" aria-hidden="true">
+     <div class="modal-dialog modal-dialog-centered">
+         <div class="modal-content">
+             <div class="modal-header" style="background: #9c0000; color: white;">
+                 <h5 class="modal-title" id="mhCustomConfirmModalLabel">
+                     <i class="fas fa-question-circle me-2"></i>
+                     Confirm Action
+                 </h5>
+                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+             </div>
+             <div class="modal-body">
+                 <p id="mhCustomConfirmMessage">Are you sure you want to proceed?</p>
+             </div>
+             <div class="modal-footer">
+                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                 <button type="button" class="btn btn-primary" id="mhCustomConfirmYes">Yes, Proceed</button>
+             </div>
+         </div>
+     </div>
+ </div>
 
-<div class="modal-footer">
-    <div class="footer-left"></div>
-    <div class="footer-right">
-        <button class="prev-button" id="modalPrevButton" style="display: none;">&#8592; Previous</button>
-        <button class="next-button" id="modalNextButton">Next →</button>
-    </div>
-</div>
+ <div class="modal-footer">
+     <div class="footer-left"></div>
+     <div class="footer-right">
+         <button class="prev-button" id="modalPrevButton" style="display: none;">&#8592; Previous</button>
+         <button class="edit-button" id="modalEditButton" style="margin-right: 10px;">Edit</button>
+         <button class="next-button" id="modalNextButton">Next →</button>
+     </div>
+ </div>
 
-<!-- Data for JavaScript -->
-<script type="application/json" id="modalData">
-{
-    "medicalHistoryData": <?php echo $medical_history_data ? json_encode($medical_history_data) : 'null'; ?>,
-    "donorSex": <?php echo json_encode(strtolower($donor_sex)); ?>,
-    "userRole": <?php echo json_encode($user_role); ?>
-}
-</script> 
+ <!-- Data for JavaScript -->
+ <script type="application/json" id="modalData">
+ {
+     "medicalHistoryData": <?php echo $medical_history_data ? json_encode($medical_history_data) : 'null'; ?>,
+     "donorSex": <?php echo json_encode(strtolower($donor_sex)); ?>,
+     "userRole": <?php echo json_encode($user_role); ?>
+ }
+ </script>
+ 
+ <script>
+ // Enhanced Edit Button Functionality
+ function initializeEditFunctionality() {
+     console.log('=== EDIT FUNCTIONALITY INITIALIZATION START ===');
+     const editButton = document.getElementById('modalEditButton');
+     
+     if (editButton) {
+         console.log('✅ Edit button found, initializing functionality...');
+         
+         // Remove any existing event listeners
+         editButton.replaceWith(editButton.cloneNode(true));
+         const newEditButton = document.getElementById('modalEditButton');
+         
+         newEditButton.addEventListener('click', function() {
+             console.log('🎯 Edit button clicked - starting to enable fields...');
+             
+             // Enable editing of form fields
+             const form = document.getElementById('modalMedicalHistoryForm');
+             const radioButtons = form.querySelectorAll('input[type="radio"]');
+             const selectFields = form.querySelectorAll('select.remarks-input');
+             const textInputs = form.querySelectorAll('input[type="text"], textarea');
+             
+             console.log('Found radio buttons:', radioButtons.length);
+             console.log('Found select fields:', selectFields.length);
+             console.log('Found text inputs:', textInputs.length);
+             
+             // Enable all form inputs
+             radioButtons.forEach(input => {
+                 input.disabled = false;
+                 input.readOnly = false;
+                 console.log('Enabled radio button:', input.name);
+             });
+             
+             selectFields.forEach(input => {
+                 input.disabled = false;
+                 input.readOnly = false;
+                 console.log('Enabled select field:', input.name);
+             });
+             
+             textInputs.forEach(input => {
+                 input.disabled = false;
+                 input.readOnly = false;
+                 console.log('Enabled text input:', input.name);
+             });
+             
+             // Change button text to indicate editing mode
+             newEditButton.textContent = 'Save';
+             newEditButton.classList.remove('edit-button');
+             newEditButton.classList.add('save-button');
+             
+             // Add save functionality
+             newEditButton.onclick = function() {
+                 console.log('Save button clicked');
+                 saveEditedData();
+             };
+         });
+     } else {
+         console.log('❌ Edit button not found - checking DOM...');
+         console.log('Available buttons:', document.querySelectorAll('button').length);
+         console.log('Modal content:', document.getElementById('medicalHistoryModalContent')?.innerHTML?.substring(0, 200));
+     }
+     console.log('=== EDIT FUNCTIONALITY INITIALIZATION END ===');
+ }
+ 
+ function saveEditedData() {
+     const form = document.getElementById('modalMedicalHistoryForm');
+     const formData = new FormData(form);
+     
+     // Add action for saving
+     formData.append('action', 'save_edit');
+     
+     console.log('Saving edited data...');
+     
+     // Submit the form data
+     fetch('medical-history-process.php', {
+         method: 'POST',
+         body: formData
+     })
+     .then(response => response.json())
+     .then(data => {
+         if (data.success) {
+             // Use custom modal instead of browser alert
+             if (window.customConfirm || window.mhCustomConfirm) {
+                 (window.customConfirm || window.mhCustomConfirm)('Medical history data updated successfully!', function() {
+                     // Just close the modal, no additional action needed
+                 });
+             } else {
+                 alert('Medical history data updated successfully!');
+             }
+             
+             // Reset button to edit mode
+             const editButton = document.getElementById('modalEditButton');
+             editButton.textContent = 'Edit';
+             editButton.classList.remove('save-button');
+             editButton.classList.add('edit-button');
+             
+             // Disable form fields again (respect original disabled state)
+             const radioButtons = form.querySelectorAll('input[type="radio"]');
+             const selectFields = form.querySelectorAll('select.remarks-input');
+             const textInputs = form.querySelectorAll('input[type="text"], textarea');
+             
+             radioButtons.forEach(input => {
+                 const wasOriginallyDisabled = input.getAttribute('data-originally-disabled') === 'true';
+                 input.disabled = wasOriginallyDisabled;
+                 input.readOnly = wasOriginallyDisabled;
+             });
+             
+             selectFields.forEach(input => {
+                 const wasOriginallyDisabled = input.getAttribute('data-originally-disabled') === 'true';
+                 input.disabled = wasOriginallyDisabled;
+                 input.readOnly = wasOriginallyDisabled;
+             });
+             
+             textInputs.forEach(input => {
+                 const wasOriginallyDisabled = input.getAttribute('data-originally-disabled') === 'true';
+                 input.disabled = wasOriginallyDisabled;
+                 input.readOnly = wasOriginallyDisabled;
+             });
+         } else {
+             // Use custom modal instead of browser alert
+             if (window.customConfirm || window.mhCustomConfirm) {
+                 (window.customConfirm || window.mhCustomConfirm)('Error updating data: ' + (data.message || 'Unknown error'), function() {
+                     // Just close the modal, no additional action needed
+                 });
+             } else {
+                 alert('Error updating data: ' + (data.message || 'Unknown error'));
+             }
+         }
+     })
+     .catch(error => {
+         console.error('Error:', error);
+         // Use custom modal instead of browser alert
+         if (window.customConfirm || window.mhCustomConfirm) {
+             (window.customConfirm || window.mhCustomConfirm)('An error occurred while saving the data.', function() {
+                 // Just close the modal, no additional action needed
+             });
+         } else {
+             alert('An error occurred while saving the data.');
+         }
+     });
+ }
+ 
+ // Initialize when DOM is ready
+ if (document.readyState === 'loading') {
+     document.addEventListener('DOMContentLoaded', initializeEditFunctionality);
+ } else {
+     initializeEditFunctionality();
+ }
+ 
+ // Custom confirmation function (namespaced) to replace browser confirm
+ function mhCustomConfirm(message, onConfirm) {
+     const modal = new bootstrap.Modal(document.getElementById('mhCustomConfirmModal'));
+     const messageElement = document.getElementById('mhCustomConfirmMessage');
+     const confirmButton = document.getElementById('mhCustomConfirmYes');
+     
+     messageElement.textContent = message;
+     
+     // Remove any existing event listeners
+     const newConfirmButton = confirmButton.cloneNode(true);
+     confirmButton.parentNode.replaceChild(newConfirmButton, confirmButton);
+     
+     newConfirmButton.addEventListener('click', function() {
+         modal.hide();
+         if (onConfirm) onConfirm();
+     });
+     
+     modal.show();
+ }
+ 
+ // Also initialize when the modal content is dynamically loaded
+ if (typeof window !== 'undefined') {
+     window.initializeEditFunctionality = initializeEditFunctionality;
+     window.mhCustomConfirm = mhCustomConfirm;
+     console.log('✅ initializeEditFunctionality and mhCustomConfirm exposed to global scope');
+ }
+ </script> 

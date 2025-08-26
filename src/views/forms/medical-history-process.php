@@ -57,11 +57,14 @@ try {
         
         if ($action === 'approve') {
             $medical_history_data['medical_approval'] = 'Approved';
+            $medical_history_data['needs_review'] = false; // Medical history no longer needs review
         } elseif ($action === 'decline') {
             $medical_history_data['medical_approval'] = 'Declined';
+            $medical_history_data['needs_review'] = false; // Medical history no longer needs review
         } elseif ($action === 'next') {
             // For interviewer/physician using the "NEXT" button
             $medical_history_data['medical_approval'] = 'Approved';
+            $medical_history_data['needs_review'] = false; // Medical history no longer needs review
         }
     }
 
@@ -149,7 +152,57 @@ try {
     curl_close($ch);
 
     if ($http_code >= 200 && $http_code < 300) {
-        error_log("Update successful");
+        error_log("Medical history update successful");
+        
+        // Update screening_forms needs_review based on medical history outcome
+        // This ensures proper workflow: medical_history.needs_review = false, screening_form.needs_review = true
+        if ($action === 'approve' || $action === 'next' || $action === 'decline') {
+            if ($medical_history_data['medical_approval'] === 'Approved') {
+                // If approved, set screening_forms needs_review to true (ready for next stage)
+                error_log("Updating screening_forms needs_review to true for donor_id: $donor_id");
+                $screening_needs_review = true;
+            } else {
+                // If declined, set screening_forms needs_review to false (won't proceed)
+                error_log("Updating screening_forms needs_review to false for donor_id: $donor_id (declined)");
+                $screening_needs_review = false;
+            }
+            
+            // Update screening_forms table
+            $screening_update_data = [
+                'needs_review' => $screening_needs_review,
+                'updated_at' => date('Y-m-d H:i:s')
+            ];
+            
+            $screening_ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?donor_form_id=eq.' . $donor_id);
+            
+            $screening_json = json_encode($screening_update_data);
+            error_log("Screening update JSON: " . $screening_json);
+            
+            curl_setopt($screening_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            curl_setopt($screening_ch, CURLOPT_POSTFIELDS, $screening_json);
+            curl_setopt($screening_ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($screening_ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json',
+                'Prefer: return=representation'
+            ]);
+            
+            $screening_response = curl_exec($screening_ch);
+            $screening_http_code = curl_getinfo($screening_ch, CURLINFO_HTTP_CODE);
+            
+            error_log("Screening update response code: " . $screening_http_code);
+            error_log("Screening update response: " . $screening_response);
+            
+            curl_close($screening_ch);
+            
+            if ($screening_http_code >= 200 && $screening_http_code < 300) {
+                error_log("Screening form needs_review updated successfully");
+            } else {
+                error_log("Warning: Failed to update screening form needs_review. HTTP Code: $screening_http_code, Response: " . $screening_response);
+            }
+        }
+        
         echo json_encode([
             'success' => true, 
             'message' => 'Medical history updated successfully',

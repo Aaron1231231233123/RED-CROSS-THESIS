@@ -28,6 +28,73 @@ function hashDonorId($donor_id) {
     return hash('sha256', $donor_id . $salt);
 }
 
+// Helper function to determine donor type based on eligibility and table IDs
+function getDonorType($donor_id, $medical_info, $eligibility_by_donor, $stage = 'medical_review', $screening_info = null, $physical_info = null) {
+    // Check if donor has eligibility record (Returning donor)
+    $has_eligibility = isset($eligibility_by_donor[$donor_id]);
+    
+    if ($has_eligibility) {
+        // RETURNING DONOR LOGIC - Based on needs_review status
+        $needs_review_stage = '';
+        
+        // Check needs_review status from different tables (highest priority first)
+        if ($physical_info && isset($physical_info['needs_review']) && $physical_info['needs_review'] === true) {
+            $needs_review_stage = 'Physical';
+        }
+        elseif ($screening_info && isset($screening_info['needs_review']) && $screening_info['needs_review'] === true) {
+            $needs_review_stage = 'Screening';
+        }
+        elseif ($medical_info && isset($medical_info['needs_review']) && $medical_info['needs_review'] === true) {
+            $needs_review_stage = 'Medical';
+        }
+        else {
+            // If no needs_review is true, determine stage based on current stage
+    switch ($stage) {
+        case 'blood_collection':
+                    $needs_review_stage = 'Collection';
+            break;
+        case 'physical_examination':
+                    $needs_review_stage = 'Physical';
+            break;
+        case 'screening_form':
+                    $needs_review_stage = 'Screening';
+            break;
+        case 'medical_review':
+                    $needs_review_stage = 'Medical';
+            break;
+        default:
+                    $needs_review_stage = 'Medical';
+            }
+    }
+    
+        return 'Returning (' . $needs_review_stage . ')';
+    } else {
+        // NEW DONOR LOGIC - Based on medical_approval and table IDs
+        $stage_name = '';
+        
+        // Check which tables have IDs (highest priority first)
+        if (isset($physical_info['physical_examination_id']) && $physical_info['physical_examination_id']) {
+            $stage_name = 'Collection';
+        }
+        elseif (isset($screening_info['screening_id']) && $screening_info['screening_id']) {
+            $stage_name = 'Physical';
+        }
+        elseif (isset($medical_info['medical_history_id']) && $medical_info['medical_history_id']) {
+            // Check if medical_approval is "Approved"
+            if (isset($medical_info['medical_approval']) && $medical_info['medical_approval'] === 'Approved') {
+                $stage_name = 'Screening';
+            } else {
+                $stage_name = 'Medical';
+            }
+        }
+        else {
+            $stage_name = 'Medical'; // Default for new donors (not approved yet)
+        }
+        
+        return 'New (' . $stage_name . ')';
+    }
+}
+
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
     header("Location: /REDCROSS/public/login.php");
@@ -38,6 +105,7 @@ if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] != 3) {
     header("Location: ../../public/unauthorized.php");
     exit();
 }
+
 // Add pagination settings
 $records_per_page = 15;
 $current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
@@ -46,224 +114,288 @@ $offset = ($current_page - 1) * $records_per_page;
 // Initialize the donors array
 $donors = [];
 
-// Get all donor records
-$query_url = SUPABASE_URL . '/rest/v1/donor_form?select=donor_id,surname,first_name,middle_name,birthdate,age,sex,registration_channel,submitted_at&order=submitted_at.desc';
+// OPTIMIZED APPROACH: Parallel cURL requests and selective data fetching
+$multi_handle = curl_multi_init();
+$curl_handles = [];
 
-$ch = curl_init();
-curl_setopt_array($ch, [
-    CURLOPT_URL => $query_url,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY
-    ]
-]);
+// Define the queries with optimized field selection
+$queries = [
+    'donor_forms' => '/rest/v1/donor_form?select=donor_id,surname,first_name,submitted_at,registration_channel&order=submitted_at.desc',
+    // include needs_review flag and updated_at to prioritize and display review time
+    'medical_histories' => '/rest/v1/medical_history?select=donor_id,medical_history_id,medical_approval,needs_review,created_at,updated_at&order=created_at.desc',
+    'screening_forms' => '/rest/v1/screening_form?select=screening_id,donor_form_id,needs_review,created_at&order=created_at.desc',
+    'physical_exams' => '/rest/v1/physical_examination?select=donor_id,needs_review,created_at&order=created_at.desc',
+    'blood_collections' => '/rest/v1/blood_collection?select=screening_id,start_time&order=start_time.desc',
+    'eligibility_records' => '/rest/v1/eligibility?select=donor_id&order=created_at.desc'
+];
 
-$response = curl_exec($ch);
-curl_close($ch);
-
-// Log the final query URL and raw response for debugging
-error_log("Final query URL: " . $query_url);
-error_log("Supabase raw response: " . substr($response, 0, 500) . '...');
-
-// Check if the response is valid JSON
-if ($response === false || is_null(json_decode($response, true))) {
-    error_log("Error fetching data from Supabase: " . curl_error($ch));
-    $donors = [];
-} else {
-    $all_donors = json_decode($response, true) ?: [];
-    error_log("Decoded all donors count: " . count($all_donors));
-    
-    // Filter to only show PRC Portal registration channel donors (excluding Mobile)
-    $donors = [];
-    foreach ($all_donors as $donor) {
-        if (!isset($donor['registration_channel']) || $donor['registration_channel'] !== 'Mobile') {
-            $donors[] = $donor;
-        }
-    }
-    error_log("Filtered PRC Portal donors count: " . count($donors));
+// Create parallel cURL requests
+foreach ($queries as $key => $query) {
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => SUPABASE_URL . $query,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY
+        ],
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_CONNECTTIMEOUT => 10
+    ]);
+    $curl_handles[$key] = $ch;
+    curl_multi_add_handle($multi_handle, $ch);
 }
 
-// Fetch medical history records to calculate status counts
-$medical_history_url = SUPABASE_URL . '/rest/v1/medical_history?select=medical_history_id,donor_id,medical_approval';
-$ch = curl_init($medical_history_url);
-curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY
-    ]
-]);
-$response = curl_exec($ch);
-curl_close($ch);
+// Execute all requests in parallel
+$running = null;
+do {
+    curl_multi_exec($multi_handle, $running);
+    curl_multi_select($multi_handle);
+} while ($running > 0);
 
-// Initialize counters
-$incoming_count = 0;
-$approved_count = 0;
-$declined_count = 0;
+// Get results
+$donor_forms = json_decode(curl_multi_getcontent($curl_handles['donor_forms']), true) ?: [];
+$medical_histories = json_decode(curl_multi_getcontent($curl_handles['medical_histories']), true) ?: [];
+$screening_forms = json_decode(curl_multi_getcontent($curl_handles['screening_forms']), true) ?: [];
+$physical_exams = json_decode(curl_multi_getcontent($curl_handles['physical_exams']), true) ?: [];
+$blood_collections = json_decode(curl_multi_getcontent($curl_handles['blood_collections']), true) ?: [];
+$eligibility_records = json_decode(curl_multi_getcontent($curl_handles['eligibility_records']), true) ?: [];
 
-// Arrays to store donor IDs by status
-$donor_with_medical_history = [];
-$donor_with_approved_medical_history = [];
-$donor_with_declined_medical_history = [];
+// Clean up
+foreach ($curl_handles as $ch) {
+    curl_multi_remove_handle($multi_handle, $ch);
+    curl_close($ch);
+}
+curl_multi_close($multi_handle);
 
-if ($response === false || is_null(json_decode($response, true))) {
-    error_log("Error fetching medical history data from Supabase");
-} else {
-    $medical_histories = json_decode($response, true) ?: [];
-    error_log("Decoded medical histories count: " . count($medical_histories));
-    
-    // Process medical histories to get counts
-    $incoming_with_null_approval = [];
+// Create optimized lookup arrays with pre-allocated size
+$donors_by_id = array_column($donor_forms, null, 'donor_id');
+$medical_by_donor = array_column($medical_histories, null, 'donor_id');
+$screenings_by_donor = array_column($screening_forms, null, 'donor_form_id');
+$physicals_by_donor = array_column($physical_exams, null, 'donor_id');
+$blood_by_screening = array_column($blood_collections, null, 'screening_id');
+$eligibility_by_donor = array_column($eligibility_records, null, 'donor_id');
 
-    foreach ($medical_histories as $history) {
-        if (isset($history['donor_id'])) {
-            if (isset($history['medical_approval'])) {
-                if ($history['medical_approval'] === 'Approved') {
-                    $approved_count++;
-                    $donor_with_approved_medical_history[] = $history['donor_id'];
-                    $donor_with_medical_history[] = $history['donor_id'];
-                } else if ($history['medical_approval'] === null) {
-                    // If medical_approval is null, treat it as incoming
-                    $incoming_with_null_approval[] = $history['donor_id'];
-                } else {
-                    $declined_count++;
-                    $donor_with_declined_medical_history[] = $history['donor_id'];
-                    $donor_with_medical_history[] = $history['donor_id'];
-                }
-            } else {
-                // If medical_approval field is missing, also treat as incoming
-                $incoming_with_null_approval[] = $history['donor_id'];
-            }
-        }
-    }
+// Create sets to track donors already processed at higher priority levels
+$donors_with_blood = [];
+$donors_with_physical = [];
+$donors_with_screening = [];
+
+// Process the donor history with OPTIMIZED HIERARCHY PRIORITY
+$donor_history = [];
+$counter = 1;
+
+// PRIORITY 1: Process Blood Collections (Highest Priority) - Donors who completed donation
+foreach ($blood_collections as $blood_info) {
+    $screening_id = $blood_info['screening_id'];
+    $screening_info = $screenings_by_donor[$screening_id] ?? null;
+    if (!$screening_info) continue;
     
-    // Remove duplicates
-    $donor_with_medical_history = array_unique($donor_with_medical_history);
-    $donor_with_approved_medical_history = array_unique($donor_with_approved_medical_history);
-    $donor_with_declined_medical_history = array_unique($donor_with_declined_medical_history);
-    $incoming_with_null_approval = array_unique($incoming_with_null_approval);
+    $donor_info = $donors_by_id[$screening_info['donor_form_id']] ?? null;
+    if (!$donor_info) continue;
     
-    // Calculate incoming count (donors without any medical history or with null approval)
-    $all_donor_ids = array_column($donors, 'donor_id');
-    $processed_donors = array_merge($donor_with_approved_medical_history, $donor_with_declined_medical_history);
-    $incoming_donors = array_diff($all_donor_ids, $processed_donors);
-    $incoming_count = count($incoming_donors);
+    $donor_id = $donor_info['donor_id'];
+    $donors_with_blood[$donor_id] = true;
     
-    // Update counters to reflect unique donors
-    $approved_count = count($donor_with_approved_medical_history);
-    $declined_count = count($donor_with_declined_medical_history);
+    $medical_info = $medical_by_donor[$donor_id] ?? null;
+    $donor_type_label = getDonorType($donor_id, $medical_info, $eligibility_by_donor, 'blood_collection');
     
-    // Log the detailed counts for debugging
-    error_log("Medical History Counts - Total donors: " . count($all_donor_ids));
-    error_log("Medical History Counts - Approved: $approved_count, Declined: $declined_count, Incoming: $incoming_count");
-    error_log("Medical History Counts - Donors with null approval: " . count($incoming_with_null_approval));
-    error_log("Medical History Counts - Processed donors: " . count($processed_donors));
-    error_log("Incoming count: $incoming_count, Approved count: $approved_count, Declined count: $declined_count");
+    $donor_history[] = [
+        'no' => $counter++,
+        'date' => ($medical_info['updated_at'] ?? null) ?: ($blood_info['start_time'] ?? $screening_info['created_at'] ?? $donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
+        'surname' => $donor_info['surname'] ?? 'N/A',
+        'first_name' => $donor_info['first_name'] ?? 'N/A',
+        'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
+        'donor_type' => $donor_type_label,
+        'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
+        'donor_id' => $donor_id,
+        'stage' => 'blood_collection',
+        'medical_history_id' => $medical_info['medical_history_id'] ?? null
+    ];
 }
 
-// Calculate today's summary count
-$today = date('Y-m-d');
+// PRIORITY 2: Process Physical Examinations (Medium Priority)
+foreach ($physical_exams as $physical_info) {
+    $donor_id = $physical_info['donor_id'];
+    if (isset($donors_with_blood[$donor_id])) continue;
+    
+    $donor_info = $donors_by_id[$donor_id] ?? null;
+    if (!$donor_info) continue;
+    
+    $donors_with_physical[$donor_id] = true;
+    $medical_info = $medical_by_donor[$donor_id] ?? null;
+    // compute donor_type_label safely
+    $donor_type_label = getDonorType($donor_id, $medical_info, $eligibility_by_donor, 'physical_examination', null, $physical_info);
+    
+    $donor_history[] = [
+        'no' => $counter++,
+        'date' => ($medical_info['updated_at'] ?? null) ?: ($physical_info['created_at'] ?? $donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
+        'surname' => $donor_info['surname'] ?? 'N/A',
+        'first_name' => $donor_info['first_name'] ?? 'N/A',
+        'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
+        'donor_type' => $donor_type_label,
+        'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
+        'donor_id' => $donor_id,
+        'stage' => 'physical_examination',
+        'medical_history_id' => $medical_info['medical_history_id'] ?? null
+    ];
+}
+
+// PRIORITY 3: Process Screening Forms (Low Priority)
+foreach ($screening_forms as $screening_info) {
+    $donor_id = $screening_info['donor_form_id'];
+    if (isset($donors_with_blood[$donor_id]) || isset($donors_with_physical[$donor_id])) continue;
+    
+    $donor_info = $donors_by_id[$donor_id] ?? null;
+    if (!$donor_info) continue;
+    
+    $donors_with_screening[$donor_id] = true;
+    $medical_info = $medical_by_donor[$donor_id] ?? null;
+    // compute donor_type_label safely
+    $donor_type_label = getDonorType($donor_id, $medical_info, $eligibility_by_donor, 'screening_form', $screening_info);
+    
+    $donor_history[] = [
+        'no' => $counter++,
+        'date' => ($medical_info['updated_at'] ?? null) ?: ($screening_info['created_at'] ?? $donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
+        'surname' => $donor_info['surname'] ?? 'N/A',
+        'first_name' => $donor_info['first_name'] ?? 'N/A',
+        'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
+        'donor_type' => $donor_type_label,
+        'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
+        'donor_id' => $donor_id,
+        'stage' => 'screening_form',
+        'medical_history_id' => $medical_info['medical_history_id'] ?? null
+    ];
+}
+
+// PRIORITY 4: Process Donor Forms with ONLY registration (Medical Review stage)
+$all_processed_donors = $donors_with_blood + $donors_with_physical + $donors_with_screening;
+foreach ($donor_forms as $donor_info) {
+    $donor_id = $donor_info['donor_id'];
+    if (isset($all_processed_donors[$donor_id])) continue;
+    if (isset($screenings_by_donor[$donor_id])) continue;
+    
+    $medical_info = $medical_by_donor[$donor_id] ?? null;
+    // compute donor_type_label safely
+    $donor_type_label = getDonorType($donor_id, $medical_info, $eligibility_by_donor, 'medical_review');
+    
+    $donor_history[] = [
+        'no' => $counter++,
+        'date' => ($medical_info['updated_at'] ?? null) ?: ($donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
+        'surname' => $donor_info['surname'] ?? 'N/A',
+        'first_name' => $donor_info['first_name'] ?? 'N/A',
+        'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
+        'donor_type' => $donor_type_label,
+        'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
+        'donor_id' => $donor_id,
+        'stage' => 'medical_review',
+        'medical_history_id' => $medical_info['medical_history_id'] ?? null
+    ];
+}
+
+// Optimized sorting with pre-computed stage priorities
+$stage_priority = ['Medical' => 1, 'Screening' => 2, 'Physical' => 3, 'Collection' => 4, 'Completed' => 5];
+
+usort($donor_history, function($a, $b) use ($stage_priority, $medical_by_donor) {
+    // Determine stages first
+    $getStageFromType = function($label) use ($stage_priority) {
+        foreach ($stage_priority as $stage => $_) {
+            if (strpos($label, $stage) !== false) return $stage;
+        }
+        return '';
+    };
+    $a_stage = $getStageFromType($a['donor_type'] ?? '');
+    $b_stage = $getStageFromType($b['donor_type'] ?? '');
+
+    // Priority 0: needs_review true first (prioritize donors that need review)
+    $a_needs_review = !empty($a['donor_id']) && isset($medical_by_donor[$a['donor_id']]) && !empty($medical_by_donor[$a['donor_id']]['needs_review']);
+    $b_needs_review = !empty($b['donor_id']) && isset($medical_by_donor[$b['donor_id']]) && !empty($medical_by_donor[$b['donor_id']]['needs_review']);
+    if ($a_needs_review !== $b_needs_review) return $a_needs_review ? -1 : 1;
+
+    // Priority 1: stage priority
+    if ($a_stage !== $b_stage) {
+        return $stage_priority[$a_stage] - $stage_priority[$b_stage];
+    }
+    
+    // Priority 2: date grouping (newest day first), then time within day (oldest first)
+    $toDt = function($s) {
+        try { return new DateTime($s); } catch (Exception $e) { return new DateTime('@0'); }
+    };
+    $adt = $toDt($a['date'] ?? null);
+    $bdt = $toDt($b['date'] ?? null);
+
+    $a_day = $adt->format('Y-m-d');
+    $b_day = $bdt->format('Y-m-d');
+    if ($a_day !== $b_day) {
+        // Newest day first (descending by day)
+        return strcmp($b_day, $a_day);
+    }
+
+    // Same day: oldest time first (ascending by time with microseconds)
+    $am = (float)$adt->format('U.u');
+    $bm = (float)$bdt->format('U.u');
+    if ($am === $bm) return 0;
+    return ($am < $bm) ? -1 : 1;
+});
+
+// Calculate counts from already processed data
+$new_count = 0;
+$returning_count = 0;
 $today_count = 0;
-foreach ($donors as $donor) {
-    if (isset($donor['submitted_at'])) {
-        $submission_date = date('Y-m-d', strtotime($donor['submitted_at']));
+$today = date('Y-m-d');
+
+// Count from donor_history (already processed and sorted)
+foreach ($donor_history as $entry) {
+    if (strpos($entry['donor_type'], 'New') === 0) {
+        $new_count++;
+    } elseif (strpos($entry['donor_type'], 'Returning') === 0) {
+        $returning_count++;
+    }
+    
+    // Count today's submissions
+    if (isset($entry['date'])) {
+        $submission_date = date('Y-m-d', strtotime($entry['date']));
         if ($submission_date === $today) {
             $today_count++;
         }
     }
 }
 
-// Handle status filtering
-$status_filter = isset($_GET['status']) ? $_GET['status'] : 'incoming';
-
-// Filter donors based on status if needed
-$filtered_donors = [];
-if ($status_filter === 'incoming') {
-    foreach ($donors as $donor) {
-        if (in_array($donor['donor_id'], $incoming_donors)) {
-            $filtered_donors[] = $donor;
-        }
-    }
-    $donors = $filtered_donors;
-} elseif ($status_filter === 'approved') {
-    foreach ($donors as $donor) {
-        if (in_array($donor['donor_id'], $donor_with_approved_medical_history)) {
-            $filtered_donors[] = $donor;
-        }
-    }
-    $donors = $filtered_donors;
-} elseif ($status_filter === 'declined') {
-    foreach ($donors as $donor) {
-        if (in_array($donor['donor_id'], $donor_with_declined_medical_history)) {
-            $filtered_donors[] = $donor;
-        }
-    }
-    $donors = $filtered_donors;
-} elseif ($status_filter === 'today') {
-    foreach ($donors as $donor) {
-        if (isset($donor['submitted_at'])) {
-            $submission_date = date('Y-m-d', strtotime($donor['submitted_at']));
-            if ($submission_date === $today) {
-                $filtered_donors[] = $donor;
-            }
-        }
-    }
-    $donors = $filtered_donors;
-}
-
-// Group donors by unique identity (surname, first_name, middle_name, birthdate)
-$donorGroups = [];
-foreach ($donors as $donor) {
-    $key = ($donor['surname'] ?? '') . '|' . 
-           ($donor['first_name'] ?? '') . '|' . 
-           ($donor['middle_name'] ?? '') . '|' . 
-           ($donor['birthdate'] ?? '');
-    
-    if (!isset($donorGroups[$key])) {
-        $donorGroups[$key] = [
-            'info' => $donor,
-            'count' => 1,
-            'latest_submission' => $donor['submitted_at'] ?? null
-        ];
-    } else {
-        $donorGroups[$key]['count']++;
-        
-        // Keep track of the latest submission
-        if (isset($donor['submitted_at']) && 
-            (!isset($donorGroups[$key]['latest_submission']) || 
-            $donor['submitted_at'] > $donorGroups[$key]['latest_submission'])) {
-            $donorGroups[$key]['latest_submission'] = $donor['submitted_at'];
-            $donorGroups[$key]['info'] = $donor;
-        }
-    }
-}
-
-// Convert back to array for pagination
-$donors = [];
-foreach ($donorGroups as $group) {
-    $donor = $group['info'];
-    $donor['donation_count'] = $group['count'];
-    $donor['latest_submission'] = $group['latest_submission'];
-    $donors[] = $donor;
-}
-
-// Sort by updated_at (FIFO: oldest first)
-usort($donors, function($a, $b) {
-    $a_time = isset($a['updated_at']) ? strtotime($a['updated_at']) : (isset($a['latest_submission']) ? strtotime($a['latest_submission']) : (isset($a['submitted_at']) ? strtotime($a['submitted_at']) : 0));
-    $b_time = isset($b['updated_at']) ? strtotime($b['updated_at']) : (isset($b['latest_submission']) ? strtotime($b['latest_submission']) : (isset($b['submitted_at']) ? strtotime($b['submitted_at']) : 0));
-    return $a_time <=> $b_time;
-});
-
-$total_records = count($donors);
+$total_records = count($donor_history);
 $total_pages = ceil($total_records / $records_per_page);
 
 // Adjust current page if needed
 if ($current_page < 1) $current_page = 1;
 if ($current_page > $total_pages && $total_pages > 0) $current_page = $total_pages;
 
-// Slice the array to get only the records for the current page
-$donors = array_slice($donors, $offset, $records_per_page);
+// Optimized pagination with duplicate removal
+$total_records = count($donor_history);
+$total_pages = ceil($total_records / $records_per_page);
+
+// Adjust current page if needed
+if ($current_page < 1) $current_page = 1;
+if ($current_page > $total_pages && $total_pages > 0) $current_page = $total_pages;
+
+// Remove duplicates and slice for pagination in one operation
+$seen_donors = [];
+$unique_donor_history = [];
+$page_start = ($current_page - 1) * $records_per_page;
+$page_end = $page_start + $records_per_page;
+$current_count = 0;
+
+foreach ($donor_history as $entry) {
+    $donor_key = $entry['donor_id'] . '_' . $entry['stage'];
+    if (!isset($seen_donors[$donor_key])) {
+        $seen_donors[$donor_key] = true;
+        if ($current_count >= $page_start && $current_count < $page_end) {
+            $entry['no'] = $current_count - $page_start + 1;
+            $unique_donor_history[] = $entry;
+        }
+        $current_count++;
+    }
+}
+
+$donor_history = $unique_donor_history;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -659,14 +791,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
             border-color: #dee2e6;
         }
 
-        /* Badge styling */
-        .badge.bg-primary {
-            background-color: var(--primary-color) !important;
-            font-size: 0.95rem;
-            padding: 0.3rem 0.6rem;
-            font-weight: 600;
-            border-radius: 4px;
-        }
+
         
         /* Section header */
         .section-header {
@@ -674,6 +799,42 @@ $donors = array_slice($donors, $offset, $records_per_page);
             font-weight: 700;
             margin-bottom: 1.25rem;
             color: #333;
+        }
+
+        /* Badge styles for Donor Type and Registered via */
+        .badge-tag {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: #fff;
+            line-height: 1;
+            white-space: nowrap;
+        }
+        .badge-new { background-color: #2e7d32; }            /* green */
+        .badge-returning { background-color: #1976d2; }      /* blue */
+        .badge-mobile { background-color: #fb8c00; }         /* orange */
+        .badge-system { background-color: #6a1b9a; }         /* purple */
+        /* Extra padding for Registered via badges */
+        .badge-registered { padding: 6px 16px; }
+        /* Donor type colored text (no badge) */
+        .type-new { color: #2e7d32; font-weight: 700; }
+        .type-returning { color: #1976d2; font-weight: 700; }
+
+        /* Donor Status modal header styling */
+        #deferralStatusModal .modal-header {
+            background-color: var(--table-header-bg);
+            color: #fff;
+        }
+        #deferralStatusModal .modal-header .btn-close {
+            filter: invert(1);
+            opacity: 1;
+        }
+
+        /* Blur background when modal is open */
+        .modal-backdrop.show {
+            backdrop-filter: blur(4px);
         }
     </style>
 </head>
@@ -693,30 +854,9 @@ $donors = array_slice($donors, $offset, $records_per_page);
             <nav class="col-md-3 col-lg-2 d-md-block sidebar">
                 <h4>Interviewer</h4>
                 
-                <!-- Medical Screening Queue Dropdown -->
-                <div class="dropdown-menu-custom mb-3">
-                    <button class="dropdown-toggle-custom" type="button" id="medicalScreeningToggle">
-                        <span>Medical Screening Queue</span>
-                        <i class="fas fa-chevron-down"></i>
-                    </button>
-                    <div class="dropdown-menu-items" id="medicalScreeningMenu">
-                        <?php if ($user_staff_roles === 'interviewer'): ?>
-                            <li><a class="dropdown-item-custom" href="dashboard-staff-donor-submission.php">System Registration</a></li>
-                        <?php endif; ?>
-                        
-                        <?php if ($user_staff_roles === 'reviewer'): ?>
-                            <li><a class="dropdown-item-custom active" href="dashboard-staff-medical-history-submissions.php">Initial Screening Queue</a></li>
-                        <?php endif; ?>
-                        
-                        <li><a class="dropdown-item-custom" href="dashboard-staff-existing-files/dashboard-staff-mobile-registration.php">Mobile Registration</a></li>
-                    </div>
-                </div>
-                
                 <ul class="nav flex-column">
-                    
-
                     <li class="nav-item">
-                        <a class="nav-link" href="dashboard-staff-history/dashboard-medical-review-history.php">Medical Review History</a>
+                        <a class="nav-link active" href="dashboard-staff-medical-history-submissions.php">Medical Screening</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="../../assets/php_func/logout.php">Logout</a>
@@ -733,30 +873,21 @@ $donors = array_slice($donors, $offset, $records_per_page);
                     
                     <!-- Status Cards -->
                     <div class="dashboard-staff-status">
-                        <a href="?status=<?php echo $status_filter; ?>" class="status-card active">
-                            <p class="dashboard-staff-count"><?php 
-                                // Show the count based on current filter
-                                if ($status_filter === 'incoming') {
-                                    echo $incoming_count;
-                                } elseif ($status_filter === 'approved') {
-                                    echo $approved_count;
-                                } elseif ($status_filter === 'declined') {
-                                    echo $declined_count;
-                                } elseif ($status_filter === 'today') {
-                                    echo $today_count;
-                                } else {
-                                    echo $total_records;
-                                }
-                            ?></p>
-                            <p class="dashboard-staff-title">Pending</p>
+                        <a href="#" class="status-card active">
+                            <p class="dashboard-staff-count"><?php echo $new_count; ?></p>
+                            <p class="dashboard-staff-title">New Donors</p>
                         </a>
-                        <a href="?status=today" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'today' ? 'active' : ''); ?>">
+                        <a href="#" class="status-card">
+                            <p class="dashboard-staff-count"><?php echo $returning_count; ?></p>
+                            <p class="dashboard-staff-title">Eligible Donors</p>
+                        </a>
+                        <a href="#" class="status-card">
                             <p class="dashboard-staff-count"><?php echo $today_count; ?></p>
                             <p class="dashboard-staff-title">Today's Summary</p>
                         </a>
                     </div>
                     
-                    <h5 class="section-header">Donation Records</h5>
+                    <h5 class="section-header">Medical History Submissions</h5>
                     
                     <!-- Search Bar -->
                     <div class="search-container">
@@ -772,47 +903,51 @@ $donors = array_slice($donors, $offset, $records_per_page);
                         <table class="dashboard-staff-tables table-hover">
                             <thead>
                                 <tr>
-                                    <th>Donation Date</th>
+                                    <th>No.</th>
+                                    <th>Date</th>
                                     <th>Surname</th>
                                     <th>First Name</th>
-                                    <th>Gender</th>
-                                    <th>Age</th>
+                                    <th>Interviewer</th>
+                                    <th>Donor Type</th>
+                                    <th>Registered via</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody id="donorTableBody">
-                                <?php if($donors && is_array($donors)): ?>
-                                    <?php foreach($donors as $index => $donor): ?>
+                                <?php if($donor_history && is_array($donor_history)): ?>
+                                    <?php foreach($donor_history as $index => $entry): ?>
                                         <?php
                                         // Calculate age if missing but birthdate is available
-                                        if (empty($donor['age']) && !empty($donor['birthdate'])) {
-                                            $birthDate = new DateTime($donor['birthdate']);
+                                        if (empty($entry['age']) && !empty($entry['birthdate'])) {
+                                            $birthDate = new DateTime($entry['birthdate']);
                                             $today = new DateTime();
-                                            $donor['age'] = $birthDate->diff($today)->y;
+                                            $entry['age'] = $birthDate->diff($today)->y;
                                         }
                                         ?>
-                                        <tr class="clickable-row" data-donor-id="<?php echo $donor['donor_id']; ?>">
+                                        <tr class="clickable-row" data-donor-id="<?php echo $entry['donor_id']; ?>" data-stage="<?php echo htmlspecialchars($entry['stage']); ?>" data-donor-type="<?php echo htmlspecialchars($entry['donor_type']); ?>">
+                                            <td><?php echo $entry['no']; ?></td>
                                             <td><?php 
-                                                if (isset($donor['latest_submission'])) {
-                                                    $date = new DateTime($donor['latest_submission']);
+                                                if (isset($entry['date'])) {
+                                                    $date = new DateTime($entry['date']);
                                                     echo $date->format('F d, Y');
                                                 } else {
                                                     echo 'N/A';
                                                 }
                                             ?></td>
-                                            <td><?php echo isset($donor['surname']) ? htmlspecialchars($donor['surname']) : ''; ?></td>
-                                            <td><?php echo isset($donor['first_name']) ? htmlspecialchars($donor['first_name']) : ''; ?></td>
-                                            <td><?php echo !empty($donor['sex']) ? htmlspecialchars(ucfirst($donor['sex'])) : 'N/A'; ?></td>
-                                            <td><?php echo isset($donor['age']) ? htmlspecialchars($donor['age']) : ''; ?></td>
+                                            <td><?php echo isset($entry['surname']) ? htmlspecialchars($entry['surname']) : ''; ?></td>
+                                            <td><?php echo isset($entry['first_name']) ? htmlspecialchars($entry['first_name']) : ''; ?></td>
+                                            <td><?php echo isset($entry['interviewer']) ? htmlspecialchars($entry['interviewer']) : 'N/A'; ?></td>
+                                            <td><span class="<?php echo stripos($entry['donor_type'],'returning')===0 ? 'type-returning' : 'type-new'; ?>"><?php echo htmlspecialchars($entry['donor_type']); ?></span></td>
+                                            <td><span class="badge-tag badge-registered <?php echo strtolower($entry['registered_via'])==='mobile' ? 'badge-mobile' : 'badge-system'; ?>"><?php echo htmlspecialchars($entry['registered_via']); ?></span></td>
                                             <td>
                                                 <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" 
-                                                        data-donor-id="<?php echo $donor['donor_id']; ?>" 
+                                                        data-donor-id="<?php echo $entry['donor_id']; ?>" 
                                                         title="View Details"
                                                         style="width: 35px; height: 30px;">
                                                     <i class="fas fa-eye"></i>
                                                 </button>
                                                 <button type="button" class="btn btn-warning btn-sm edit-donor-btn" 
-                                                        data-donor-id="<?php echo $donor['donor_id']; ?>" 
+                                                        data-donor-id="<?php echo $entry['donor_id']; ?>" 
                                                         title="Edit"
                                                         style="width: 35px; height: 30px;">
                                                     <i class="fas fa-edit"></i>
@@ -822,7 +957,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr>
-                                        <td colspan="6" class="text-center">No donor records found</td>
+                                        <td colspan="8" class="text-center text-muted">No donor records found</td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>
@@ -835,19 +970,19 @@ $donors = array_slice($donors, $offset, $records_per_page);
                                 <ul class="pagination justify-content-center">
                                     <!-- Previous button -->
                                     <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Previous</a>
+                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Previous</a>
                                     </li>
                                     
                                     <!-- Page numbers -->
                                     <?php for($i = 1; $i <= $total_pages; $i++): ?>
                                         <li class="page-item <?php echo $current_page == $i ? 'active' : ''; ?>">
-                                            <a class="page-link" href="?page=<?php echo $i; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>"><?php echo $i; ?></a>
+                                            <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
                                         </li>
                                     <?php endfor; ?>
                                     
                                     <!-- Next button -->
                                     <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Next</a>
+                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Next</a>
                                     </li>
                                 </ul>
                             </nav>
@@ -876,21 +1011,69 @@ $donors = array_slice($donors, $offset, $records_per_page);
                         </div>
                     </div>
             
-                    <div id="screeningInfo" class="mt-4" style="display: none;">
-                        <h6 class="border-bottom pb-2 mb-3">Screening Information</h6>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <p><strong>Interview Date:</strong> <span id="interviewDate">-</span></p>
+                    
                         </div>
-                            <div class="col-md-6">
-                                <p><strong>Body Weight:</strong> <span id="bodyWeight">-</span></p>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="proceedToMedicalHistory">Proceed to Medical History</button>
+                <button type="button" class="btn btn-outline-primary" id="markReviewFromMain">Mark for Medical Review</button>
                             </div>
                             </div>
                             </div>
+</div>
+
+    <!-- Stage Notice Modal (Read-only for non-medical stages) -->
+    <div class="modal fade" id="stageNoticeModal" tabindex="-1" aria-labelledby="stageNoticeModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="stageNoticeModalLabel">Notice: Different Processing Stage</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="stageNoticeBody">
+                    <!-- Filled dynamically -->
                 </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-primary" id="proceedToMedicalHistory">Proceed to Medical History</button>
+                    <button type="button" class="btn btn-primary" id="stageNoticeViewBtn">View Details</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Returning Donor Info Modal (friendly notice before viewing) -->
+    <div class="modal fade" id="returningInfoModal" tabindex="-1" aria-labelledby="returningInfoModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="returningInfoModalLabel">Returning Donor</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="returningInfoBody">
+                    This donor has previous donations. You can safely view details in read-only mode from here. Processing for new medical history occurs only under New (Medical).
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-outline-primary" id="returningInfoViewBtn">View Details</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Screening Details Modal -->
+    <div class="modal fade" id="screeningDetailsModal" tabindex="-1" aria-labelledby="screeningDetailsLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="screeningDetailsLabel">Screening Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="screeningDetailsBody">
+                    <!-- Populated dynamically -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="markReturningReviewBtn">Mark for Medical Review</button>
             </div>
         </div>
     </div>
@@ -956,6 +1139,37 @@ $donors = array_slice($donors, $offset, $records_per_page);
         </div>
     </div>
 
+    <!-- Data Processing Confirmation Modal -->
+    <div class="modal fade" id="dataProcessingConfirmModal" tabindex="-1" aria-labelledby="dataProcessingConfirmLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header" style="background:#8b0000;color:#fff;">
+                    <h5 class="modal-title" id="dataProcessingConfirmLabel">Submit Medical Screening</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Please confirm the outcome of this screening.</p>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="screeningOutcome" id="approveOption" value="approve" checked>
+                        <label class="form-check-label" for="approveOption">
+                            Approve for Donation
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="screeningOutcome" id="draftOption" value="draft">
+                        <label class="form-check-label" for="draftOption">
+                            Save as Draft
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmProcessingBtn">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Loading Modal -->
     <div class="modal" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-dialog-centered">
@@ -965,6 +1179,44 @@ $donors = array_slice($donors, $offset, $records_per_page);
                         <span class="visually-hidden">Loading...</span>
                     </div>
                     <p class="text-white mt-3 mb-0">Please wait...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Screening Mark Modal -->
+    <div class="modal fade" id="confirmScreeningMarkModal" tabindex="-1" aria-labelledby="confirmScreeningMarkLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="confirmScreeningMarkLabel">Mark Screening for Review</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Do you want to mark this donor's screening record for review?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirmScreeningMarkBtn">Yes, mark it</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Review Confirmation Modal -->
+    <div class="modal fade" id="reviewConfirmModal" tabindex="-1" aria-labelledby="reviewConfirmLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header" style="background:#8b0000;color:#fff;">
+                    <h5 class="modal-title" id="reviewConfirmLabel">Review Medical History</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    This will redirect you to the medical history the donor just submitted. Do you want to proceed?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="reviewConfirmProceedBtn">Proceed</button>
                 </div>
             </div>
         </div>
@@ -995,67 +1247,299 @@ $donors = array_slice($donors, $offset, $records_per_page);
             const donorTableBody = document.getElementById('donorTableBody');
             const deferralStatusModal = new bootstrap.Modal(document.getElementById('deferralStatusModal'));
             const deferralStatusContent = document.getElementById('deferralStatusContent');
-            const screeningInfo = document.getElementById('screeningInfo');
-            const interviewDateSpan = document.getElementById('interviewDate');
-            const bodyWeightSpan = document.getElementById('bodyWeight');
-            const proceedButton = document.getElementById('proceedToMedicalHistory');
+            const stageNoticeModal = new bootstrap.Modal(document.getElementById('stageNoticeModal'));
+            const stageNoticeBody = document.getElementById('stageNoticeBody');
+            const stageNoticeViewBtn = document.getElementById('stageNoticeViewBtn');
+            const returningInfoModal = new bootstrap.Modal(document.getElementById('returningInfoModal'));
+            const returningInfoViewBtn = document.getElementById('returningInfoViewBtn');
+            const markReturningReviewBtn = document.getElementById('markReturningReviewBtn');
+            const markReviewFromMain = document.getElementById('markReviewFromMain');
             
             let currentDonorId = null;
+            let allowProcessing = false;
+            let modalContextType = 'new_medical'; // 'new_medical' | 'new_other_stage' | 'returning' | 'other'
+            let currentStage = null; // 'medical_review' | 'screening_form' | 'physical_examination' | 'blood_collection'
             
             // Store original rows for search reset
             const originalRows = Array.from(donorTableBody.getElementsByTagName('tr'));
+            
+            // Optimized search functionality with debouncing
+            let searchTimeout;
+            if (searchInput && searchInput.addEventListener) {
+            searchInput.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    performOptimizedSearch(this.value.toLowerCase());
+                }, 300); // 300ms debounce
+            });
+            }
             
             // Add click event to all clickable rows
             document.querySelectorAll('.clickable-row').forEach(row => {
                 row.addEventListener('click', function() {
                     const donorId = this.getAttribute('data-donor-id');
-                    if (donorId) {
+                    const stageAttr = this.getAttribute('data-stage');
+                    const donorTypeLabel = this.getAttribute('data-donor-type');
+                    if (!donorId) return;
+                    
+                    // Set global variables for modal context
+                    window.currentDonorId = donorId;
+                    window.currentDonorType = donorTypeLabel || 'New';
+                    window.currentDonorStage = stageAttr || 'Medical';
+                    
                         currentDonorId = donorId;
+                    const lowerType = (donorTypeLabel || '').toLowerCase();
+                    const isNew = lowerType.startsWith('new');
+                    const isReturning = lowerType.startsWith('returning');
+                    // Derive stage from donor type text to avoid mismatches
+                    const typeText = lowerType;
+                    let stageFromType = 'unknown';
+                    if (typeText.includes('medical')) stageFromType = 'medical_review';
+                    else if (typeText.includes('screening')) stageFromType = 'screening_form';
+                    else if (typeText.includes('physical')) stageFromType = 'physical_examination';
+                    else if (typeText.includes('collection') || typeText.includes('completed')) stageFromType = 'blood_collection';
+                    const effectiveStage = stageFromType !== 'unknown' ? stageFromType : stageAttr;
+                    currentStage = effectiveStage;
+                    allowProcessing = isNew && (effectiveStage === 'medical_review');
+                    modalContextType = allowProcessing ? 'new_medical' : (isNew ? 'new_other_stage' : (isReturning ? 'returning' : 'other'));
+                    window.modalContextType = modalContextType;
+                    
+                    if (!allowProcessing && !isReturning) {
+                        // Show read-only notice modal
+                        const stageTitleMap = {
+                            'screening_form': 'Screening Stage',
+                            'physical_examination': 'Physical Examination Stage',
+                            'blood_collection': 'Blood Collection Stage'
+                        };
+                        const friendlyStage = stageTitleMap[effectiveStage] || 'Different Stage';
+                        const newOrReturningNote = isNew
+                            ? `This record is <strong>New</strong> but not in the Medical stage (<strong>${friendlyStage}</strong>).`
+                            : `This record is <strong>Returning</strong>. This page is dedicated to processing <strong>New (Medical)</strong> only.`;
+                        stageNoticeBody.innerHTML = `
+                            <p>${newOrReturningNote}</p>
+                            <p><strong>Note:</strong> Medical history processing on this page is available only for <strong>New (Medical)</strong> records.</p>
+                            <div class="alert alert-info mb-0">
+                                <div><strong>Donor type:</strong> ${donorTypeLabel || ''}</div>
+                                <div class="small text-muted">You can view read-only details for reference.</div>
+                            </div>`;
+                        stageNoticeModal.show();
                         
-                        // Show the modal with loading state
+                        // Bind view details to open the existing details modal without processing
+                        if (stageNoticeViewBtn) {
+                            stageNoticeViewBtn.onclick = () => {
+                            stageNoticeModal.hide();
+                            // Prepare details modal in read-only mode
+                            deferralStatusContent.innerHTML = `
+                                <div class=\"d-flex justify-content-center\">\n                                    <div class=\"spinner-border text-primary\" role=\"status\">\n                                        <span class=\"visually-hidden\">Loading...</span>\n                                    </div>\n                                </div>`;
+                            
+                            // Hide proceed button in read-only mode
+                            const proceedButton = getProceedButton();
+                            if (proceedButton && proceedButton.style) {
+                                proceedButton.style.display = 'none';
+                                proceedButton.textContent = 'Review Medical History';
+                            }
+                            deferralStatusModal.show();
+                            fetchDonorStatusInfo(donorId);
+                        };
+                        }
+                        return;
+                    }
+                    
+                    if (isReturning) {
+                        if (effectiveStage === 'medical_review') {
+                            // Returning (Medical): go straight to details with Review available
                         deferralStatusContent.innerHTML = `
                             <div class="d-flex justify-content-center">
                                 <div class="spinner-border text-primary" role="status">
                                     <span class="visually-hidden">Loading...</span>
                     </div>
                             </div>`;
-                        screeningInfo.style.display = 'none';
+                            const proceedButton = getProceedButton();
+                            if (proceedButton && proceedButton.style) {
+                                proceedButton.style.display = 'inline-block';
+                                proceedButton.textContent = 'Review Medical History';
+                            }
+                            if (markReviewFromMain) markReviewFromMain.style.display = 'none';
                         deferralStatusModal.show();
-                        
-                        // Fetch donor info and deferral status
                         fetchDonorStatusInfo(donorId);
+                            return;
+                        }
+                        // Returning but not Medical: friendly confirmation with mark option
+                        returningInfoModal.show();
+                        if (returningInfoViewBtn) {
+                            returningInfoViewBtn.onclick = () => {
+                            returningInfoModal.hide();
+                            deferralStatusContent.innerHTML = `
+                                <div class="d-flex justify-content-center">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>`;
+                            const proceedButton = getProceedButton();
+                            if (proceedButton && proceedButton.style) proceedButton.style.display = 'none';
+                            deferralStatusModal.show();
+                            fetchDonorStatusInfo(donorId);
+                        };
+                        }
+                        // Mark for review handler
+                        if (markReturningReviewBtn) {
+                            markReturningReviewBtn.onclick = () => {
+                                fetch('../../assets/php_func/update_needs_review.php', {
+                                    method: 'POST',
+                                    headers: { 'Accept': 'application/json' },
+                                    body: new URLSearchParams({ donor_id: donorId })
+                                })
+                                .then(r => r.json())
+                                .then(res => {
+                                    if (res && res.success) {
+                                        returningInfoModal.hide();
+                                        // Use custom modal instead of browser alert
+                                        if (window.customConfirm) {
+                                            window.customConfirm('Marked for Medical Review.', function() {
+                                                // Refresh to apply resorting by date/priority
+                                                window.location.reload();
+                                            });
+                                        } else {
+                                            alert('Marked for Medical Review.');
+                                            // Refresh to apply resorting by date/priority
+                                            window.location.reload();
+                                        }
+                                        // Optionally update UI label to Returning (Medical)
+                                        const row = document.querySelector(`tr[data-donor-id="${donorId}"]`);
+                                        if (row) {
+                                            const donorTypeCell = row.querySelector('td:nth-child(6)');
+                                            if (donorTypeCell && donorTypeCell.textContent.toLowerCase().includes('returning')) {
+                                                donorTypeCell.textContent = 'Returning (Medical)';
+                                                row.setAttribute('data-donor-type', 'Returning (Medical)');
+                                            }
+                                        }
+                                        // Refresh to apply resorting by date/priority
+                                        // window.location.reload(); // Moved to modal callback
+                                    } else {
+                                        // Use custom modal instead of browser alert
+                                        if (window.customConfirm) {
+                                            window.customConfirm('Failed to mark for review.', function() {
+                                                // Just close the modal, no additional action needed
+                                            });
+                                        } else {
+                                            alert('Failed to mark for review.');
+                                        }
+                                    }
+                                })
+                                .catch(() => {
+                                    // Use custom modal instead of browser alert
+                                    if (window.customConfirm) {
+                                        window.customConfirm('Failed to mark for review.', function() {
+                                            // Just close the modal, no additional action needed
+                                        });
+                                    } else {
+                                        alert('Failed to mark for review.');
+                                    }
+                                });
+                            };
+                        }
+                        // Enable main modal mark button only for returning
+                        if (markReviewFromMain) {
+                            markReviewFromMain.style.display = 'inline-block';
+                            markReviewFromMain.onclick = () => {
+                                fetch('../../assets/php_func/update_needs_review.php', {
+                                    method: 'POST',
+                                    headers: { 'Accept': 'application/json' },
+                                    body: new URLSearchParams({ donor_id: donorId })
+                                })
+                                .then(r => r.json())
+                                .then(res => {
+                                    if (res && res.success) {
+                                        // Use custom modal instead of browser alert
+                                        if (window.customConfirm) {
+                                            window.customConfirm('Marked for Medical Review.', function() {
+                                                // Refresh to apply resorting by date/priority
+                                                window.location.reload();
+                                            });
+                                        } else {
+                                            alert('Marked for Medical Review.');
+                                            // Refresh to apply resorting by date/priority
+                                            window.location.reload();
+                                        }
+                                        const row = document.querySelector(`tr[data-donor-id="${donorId}"]`);
+                                        if (row) {
+                                            const donorTypeCell = row.querySelector('td:nth-child(6)');
+                                            if (donorTypeCell && donorTypeCell.textContent.toLowerCase().includes('returning')) {
+                                                donorTypeCell.textContent = 'Returning (Medical)';
+                                                row.setAttribute('data-donor-type', 'Returning (Medical)');
+                                            }
+                                            const dateCell = row.querySelector('td:nth-child(2)');
+                                            if (dateCell && res.updated_at) {
+                                                const d = new Date(res.updated_at);
+                                                const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                                                dateCell.textContent = d.toLocaleDateString('en-US', options);
+                                            }
+                                        }
+                                        // Refresh to apply resorting by date/priority
+                                        // window.location.reload(); // Moved to modal callback
+                                    } else {
+                                        // Use custom modal instead of browser alert
+                                        if (window.customConfirm) {
+                                            window.customConfirm('Failed to mark for review.', function() {
+                                                // Just close the modal, no additional action needed
+                                            });
+                                        } else {
+                                            alert('Failed to mark for review.');
+                                        }
+                                    }
+                                })
+                                .catch(() => {
+                                    // Use custom modal instead of browser alert
+                                    if (window.customConfirm) {
+                                        window.customConfirm('Failed to mark for review.', function() {
+                                            // Just close the modal, no additional action needed
+                                        });
+                                    } else {
+                                        alert('Failed to mark for review.');
+                                    }
+                                });
+                            };
+                        }
+                        return;
                     }
+                    
+                    // Allow processing: show details and keep proceed button visible
+                    deferralStatusContent.innerHTML = `
+                        <div class="d-flex justify-content-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>`;
+                    
+                    const proceedButton = getProceedButton();
+                    if (proceedButton && proceedButton.style) {
+                        proceedButton.style.display = 'inline-block';
+                        proceedButton.textContent = 'Review Medical History';
+                    }
+                    // Hide mark button for non-returning/new-medical flow
+                    if (markReviewFromMain) markReviewFromMain.style.display = 'none';
+                    deferralStatusModal.show();
+                    fetchDonorStatusInfo(donorId);
                 });
             });
             
             // Function to fetch donor status information
             function fetchDonorStatusInfo(donorId) {
                 // First, fetch donor information
-                fetch(`../../assets/php_func/fetch_donor_info.php?donor_id=${donorId}`)
+                fetch('../../assets/php_func/fetch_donor_info.php?donor_id=' + donorId)
                     .then(response => response.json())
                     .then(donorData => {
                         // Next, check physical examination table for deferral status
-                        fetch(`../../assets/php_func/check_deferral_status.php?donor_id=${donorId}`)
+                        fetch('../../assets/php_func/check_deferral_status.php?donor_id=' + donorId)
                             .then(response => response.json())
                             .then(deferralData => {
                                 displayDonorInfo(donorData, deferralData);
                                 
                                 // After getting deferral info, fetch screening info
-                                fetch(`../../assets/php_func/fetch_screening_info.php?donor_id=${donorId}`)
+                                fetch('../../assets/php_func/fetch_screening_info.php?donor_id=' + donorId)
                                     .then(response => response.json())
-                                    .then(screeningData => {
-                                        if (screeningData.success && screeningData.data) {
-                                            screeningInfo.style.display = 'block';
-                                            interviewDateSpan.textContent = screeningData.data.interview_date || '-';
-                                            bodyWeightSpan.textContent = screeningData.data.body_weight ? `${screeningData.data.body_weight} kg` : '-';
-                    } else {
-                                            screeningInfo.style.display = 'none';
-                                        }
-                                    })
-                                    .catch(error => {
-                                        console.error("Error fetching screening info:", error);
-                                        screeningInfo.style.display = 'none';
-                                    });
+                                    .then(() => {})
+                                    .catch(error => { console.error("Error fetching screening info:", error); });
                             })
                             .catch(error => {
                                 console.error("Error checking deferral status:", error);
@@ -1071,282 +1555,227 @@ $donors = array_slice($donors, $offset, $records_per_page);
             // Function to display donor and deferral information
             function displayDonorInfo(donorData, deferralData) {
                 let donorInfoHTML = '';
+                const safe = (v) => v || 'N/A';
                 
                 if (donorData && donorData.success) {
-                    const donor = donorData.data;
+                    const donor = donorData.data || {};
+                    const fullName = `${safe(donor.surname)}, ${safe(donor.first_name)} ${safe(donor.middle_name)}`.trim();
+                    const currentStatus = (() => {
+                        // Get donor type from the row data
+                        const donorType = window.currentDonorType || 'New';
+                        const donorStage = window.currentDonorStage || 'Medical';
+                        
+                        if (donorType === 'New') {
+                            if (donorStage === 'Medical') return 'Medical';
+                            if (donorStage === 'Screening') return 'Screening';
+                            if (donorStage === 'Physical') return 'Physical';
+                            if (donorStage === 'Collection') return 'Collection';
+                            return 'Medical'; // Default
+                        } else if (donorType === 'Returning') {
+                            if (donorStage === 'Medical') return 'Medical';
+                            if (donorStage === 'Screening') return 'Screening';
+                            if (donorStage === 'Physical') return 'Physical';
+                            if (donorStage === 'Collection') return 'Collection';
+                            return 'Medical'; // Default
+                        }
+                        return 'Medical'; // Default fallback
+                    })();
                     
-                    // Display basic donor info
-                    donorInfoHTML += `
-                        <div class="card mb-3">
-                            <div class="card-header bg-light">
-                                <h6 class="mb-0">Donor Information</h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6"><strong>Name:</strong> ${donor.surname || ''}, ${donor.first_name || ''} ${donor.middle_name || ''}</div>
-                                    <div class="col-md-3"><strong>Birthdate:</strong> ${donor.birthdate || '-'}</div>
-                                    <div class="col-md-3"><strong>Age:</strong> ${donor.age || '-'}</div>
-                                </div>
-                                <div class="row mt-2">
-                                    <div class="col-md-6"><strong>Donation Count:</strong> <span class="badge bg-primary">${donor.donation_count || '1'}</span></div>
-                                    <div class="col-md-6"><strong>Last Donation:</strong> ${formatDate(donor.latest_submission) || 'N/A'}</div>
-                                </div>
-                            </div>
-                        </div>`;
-                    
-                    // Display latest donation details
-                    if (donor.donation_history && donor.donation_history.length > 0) {
-                        const latestDonation = donor.donation_history[0];
+                    // Header
                         donorInfoHTML += `
-                            <div class="card mb-3">
-                                <div class="card-header bg-light">
-                                    <h6 class="mb-0">Latest Donation Details</h6>
+                        <div class="mb-3">
+                            <h5 class="mb-2" style="color:#9c0000; font-weight:700;">Donor Profile</h5>
+                            <div class="d-flex justify-content-between align-items-center small text-muted">
+                                <div><strong>${fullName}</strong> &nbsp; ${safe(donor.age)}${donor.sex ? ', ' + donor.sex : ''}</div>
+                                <div><strong>Current Status:</strong> ${currentStatus}</div>
                                 </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        <div class="col-md-6"><strong>Date:</strong> ${formatDate(latestDonation.date) || 'N/A'}</div>
-                                        <div class="col-md-6"><strong>Donation Type:</strong> ${latestDonation.donation_type || 'Unknown'}</div>
-                                    </div>
-                                    <div class="row mt-2">
-                                        <div class="col-md-6"><strong>Blood Type:</strong> ${latestDonation.blood_type || 'Unknown'}</div>
-                                        <div class="col-md-6"><strong>Contact:</strong> ${latestDonation.contact || 'Not provided'}</div>
-                                    </div>
-                                </div>
+                            <hr/>
                             </div>`;
                         
-                        // Display medical history if available
-                        if (donor.medical_history) {
-                            const medical = donor.medical_history;
+                    // Donor Information (from donor_form)
                             donorInfoHTML += `
-                                <div class="card mb-3">
-                                    <div class="card-header bg-light">
-                                        <h6 class="mb-0">Previous Medical History</h6>
+                        <div class="mb-3">
+                            <h6 class="mb-2">Donor Information</h6>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small mb-1">Birthdate</label>
+                                    <input class="form-control" value="${safe(donor.birthdate)}" disabled>
                                     </div>
-                                    <div class="card-body">
-                                        <div class="row">
-                                            <div class="col-12">
-                                                <p class="mb-1"><strong>Medical Conditions:</strong> 
-                                                    ${medical.asthma ? '<span class="badge bg-warning me-1">Asthma</span>' : ''}
-                                                    ${medical.allergies ? '<span class="badge bg-warning me-1">Allergies</span>' : ''}
-                                                    ${medical.heart_disease ? '<span class="badge bg-warning me-1">Heart Disease</span>' : ''}
-                                                    ${medical.hepatitis ? '<span class="badge bg-warning me-1">Hepatitis</span>' : ''}
-                                                    ${medical.diabetes ? '<span class="badge bg-warning me-1">Diabetes</span>' : ''}
-                                                    ${medical.kidney_disease ? '<span class="badge bg-warning me-1">Kidney Disease</span>' : ''}
-                                                    ${medical.malaria ? '<span class="badge bg-warning me-1">Malaria</span>' : ''}
-                                                    ${medical.thyroid_disease ? '<span class="badge bg-warning me-1">Thyroid Disease</span>' : ''}
-                                                    ${!medical.asthma && !medical.allergies && !medical.heart_disease && !medical.hepatitis && 
-                                                      !medical.diabetes && !medical.kidney_disease && !medical.malaria && !medical.thyroid_disease ? 
-                                                      'None reported' : ''}
-                                                </p>
+                                <div class="col-md-6">
+                                    <label class="form-label small mb-1">Civil Status</label>
+                                    <input class="form-control" value="${safe(donor.civil_status)}" disabled>
                                             </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small mb-1">Address</label>
+                                    <input class="form-control" value="${safe(donor.permanent_address)}" disabled>
                                         </div>
-                                        <div class="row mt-2">
                                             <div class="col-md-6">
-                                                <p class="mb-1"><strong>Blood Transfusion:</strong> ${medical.blood_transfusion ? 'Yes' : 'No'}</p>
-                                                <p class="mb-1"><strong>Surgery History:</strong> ${medical.surgery ? 'Yes' : 'No'}</p>
+                                    <label class="form-label small mb-1">Nationality</label>
+                                    <input class="form-control" value="${safe(donor.nationality)}" disabled>
                                             </div>
                                             <div class="col-md-6">
-                                                <p class="mb-1"><strong>Tattoo:</strong> ${medical.tattoo ? 'Yes' : 'No'}</p>
-                                                <p class="mb-1"><strong>Medication:</strong> ${medical.medicine ? 'Yes' : 'No'}</p>
+                                    <label class="form-label small mb-1">Mobile Number</label>
+                                    <input class="form-control" value="${safe(donor.mobile || donor.telephone)}" disabled>
                                             </div>
-                                        </div>
-                                        <div class="row mt-2">
-                                            <div class="col-12">
-                                                <p class="mb-0"><strong>Notes:</strong> ${medical.notes || 'No additional notes'}</p>
-                                            </div>
+                                            <div class="col-md-6">
+                                    <label class="form-label small mb-1">Occupation</label>
+                                    <input class="form-control" value="${safe(donor.occupation)}" disabled>
                                         </div>
                                     </div>
                                 </div>`;
-                        }
-                        
-                        // Display donation history table
-                        if (donor.donation_history.length > 1) {
-                            let historyRows = '';
-                            donor.donation_history.slice(1).forEach((donation, index) => {
-                                historyRows += `
-                                <tr>
-                                    <td>${index + 2}</td>
-                                    <td>${formatDate(donation.date) || 'N/A'}</td>
-                                    <td>${donation.donation_type || 'Unknown'}</td>
-                                    <td>${donation.blood_type || 'Unknown'}</td>
+                    
+                    // Donation History Table
+                    let donations = Array.isArray(donor.donation_history) ? donor.donation_history : [];
+                    // If no donation history array, synthesize a single row from eligibility info
+                    if ((!donations || donations.length === 0) && donor.eligibility) {
+                        const el = donor.eligibility;
+                        donations = [{
+                            date: el.start_date || el.created_at || donor.latest_submission || null,
+                            gateway: donor.registration_channel || 'System',
+                            blood_type: el.blood_type || '-',
+                            next_eligible_date: el.end_date || null,
+                            medical_history_status: (donor.medical_history && (donor.medical_history.medical_approval || donor.medical_history.fitness_result === 'Accepted')) ? 'Successful' : 'Pending'
+                        }];
+                    }
+                    let donationRows = '';
+                    donations.forEach(d => {
+                        donationRows += `
+                            <tr>
+                                <td>${safe(formatDate(d.date))}</td>
+                                <td>${safe(d.gateway || donor.registration_channel)}</td>
+                                <td>${safe(d.blood_type)}</td>
+                                <td>${safe((donor.eligibility && donor.eligibility.end_date ? formatDate(donor.eligibility.end_date) : (d.next_eligible_date ? formatDate(d.next_eligible_date) : null)))}</td>
+                                <td>${safe(d.medical_history_status)}</td>
                                 </tr>`;
                             });
-                            
+                    if (!donationRows) {
+                        donationRows = `<tr><td colspan="5" class="text-center text-muted">No donation history available</td></tr>`;
+                    }
                             donorInfoHTML += `
-                                <div class="card mb-3">
-                                    <div class="card-header bg-light">
-                                        <h6 class="mb-0">Previous Donations</h6>
-                                    </div>
-                                    <div class="card-body p-0">
+                        <div class="mb-3">
+                            <h6 class="mb-2">Donation History</h6>
                                         <div class="table-responsive">
-                                            <table class="table table-bordered table-striped mb-0">
+                                <table class="table table-sm table-bordered mb-0">
                                                 <thead class="table-dark">
                                                     <tr>
-                                                        <th>#</th>
-                                                        <th>Date</th>
-                                                        <th>Type</th>
-                                                        <th>Blood Type</th>
+                                            <th>Date of Donation</th>
+                                            <th>Gateway</th>
+                                            <th>Blood</th>
+                                            <th>Next Eligible Date</th>
+                                            <th>Medical History</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody>
-                                                    ${historyRows}
-                                                </tbody>
+                                    <tbody>${donationRows}</tbody>
                                             </table>
-                                        </div>
                                     </div>
                                 </div>`;
-                        }
-                    }
                     
-                    // Display eligibility information if available
-                    if (donor.eligibility) {
-                        const eligibility = donor.eligibility;
-                        const endDate = eligibility.end_date ? new Date(eligibility.end_date) : null;
-                        const now = new Date();
-                        
+                    // Medical History Table (summarized)
+                    const medHist = donor.medical_history || null;
+                    let medRows = '';
+                    if (medHist) {
+                        medRows += `
+                            <tr>
+                                <td>${safe(formatDate(medHist.date_screened || donor.latest_submission))}</td>
+                                <td>${safe(medHist.vital_signs || 'Normal')}</td>
+                                <td>${safe(medHist.hematology || 'Within Normal Range')}</td>
+                                <td>${safe(medHist.fitness_result || (medHist.medical_approval ? 'Accepted' : 'Deferred'))}</td>
+                                <td>${safe(medHist.physician || '-')}</td>
+                                <td>${safe(medHist.action || '')}</td>
+                            </tr>`;
+                    }
+                    if (!medRows) {
+                        medRows = `<tr><td colspan="6" class="text-center text-muted">No medical history recorded</td></tr>`;
+                    }
                         donorInfoHTML += `
-                            <div class="card mb-3">
-                                <div class="card-header bg-light">
-                                    <h6 class="mb-0">Eligibility Information</h6>
+                        <div class="mb-2">
+                            <h6 class="mb-2">Medical History</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered mb-0">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>Date Screened</th>
+                                            <th>Vital Signs</th>
+                                            <th>Hematology</th>
+                                            <th>Fitness Result</th>
+                                            <th>Physician</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="returningMedRows">${medRows}</tbody>
+                                </table>
                                 </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        <div class="col-md-6"><strong>Status:</strong> 
-                                            ${(() => {
-                                                const endDate = eligibility.end_date ? new Date(eligibility.end_date) : null;
-                                                const now = new Date();
-                                                
-                                                // Reset time components to compare just the dates
-                                                if (endDate) {
-                                                    endDate.setHours(0, 0, 0, 0);
-                                                    now.setHours(0, 0, 0, 0);
-                                                }
-                                                
-                                                if (endDate && now < endDate) {
-                                                    // Not eligible yet - show warning
-                                                    return `<span class="badge bg-warning" style="font-size: 0.9rem; padding: 0.5rem 0.75rem;">Temporarily Deferred</span>`;
-                                                } else if (endDate && now.getTime() === endDate.getTime()) {
-                                                    // Today is the eligibility date - they are now eligible
-                                                    return `<span class="badge bg-success" style="font-size: 0.9rem; padding: 0.5rem 0.75rem;">Eligible for Donation Today</span>`;
-                                                } else if (eligibility.status === 'approved') {
-                                                    return `<span class="badge bg-success" style="font-size: 0.9rem; padding: 0.5rem 0.75rem;">Eligible for Donation</span>`;
-                                                } else {
-                                                    return `<span class="badge bg-danger" style="font-size: 0.9rem; padding: 0.5rem 0.75rem;">Not Eligible for Donation</span>`;
-                                                }
-                                            })()}
-                                        </div>
-                                        <div class="col-md-6"><strong>Eligible After:</strong> ${eligibility.end_date ? formatDate(eligibility.end_date) : 'N/A'}</div>
-                                    </div>
-                                    <div class="row mt-2">
-                                        <div class="col-12">
-                                            <p class="mb-0"><strong>Notes:</strong> ${eligibility.remarks || 'No additional notes'}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>`;
+                        </div>`;
+                    
+                    // If returning, enrich medical section with screening details
+                    if (modalContextType === 'returning' && donor.donor_id) {
+                        fetch('../../assets/php_func/fetch_screening_info.php?donor_id=' + donor.donor_id)
+                            .then(r => r.json())
+                            .then(scr => {
+                                if (scr && scr.success && scr.data) {
+                                    const s = scr.data;
+                                    // Build a summarized single-row view inside the table
+                                    const dateScreened = formatDate(s.interview_date) || formatDate(donor.latest_submission) || 'N/A';
+                                    const vital = s.body_weight ? 'BW: ' + s.body_weight + ' kg' : 'N/A';
+                                    const hematology = [
+                                        s.hemoglobin ? 'Hgb: ' + s.hemoglobin : null,
+                                        s.hematocrit ? 'Hct: ' + s.hematocrit : null,
+                                        s.rbc_count ? 'RBC: ' + s.rbc_count : null,
+                                        s.wbc_count ? 'WBC: ' + s.wbc_count : null,
+                                        s.platelet_count ? 'Plt: ' + s.platelet_count : null,
+                                        (s.blood_type || (donor.eligibility ? donor.eligibility.blood_type : null)) ? 'BT: ' + (s.blood_type || donor.eligibility.blood_type) : null
+                                    ].filter(Boolean).join(', ') || 'N/A';
+                                    const fitness = (donor.medical_history && (donor.medical_history.medical_approval || donor.medical_history.fitness_result === 'Accepted')) ? 'Accepted' : 'Deferred';
+                                    const physician = (donor.medical_history && donor.medical_history.physician) ? donor.medical_history.physician : '-';
+                                    const rowHtml = '<tr><td>' + dateScreened + '</td><td>' + vital + '</td><td>' + hematology + '</td><td>' + fitness + '</td><td>' + physician + '</td><td><button type="button" class="btn btn-sm btn-outline-primary" id="viewScreeningBtn"><i class="fas fa-eye"></i></button></td></tr>';
+                                    const tbody = document.getElementById('returningMedRows');
+                                    if (tbody) tbody.innerHTML = rowHtml;
+                                    // Wire action button to show full details
+                                    const btn = document.getElementById('viewScreeningBtn');
+                                    if (btn) {
+                                        btn.onclick = () => {
+                                            const modalBody = document.getElementById('screeningDetailsBody');
+                                            if (modalBody) {
+                                                // Calculate blood type separately to avoid template literal syntax issues
+                                                const bloodType = s.blood_type || (donor.eligibility && donor.eligibility.blood_type ? donor.eligibility.blood_type : 'N/A');
+                                                const modalContent = '<div class="row g-2">' +
+                                                    '<div class="col-md-4"><div class="small text-muted">Interview Date</div><div>' + (formatDate(s.interview_date) || 'N/A') + '</div></div>' +
+                                                    '<div class="col-md-4"><div class="small text-muted">Body Weight</div><div>' + (s.body_weight ? s.body_weight + ' kg' : 'N/A') + '</div></div>' +
+                                                    '<div class="col-md-4"><div class="small text-muted">Specific Gravity</div><div>' + (s.specific_gravity || 'N/A') + '</div></div>' +
+                                                    '<div class="col-md-4"><div class="small text-muted">Hemoglobin</div><div>' + (s.hemoglobin || 'N/A') + '</div></div>' +
+                                                    '<div class="col-md-4"><div class="small text-muted">Hematocrit</div><div>' + (s.hematocrit || 'N/A') + '</div></div>' +
+                                                    '<div class="col-md-4"><div class="small text-muted">RBC Count</div><div>' + (s.rbc_count || 'N/A') + '</div></div>' +
+                                                    '<div class="col-md-4"><div class="small text-muted">WBC Count</div><div>' + (s.wbc_count || 'N/A') + '</div></div>' +
+                                                    '<div class="col-md-4"><div class="small text-muted">Platelet Count</div><div>' + (s.platelet_count || 'N/A') + '</div></div>' +
+                                                    '<div class="col-md-4"><div class="small text-muted">Blood Type</div><div>' + bloodType + '</div></div>' +
+                                                    '</div>';
+                                                modalBody.innerHTML = modalContent;
+                                                const m = new bootstrap.Modal(document.getElementById('screeningDetailsModal'));
+                                                m.show();
+                                            }
+                                        };
+                                    }
+                                }
+                            })
+                            .catch(() => {});
                     }
                 }
                 
-                // Display deferral status if available
-                if (deferralData && deferralData.success) {
-                    if (deferralData.isDeferred) {
-                        const deferralType = deferralData.deferralType || 'Unknown';
-                        const deferralReason = deferralData.reason || 'No reason provided';
-                        const remarks = deferralData.remarks || '';
-                        
-                        let alertClass = 'alert-warning';
-                        let deferralTitle = '';
-                        
-                        // Determine alert class and title based on deferral type
-                        if (deferralType === 'permanently_deferred' || remarks === 'Permanently Deferred') {
-                            alertClass = 'alert-danger';
-                            deferralTitle = 'Permanently Deferred';
-                        } else if (deferralType === 'temporarily_deferred' || remarks === 'Temporarily Deferred') {
-                            alertClass = 'alert-warning';
-                            deferralTitle = 'Temporarily Deferred';
-                        } else {
-                            deferralTitle = 'Deferred';
-                        }
-                        
-                        donorInfoHTML += `
-                            <div class="card mb-3">
-                                <div class="card-header bg-light">
-                                    <h6 class="mb-0">Donor Status</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="alert ${alertClass} mb-0">
-                                        <h6 class="alert-heading mb-2">${deferralTitle} - Not Eligible for Donation</h6>
-                                        <p class="mb-0"><strong>Reason:</strong> ${deferralReason}</p>
-                                        ${remarks ? `<p class="mb-0"><strong>Remarks:</strong> ${remarks}</p>` : ''}
-                                    </div>
-                                </div>
-                            </div>`;
-                    } else if (deferralData.isRefused || deferralData.remarks === 'Refused') {
-                        donorInfoHTML += `
-                            <div class="card mb-3">
-                                <div class="card-header bg-light">
-                                    <h6 class="mb-0">Donor Status</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="alert alert-danger mb-0">
-                                        <h6 class="alert-heading mb-2">Not Eligible - Donor Refused</h6>
-                                        <p class="mb-0"><strong>Reason:</strong> ${deferralData.reason || 'No reason provided'}</p>
-                                        ${deferralData.remarks ? `<p class="mb-0"><strong>Remarks:</strong> ${deferralData.remarks}</p>` : ''}
-                                    </div>
-                                </div>
-                            </div>`;
-                    } else {
-                        donorInfoHTML += `
-                            <div class="card mb-3">
-                                <div class="card-header bg-light">
-                                    <h6 class="mb-0">Donor Status</h6>
-                                </div>
-                                <div class="card-body">
-                                    <p class="mb-0"><strong>Status:</strong> ${deferralData.remarks || 'Accepted'}</p>
-                                    <p class="mb-0">No deferral or refusal records found for this donor.</p>
-                                </div>
-                            </div>`;
-                    }
-                } else {
-                    donorInfoHTML += `
-                        <div class="card mb-3">
-                            <div class="card-header bg-light">
-                                <h6 class="mb-0">Donor Status</h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="alert alert-info mb-0">
-                                    <h6 class="alert-heading mb-2">Status Unknown</h6>
-                                    <p class="mb-0">No physical examination records found for this donor.</p>
-                                    <p class="mb-0">Eligibility status cannot be determined without examination.</p>
-                                </div>
-                            </div>
-                        </div>`;
-                }
-                
-                // Always add eligibility information section, even if no data
-                if (!donorData || !donorData.success || !donorData.data || !donorData.data.eligibility) {
-                    donorInfoHTML += `
-                        <div class="card mb-3">
-                            <div class="card-header bg-light">
-                                <h6 class="mb-0">Eligibility Information</h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6"><strong>Status:</strong> 
-                                        <span class="badge bg-secondary" style="font-size: 0.9rem; padding: 0.5rem 0.75rem;">No Data Available</span>
-                                    </div>
-                                    <div class="col-md-6"><strong>Eligible After:</strong> N/A</div>
-                                </div>
-                                <div class="row mt-2">
-                                    <div class="col-12">
-                                        <p class="mb-0"><strong>Notes:</strong> No eligibility information available</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>`;
+                // Returning banner (suppress when in Medical stage)
+                if (modalContextType === 'returning' && currentStage !== 'medical_review') {
+                    donorInfoHTML = '<div class="alert alert-primary mb-3"><strong>Returning donor:</strong> This donor has previous donations. Review details as needed. Processing here is for New (Medical) only.</div>' + donorInfoHTML;
                 }
                 
                 deferralStatusContent.innerHTML = donorInfoHTML;
+                // Ensure proceed button visibility reflects current stage capability
+                try {
+                    const proceedButton = getProceedButton();
+                    if (proceedButton && proceedButton.style) {
+                        const showReview = allowProcessing || currentStage === 'medical_review';
+                        proceedButton.style.display = showReview ? 'inline-block' : 'none';
+                        proceedButton.textContent = 'Review Medical History';
+                    }
+                } catch (e) {}
             }
             
             // Helper function to capitalize first letter
@@ -1366,9 +1795,9 @@ $donors = array_slice($donors, $offset, $records_per_page);
                 });
             }
             
-            // Handle proceed button click
-            proceedButton.addEventListener('click', function() {
-                if (currentDonorId) {
+            // Handle proceed button click with confirmation
+            function openMedicalHistoryForCurrentDonor() {
+                if (!currentDonorId) return;
                     // Hide the deferral status modal first
                     deferralStatusModal.hide();
                     
@@ -1377,38 +1806,96 @@ $donors = array_slice($donors, $offset, $records_per_page);
                     const modalContent = document.getElementById('medicalHistoryModalContent');
                     
                     // Reset modal content to loading state
-                    modalContent.innerHTML = `
-                        <div class="d-flex justify-content-center">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                        </div>`;
+                modalContent.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
                     
                     // Show the modal
                     medicalHistoryModal.show();
                     
                     // Load the medical history form content
-                    fetch(`../../src/views/forms/medical-history-modal-content.php?donor_id=${currentDonorId}`)
+                                    fetch('../../src/views/forms/medical-history-modal-content.php?donor_id=' + currentDonorId)
                         .then(response => response.text())
                         .then(data => {
                             modalContent.innerHTML = data;
+                            
+                            // Execute any script tags in the loaded content
+                            const scripts = modalContent.querySelectorAll('script');
+                            scripts.forEach(script => {
+                                try {
+                                    const newScript = document.createElement('script');
+                                    if (script.type) newScript.type = script.type;
+                                    if (script.src) {
+                                        newScript.src = script.src;
+                                    } else {
+                                        newScript.text = script.textContent || '';
+                                    }
+                                    document.body.appendChild(newScript);
+                                } catch (e) {
+                                    console.log('Script execution error:', e);
+                                }
+                            });
                             
                             // After loading content, generate the questions
                             generateMedicalHistoryQuestions();
                         })
                         .catch(error => {
                             console.error('Error loading medical history form:', error);
-                            modalContent.innerHTML = `
-                                <div class="alert alert-danger">
-                                    <h6>Error Loading Form</h6>
-                                    <p>Unable to load the medical history form. Please try again.</p>
-                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                </div>`;
-                        });
+                        modalContent.innerHTML = '<div class="alert alert-danger"><h6>Error Loading Form</h6><p>Unable to load the medical history form. Please try again.</p><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>';
+                    });
+            }
+
+            // Helper function to get proceed button
+            function getProceedButton() {
+                return document.getElementById('proceedToMedicalHistory');
+            }
+            
+            // Bind proceed button event listener after DOM is ready
+            setTimeout(() => {
+                const proceedButton = getProceedButton();
+                if (proceedButton && proceedButton.addEventListener) {
+                    proceedButton.addEventListener('click', function() {
+                        if (!currentDonorId) return;
+                        const confirmModal = new bootstrap.Modal(document.getElementById('reviewConfirmModal'));
+                        const proceedBtn = document.getElementById('reviewConfirmProceedBtn');
+                        if (proceedBtn) {
+                            proceedBtn.onclick = () => { confirmModal.hide(); openMedicalHistoryForCurrentDonor(); };
+                        }
+                        confirmModal.show();
+                    });
                 }
-            });
+            }, 100);
+            
+            // Optimized search function with caching
+            function performOptimizedSearch(searchTerm) {
+                if (!searchTerm.trim()) {
+                    // Show all rows if search is empty
+                    originalRows.forEach(row => row.style.display = '');
+                    return;
+                }
+                
+                // Use cached search results for better performance
+                const searchResults = originalRows.filter(row => {
+                    const cells = row.getElementsByTagName('td');
+                    if (cells.length === 0) return false;
+                    
+                    // Search in surname, first name, and donor type columns
+                    const surname = (cells[2]?.textContent || '').toLowerCase();
+                    const firstName = (cells[3]?.textContent || '').toLowerCase();
+                    const donorType = (cells[5]?.textContent || '').toLowerCase();
+                    
+                    return surname.includes(searchTerm) || 
+                           firstName.includes(searchTerm) || 
+                           donorType.includes(searchTerm);
+                });
+                
+                // Hide all rows first
+                originalRows.forEach(row => row.style.display = 'none');
+                
+                // Show matching rows
+                searchResults.forEach(row => row.style.display = '');
+            }
             
             // Update placeholder based on selected category
+            if (searchCategory && searchCategory.addEventListener) {
             searchCategory.addEventListener('change', function() {
                 const category = this.value;
                 let placeholder = 'Search by ';
@@ -1418,9 +1905,14 @@ $donors = array_slice($donors, $offset, $records_per_page);
                     case 'age': placeholder += 'age...'; break;
                     default: placeholder = 'Search donors...';
                 }
+                    if (searchInput) {
                 searchInput.placeholder = placeholder;
-                performSearch();
+                    }
             });
+            }
+
+            // Handle Mark for Medical Review from main details modal
+            // Do not bind a global handler; enabled per-row only for returning
         });
 
         // Function to generate medical history questions in the modal
@@ -1623,7 +2115,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
             // Initialize step navigation
             initializeModalStepNavigation(modalUserRole, modalIsMale);
             
-            // Make form fields read-only for interviewers and physicians
+            // Make form fields read-only for interviewers and physicians (but allow Edit button to override)
             if (modalUserRole === 'interviewer' || modalUserRole === 'physician') {
                 setTimeout(() => {
                     const radioButtons = document.querySelectorAll('#modalMedicalHistoryForm input[type="radio"]');
@@ -1631,14 +2123,41 @@ $donors = array_slice($donors, $offset, $records_per_page);
                     
                     radioButtons.forEach(radio => {
                         radio.disabled = true;
+                        radio.setAttribute('data-originally-disabled', 'true');
                     });
                     
                     selectFields.forEach(select => {
                         select.disabled = true;
+                        select.setAttribute('data-originally-disabled', 'true');
                     });
                     
                     console.log("Made form fields read-only for role:", modalUserRole);
+                    
+                    // Initialize edit functionality after fields are made read-only
+                    console.log('🔄 Calling initializeEditFunctionality after making fields read-only...');
+                    
+                    // Wait a bit more to ensure the modal content JavaScript has executed
+                    setTimeout(() => {
+                        if (window.initializeEditFunctionality) {
+                            console.log('✅ Found initializeEditFunctionality, calling it...');
+                            window.initializeEditFunctionality();
+                        } else {
+                            console.log('❌ window.initializeEditFunctionality is still not available');
+                            console.log('Available window functions:', Object.keys(window).filter(key => key.includes('initialize')));
+                        }
+                    }, 50);
                 }, 100);
+            } else {
+                // For reviewers, initialize edit functionality immediately
+                console.log('🔄 Calling initializeEditFunctionality for reviewer role...');
+                setTimeout(() => {
+                    if (window.initializeEditFunctionality) {
+                        console.log('✅ Found initializeEditFunctionality for reviewer, calling it...');
+                        window.initializeEditFunctionality();
+                    } else {
+                        console.log('❌ window.initializeEditFunctionality is not available for reviewer');
+                    }
+                }, 50);
             }
         }
         
@@ -1795,7 +2314,21 @@ $donors = array_slice($donors, $offset, $records_per_page);
                 message = 'Do you want to proceed to the declaration form?';
             }
             
+            // Use custom confirmation instead of browser confirm
+            if (window.customConfirm) {
+                window.customConfirm(message, function() {
+                    processFormSubmission(action);
+                });
+            } else {
+                // Fallback to browser confirm if custom confirm is not available
             if (confirm(message)) {
+                    processFormSubmission(action);
+                }
+            }
+        }
+        
+        // Separate function to handle the actual form submission
+        function processFormSubmission(action) {
                 document.getElementById('modalSelectedAction').value = action;
                 
                 // Submit the form via AJAX
@@ -1818,10 +2351,40 @@ $donors = array_slice($donors, $offset, $records_per_page);
                             const donorIdInput = document.querySelector('#modalMedicalHistoryForm input[name="donor_id"]');
                             const donorId = donorIdInput ? donorIdInput.value : null;
                             
+                            // If Returning (Medical), ask to mark screening for review
+                            try {
+                                if (donorId && window.currentStage === 'medical_review' && (window.modalContextType === 'returning' || document.querySelector(`tr[data-donor-id="${donorId}"]`)?.getAttribute('data-donor-type')?.toLowerCase().includes('returning'))) {
+                                    const csm = new bootstrap.Modal(document.getElementById('confirmScreeningMarkModal'));
+                                    const btn = document.getElementById('confirmScreeningMarkBtn');
+                                    btn.onclick = () => {
+                                        fetch('../../assets/php_func/update_screening_needs_review.php', {
+                                            method: 'POST',
+                                            headers: { 'Accept': 'application/json' },
+                                            body: new URLSearchParams({ donor_id: donorId })
+                                        }).then(r => r.json()).finally(() => { csm.hide(); });
+                                    };
+                                    csm.show();
+                                }
+                            } catch (e) {}
+                            
                             if (donorId) {
                                 showDeclarationFormModal(donorId);
                             } else {
+                                // Use custom modal instead of browser alert
+                                if (window.customConfirm) {
+                                    window.customConfirm('Error: Donor ID not found', function() {
+                                        // Just close the modal, no additional action needed
+                                    });
+                                } else {
+                                    // Use custom modal instead of browser alert
+                                    if (window.customConfirm) {
+                                        window.customConfirm('Error: Donor ID not found', function() {
+                                            // Just close the modal, no additional action needed
+                                        });
+                            } else {
                                 alert('Error: Donor ID not found');
+                                    }
+                                }
                             }
                         } else if (action === 'decline') {
                             // Close modal and refresh the main page for decline only
@@ -1830,14 +2393,27 @@ $donors = array_slice($donors, $offset, $records_per_page);
                             window.location.reload();
                         }
                     } else {
+                        // Use custom modal instead of browser alert
+                        if (window.customConfirm) {
+                            window.customConfirm('Error: ' + (data.message || 'Unknown error occurred'), function() {
+                                // Just close the modal, no additional action needed
+                            });
+                    } else {
                         alert('Error: ' + (data.message || 'Unknown error occurred'));
+                        }
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
+                    // Use custom modal instead of browser alert
+                    if (window.customConfirm) {
+                        window.customConfirm('An error occurred while processing the form.', function() {
+                            // Just close the modal, no additional action needed
+                        });
+                    } else {
                     alert('An error occurred while processing the form.');
+                    }
                 });
-            }
         }
         
         // Function to show declaration form modal
@@ -1862,7 +2438,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
             declarationModal.show();
             
             // Load the declaration form content
-            fetch(`../../src/views/forms/declaration-form-modal-content.php?donor_id=${donorId}`)
+            fetch('../../src/views/forms/declaration-form-modal-content.php?donor_id=' + donorId)
                 .then(response => {
                     console.log('Declaration form response status:', response.status);
                     if (!response.ok) {
@@ -1977,10 +2553,36 @@ $donors = array_slice($donors, $offset, $records_per_page);
                     // Ensure submit function is available globally
                     window.submitDeclarationForm = function() {
                         console.log('Submit declaration form called');
-                        if (confirm('Are you sure you want to complete the donor registration?')) {
+                        
+                        // Close declaration form modal
+                        const declarationModal = bootstrap.Modal.getInstance(document.getElementById('declarationFormModal'));
+                        if (declarationModal) {
+                            declarationModal.hide();
+                        }
+                        
+                        // Show data processing confirmation modal
+                        const dataProcessingModal = new bootstrap.Modal(document.getElementById('dataProcessingConfirmModal'));
+                        dataProcessingModal.show();
+                        
+                        // Handle confirmation button click
+                        document.getElementById('confirmProcessingBtn').onclick = function() {
+                            const selectedOutcome = document.querySelector('input[name="screeningOutcome"]:checked').value;
+                            console.log('Selected outcome:', selectedOutcome);
+                            
+                            // Close confirmation modal
+                            dataProcessingModal.hide();
+                            
+                            // Process the declaration form
                             const form = document.getElementById('modalDeclarationForm');
                             if (!form) {
+                                // Use custom modal instead of browser alert
+                                if (window.customConfirm) {
+                                    window.customConfirm('Form not found. Please try again.', function() {
+                                        // Just close the modal, no additional action needed
+                                    });
+                                } else {
                                 alert('Form not found. Please try again.');
+                                }
                                 return;
                             }
                             
@@ -1996,20 +2598,56 @@ $donors = array_slice($donors, $offset, $records_per_page);
                             .then(response => response.json())
                             .then(data => {
                                 if (data.success) {
-                                    alert('Donor registration completed successfully!');
-                                    console.log('Registration complete, reloading page...');
-                                    
+                                    // Show success message based on outcome
+                                    if (selectedOutcome === 'approve') {
+                                        // Use custom modal instead of browser alert
+                                        if (window.customConfirm) {
+                                            // Add a longer delay to ensure the modal shows and DOM is ready
+                                            setTimeout(() => {
+                                                window.customConfirm('Donor approved for donation and forwarded to physician for physical examination. Proceed to print the donor declaration form and hand it to the donor.', function() {
+                                                    // Force complete page reload after user clicks OK
+                                                    window.location.href = window.location.href;
+                                                });
+                                            }, 500);
+                                        } else {
+                                            console.log('Custom modal not available, using fallback alert');
+                                            alert('Donor approved for donation and forwarded to physician for physical examination. Proceed to print the donor declaration form and hand it to the donor.');
                                     // Force complete page reload
                                     window.location.href = window.location.href;
+                                        }
+                                    } else {
+                                        // Use custom modal instead of browser alert
+                                        if (window.customConfirm) {
+                                            window.customConfirm('Donor registration saved as draft successfully!', function() {
+                                                // Force complete page reload after user clicks OK
+                                                window.location.href = window.location.href;
+                                            });
+                                        } else {
+                                            alert('Donor registration saved as draft successfully!');
+                                            // Force complete page reload
+                                            window.location.href = window.location.href;
+                                        }
+                                    }
+                                    console.log('Registration complete, reloading page...');
+                                    
+                                    // Remove the automatic reload since we handle it in the modal callback
+                                    // window.location.href = window.location.href;
                                 } else {
                                     alert('Error: ' + (data.message || 'Unknown error occurred'));
                                 }
                             })
                             .catch(error => {
                                 console.error('Error:', error);
-                                alert('An error occurred while processing the form.');
+                                // Use custom modal instead of browser alert
+                                if (window.customConfirm) {
+                                    window.customConfirm('An error occurred while processing the form.', function() {
+                                        // Just close the modal, no additional action needed
                             });
+                                } else {
+                                    alert('An error occurred while processing the form.');
                         }
+                            });
+                        };
                     };
                 })
                 .catch(error => {
@@ -2021,7 +2659,7 @@ $donors = array_slice($donors, $offset, $records_per_page);
                             </h5>
                             <p>Unable to load the declaration form. Please try again.</p>
                             <hr>
-                            <p class="mb-0">Error details: ${error.message}</p>
+                            <p class="mb-0">Error details: ' + error.message + '</p>
                             <button type="button" class="btn btn-secondary mt-3" data-bs-dismiss="modal">
                                 <i class="fas fa-times"></i> Close
                             </button>
@@ -2069,42 +2707,191 @@ $donors = array_slice($donors, $offset, $records_per_page);
             });
         };
         
-        // Dropdown functionality for Medical Screening Queue
-        document.addEventListener('DOMContentLoaded', function() {
-            const dropdownToggle = document.getElementById('medicalScreeningToggle');
-            const dropdownMenu = document.getElementById('medicalScreeningMenu');
-            const chevronIcon = dropdownToggle?.querySelector('i');
+        // Custom confirmation function to replace browser confirm
+        function customConfirm(message, onConfirm) {
+            // Create a simple modal without Bootstrap
+            const modalHTML = `
+                <div id="simpleCustomModal" style="
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0,0,0,0.5);
+                    z-index: 99999;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                ">
+                    <div style="
+                        background: white;
+                        padding: 30px;
+                        border-radius: 10px;
+                        max-width: 500px;
+                        width: 90%;
+                        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                    ">
+                        <div style="
+                            background: #9c0000;
+                            color: white;
+                            padding: 15px 20px;
+                            margin: -30px -30px 20px -30px;
+                            border-radius: 10px 10px 0 0;
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                        ">
+                            <h5 style="margin: 0;">
+                                <i class="fas fa-question-circle me-2"></i>
+                                Confirm Action
+                            </h5>
+                            <button onclick="closeSimpleModal()" style="
+                                background: none;
+                                border: none;
+                                color: white;
+                                font-size: 20px;
+                                cursor: pointer;
+                            ">&times;</button>
+                        </div>
+                        <p style="font-size: 16px; line-height: 1.5; margin-bottom: 25px;">${message}</p>
+                        <div style="text-align: right;">
+                            <button onclick="closeSimpleModal()" style="
+                                background: #6c757d;
+                                color: white;
+                                border: none;
+                                padding: 10px 25px;
+                                border-radius: 6px;
+                                margin-right: 10px;
+                                cursor: pointer;
+                            ">Cancel</button>
+                            <button onclick="confirmSimpleModal()" style="
+                                background: #9c0000;
+                                color: white;
+                                border: none;
+                                padding: 10px 25px;
+                                border-radius: 6px;
+                                cursor: pointer;
+                            ">Yes, Proceed</button>
+                        </div>
+                    </div>
+                </div>
+            `;
             
-            if (dropdownToggle && dropdownMenu) {
-                dropdownToggle.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    const isShown = dropdownMenu.classList.contains('show');
-                    
-                    if (isShown) {
-                        // Collapse the dropdown
-                        dropdownMenu.classList.remove('show');
-                        chevronIcon.classList.remove('fa-chevron-up');
-                        chevronIcon.classList.add('fa-chevron-down');
-                    } else {
-                        // Expand the dropdown
-                        dropdownMenu.classList.add('show');
-                        chevronIcon.classList.remove('fa-chevron-down');
-                        chevronIcon.classList.add('fa-chevron-up');
-                    }
-                });
-                
-                // Close dropdown when clicking outside
-                document.addEventListener('click', function(e) {
-                    if (!dropdownToggle.contains(e.target) && !dropdownMenu.contains(e.target)) {
-                        dropdownMenu.classList.remove('show');
-                        chevronIcon.classList.remove('fa-chevron-up');
-                        chevronIcon.classList.add('fa-chevron-down');
-                    }
-                });
+            // Remove any existing modal
+            const existingModal = document.getElementById('simpleCustomModal');
+            if (existingModal) {
+                existingModal.remove();
             }
-        });
+            
+            // Add modal to page
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            
+            // Set up confirmation function
+            window.confirmSimpleModal = function() {
+                closeSimpleModal();
+                if (onConfirm) onConfirm();
+            };
+            
+            window.closeSimpleModal = function() {
+                const modal = document.getElementById('simpleCustomModal');
+                if (modal) {
+                    modal.remove();
+                }
+            };
+        }
+
+        // Make customConfirm globally available
+        window.customConfirm = customConfirm;
+        
+        
+
     </script>
+
+    <!-- Custom Confirmation Modal -->
+    <div class="modal fade" id="customConfirmModal" tabindex="-1" aria-labelledby="customConfirmModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header" style="background: #9c0000; color: white;">
+                    <h5 class="modal-title" id="customConfirmModalLabel">
+                        <i class="fas fa-question-circle me-2"></i>
+                        Confirm Action
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="customConfirmMessage">Are you sure you want to proceed?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="customConfirmYes">Yes, Proceed</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* Custom confirmation modal styling */
+        #customConfirmModal .modal-content {
+            border-radius: 10px;
+            border: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        #customConfirmModal .modal-header {
+            background: #9c0000; /* Red Cross themed */
+            color: white;
+            border-radius: 10px 10px 0 0;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        #customConfirmModal .modal-body {
+            padding: 25px;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        
+        #customConfirmModal .modal-footer {
+            border-top: 1px solid #e9ecef;
+            padding: 20px 25px;
+        }
+        
+        #customConfirmModal .btn {
+            padding: 10px 25px;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        #customConfirmModal .btn-primary {
+            background-color: #9c0000;
+            border-color: #9c0000;
+        }
+        
+        #customConfirmModal .btn-primary:hover {
+            background-color: #8b0000;
+            border-color: #8b0000;
+            transform: translateY(-1px);
+        }
+        
+        /* Ensure modal appears above everything */
+        #customConfirmModal {
+            z-index: 99999 !important;
+        }
+        
+        #customConfirmModal .modal-backdrop {
+            z-index: 99998 !important;
+        }
+        
+        /* Force modal to be visible */
+        #customConfirmModal.show {
+            display: block !important;
+            opacity: 1 !important;
+        }
+        
+        /* Ensure backdrop is visible */
+        .modal-backdrop.show {
+            opacity: 0.5 !important;
+        }
+    </style>
 </body>
 </html>

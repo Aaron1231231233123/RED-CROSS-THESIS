@@ -2,6 +2,9 @@
 session_start();
 require_once '../../assets/conn/db_conn.php';
 require '../../assets/php_func/user_roles_staff.php';
+
+// Set cURL timeout for faster responses
+$curl_timeout = 10;
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
     header("Location: /REDCROSS/public/login.php");
@@ -18,6 +21,7 @@ $interviewer_name = 'Unknown Interviewer';
 if (isset($_SESSION['user_id'])) {
     $ch = curl_init(SUPABASE_URL . '/rest/v1/users?select=surname,first_name,middle_name&user_id=eq.' . $_SESSION['user_id']);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, $curl_timeout);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'apikey: ' . SUPABASE_API_KEY,
         'Authorization: Bearer ' . SUPABASE_API_KEY
@@ -50,6 +54,7 @@ $all_donors_ch = curl_init();
 curl_setopt_array($all_donors_ch, [
     CURLOPT_URL => SUPABASE_URL . '/rest/v1/donor_form?select=donor_id',
     CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT => $curl_timeout,
     CURLOPT_HTTPHEADER => [
         'apikey: ' . SUPABASE_API_KEY,
         'Authorization: Bearer ' . SUPABASE_API_KEY
@@ -57,15 +62,10 @@ curl_setopt_array($all_donors_ch, [
 ]);
 $all_donors_response = curl_exec($all_donors_ch);
 
-// Add debugging
-error_log("DEBUG - Donor API URL: " . SUPABASE_URL . '/rest/v1/donor_form?select=donor_id');
-error_log("DEBUG - Donor Raw response: " . substr($all_donors_response, 0, 100));
-
 $all_donor_ids = [];
 
 if ($all_donors_response !== false) {
     $all_donors_data = json_decode($all_donors_response, true) ?: [];
-    error_log("DEBUG - Donor count from API: " . count($all_donors_data));
     
     foreach ($all_donors_data as $donor) {
         if (isset($donor['donor_id'])) {
@@ -75,14 +75,14 @@ if ($all_donors_response !== false) {
 }
 curl_close($all_donors_ch);
 $total_donors = count($all_donor_ids);
-error_log("DEBUG - Valid donor IDs extracted: " . $total_donors);
 
 // --- STEP 2: Get screening forms ---
 // First, get all donor IDs that have screening forms - ORIGINAL WORKING METHOD
 $screening_ch = curl_init();
 curl_setopt_array($screening_ch, [
-    CURLOPT_URL => SUPABASE_URL . '/rest/v1/screening_form?select=donor_form_id,screening_id,disapproval_reason',
+    CURLOPT_URL => SUPABASE_URL . '/rest/v1/screening_form?select=donor_form_id,screening_id,disapproval_reason,needs_review',
     CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT => $curl_timeout,
     CURLOPT_HTTPHEADER => [
         'apikey: ' . SUPABASE_API_KEY,
         'Authorization: Bearer ' . SUPABASE_API_KEY
@@ -90,17 +90,15 @@ curl_setopt_array($screening_ch, [
 ]);
 
 $screening_response = curl_exec($screening_ch);
-error_log("DEBUG - Screening API URL: " . SUPABASE_URL . '/rest/v1/screening_form?select=donor_form_id,screening_id,disapproval_reason');
-error_log("DEBUG - Screening Raw response: " . substr($screening_response, 0, 100));
 
 // Initialize arrays
 $screened_donor_ids = []; // All screened donors
 $declined_donor_ids = []; // Declined donors
 $screening_ids_map = []; // Map screening_id to donor_form_id
+$screening_needs_review_ids = []; // Donors with screening needs_review = True
 
 if ($screening_response !== false) {
     $screening_data = json_decode($screening_response, true) ?: [];
-    error_log("DEBUG - Screening forms count from API: " . count($screening_data));
     
     foreach ($screening_data as $item) {
         if (isset($item['donor_form_id'])) {
@@ -116,13 +114,16 @@ if ($screening_response !== false) {
             if (!empty($item['disapproval_reason'])) {
                 $declined_donor_ids[] = $donor_id;
             }
+            
+            // Track donors with screening needs_review = True
+            if (isset($item['needs_review']) && $item['needs_review'] === true) {
+                $screening_needs_review_ids[] = $donor_id;
+            }
         }
     }
 }
 curl_close($screening_ch);
 $declined_count = count($declined_donor_ids);
-error_log("DEBUG - Screening IDs map created: " . count($screening_ids_map));
-error_log("DEBUG - Declined donor count: " . $declined_count);
 
 // --- STEP 3: STRICT FILTERING - Get ONLY explicitly approved medical history records ---
 $medical_history_ch = curl_init();
@@ -131,6 +132,7 @@ $medical_history_ch = curl_init();
 curl_setopt_array($medical_history_ch, [
     CURLOPT_URL => SUPABASE_URL . '/rest/v1/medical_history?select=donor_id,medical_approval&medical_approval=eq.Approved',
     CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT => $curl_timeout,
     CURLOPT_HTTPHEADER => [
         'apikey: ' . SUPABASE_API_KEY,
         'Authorization: Bearer ' . SUPABASE_API_KEY
@@ -140,21 +142,12 @@ curl_setopt_array($medical_history_ch, [
 $medical_history_response = curl_exec($medical_history_ch);
 curl_close($medical_history_ch);
 
-error_log("DEBUG - STRICT Medical History Query: " . SUPABASE_URL . '/rest/v1/medical_history?select=donor_id,medical_approval&medical_approval=eq.Approved');
-error_log("DEBUG - Medical History Sample Response: " . substr($medical_history_response, 0, 200));
-
 $approved_donor_ids = [];
 
 if ($medical_history_response !== false) {
     $medical_history_data = json_decode($medical_history_response, true);
     
     if (is_array($medical_history_data)) {
-        error_log("DEBUG - Found " . count($medical_history_data) . " strictly approved medical history records");
-        
-        // Log all records for debugging
-        foreach ($medical_history_data as $index => $record) {
-            error_log("DEBUG - Medical history record #" . ($index + 1) . ": " . json_encode($record));
-        }
         
         foreach ($medical_history_data as $record) {
             if (isset($record['donor_id']) && isset($record['medical_approval'])) {
@@ -164,25 +157,15 @@ if ($medical_history_response !== false) {
                     
                     // Skip if donor was declined in screening
                     if (in_array($donor_id, $declined_donor_ids)) {
-                        error_log("DEBUG - Skipping approved donor ID " . $donor_id . " (declined in screening)");
                         continue;
                     }
                     
                     // Add to approved list ONLY if all conditions are met
                     $approved_donor_ids[] = $donor_id;
-                    error_log("DEBUG - CONFIRMED approved donor ID: " . $donor_id . " with medical_approval: '" . $record['medical_approval'] . "'");
-                } else {
-                    error_log("DEBUG - REJECTED donor ID " . $record['donor_id'] . " with medical_approval: " . json_encode($record['medical_approval']));
                 }
-            } else {
-                error_log("DEBUG - INVALID record structure: " . json_encode($record));
             }
         }
-    } else {
-        error_log("DEBUG - Error: medical history response is not an array: " . json_encode($medical_history_data));
     }
-} else {
-    error_log("DEBUG - FAILED to fetch medical history data - cURL error: " . curl_error($medical_history_ch));
 }
 
 
@@ -190,16 +173,7 @@ if ($medical_history_response !== false) {
 // FINAL VERIFICATION: Remove duplicates and confirm approved donor list
 if (!empty($approved_donor_ids)) {
     $approved_donor_ids = array_values(array_unique($approved_donor_ids));
-    error_log("DEBUG - FINAL approved donor count: " . count($approved_donor_ids));
-    error_log("DEBUG - FINAL approved donor IDs: [" . implode(',', $approved_donor_ids) . "]");
-    error_log("DEBUG - These are the ONLY donor IDs that should appear in 'existing' status");
-    
-    // Log each approved donor for verification
-    foreach ($approved_donor_ids as $id) {
-        error_log("DEBUG - APPROVED DONOR CONFIRMED: ID " . $id);
-    }
 } else {
-    error_log("DEBUG - WARNING: Zero approved donors found - all have NULL or non-'Approved' medical_approval");
     $approved_donor_ids = []; // Force empty array
 }
 
@@ -214,6 +188,7 @@ foreach ($incoming_donor_ids as $donor_id) {
     curl_setopt_array($check_ch, [
         CURLOPT_URL => SUPABASE_URL . '/rest/v1/medical_history?select=medical_approval&donor_id=eq.' . $donor_id,
         CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => $curl_timeout,
         CURLOPT_HTTPHEADER => [
             'apikey: ' . SUPABASE_API_KEY,
             'Authorization: Bearer ' . SUPABASE_API_KEY
@@ -248,10 +223,10 @@ $existing_donors_count = count($approved_donor_ids);
 // Ineligible donors are those who have been declined in screening
 $ineligible_count = count($declined_donor_ids);
 
+// Screening review donors are those with needs_review = True in screening_form
+$screening_review_count = count($screening_needs_review_ids);
+
 // We'll calculate today's count from the actual query results later
-error_log("DEBUG - Registrations count: $registrations_count");
-error_log("DEBUG - Existing donors count: $existing_donors_count");
-error_log("DEBUG - Ineligible count: $ineligible_count");
 
 // Add pagination settings
 $records_per_page = 15;
@@ -261,6 +236,15 @@ $offset = ($current_page - 1) * $records_per_page;
 // Initialize the donors array
 $donors = [];
 
+// Initialize timestamp map for date display
+$timestamp_map = [];
+
+// FIFO (First In, First Out) Logic:
+// - Registrations: Ordered by earliest timestamp from donor_form.submitted_at OR screening_form.updated_at OR medical_history.updated_at (mixed FIFO, includes screening exceptions)
+// - Existing donors: Ordered by medical_history.updated_at.asc (oldest medical review first)
+// - Ineligible donors: Ordered by medical_history.updated_at.asc (oldest medical review first)
+// - Screening review: Ordered by earliest timestamp from screening_form.updated_at OR medical_history.updated_at (mixed FIFO)
+
 // Modify your Supabase query to properly filter for unprocessed donors
 $ch = curl_init();
 
@@ -269,6 +253,7 @@ $screening_ch = curl_init();
 curl_setopt_array($screening_ch, [
     CURLOPT_URL => SUPABASE_URL . '/rest/v1/screening_form?select=donor_form_id',
     CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT => $curl_timeout,
     CURLOPT_HTTPHEADER => [
         'apikey: ' . SUPABASE_API_KEY,
         'Authorization: Bearer ' . SUPABASE_API_KEY
@@ -290,38 +275,84 @@ if ($screening_response !== false) {
 }
 curl_close($screening_ch);
 
-// Debug info
-$debug_screening = [
-    'screening_response' => substr($screening_response, 0, 500) . '...',
-    'screening_processed_donor_ids' => $screening_processed_donor_ids
-];
-error_log("Screening form data (direct query): " . json_encode($debug_screening));
+
 
 // Now get donor forms with strict filtering based on status
-$query_url = SUPABASE_URL . '/rest/v1/donor_form?select=*&order=submitted_at.desc';
+// Use FIFO ordering: oldest first (submitted_at.asc) for proper queue management
+$query_url = SUPABASE_URL . '/rest/v1/donor_form?select=*&order=submitted_at.asc';
 
 // Check if we're filtering by status
 $status_filter = isset($_GET['status']) ? $_GET['status'] : 'registrations';
 if ($status_filter === 'registrations') {
-    // Show only donors without screening forms (new registrations)
-    if (!empty($screened_donor_ids)) {
-        $screened_ids_str = implode(',', $screened_donor_ids);
-        $query_url .= '&donor_id=not.in.(' . $screened_ids_str . ')';
+    // Show donors without screening forms (new registrations) PLUS donors with screening exceptions
+    // These should be ordered by submitted_at.asc (FIFO - oldest first)
+    $filtered_donor_ids = [];
+    
+    // Add donors without screening forms
+    $donors_without_screening = array_diff($all_donor_ids, $screened_donor_ids);
+    $filtered_donor_ids = array_merge($filtered_donor_ids, $donors_without_screening);
+    
+    // Add donors with screening exceptions (needs_review = True)
+    if (!empty($screening_needs_review_ids)) {
+        $filtered_donor_ids = array_merge($filtered_donor_ids, $screening_needs_review_ids);
+    }
+    
+    // Remove duplicates
+    $filtered_donor_ids = array_unique($filtered_donor_ids);
+    
+    // Exclude donors with medical_history where medical_approval exists and is not 'Approved'
+    if (!empty($filtered_donor_ids)) {
+        $filter_ids_str = implode(',', $filtered_donor_ids);
+        $mh_filter_ch = curl_init();
+        curl_setopt_array($mh_filter_ch, [
+            CURLOPT_URL => SUPABASE_URL . '/rest/v1/medical_history?select=donor_id,medical_approval&donor_id=in.(' . $filter_ids_str . ')',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => $curl_timeout,
+            CURLOPT_HTTPHEADER => [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY
+            ]
+        ]);
+        $mh_filter_response = curl_exec($mh_filter_ch);
+        curl_close($mh_filter_ch);
+        if ($mh_filter_response !== false) {
+            $mh_rows = json_decode($mh_filter_response, true) ?: [];
+            $disallowed_ids = [];
+            foreach ($mh_rows as $row) {
+                if (!empty($row['donor_id'])) {
+                    $approval = $row['medical_approval'] ?? null;
+                    // Exclude if approval is anything other than 'Approved' (NULL or other values)
+                    if ($approval !== 'Approved') {
+                        $disallowed_ids[] = (int)$row['donor_id'];
+                    }
+                }
+            }
+            if (!empty($disallowed_ids)) {
+                $filtered_donor_ids = array_values(array_diff($filtered_donor_ids, $disallowed_ids));
+            }
+        }
+    }
+    
+    if (!empty($filtered_donor_ids)) {
+        $filtered_ids_str = implode(',', $filtered_donor_ids);
+        $query_url .= '&donor_id=in.(' . $filtered_ids_str . ')';
+    } else {
+        // If no donors match criteria, show empty result
+        $query_url .= '&donor_id=eq.999999999';
     }
 } elseif ($status_filter === 'existing') {
     // ULTIMATE STRICT FILTER: Show ONLY donors with explicitly approved medical history
+    // For existing donors, order by medical_history updated_at timestamp (FIFO)
     if (!empty($approved_donor_ids)) {
         $approved_ids_str = implode(',', $approved_donor_ids);
         $query_url .= '&donor_id=in.(' . $approved_ids_str . ')';
-        error_log("DEBUG - EXISTING FILTER: Approved donor IDs: " . $approved_ids_str);
-        error_log("DEBUG - EXISTING FILTER: Query URL: " . $query_url);
     } else {
         // Absolutely no approved donors - force completely empty result
         $query_url .= '&donor_id=eq.999999999';
-        error_log("DEBUG - EXISTING FILTER: Zero approved donors, using impossible ID filter");
     }
 } elseif ($status_filter === 'ineligible') {
     // Show only declined donors (ineligible)
+    // For ineligible donors, order by medical_history updated_at timestamp (FIFO)
     if (!empty($declined_donor_ids)) {
         $declined_ids_str = implode(',', $declined_donor_ids);
         $query_url .= '&donor_id=in.(' . $declined_ids_str . ')';
@@ -329,11 +360,22 @@ if ($status_filter === 'registrations') {
         // If no declined donors, show empty result
         $query_url .= '&donor_id=eq.999999999'; // Use extremely high number to ensure no matches
     }
+} elseif ($status_filter === 'screening_review') {
+    // Show only donors with screening needs_review = True
+    // For screening review donors, order by screening form updated_at timestamp (FIFO)
+    if (!empty($screening_needs_review_ids)) {
+        $screening_review_ids_str = implode(',', $screening_needs_review_ids);
+        $query_url .= '&donor_id=in.(' . $screening_review_ids_str . ')';
+    } else {
+        // If no donors need screening review, show empty result
+        $query_url .= '&donor_id=eq.999999999';
+    }
 }
 
 curl_setopt_array($ch, [
     CURLOPT_URL => $query_url,
     CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT => $curl_timeout,
     CURLOPT_HTTPHEADER => [
         'apikey: ' . SUPABASE_API_KEY,
         'Authorization: Bearer ' . SUPABASE_API_KEY
@@ -342,9 +384,7 @@ curl_setopt_array($ch, [
 
 $response = curl_exec($ch);
 
-// Log the final query URL and raw response for debugging
-error_log("Final query URL: " . $query_url);
-error_log("Supabase raw response: " . substr($response, 0, 500) . '...');
+
 
 // Check if the response is valid JSON
 if ($response === false || is_null(json_decode($response, true))) {
@@ -352,20 +392,31 @@ if ($response === false || is_null(json_decode($response, true))) {
     $donors = [];
 } else {
     $donors = json_decode($response, true) ?: [];
-    error_log("Decoded donors count: " . count($donors));
     
-    // Simple restriction: Check each donor's medical_approval status directly
-    if (!empty($donors)) {
-        $filtered_donors = [];
+    // Apply FIFO ordering for registrations (including screening exceptions)
+    if (!empty($donors) && $status_filter === 'registrations') {
+        // Get both screening form and medical history timestamps for mixed FIFO ordering
+        $donor_ids = array_column($donors, 'donor_id');
+        $donor_ids_str = implode(',', $donor_ids);
         
-        foreach ($donors as $donor) {
-            $donor_id = $donor['donor_id'] ?? null;
-            
-            if ($donor_id) {
-                // Query medical_history for this specific donor
-                $check_ch = curl_init();
-                curl_setopt_array($check_ch, [
-                    CURLOPT_URL => SUPABASE_URL . '/rest/v1/medical_history?select=medical_approval&donor_id=eq.' . $donor_id,
+        // Get screening form timestamps (only for donors with needs_review = True)
+        $screening_timestamps_ch = curl_init();
+        curl_setopt_array($screening_timestamps_ch, [
+            CURLOPT_URL => SUPABASE_URL . '/rest/v1/screening_form?select=donor_form_id,updated_at,needs_review&donor_form_id=in.(' . $donor_ids_str . ')&needs_review=eq.true&order=updated_at.asc',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY
+            ]
+        ]);
+        
+        $screening_timestamps_response = curl_exec($screening_timestamps_ch);
+        curl_close($screening_timestamps_ch);
+        
+        // Get medical history timestamps
+        $medical_timestamps_ch = curl_init();
+        curl_setopt_array($medical_timestamps_ch, [
+            CURLOPT_URL => SUPABASE_URL . '/rest/v1/medical_history?select=donor_id,updated_at&donor_id=in.(' . $donor_ids_str . ')&order=updated_at.asc',
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_HTTPHEADER => [
                         'apikey: ' . SUPABASE_API_KEY,
@@ -373,34 +424,180 @@ if ($response === false || is_null(json_decode($response, true))) {
                     ]
                 ]);
                 
-                $check_response = curl_exec($check_ch);
-                curl_close($check_ch);
-                
-                if ($check_response !== false) {
-                    $medical_data = json_decode($check_response, true);
+        $medical_timestamps_response = curl_exec($medical_timestamps_ch);
+        curl_close($medical_timestamps_ch);
+        
+        if ($screening_timestamps_response !== false && $medical_timestamps_response !== false) {
+            $screening_timestamps = json_decode($screening_timestamps_response, true) ?: [];
+            $medical_timestamps = json_decode($medical_timestamps_response, true) ?: [];
+            
+            // Create a mapping of donor_id to the earliest timestamp from either table
+            $timestamp_map = [];
+            
+            // Process screening form timestamps (only for needs_review = True)
+            foreach ($screening_timestamps as $screening) {
+                if (isset($screening['donor_form_id']) && isset($screening['updated_at']) && isset($screening['needs_review']) && $screening['needs_review'] === true) {
+                    $donor_id = $screening['donor_form_id'];
+                    $screening_timestamp = $screening['updated_at'];
                     
-                    // Only include donor if medical_approval is 'Approved' (not NULL)
-                    if (is_array($medical_data) && !empty($medical_data)) {
-                        $medical_approval = $medical_data[0]['medical_approval'] ?? null;
-                        
-                        if ($medical_approval === 'Approved') {
-                            $filtered_donors[] = $donor;
-                        }
-                        // Skip if medical_approval is NULL or anything else
+                    // If we don't have a timestamp for this donor yet, or if screening timestamp is earlier
+                    if (!isset($timestamp_map[$donor_id]) || strtotime($screening_timestamp) < strtotime($timestamp_map[$donor_id])) {
+                        $timestamp_map[$donor_id] = $screening_timestamp;
                     }
-                    // Skip if no medical history record found
                 }
             }
+            
+            // Process medical history timestamps
+            foreach ($medical_timestamps as $medical) {
+                if (isset($medical['donor_id']) && isset($medical['updated_at'])) {
+                    $donor_id = $medical['donor_id'];
+                    $medical_timestamp = $medical['updated_at'];
+                    
+                    // If we don't have a timestamp for this donor yet, or if medical timestamp is earlier
+                    if (!isset($timestamp_map[$donor_id]) || strtotime($medical_timestamp) < strtotime($timestamp_map[$donor_id])) {
+                        $timestamp_map[$donor_id] = $medical_timestamp;
+                    }
+                }
+            }
+            
+            // Sort donors based on the earliest timestamp from either table (FIFO)
+            usort($donors, function($a, $b) use ($timestamp_map) {
+                $a_timestamp = $timestamp_map[$a['donor_id']] ?? $a['submitted_at'];
+                $b_timestamp = $timestamp_map[$b['donor_id']] ?? $b['submitted_at'];
+                return strtotime($a_timestamp) - strtotime($b_timestamp);
+            });
+            
         }
-        
-        $donors = $filtered_donors;
     }
+    
+    // Apply FIFO ordering based on medical_history updated_at timestamps for existing and ineligible donors
+    if (!empty($donors) && ($status_filter === 'existing' || $status_filter === 'ineligible')) {
+        // Get medical history timestamps for proper FIFO ordering
+        $donor_ids = array_column($donors, 'donor_id');
+        $donor_ids_str = implode(',', $donor_ids);
+        
+        $medical_timestamps_ch = curl_init();
+        curl_setopt_array($medical_timestamps_ch, [
+            CURLOPT_URL => SUPABASE_URL . '/rest/v1/medical_history?select=donor_id,updated_at&donor_id=in.(' . $donor_ids_str . ')&order=updated_at.asc',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY
+            ]
+        ]);
+        
+        $medical_timestamps_response = curl_exec($medical_timestamps_ch);
+        curl_close($medical_timestamps_ch);
+        
+        if ($medical_timestamps_response !== false) {
+            $medical_timestamps = json_decode($medical_timestamps_response, true) ?: [];
+            
+            // Create a mapping of donor_id to updated_at timestamp
+            // Use global timestamp_map for date display
+            foreach ($medical_timestamps as $medical) {
+                if (isset($medical['donor_id']) && isset($medical['updated_at'])) {
+                    $timestamp_map[$medical['donor_id']] = $medical['updated_at'];
+                }
+            }
+            
+            // Sort donors based on medical_history updated_at timestamp (FIFO)
+            usort($donors, function($a, $b) use ($timestamp_map) {
+                $a_timestamp = $timestamp_map[$a['donor_id']] ?? $a['submitted_at'];
+                $b_timestamp = $timestamp_map[$b['donor_id']] ?? $b['submitted_at'];
+                return strtotime($a_timestamp) - strtotime($b_timestamp);
+            });
+            
+        }
+    }
+    
+    // Apply FIFO ordering based on mixed timestamps (screening_form + medical_history) for screening review donors
+    if (!empty($donors) && $status_filter === 'screening_review') {
+        // Get both screening form and medical history timestamps for mixed FIFO ordering
+        $donor_ids = array_column($donors, 'donor_id');
+        $donor_ids_str = implode(',', $donor_ids);
+        
+        // Get screening form timestamps (only for donors with needs_review = True)
+        $screening_timestamps_ch = curl_init();
+        curl_setopt_array($screening_timestamps_ch, [
+            CURLOPT_URL => SUPABASE_URL . '/rest/v1/screening_form?select=donor_form_id,updated_at,needs_review&donor_form_id=in.(' . $donor_ids_str . ')&needs_review=eq.true&order=updated_at.asc',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY
+            ]
+        ]);
+        
+        $screening_timestamps_response = curl_exec($screening_timestamps_ch);
+        curl_close($screening_timestamps_ch);
+        
+        // Get medical history timestamps
+        $medical_timestamps_ch = curl_init();
+        curl_setopt_array($medical_timestamps_ch, [
+            CURLOPT_URL => SUPABASE_URL . '/rest/v1/medical_history?select=donor_id,updated_at&donor_id=in.(' . $donor_ids_str . ')&order=updated_at.asc',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY
+            ]
+        ]);
+        
+        $medical_timestamps_response = curl_exec($medical_timestamps_ch);
+        curl_close($medical_timestamps_ch);
+        
+        if ($screening_timestamps_response !== false && $medical_timestamps_response !== false) {
+            $screening_timestamps = json_decode($screening_timestamps_response, true) ?: [];
+            $medical_timestamps = json_decode($medical_timestamps_response, true) ?: [];
+            
+            // Create a mapping of donor_id to the earliest timestamp from either table
+            $timestamp_map = [];
+            
+            // Process screening form timestamps (only for needs_review = True)
+            foreach ($screening_timestamps as $screening) {
+                if (isset($screening['donor_form_id']) && isset($screening['updated_at']) && isset($screening['needs_review']) && $screening['needs_review'] === true) {
+                    $donor_id = $screening['donor_form_id'];
+                    $screening_timestamp = $screening['updated_at'];
+                    
+                    // If we don't have a timestamp for this donor yet, or if screening timestamp is earlier
+                    if (!isset($timestamp_map[$donor_id]) || strtotime($screening_timestamp) < strtotime($timestamp_map[$donor_id])) {
+                        $timestamp_map[$donor_id] = $screening_timestamp;
+                    }
+                }
+            }
+            
+            // Process medical history timestamps
+            foreach ($medical_timestamps as $medical) {
+                if (isset($medical['donor_id']) && isset($medical['updated_at'])) {
+                    $donor_id = $medical['donor_id'];
+                    $medical_timestamp = $medical['updated_at'];
+                    
+                    // If we don't have a timestamp for this donor yet, or if medical timestamp is earlier
+                    if (!isset($timestamp_map[$donor_id]) || strtotime($medical_timestamp) < strtotime($timestamp_map[$donor_id])) {
+                        $timestamp_map[$donor_id] = $medical_timestamp;
+                    }
+                }
+            }
+            
+            // Sort donors based on the earliest timestamp from either table (FIFO)
+            usort($donors, function($a, $b) use ($timestamp_map) {
+                $a_timestamp = $timestamp_map[$a['donor_id']] ?? $a['submitted_at'];
+                $b_timestamp = $timestamp_map[$b['donor_id']] ?? $b['submitted_at'];
+                return strtotime($a_timestamp) - strtotime($b_timestamp);
+            });
+            
+        }
+    }
+    
+
+    
+    // Note: Medical approval filtering is already handled in the query logic above
+    // No need for additional filtering here as the data is already properly filtered
 }
 
 $total_records = count($donors);
 $total_pages = ceil($total_records / $records_per_page);
 
 // Slice the array to get only the records for the current page
+// FIFO ordering is preserved through array_slice
 $donors = array_slice($donors, $offset, $records_per_page);
 
 // Close cURL session
@@ -1732,6 +1929,10 @@ select.donor_form_input[disabled] {
                             <p class="dashboard-staff-count"><?php echo $existing_donors_count; ?></p>
                             <p class="dashboard-staff-title">Existing Donors</p>
                         </a>
+                        <a href="?status=screening_review" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'screening_review') ? 'active' : ''; ?>">
+                            <p class="dashboard-staff-count"><?php echo $screening_review_count; ?></p>
+                            <p class="dashboard-staff-title">Screening Review</p>
+                        </a>
                         <a href="?status=ineligible" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'ineligible') ? 'active' : ''; ?>">
                             <p class="dashboard-staff-count"><?php echo $ineligible_count; ?></p>
                             <p class="dashboard-staff-title">Ineligible</p>
@@ -1786,8 +1987,15 @@ select.donor_form_input[disabled] {
                                         <tr class="clickable-row">
                                             <td><?php echo $index + 1; ?></td>
                                             <td><?php 
-                                                // Try multiple date fields in order of preference
+                                                // Get the most relevant date based on donor status and available timestamps
                                                 $date_to_show = '';
+                                                $donor_id = $donor['donor_id'];
+                                                
+                                                // Use the timestamp map from FIFO ordering if available
+                                                if (isset($timestamp_map[$donor_id])) {
+                                                    $date_to_show = date('F j, Y', strtotime($timestamp_map[$donor_id]));
+                                                } else {
+                                                    // Fallback to donor form submitted_at
                                                 if (!empty($donor['submitted_at'])) {
                                                     $date_to_show = date('F j, Y', strtotime($donor['submitted_at']));
                                                 } elseif (!empty($donor['created_at'])) {
@@ -1797,6 +2005,8 @@ select.donor_form_input[disabled] {
                                                 } else {
                                                     $date_to_show = 'N/A';
                                                 }
+                                                }
+                                                
                                                 echo $date_to_show;
                                             ?></td>
                                             <td><?php echo !empty($donor['surname']) ? strtoupper(htmlspecialchars($donor['surname'])) : 'N/A'; ?></td>

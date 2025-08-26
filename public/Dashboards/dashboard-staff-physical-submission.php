@@ -22,14 +22,24 @@ $response = curl_exec($ch);
 $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
-// Debug logging
-error_log("Screening fetch response code: " . $http_code);
-error_log("Screening response sample: " . substr($response, 0, 200) . "...");
-
 $all_screenings = json_decode($response, true) ?: [];
 
-// 2. Get all physical examination records to determine which donor_ids to exclude
-$ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=donor_id,remarks,disapproval_reason,gen_appearance,heart_and_lungs,skin,reason,blood_pressure,pulse_rate,body_temp');
+// 2b. Get eligibility records to classify donors as New or Returning
+$ch = curl_init(SUPABASE_URL . '/rest/v1/eligibility?select=donor_id');
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+$response = curl_exec($ch);
+curl_close($ch);
+$eligibility_records = json_decode($response, true) ?: [];
+$eligibility_by_donor = [];
+foreach ($eligibility_records as $er) {
+    if (isset($er['donor_id'])) {
+        $eligibility_by_donor[(int)$er['donor_id']] = true;
+    }
+}
+
+// 2. Get all physical examination records with full details
+$ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=physical_exam_id,donor_id,remarks,disapproval_reason,gen_appearance,heart_and_lungs,skin,reason,blood_pressure,pulse_rate,body_temp,blood_bag_type,created_at,updated_at&order=created_at.desc');
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
@@ -37,53 +47,106 @@ $response = curl_exec($ch);
 $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
-// Debug logging
-error_log("Physical examination fetch response code: " . $http_code);
-error_log("Physical examination response: " . $response);
-
 $physical_exams = json_decode($response, true) ?: [];
 
-// Create array of donor_ids that already have physical exams
+// Create arrays to organize physical exams by status and collect all donor IDs
 $existing_physical_exam_donor_ids = [];
 $pending_physical_exam_donor_ids = [];
+$physical_exam_data = []; // Store full physical exam data by donor_id
+$all_donor_ids = []; // Collect all donor IDs for batch fetching
 
 foreach ($physical_exams as $exam) {
     if (isset($exam['donor_id'])) {
+        $donor_id = $exam['donor_id'];
+        $physical_exam_data[$donor_id] = $exam; // Store full exam data
+        $all_donor_ids[] = $donor_id; // Collect donor ID for batch fetch
+        
         // Check if this physical exam has "pending" remarks
         if (isset($exam['remarks']) && strtolower($exam['remarks']) === 'pending') {
-            // Add to pending list
-            $pending_physical_exam_donor_ids[] = $exam['donor_id'];
-            error_log("Found pending physical examination for donor_id: " . $exam['donor_id']);
+            $pending_physical_exam_donor_ids[] = $donor_id;
         } else {
-            // Add to regular exclude list for completed exams
-            $existing_physical_exam_donor_ids[] = $exam['donor_id'];
-            error_log("Found completed physical examination for donor_id: " . $exam['donor_id']);
+            $existing_physical_exam_donor_ids[] = $donor_id;
         }
     }
 }
 
-if (empty($existing_physical_exam_donor_ids) && empty($pending_physical_exam_donor_ids)) {
-    error_log("WARNING: No physical examination records found with donor_ids. This could be normal if no exams exist yet.");
+// Also collect donor IDs from screening records
+foreach ($all_screenings as $screening) {
+    if (isset($screening['donor_form_id'])) {
+        $all_donor_ids[] = $screening['donor_form_id'];
+    }
 }
 
-error_log("Found " . count($existing_physical_exam_donor_ids) . " donors that have completed physical exams");
-error_log("Found " . count($pending_physical_exam_donor_ids) . " donors that have pending physical exams");
-error_log("Found " . count($all_screenings) . " total screening records before filtering");
+// Remove duplicates and batch fetch all donor data
+$all_donor_ids = array_unique($all_donor_ids);
+$donor_data_cache = [];
 
-// 3. Process and filter the screenings
-$filtered_screenings = [];
-$pending_exam_screenings = [];
+if (!empty($all_donor_ids)) {
+    // Batch fetch donor data using IN clause
+    $donor_ids_str = implode(',', $all_donor_ids);
+    $ch_donors = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select=donor_id,surname,first_name,middle_name&donor_id=in.(' . $donor_ids_str . ')');
+    curl_setopt($ch_donors, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch_donors, CURLOPT_HTTPHEADER, [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ]);
+    
+    $donors_response = curl_exec($ch_donors);
+    curl_close($ch_donors);
+    
+    $donors_data = json_decode($donors_response, true) ?: [];
+    
+    // Create a cache for quick donor lookup
+    foreach ($donors_data as $donor) {
+        if (isset($donor['donor_id'])) {
+            $donor_data_cache[$donor['donor_id']] = $donor;
+        }
+    }
+}
+
+// 3. Process all screenings and physical exams
+$all_records = [];
 $skipped_count = 0;
+
+// First, process all physical examination records
+foreach ($physical_exams as $exam) {
+    if (isset($exam['donor_id'])) {
+        $donor_id = $exam['donor_id'];
+        
+        // Get donor data from cache
+        $donor_data = isset($donor_data_cache[$donor_id]) ? $donor_data_cache[$donor_id] : [
+            'surname' => 'Unknown',
+            'first_name' => 'Unknown',
+            'middle_name' => ''
+        ];
+        
+        // Create a record for this physical exam
+        $record = [
+            'type' => 'physical_exam',
+            'physical_exam_id' => $exam['physical_exam_id'],
+            'donor_id' => $donor_id,
+            'created_at' => $exam['created_at'],
+            'updated_at' => $exam['updated_at'],
+            'physical_exam' => $exam,
+            'donor_form' => $donor_data,
+            'has_pending_exam' => (isset($exam['remarks']) && strtolower($exam['remarks']) === 'pending'),
+            'donor_type' => isset($eligibility_by_donor[$donor_id]) ? 'Returning' : 'New',
+            'stage_label' => 'Physical'
+        ];
+        
+        $all_records[] = $record;
+    }
+}
+
+// Then, process screening records that don't have physical exams yet
 foreach ($all_screenings as $screening) {
     // Skip if not valid array data
     if (!is_array($screening)) {
-        error_log("Skipping invalid screening record (not an array)");
         continue;
     }
     
     // Skip records that have disapproval reasons
     if (!empty($screening['disapproval_reason'])) {
-        error_log("Skipping screening ID " . ($screening['screening_id'] ?? 'unknown') . " - has disapproval reason: " . $screening['disapproval_reason']);
         $skipped_count++;
         continue;
     }
@@ -92,76 +155,70 @@ foreach ($all_screenings as $screening) {
     if (isset($screening['donor_form_id'])) {
         $donor_id = $screening['donor_form_id'];
         
-        // Determine if this donor has a pending physical exam
-        $has_pending_exam = in_array($donor_id, $pending_physical_exam_donor_ids);
-        
-        // Skip if donor already has a completed physical exam
-        if (in_array($donor_id, $existing_physical_exam_donor_ids)) {
-            error_log("Skipping donor ID " . $donor_id . " - already has completed physical exam");
+        // Skip if this donor already has a physical exam (we already processed it above)
+        if (in_array($donor_id, $existing_physical_exam_donor_ids) || in_array($donor_id, $pending_physical_exam_donor_ids)) {
             $skipped_count++;
             continue;
         }
         
-        // Fetch donor data
-        $ch_donor = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select=surname,first_name,middle_name&donor_id=eq.' . $donor_id);
-        curl_setopt($ch_donor, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch_donor, CURLOPT_HTTPHEADER, [
-            'apikey: ' . SUPABASE_API_KEY,
-            'Authorization: Bearer ' . SUPABASE_API_KEY
-        ]);
+        // Get donor data from cache
+        $donor_data = isset($donor_data_cache[$donor_id]) ? $donor_data_cache[$donor_id] : [
+            'surname' => 'Unknown',
+            'first_name' => 'Unknown',
+            'middle_name' => ''
+        ];
         
-        $donor_response = curl_exec($ch_donor);
-        curl_close($ch_donor);
+        // Create a record for this screening
+        $record = [
+            'type' => 'screening',
+            'screening_id' => $screening['screening_id'],
+            'donor_id' => $donor_id,
+            'created_at' => $screening['created_at'],
+            'screening_data' => $screening,
+            'donor_form' => $donor_data,
+            'has_pending_exam' => false,
+            'donor_type' => isset($eligibility_by_donor[$donor_id]) ? 'Returning' : 'New',
+            'stage_label' => 'Physical'
+        ];
         
-        $donor_data = json_decode($donor_response, true) ?: [];
-        
-        if (!empty($donor_data)) {
-            $screening['donor_form'] = $donor_data[0];
-            error_log("Added donor data for screening " . $screening['screening_id'] . ": " . json_encode($donor_data[0]));
-        } else {
-            error_log("No donor data found for ID " . $donor_id);
-            $screening['donor_form'] = [
-                'surname' => 'Unknown',
-                'first_name' => 'Unknown',
-                'middle_name' => ''
-            ];
-        }
-        
-        // Add status flag to mark records with pending exams
-        $screening['has_pending_exam'] = $has_pending_exam;
-        
-        // Add the screening to the appropriate list
-        if ($has_pending_exam) {
-            $pending_exam_screenings[] = $screening;
-        } else {
-            $filtered_screenings[] = $screening;
-        }
+        $all_records[] = $record;
     }
 }
 
-error_log("Filtered to " . count($filtered_screenings) . " screenings without physical exams");
-error_log("Skipped " . $skipped_count . " screening records that already have physical exams or are disapproved");
+// Performance optimization complete
 
 // Count stats for dashboard cards
-$pending_physical_exams_count = count($filtered_screenings); // Screenings without physical exams
-$active_physical_exams_count = 0;
-$todays_summary_count = 0;
+$pending_physical_exams_count = 0; // Screenings without physical exams
+$active_physical_exams_count = 0; // Completed physical exams
+$todays_summary_count = 0; // Today's records
+$new_count = 0; // New donors (by eligibility absence)
+$returning_count = 0; // Returning donors (by eligibility presence)
 
-// Count active (approved) physical exams
-foreach ($physical_exams as $exam) {
-    if (isset($exam['remarks'])) {
-        $remarks = strtolower($exam['remarks']);
+$today = date('Y-m-d');
+
+foreach ($all_records as $record) {
+    // Count pending (screenings without physical exams)
+    if ($record['type'] === 'screening') {
+        $pending_physical_exams_count++;
+    }
+    
+    // Count active (completed physical exams)
+    if ($record['type'] === 'physical_exam' && isset($record['physical_exam']['remarks'])) {
+        $remarks = strtolower($record['physical_exam']['remarks']);
         if ($remarks == 'accepted') {
             $active_physical_exams_count++;
         }
     }
-}
-
-// Count today's submissions
-$today = date('Y-m-d');
-foreach ($filtered_screenings as $screening) {
-    if (isset($screening['created_at']) && date('Y-m-d', strtotime($screening['created_at'])) === $today) {
+    
+    // Count today's records
+    if (isset($record['created_at']) && date('Y-m-d', strtotime($record['created_at'])) === $today) {
         $todays_summary_count++;
+    }
+
+    // Count New vs Returning
+    if (isset($record['donor_type'])) {
+        if ($record['donor_type'] === 'Returning') $returning_count++;
+        else $new_count++;
     }
 }
 
@@ -172,91 +229,86 @@ $records_per_page = 15;
 $current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 
 // Handle status filtering
-$status_filter = isset($_GET['status']) ? $_GET['status'] : 'pending';
+$status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
 
-// Create arrays for different status categories
-$active_donors = [];
-$active_donors_data = []; // Store full exam data for active donors
+// Filter records based on the selected status (optimized)
+$display_records = [];
 
-// Filter physical exams by status
-foreach ($physical_exams as $exam) {
-    if (isset($exam['donor_id']) && isset($exam['remarks'])) {
-        $remarks = strtolower($exam['remarks']);
-        
-        if ($remarks == 'accepted') {
-            $active_donors[] = $exam['donor_id'];
-            $active_donors_data[$exam['donor_id']] = $exam; // Store full exam data
-        }
-    }
-}
-
-// Initialize arrays based on the selected filter
 switch ($status_filter) {
+    case 'all':
+        $display_records = $all_records;
+        break;
+        
     case 'active':
-        // Show only active (approved) physical exams
-        $display_screenings = [];
-        // Get screening records for active donors
-        foreach ($all_screenings as $screening) {
-            if (isset($screening['donor_form_id']) && in_array($screening['donor_form_id'], $active_donors)) {
-                // Fetch donor info and add it to the screening record
-                $ch_donor = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select=surname,first_name,middle_name&donor_id=eq.' . $screening['donor_form_id']);
-                curl_setopt($ch_donor, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch_donor, CURLOPT_HTTPHEADER, [
-                    'apikey: ' . SUPABASE_API_KEY,
-                    'Authorization: Bearer ' . SUPABASE_API_KEY
-                ]);
-                
-                $donor_response = curl_exec($ch_donor);
-                curl_close($ch_donor);
-                
-                $donor_data = json_decode($donor_response, true) ?: [];
-                
-                if (!empty($donor_data)) {
-                    $screening['donor_form'] = $donor_data[0];
-                } else {
-                    $screening['donor_form'] = [
-                        'surname' => 'Unknown',
-                        'first_name' => 'Unknown',
-                        'middle_name' => ''
-                    ];
-                }
-                
-                // Add physical examination data to the screening record
-                if (isset($active_donors_data[$screening['donor_form_id']])) {
-                    $screening['physical_exam'] = $active_donors_data[$screening['donor_form_id']];
-                }
-                
-                $display_screenings[] = $screening;
-            }
-        }
+        // Use array_filter for better performance
+        $display_records = array_filter($all_records, function($record) {
+            return $record['type'] === 'physical_exam' && 
+                   isset($record['physical_exam']['remarks']) && 
+                   strtolower($record['physical_exam']['remarks']) === 'accepted';
+        });
         break;
         
     case 'today':
-        // Show only today's submissions
-        $display_screenings = [];
         $today = date('Y-m-d');
-        foreach ($filtered_screenings as $screening) {
-            if (isset($screening['created_at']) && date('Y-m-d', strtotime($screening['created_at'])) === $today) {
-                $display_screenings[] = $screening;
-            }
-        }
+        $display_records = array_filter($all_records, function($record) use ($today) {
+            return isset($record['created_at']) && date('Y-m-d', strtotime($record['created_at'])) === $today;
+        });
         break;
         
     case 'pending':
+        $display_records = array_filter($all_records, function($record) {
+            return $record['type'] === 'screening';
+        });
+        break;
+        
+    case 'new':
+        $display_records = array_filter($all_records, function($record) {
+            return isset($record['donor_type']) && $record['donor_type'] === 'New';
+        });
+        break;
+
+    case 'returning':
+        $display_records = array_filter($all_records, function($record) {
+            return isset($record['donor_type']) && $record['donor_type'] === 'Returning';
+        });
+        break;
+
     default:
-        // Default to showing pending records (no physical exams)
-        $display_screenings = $filtered_screenings;
+        $display_records = $all_records;
         break;
 }
 
-// Sort screenings by updated_at (FIFO: oldest first)
-usort($display_screenings, function($a, $b) {
-    $a_time = isset($a['updated_at']) ? strtotime($a['updated_at']) : (isset($a['created_at']) ? strtotime($a['created_at']) : 0);
-    $b_time = isset($b['updated_at']) ? strtotime($b['updated_at']) : (isset($b['created_at']) ? strtotime($b['created_at']) : 0);
+// Sort records with priority: pending first, then FIFO (oldest first)
+usort($display_records, function($a, $b) {
+    // First priority: pending records come first
+    $a_is_pending = ($a['type'] === 'screening') || 
+                   ($a['type'] === 'physical_exam' && isset($a['physical_exam']['remarks']) && strtolower($a['physical_exam']['remarks']) === 'pending');
+    $b_is_pending = ($b['type'] === 'screening') || 
+                   ($b['type'] === 'physical_exam' && isset($b['physical_exam']['remarks']) && strtolower($b['physical_exam']['remarks']) === 'pending');
+    
+    // Physician priority: New before Returning when same pending status
+    $a_type_rank = ($a['donor_type'] ?? 'New') === 'New' ? 0 : 1;
+    $b_type_rank = ($b['donor_type'] ?? 'New') === 'New' ? 0 : 1;
+
+    if ($a_is_pending === $b_is_pending && $a_type_rank !== $b_type_rank) {
+        return $a_type_rank <=> $b_type_rank; // New first
+    }
+
+    // If one is pending and the other isn't, pending comes first
+    if ($a_is_pending && !$b_is_pending) {
+        return -1;
+    }
+    if (!$a_is_pending && $b_is_pending) {
+        return 1;
+    }
+    
+    // If both have same pending and donor type, sort by created_at (FIFO: oldest first)
+    $a_time = isset($a['created_at']) ? strtotime($a['created_at']) : 0;
+    $b_time = isset($b['created_at']) ? strtotime($b['created_at']) : 0;
     return $a_time <=> $b_time;
 });
 
-$total_records = count($display_screenings);
+$total_records = count($display_records);
 $total_pages = ceil($total_records / $records_per_page);
 
 // Adjust current page if needed
@@ -267,14 +319,14 @@ if ($current_page > $total_pages && $total_pages > 0) $current_page = $total_pag
 $offset = ($current_page - 1) * $records_per_page;
 
 // Slice the array to get only the records for the current page
-$screenings = array_slice($display_screenings, $offset, $records_per_page);
+$records = array_slice($display_records, $offset, $records_per_page);
 
 // Debug info message
 $debug_info = "";
-if (empty($filtered_screenings)) {
-    $debug_info = "No records without physical examinations found.";
+if (empty($display_records)) {
+    $debug_info = "No records found for the selected filter.";
 } else {
-    $debug_info = "Showing " . count($filtered_screenings) . " screenings that require physical examinations.";
+    $debug_info = "Showing " . count($display_records) . " records for the selected filter.";
 }
 
 // For admin view
@@ -2098,6 +2150,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         .btn {
             border-radius: 4px !important;
         }
+        
+        /* Donor type colored text (no badge) */
+        .type-new { color: #2e7d32; font-weight: 700; }
+        .type-returning { color: #1976d2; font-weight: 700; }
     </style>
 </head>
 <body class="light-mode">
@@ -2148,9 +2204,6 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         </li>
                     <?php endif; ?>
                     <li class="nav-item">
-                        <a class="nav-link" href="dashboard-staff-history/dashboard-physical-history.php">Physical History</a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link" href="../../assets/php_func/logout.php">Logout</a>
                     </li>
                 </ul>
@@ -2165,7 +2218,11 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     
                     <!-- Status Cards -->
                     <div class="dashboard-staff-status">
-                        <a href="?status=pending" class="status-card <?php echo (!isset($_GET['status']) || $_GET['status'] === 'pending') ? 'active' : ''; ?>">
+                        <a href="?status=all" class="status-card <?php echo (!isset($_GET['status']) || $_GET['status'] === 'all') ? 'active' : ''; ?>">
+                            <p class="dashboard-staff-count"><?php echo count($all_records); ?></p>
+                            <p class="dashboard-staff-title">All Records</p>
+                        </a>
+                        <a href="?status=pending" class="status-card <?php echo (isset($_GET['status']) && $_GET['status'] === 'pending') ? 'active' : ''; ?>">
                             <p class="dashboard-staff-count"><?php echo $pending_physical_exams_count; ?></p>
                             <p class="dashboard-staff-title">Pending Physical Exams</p>
                         </a>
@@ -2200,30 +2257,36 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                     <th>Date</th>
                                     <th>SURNAME</th>
                                     <th>First Name</th>
+                                    <th>Donor Type</th>
                                     <th>Status</th>
-                                    <th>Result</th>
-                                    <th>Observation</th>
+                                    <th>Physician</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody id="screeningTableBody">
                                 <?php 
-                                if (!empty($screenings)) {
+                                if (!empty($records)) {
                                     $counter = ($current_page - 1) * $records_per_page + 1; // Initialize counter with pagination
-                                    foreach ($screenings as $screening) {
+                                    foreach ($records as $record) {
                                         // Format the full name
-                                        $surname = isset($screening['donor_form']['surname']) ? $screening['donor_form']['surname'] : '';
-                                        $firstName = isset($screening['donor_form']['first_name']) ? $screening['donor_form']['first_name'] : '';
+                                        $surname = isset($record['donor_form']['surname']) ? $record['donor_form']['surname'] : '';
+                                        $firstName = isset($record['donor_form']['first_name']) ? $record['donor_form']['first_name'] : '';
                                         
                                         // Format the date
-                                        $date = isset($screening['created_at']) ? date('F j, Y', strtotime($screening['created_at'])) : 'Unknown';
+                                        $date = isset($record['created_at']) ? date('F j, Y', strtotime($record['created_at'])) : 'Unknown';
                                         
-                                        // Determine Results and Observation based on physical exam data
+                                        // Determine Results and Observation based on record type and data
                                         $result = 'N/A';
                                         $observation = 'N/A';
+                                        $status = 'Pending';
                                         
-                                        if (isset($screening['physical_exam'])) {
-                                            $exam = $screening['physical_exam'];
+                                        if ($record['type'] === 'physical_exam' && isset($record['physical_exam'])) {
+                                            $exam = $record['physical_exam'];
+                                            
+                                            // Set status based on actual remarks from physical examination data
+                                            if (!empty($exam['remarks'])) {
+                                                $status = ucfirst($exam['remarks']); // Use actual remarks like "Accepted", "Temporarily Deferred", etc.
+                                            }
                                             
                                             // Results column - based on remarks and disapproval_reason
                                             if (!empty($exam['remarks'])) {
@@ -2305,13 +2368,30 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                             
                                             // Create comprehensive tooltip
                                             $full_observation = !empty($tooltip_details) ? implode(' • ', $tooltip_details) : '';
+                                        } else {
+                                            // For screening records without physical exams
+                                            $status = 'Pending';
+                                            $result = 'N/A';
+                                            $observation = 'Awaiting physical examination';
+                                            $full_observation = 'Screening completed, waiting for physical examination';
                                         }
                                         
-                                        $encoded_data = json_encode([
-                                            'screening_id' => $screening['screening_id'] ?? '',
-                                            'donor_form_id' => $screening['donor_form_id'] ?? '',
-                                            'has_pending_exam' => $screening['has_pending_exam'] ?? false
-                                        ], JSON_HEX_APOS | JSON_HEX_QUOT);
+                                        // Prepare encoded data for JavaScript
+                                        if ($record['type'] === 'physical_exam') {
+                                            $encoded_data = json_encode([
+                                                'physical_exam_id' => $record['physical_exam_id'] ?? '',
+                                                'donor_form_id' => $record['donor_id'] ?? '',
+                                                'has_pending_exam' => $record['has_pending_exam'] ?? false,
+                                                'type' => 'physical_exam'
+                                            ], JSON_HEX_APOS | JSON_HEX_QUOT);
+                                        } else {
+                                            $encoded_data = json_encode([
+                                                'screening_id' => $record['screening_id'] ?? '',
+                                                'donor_form_id' => $record['donor_id'] ?? '',
+                                                'has_pending_exam' => $record['has_pending_exam'] ?? false,
+                                                'type' => 'screening'
+                                            ], JSON_HEX_APOS | JSON_HEX_QUOT);
+                                        }
                                         ?>
                                         <tr class="clickable-row" data-screening='<?php echo htmlspecialchars($encoded_data); ?>'>
                                             <td><?php echo $counter++; ?></td>
@@ -2319,57 +2399,77 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                             <td><?php echo htmlspecialchars(strtoupper($surname)); ?></td>
                                             <td><?php echo htmlspecialchars($firstName); ?></td>
                                             <td>
-                                                <?php if ($status_filter === 'active'): ?>
-                                                    <span class="badge bg-success">Success</span>
-                                                <?php else: ?>
-                                                    <span class="badge bg-warning">Pending</span>
-                                                <?php endif; ?>
+                                                <?php 
+                                                // Donor type text with stage label in parentheses, colored
+                                                $donor_type = isset($record['donor_type']) ? $record['donor_type'] : 'New';
+                                                $stage_label = isset($record['stage_label']) ? $record['stage_label'] : (($record['type'] === 'physical_exam') ? 'Physical' : 'Screening');
+                                                $type_text = $donor_type . ' (' . $stage_label . ')';
+                                                $cls = ($donor_type === 'Returning') ? 'type-returning' : 'type-new';
+                                                ?>
+                                                <span class="<?php echo $cls; ?>"><?php echo htmlspecialchars($type_text); ?></span>
                                             </td>
                                             <td>
-                                                <?php if ($result !== 'N/A'): ?>
-                                                    <?php if (strtolower($result) === 'accepted'): ?>
-                                                        <span class="badge bg-success"><?php echo htmlspecialchars($result); ?></span>
-                                                    <?php elseif (strpos(strtolower($result), 'reject') !== false || strpos(strtolower($result), 'disapprov') !== false): ?>
-                                                        <span class="badge bg-danger"><?php echo htmlspecialchars($result); ?></span>
-                                                    <?php else: ?>
-                                                        <span class="badge bg-warning"><?php echo htmlspecialchars($result); ?></span>
-                                                    <?php endif; ?>
-                                                <?php else: ?>
-                                                    <span class="badge bg-secondary">N/A</span>
-                                                <?php endif; ?>
+                                                <?php 
+                                                // Determine badge color based on actual remarks
+                                                $badge_class = 'bg-warning'; // Default for pending
+                                                $status_lower = strtolower($status);
+                                                if ($status_lower === 'accepted') {
+                                                    $badge_class = 'bg-success';
+                                                } elseif (strpos($status_lower, 'defer') !== false || strpos($status_lower, 'reject') !== false || strpos($status_lower, 'decline') !== false) {
+                                                    $badge_class = 'bg-danger';
+                                                } elseif ($status_lower === 'pending') {
+                                                    $badge_class = 'bg-warning';
+                                                }
+                                                ?>
+                                                <span class="badge <?php echo $badge_class; ?>"><?php echo htmlspecialchars($status); ?></span>
                                             </td>
                                             <td>
-                                                <?php if ($observation !== 'N/A'): ?>
-                                                    <span class="observation-text" title="<?php echo htmlspecialchars($full_observation ?: $observation); ?>">
-                                                        <?php 
-                                                        // Highlight vital signs in parentheses
-                                                        if (strpos($observation, '(') !== false && strpos($observation, ')') !== false) {
-                                                            $observation = preg_replace('/\((.*?)\)/', '(<span class="vitals">$1</span>)', $observation);
-                                                        }
-                                                        echo $observation; 
-                                                        ?>
-                                                    </span>
-                                                <?php else: ?>
-                                                    <span class="badge bg-secondary">N/A</span>
-                                                <?php endif; ?>
+                                                <?php 
+                                                // Get physician name from session or physical exam data
+                                                $physician_name = 'N/A';
+                                                if ($record['type'] === 'physical_exam' && isset($record['physical_exam'])) {
+                                                    // You can add logic here to get physician name from the physical exam
+                                                    // For now, showing a placeholder
+                                                    $physician_name = 'Dr. Physician';
+                                                } else {
+                                                    $physician_name = 'Pending';
+                                                }
+                                                echo htmlspecialchars($physician_name);
+                                                ?>
                                             </td>
                                             <td>
-                                                <button type="button" class="btn btn-info btn-sm view-btn me-1" 
-                                                        data-screening='<?php echo htmlspecialchars($encoded_data); ?>'
-                                                        title="View Details">
-                                                    <i class="fas fa-eye"></i>
-                                                </button>
-                                                <button type="button" class="btn btn-warning btn-sm edit-btn" 
-                                                        data-screening-id="<?php echo $screening['screening_id'] ?? ''; ?>" 
-                                                        title="Edit">
-                                                    <i class="fas fa-edit"></i>
-                                                </button>
+                                                <?php 
+                                                // Determine if this record is pending (editable)
+                                                $is_pending = false;
+                                                if ($record['type'] === 'screening') {
+                                                    $is_pending = true; // Screenings are always pending (need physical exam)
+                                                } elseif ($record['type'] === 'physical_exam' && isset($record['physical_exam']['remarks'])) {
+                                                    $remarks = strtolower($record['physical_exam']['remarks']);
+                                                    $is_pending = ($remarks === 'pending');
+                                                }
+                                                ?>
+                                                
+                                                <?php if ($is_pending): ?>
+                                                    <!-- Pending records: Show edit button only -->
+                                                    <button type="button" class="btn btn-warning btn-sm edit-btn" 
+                                                            data-screening='<?php echo htmlspecialchars($encoded_data); ?>'
+                                                            title="Edit Physical Examination">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                <?php else: ?>
+                                                    <!-- Completed records: Show view button only -->
+                                                    <button type="button" class="btn btn-info btn-sm view-btn" 
+                                                            data-screening='<?php echo htmlspecialchars($encoded_data); ?>'
+                                                            title="View Details">
+                                                        <i class="fas fa-eye"></i>
+                                                    </button>
+                                                <?php endif; ?>
                                             </td>
                                         </tr>
                                 <?php 
                                     }
                                 } else {
-                                    echo '<tr><td colspan="9" class="text-center">No pending physical exams found</td></tr>';
+                                    echo '<tr><td colspan="7" class="text-center">No records found for the selected filter</td></tr>';
                                 }
                                 ?>
                             </tbody>
@@ -3084,10 +3184,17 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 document.querySelectorAll(".edit-btn").forEach(button => {
                     button.addEventListener("click", function(e) {
                         e.stopPropagation(); // Prevent row click
-                        const screeningId = this.getAttribute('data-screening-id');
-                        console.log('Edit button clicked for screening ID:', screeningId);
-                        // Add your edit functionality here
-                        alert('Edit functionality will be implemented for screening ID: ' + screeningId);
+                        try {
+                            currentScreeningData = JSON.parse(this.getAttribute('data-screening'));
+                            console.log("Selected record for editing:", currentScreeningData);
+                            
+                            confirmationDialog.classList.remove("hide");
+                            confirmationDialog.classList.add("show");
+                            confirmationDialog.style.display = "block";
+                        } catch (e) {
+                            console.error("Error parsing screening data:", e);
+                            alert("Error selecting this record. Please try again.");
+                        }
                     });
                 });
 
