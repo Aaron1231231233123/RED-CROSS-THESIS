@@ -58,17 +58,20 @@ try {
         if ($action === 'approve') {
             $medical_history_data['medical_approval'] = 'Approved';
             $medical_history_data['needs_review'] = false; // Medical history no longer needs review
+            $medical_history_data['updated_at'] = gmdate('c'); // ISO 8601 UTC timestamp
         } elseif ($action === 'decline') {
             $medical_history_data['medical_approval'] = 'Declined';
             $medical_history_data['needs_review'] = false; // Medical history no longer needs review
+            $medical_history_data['updated_at'] = gmdate('c'); // ISO 8601 UTC timestamp
         } elseif ($action === 'next') {
             // For interviewer/physician using the "NEXT" button
             $medical_history_data['medical_approval'] = 'Approved';
             $medical_history_data['needs_review'] = false; // Medical history no longer needs review
+            $medical_history_data['updated_at'] = gmdate('c'); // ISO 8601 UTC timestamp
         } elseif ($action === 'save_edit') {
             // For saving edited data without changing approval status
             // Keep existing approval status and just update the form data
-            $medical_history_data['updated_at'] = date('Y-m-d H:i:s');
+            $medical_history_data['updated_at'] = gmdate('c'); // ISO 8601 UTC timestamp
         }
     }
 

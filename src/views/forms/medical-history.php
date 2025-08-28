@@ -213,13 +213,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             if ($action === 'approve') {
                 $medical_history_data['medical_approval'] = 'Approved';
+                $medical_history_data['updated_at'] = gmdate('c'); // ISO 8601 UTC timestamp
                 error_log("Setting status to Approved");
             } elseif ($action === 'decline') {
                 $medical_history_data['medical_approval'] = 'Declined';
+                $medical_history_data['updated_at'] = gmdate('c'); // ISO 8601 UTC timestamp
                 error_log("Setting status to Declined");
             } elseif ($action === 'next') {
                 // For interviewer/physician using the "NEXT" button
                 $medical_history_data['medical_approval'] = 'Approved';
+                $medical_history_data['updated_at'] = gmdate('c'); // ISO 8601 UTC timestamp
                 error_log("Setting status to Approved (via NEXT button)");
             } else {
                 error_log("Unknown action value: " . $action);

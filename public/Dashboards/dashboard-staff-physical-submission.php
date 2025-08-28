@@ -1255,9 +1255,9 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         
         .signature-line {
             display: flex;
-            justify-content: space-between;
-            align-items: end;
+            align-items: center;
             margin-bottom: 15px;
+            gap: 15px;
         }
         
         .signature-line span {
@@ -1266,11 +1266,14 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             font-size: 0.9rem;
         }
         
-        .signature-space {
-            flex: 1;
+        .physician-name {
+            color: #b22222 !important;
+            font-weight: 600 !important;
+            font-size: 1rem !important;
             border-bottom: 1px solid #6c757d;
-            margin: 0 20px 5px 20px;
-            max-width: 300px;
+            padding-bottom: 2px;
+            min-width: 150px;
+            text-align: center;
         }
         
         .signature-note {
@@ -3201,7 +3204,47 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                 <div class="signature-content">
                                     <div class="signature-line">
                                         <span>Examining Physician</span>
-                                        <div class="signature-space"></div>
+                                        <span class="physician-name"><?php 
+                                            // Get the logged-in user's name from the users table
+                                            if (isset($_SESSION['user_id'])) {
+                                                $user_id = $_SESSION['user_id'];
+                                                $ch = curl_init(SUPABASE_URL . '/rest/v1/users?select=first_name,surname&user_id=eq.' . $user_id);
+                                                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                                                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                                                    'apikey: ' . SUPABASE_API_KEY,
+                                                    'Authorization: Bearer ' . SUPABASE_API_KEY
+                                                ]);
+                                                
+                                                $response = curl_exec($ch);
+                                                $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                                                curl_close($ch);
+                                                
+                                                if ($http_code === 200) {
+                                                    $user_data = json_decode($response, true);
+                                                    if (is_array($user_data) && !empty($user_data)) {
+                                                        $user = $user_data[0];
+                                                        $first_name = isset($user['first_name']) ? htmlspecialchars($user['first_name']) : '';
+                                                        $surname = isset($user['surname']) ? htmlspecialchars($user['surname']) : '';
+                                                        
+                                                        if ($first_name && $surname) {
+                                                            echo $first_name . ' ' . $surname;
+                                                        } elseif ($first_name) {
+                                                            echo $first_name;
+                                                        } elseif ($surname) {
+                                                            echo $surname;
+                                                        } else {
+                                                            echo 'Physician';
+                                                        }
+                                                    } else {
+                                                        echo 'Physician';
+                                                    }
+                                                } else {
+                                                    echo 'Physician';
+                                                }
+                                            } else {
+                                                echo 'Physician';
+                                            }
+                                        ?></span>
                                     </div>
                                     <div class="signature-note">
                                         This examination was conducted in accordance with Philippine Red Cross standards and protocols.

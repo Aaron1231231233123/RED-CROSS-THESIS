@@ -2431,14 +2431,11 @@ select.donor_form_input[disabled] {
                                                 echo htmlspecialchars($gateway); 
                                             ?></td>
                                             <td>
-                                                <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" 
+                                                <button type="button" class="btn btn-info btn-sm view-donor-btn" 
                                                         data-donor-id="<?php echo $donor['donor_id']; ?>" 
                                                         data-donor='<?php echo $encoded_data; ?>' 
                                                         title="View Details">
                                                     <i class="fas fa-eye"></i>
-                                                </button>
-                                                <button type="button" class="btn btn-warning btn-sm edit-donor-btn" data-donor-id="<?php echo $donor['donor_id']; ?>" title="Edit">
-                                                    <i class="fas fa-edit"></i>
                                                 </button>
                                             </td>
                                         </tr>
