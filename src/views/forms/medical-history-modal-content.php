@@ -708,7 +708,7 @@ if ($http_code === 200) {
              // Add save functionality
              newEditButton.onclick = function() {
                  console.log('Save button clicked');
-                 saveEditedData();
+                 showSaveConfirmationModal();
              };
          });
      } else {
@@ -729,20 +729,20 @@ if ($http_code === 200) {
      console.log('Saving edited data...');
      
      // Submit the form data
-     fetch('medical-history-process.php', {
+     fetch('../../src/views/forms/medical-history-process.php', {
          method: 'POST',
          body: formData
      })
      .then(response => response.json())
      .then(data => {
          if (data.success) {
-             // Use custom modal instead of browser alert
+             // Show success message using custom modal
              if (window.customConfirm || window.mhCustomConfirm) {
-                 (window.customConfirm || window.mhCustomConfirm)('Medical history data updated successfully!', function() {
+                 (window.customConfirm || window.mhCustomConfirm)('Medical history data saved successfully!', function() {
                      // Just close the modal, no additional action needed
                  });
              } else {
-                 alert('Medical history data updated successfully!');
+                 alert('Medical history data saved successfully!');
              }
              
              // Reset button to edit mode
@@ -774,26 +774,14 @@ if ($http_code === 200) {
                  input.readOnly = wasOriginallyDisabled;
              });
          } else {
-             // Use custom modal instead of browser alert
-             if (window.customConfirm || window.mhCustomConfirm) {
-                 (window.customConfirm || window.mhCustomConfirm)('Error updating data: ' + (data.message || 'Unknown error'), function() {
-                     // Just close the modal, no additional action needed
-                 });
-             } else {
-                 alert('Error updating data: ' + (data.message || 'Unknown error'));
-             }
+             // Show error modal
+             showErrorModal('Error updating data: ' + (data.message || 'Unknown error occurred'));
          }
      })
      .catch(error => {
          console.error('Error:', error);
-         // Use custom modal instead of browser alert
-         if (window.customConfirm || window.mhCustomConfirm) {
-             (window.customConfirm || window.mhCustomConfirm)('An error occurred while saving the data.', function() {
-                 // Just close the modal, no additional action needed
-             });
-         } else {
-             alert('An error occurred while saving the data.');
-         }
+         // Show error modal
+         showErrorModal('An error occurred while saving the data. Please try again.');
      });
  }
  
@@ -830,4 +818,104 @@ if ($http_code === 200) {
      window.mhCustomConfirm = mhCustomConfirm;
      console.log('✅ initializeEditFunctionality and mhCustomConfirm exposed to global scope');
  }
- </script> 
+ </script>
+
+<!-- Save Confirmation Modal -->
+<div class="modal fade" id="saveConfirmationModal" tabindex="-1" aria-labelledby="saveConfirmationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 15px; border: none;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
+                <h5 class="modal-title" id="saveConfirmationModalLabel">
+                    <i class="fas fa-save me-2"></i>
+                    Confirm Save
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <p class="mb-0" style="font-size: 1.1rem;">Are you sure you want to save the medical history data?</p>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn px-4" style="background-color: #b22222; border-color: #b22222; color: white;" id="confirmSaveBtn">Yes, Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Error Modal -->
+<div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 15px; border: none;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
+                <h5 class="modal-title" id="errorModalLabel">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Error
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <p class="mb-0" style="font-size: 1.1rem;" id="errorMessage">An error occurred while saving the data.</p>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Function to show save confirmation modal
+function showSaveConfirmationModal() {
+    const saveConfirmationModal = new bootstrap.Modal(document.getElementById('saveConfirmationModal'));
+    saveConfirmationModal.show();
+}
+
+// Function to show error modal
+function showErrorModal(message) {
+    const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
+    const errorMessage = document.getElementById('errorMessage');
+    if (errorMessage) {
+        errorMessage.textContent = message;
+    }
+    errorModal.show();
+}
+
+// Update the save button click handler to show confirmation first
+function bindConfirmSaveHandler() {
+    const confirmSaveBtn = document.getElementById('confirmSaveBtn');
+    if (!confirmSaveBtn) return;
+    // Replace existing handlers to avoid duplicates
+    const newBtn = confirmSaveBtn.cloneNode(true);
+    confirmSaveBtn.parentNode.replaceChild(newBtn, confirmSaveBtn);
+    newBtn.addEventListener('click', function() {
+        const saveConfirmationModal = bootstrap.Modal.getInstance(document.getElementById('saveConfirmationModal'));
+        if (saveConfirmationModal) {
+            saveConfirmationModal.hide();
+        }
+        saveEditedData();
+    });
+}
+
+// Bind immediately (content is already in DOM when this script runs)
+bindConfirmSaveHandler();
+
+// Also re-bind whenever the modal is shown (in case the DOM was re-rendered)
+const saveConfirmEl = document.getElementById('saveConfirmationModal');
+if (saveConfirmEl) {
+    saveConfirmEl.addEventListener('shown.bs.modal', bindConfirmSaveHandler);
+}
+
+// Override the save button click to show confirmation first
+function initializeSaveConfirmation() {
+    const saveButton = document.getElementById('modalEditButton');
+    if (saveButton && saveButton.textContent === 'Save') {
+        saveButton.onclick = function() {
+            console.log('Save button clicked - showing confirmation');
+            showSaveConfirmationModal();
+        };
+    }
+}
+
+// Call this after the edit functionality is initialized
+setTimeout(initializeSaveConfirmation, 100);
+</script> 

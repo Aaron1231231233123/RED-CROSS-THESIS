@@ -1,5 +1,13 @@
 
 <?php
+// Prevent any output before headers
+ob_start();
+
+// Error handling
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+
 if (!isset($_SESSION['user_id'])) {
     header("Location: /REDCROSS/public/login.php");
     exit();

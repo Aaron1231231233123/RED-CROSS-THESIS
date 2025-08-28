@@ -1,4 +1,12 @@
 <?php
+// Prevent any output before headers
+ob_start();
+
+// Error handling
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+
 // Include database connection
 include_once '../conn/db_conn.php';
 
@@ -7,22 +15,6 @@ header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type');
-
-// Enable error reporting for debugging
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
-// Handle preflight request
-if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-    exit(0);
-}
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['success' => false, 'message' => 'Method not allowed']);
-    exit;
-}
 
 // Helper function to log errors
 function logError($message) {
@@ -473,30 +465,41 @@ function createDeferEligibilityRecord($data) {
 }
 
 // Process incoming request
-$method = $_SERVER['REQUEST_METHOD'];
+try {
+    $method = $_SERVER['REQUEST_METHOD'];
 
-if ($method === 'POST') {
-    // Get JSON data from request body
-    $jsonData = file_get_contents('php://input');
-    $data = json_decode($jsonData, true);
-    
-    if (!$data) {
-        echo json_encode(["success" => false, "error" => "Invalid JSON data"]);
-        exit;
-    }
-    
-    // Debug log incoming data
-    error_log("Received data: " . json_encode($data));
-    
-    // Check if this is a defer action
-    if (isset($data['action']) && $data['action'] === 'create_eligibility_defer') {
-        $result = createDeferEligibilityRecord($data);
+    if ($method === 'POST') {
+        // Get JSON data from request body
+        $jsonData = file_get_contents('php://input');
+        $data = json_decode($jsonData, true);
+        
+        if (!$data) {
+            echo json_encode(["success" => false, "error" => "Invalid JSON data"]);
+            exit;
+        }
+        
+        // Debug log incoming data
+        error_log("Received data: " . json_encode($data));
+        
+        // Check if this is a defer action
+        if (isset($data['action']) && $data['action'] === 'create_eligibility_defer') {
+            $result = createDeferEligibilityRecord($data);
+        } else {
+            // Default to the original eligibility creation
+            $result = createEligibilityRecord($data);
+        }
+        
+        echo json_encode($result);
     } else {
-        // Default to the original eligibility creation
-        $result = createEligibilityRecord($data);
+        echo json_encode(["success" => false, "error" => "Only POST method is allowed"]);
     }
-    
-    echo json_encode($result);
-} else {
-    echo json_encode(["success" => false, "error" => "Only POST method is allowed"]);
-} 
+} catch (Exception $e) {
+    error_log("Create eligibility error: " . $e->getMessage());
+    echo json_encode(["success" => false, "error" => "Internal server error: " . $e->getMessage()]);
+} catch (Error $e) {
+    error_log("Create eligibility fatal error: " . $e->getMessage());
+    echo json_encode(["success" => false, "error" => "Internal server error"]);
+}
+
+// Flush output buffer
+ob_end_flush(); 

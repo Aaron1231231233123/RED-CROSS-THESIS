@@ -468,6 +468,9 @@ class BloodCollectionModal {
         // Add hidden data
         data.physical_exam_id = this.bloodCollectionData.physical_exam_id;
         data.donor_id = this.bloodCollectionData.donor_id;
+        // Hint to backend: if a row exists, increment amount_taken instead of replacing
+        // and update other fields.
+        data.update_mode = 'increment_on_existing';
 
         return data;
     }
@@ -501,7 +504,10 @@ class BloodCollectionModal {
                 body: JSON.stringify(formData)
             });
 
-            const result = await response.json();
+            // Robust JSON parse with fallback
+            const raw = await response.text();
+            let result;
+            try { result = JSON.parse(raw); } catch (e) { result = { success: false, error: raw || 'Non-JSON response' }; }
 
             if (result.success) {
                 this.showToast('Blood collection recorded successfully!', 'success');
@@ -516,15 +522,10 @@ class BloodCollectionModal {
             } else {
                 // Handle specific error types
                 const errorMessage = result.error || result.message || 'Failed to record blood collection';
-                
+
                 if (errorMessage.includes('already exists')) {
-                    this.showToast('This record has already been processed. Refreshing page...', 'warning');
-                    
-                    // Close modal and refresh for duplicate errors
-                    setTimeout(() => {
-                        this.closeModal();
-                        window.location.reload();
-                    }, 2000);
+                    // Instead of blocking, retry as an UPDATE with increment semantics
+                    await this.retryUpdateWithIncrement(formData);
                 } else {
                     throw new Error(errorMessage);
                 }
@@ -534,6 +535,40 @@ class BloodCollectionModal {
             console.error('Error submitting form:', error);
             this.showToast(error.message || 'Error recording blood collection', 'error');
             this.isSubmitting = false; // Reset flag on error to allow retry
+            this.showLoading(false);
+        }
+    }
+
+    async retryUpdateWithIncrement(formData) {
+        try {
+            // Ensure flag present
+            formData.update_mode = 'increment_on_existing';
+
+            const response = await fetch('../../assets/php_func/process_blood_collection.php?action=update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+
+            const raw = await response.text();
+            let result;
+            try { result = JSON.parse(raw); } catch (e) { result = { success: false, error: raw || 'Non-JSON response' }; }
+
+            if (result.success) {
+                this.showToast('Existing collection updated (amount added).', 'success');
+                this.disableAllFormInteraction();
+                setTimeout(() => {
+                    this.closeModal();
+                    window.location.reload();
+                }, 1500);
+            } else {
+                const msg = result.error || result.message || 'Failed to update collection';
+                throw new Error(msg);
+            }
+        } catch (err) {
+            console.error('Update with increment failed:', err);
+            this.showToast(err.message || 'Update failed', 'error');
+            this.isSubmitting = false;
             this.showLoading(false);
         }
     }

@@ -37,19 +37,33 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (submitButton) {
+            console.log('Submit button found, adding event listener');
             submitButton.addEventListener('click', function() {
+                console.log('Submit button clicked!');
                 handleScreeningFormSubmission();
             });
+        } else {
+            console.error('Submit button not found!');
         }
 
         if (cancelButton) {
             cancelButton.addEventListener('click', function() {
+                console.log('Cancel button clicked, closing screening modal...');
                 const modal = bootstrap.Modal.getInstance(screeningModal);
                 if (modal) {
                     modal.hide();
+                } else {
+                    // Fallback: force close the modal
+                    screeningModal.style.display = 'none';
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    backdrops.forEach(backdrop => backdrop.remove());
+                    document.body.classList.remove('modal-open');
                 }
             });
         }
+
+        // Attempt prefill immediately on init
+        prefillFromExisting();
 
         // Add donation type change handlers
         const donationTypeRadios = document.querySelectorAll('input[name="donation-type"]');
@@ -82,6 +96,11 @@ document.addEventListener('DOMContentLoaded', function() {
         updateStepDisplay();
         updateProgressBar();
         updateButtons();
+
+        // Ensure prefill has run by the time user navigates
+        if (step === 1 || step === 4) {
+            prefillFromExisting();
+        }
 
         // Update Step 3 content based on selected donation type when entering step 3
         if (step === 3) {
@@ -152,19 +171,27 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function validateCurrentStep() {
+        console.log('Validating current step:', currentStep);
         const currentContent = document.querySelector(`.screening-step-content[data-step="${currentStep}"]`);
-        if (!currentContent) return false;
+        if (!currentContent) {
+            console.log('No content found for step:', currentStep);
+            return false;
+        }
 
         const requiredFields = currentContent.querySelectorAll('input[required], select[required]');
+        console.log('Found', requiredFields.length, 'required fields');
         let isValid = true;
 
         requiredFields.forEach(field => {
+            console.log('Validating field:', field.name, 'value:', field.value);
             if (!field.value.trim()) {
+                console.log('Field', field.name, 'is empty');
                 field.focus();
                 field.style.borderColor = '#dc3545';
                 isValid = false;
                 return false;
             } else {
+                console.log('Field', field.name, 'is valid');
                 field.style.borderColor = '#e9ecef';
             }
         });
@@ -370,10 +397,15 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function handleScreeningFormSubmission() {
+        console.log('Starting form submission...');
+        
         // Final validation
         if (!validateCurrentStep()) {
+            console.log('Form validation failed, stopping submission');
             return;
         }
+        
+        console.log('Form validation passed, proceeding with submission');
 
         // Show loading state
         const submitButton = document.getElementById('screeningSubmitButton');
@@ -384,44 +416,98 @@ document.addEventListener('DOMContentLoaded', function() {
         // Get all form data
         const formData = new FormData(screeningForm);
         
+        // Apply auto-increment logic for Red Cross donations before submission
+        const rcInput = document.querySelector('input[name="red-cross"]');
+        if (rcInput && rcInput.hasAttribute('data-incremented-value')) {
+            const incrementedValue = rcInput.getAttribute('data-incremented-value');
+            formData.set('red-cross', incrementedValue);
+            console.log('[Auto-Increment] Submitting incremented Red Cross value:', incrementedValue);
+        }
+        
         // Make sure donor_id is included
         if (window.currentDonorData && window.currentDonorData.donor_id) {
             formData.append('donor_id', window.currentDonorData.donor_id);
         }
 
-        // Submit the form
+        // Submit the form data to the backend
+        console.log('Submitting screening form data...');
+        console.log('Form data entries:');
+        for (let [key, value] of formData.entries()) {
+            console.log(key + ':', value);
+        }
+        
         fetch('../../assets/php_func/process_screening_form.php', {
             method: 'POST',
             body: formData
         })
         .then(response => {
+            console.log('Response status:', response.status);
+            console.log('Response ok:', response.ok);
             if (!response.ok) {
-                throw new Error('Network response was not ok');
+                throw new Error('Network response was not ok: ' + response.status);
             }
             return response.json();
         })
         .then(data => {
+            console.log('Screening form submission response:', data);
+            
             if (data.success) {
-                // Close the modal
-                const modal = bootstrap.Modal.getInstance(screeningModal);
-                if (modal) {
-                    modal.hide();
-                }
-
-                // Show success message
                 showAlert('Screening form submitted successfully!', 'success');
-
-                // Refresh the page to update the donor list
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1500);
+                
+                // Call the transition endpoint to update needs_review flags
+                console.log('Calling transition endpoint...');
+                console.log('Current donor data:', window.currentDonorData);
+                console.log('Screening ID from response:', data.screening_id);
+                
+                const transitionData = new FormData();
+                transitionData.append('action', 'transition_to_physical');
+                transitionData.append('donor_id', window.currentDonorData.donor_id);
+                if (data.screening_id) {
+                    transitionData.append('screening_id', data.screening_id);
+                }
+                
+                console.log('Transition data being sent:');
+                for (let [key, value] of transitionData.entries()) {
+                    console.log(key + ':', value);
+                }
+                
+                fetch('dashboard-staff-donor-submission.php', {
+                    method: 'POST',
+                    body: transitionData
+                })
+                .then(response => response.json())
+                .then(transitionResult => {
+                    console.log('Transition response:', transitionResult);
+                    if (transitionResult.success) {
+                        console.log('✅ Transition successful - Physical examination updated');
+                        showAlert('Donor transitioned to physical examination review!', 'success');
+                    } else {
+                        console.warn('❌ Transition failed:', transitionResult.message);
+                        showAlert('Warning: Transition failed - ' + transitionResult.message, 'warning');
+                    }
+                })
+                .catch(transitionError => {
+                    console.error('Transition error:', transitionError);
+                })
+                .finally(() => {
+                    // Close the modal
+                    const modal = bootstrap.Modal.getInstance(screeningModal);
+                    if (modal) {
+                        modal.hide();
+                    }
+                    
+                    // Refresh the page to show updated data
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                });
             } else {
-                throw new Error(data.error || 'Unknown error occurred');
+                showAlert('Error submitting screening form: ' + (data.message || 'Unknown error'), 'danger');
             }
         })
         .catch(error => {
-            console.error('Error:', error);
-            showAlert('Error submitting form: ' + error.message, 'danger');
+            console.error('Error submitting screening form:', error);
+            showAlert('Error submitting screening form. Please try again.', 'danger');
         })
         .finally(() => {
             // Reset button state
@@ -436,6 +522,8 @@ function openScreeningModal(donorData) {
     // Store donor data globally for form submission
     window.currentDonorData = donorData;
     
+    console.log('Opening screening modal for donor:', donorData.donor_id);
+    
     // Clear form
     const form = document.getElementById('screeningForm');
     if (form) {
@@ -447,8 +535,185 @@ function openScreeningModal(donorData) {
     if (donorIdInput && donorData && donorData.donor_id) {
         donorIdInput.value = donorData.donor_id;
     }
+    
+    // Note: Auto-increment logic is now handled in the prefillFromExisting() function
+
+    // Reset modal state
+    const screeningModal = document.getElementById('screeningFormModal');
+    if (screeningModal) {
+        // Reset to step 1
+        const stepContents = screeningModal.querySelectorAll('.screening-step-content');
+        stepContents.forEach((content, index) => {
+            if (index === 0) {
+                content.classList.add('active');
+            } else {
+                content.classList.remove('active');
+            }
+        });
+        
+        // Reset progress
+        const progressFill = screeningModal.querySelector('.screening-progress-fill');
+        if (progressFill) {
+            progressFill.style.width = '20%';
+        }
+        
+        // Reset step indicators
+        const steps = screeningModal.querySelectorAll('.screening-step');
+        steps.forEach((step, index) => {
+            if (index === 0) {
+                step.classList.add('active');
+            } else {
+                step.classList.remove('active', 'completed');
+            }
+        });
+        
+        // Reset buttons
+        const nextBtn = screeningModal.querySelector('#screeningNextButton');
+        const prevBtn = screeningModal.querySelector('#screeningPrevButton');
+        const submitBtn = screeningModal.querySelector('#screeningSubmitButton');
+        
+        if (nextBtn) nextBtn.style.display = 'inline-block';
+        if (prevBtn) prevBtn.style.display = 'none';
+        if (submitBtn) submitBtn.style.display = 'none';
+    }
 
     // Show the modal
-    const modal = new bootstrap.Modal(document.getElementById('screeningFormModal'));
+    const modal = new bootstrap.Modal(screeningModal);
     modal.show();
+    
+    // Attempt prefill on show
+    setTimeout(() => {
+        prefillFromExisting();
+    }, 100);
+    
+    // Also try prefill after a longer delay in case of timing issues
+    setTimeout(() => {
+        console.log('[Screening Modal] Delayed prefill attempt');
+        prefillFromExisting();
+    }, 500);
+    
+    // Direct auto-increment for Red Cross donations
+    setTimeout(() => {
+        console.log('[Direct Auto-Increment] Starting direct auto-increment...');
+        
+        // Get the Red Cross input field
+        const rcInput = document.querySelector('input[name="red-cross"]');
+        if (rcInput) {
+            console.log('[Direct Auto-Increment] Found RC input, current value:', rcInput.value);
+            
+            // Get current value and increment it
+            const currentValue = parseInt(rcInput.value) || 0;
+            const newValue = currentValue + 1;
+            rcInput.value = newValue;
+            
+            console.log('[Direct Auto-Increment] Incremented RC from', currentValue, 'to', newValue);
+        } else {
+            console.log('[Direct Auto-Increment] RC input not found!');
+        }
+    }, 200);
 } 
+
+// Centralized prefill routine
+function prefillFromExisting() {
+    try {
+        if (!window.currentDonorData || !window.currentDonorData.donor_id) return;
+        const donorId = window.currentDonorData.donor_id;
+        console.log('[Screening Prefill] Fetching latest screening for donor', donorId);
+        fetch(`../../assets/php_func/get_latest_screening_by_donor.php?donor_id=${donorId}`)
+            .then(r => r.json())
+            .then(j => {
+                console.log('[Screening Prefill] Response', j);
+                if (!j.success || !j.data) {
+                    console.log('[Screening Prefill] No data found or request failed');
+                    return;
+                }
+                const d = j.data;
+                // Basic Info (do not autofill body weight or specific gravity)
+                const bt = document.querySelector('select[name="blood-type"]');
+                if (bt && (bt.value === '' || bt.value === null)) bt.value = d.blood_type || '';
+
+                // Donation type
+                const dt = document.querySelector(`input[name="donation-type"][value="${d.donation_type}"]`);
+                if (dt && !dt.checked) {
+                    dt.checked = true;
+                    // Trigger content update for step 3 sections
+                    const event = new Event('change');
+                    dt.dispatchEvent(event);
+                }
+
+                // History (infer yes if any signals present)
+                const inferredPrev = (
+                    d.has_previous_donation === true ||
+                    (typeof d.red_cross_donations === 'number' && d.red_cross_donations > 0) ||
+                    (typeof d.hospital_donations === 'number' && d.hospital_donations > 0) ||
+                    (d.last_donated_at && d.last_donated_at !== '0001-01-01' && d.last_donated_at !== '0001-01-01T00:00:00Z')
+                );
+                const hasPrev = inferredPrev;
+                const yesRadio = document.querySelector('input[name="history"][value="yes"]');
+                const noRadio = document.querySelector('input[name="history"][value="no"]');
+                if (hasPrev && yesRadio && !yesRadio.checked) yesRadio.checked = true;
+                if (!hasPrev && noRadio && !noRadio.checked) noRadio.checked = true;
+                const historyDetails = document.getElementById('historyDetails');
+                if (hasPrev) {
+                    if (historyDetails) historyDetails.style.display = 'block';
+                    const rcTimes = document.querySelector('input[name="red-cross"]');
+                    const hospTimes = document.querySelector('input[name="hospital-history"]');
+                    const lastRcDate = document.querySelector('input[name="last-rc-donation-date"]');
+                    const lastHospDate = document.querySelector('input[name="last-hosp-donation-date"]');
+                    const lastRcPlace = document.querySelector('input[name="last-rc-donation-place"]');
+                    const lastHospPlace = document.querySelector('input[name="last-hosp-donation-place"]');
+                    
+                    console.log('[Screening Prefill] Reached donation history section, hasPrev:', hasPrev);
+                    
+                    // Set donation counts - show original value in form but prepare incremented value for submission
+                    if (rcTimes) {
+                        const currentRcCount = (typeof d.red_cross_donations === 'number') ? d.red_cross_donations : (d.red_cross_donations ? parseInt(d.red_cross_donations, 10) || 0 : 0);
+                        // Show original value in form for debugging
+                        rcTimes.value = currentRcCount;
+                        // Store incremented value for submission
+                        rcTimes.setAttribute('data-incremented-value', currentRcCount + 1);
+                        console.log('[Auto-Increment] Red Cross: Form shows', currentRcCount, 'but will submit', currentRcCount + 1);
+                    }
+                    
+                    if (hospTimes) {
+                        // Hospital donations should only be filled manually by user
+                        // Keep existing value or set to 0 if not set
+                        const currentHospCount = (typeof d.hospital_donations === 'number') ? d.hospital_donations : (d.hospital_donations ? parseInt(d.hospital_donations, 10) || 0 : 0);
+                        hospTimes.value = currentHospCount;
+                        console.log('[Auto-Increment] Hospital:', currentHospCount, '(no auto-increment)');
+                    }
+                    // Prefer last_donated_at (timestampz) if present, fallback to per-source dates
+                    let isoDate = null;
+                    if (d.last_donated_at && typeof d.last_donated_at === 'string' && !d.last_donated_at.includes('0001-01-01')) {
+                        try {
+                            const dt = new Date(d.last_donated_at);
+                            const year = dt.getUTCFullYear();
+                            if (!isNaN(dt.getTime()) && year > 1) {
+                                // yyyy-mm-dd
+                                const yyyy = year;
+                                const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+                                const dd = String(dt.getUTCDate()).padStart(2, '0');
+                                isoDate = `${yyyy}-${mm}-${dd}`;
+                            }
+                        } catch (_) {}
+                    }
+                    if (lastRcDate) {
+                        if (isoDate && (lastRcDate.value === '' || lastRcDate.value === null)) lastRcDate.value = isoDate;
+                        else if (d.last_rc_donation_date && typeof d.last_rc_donation_date === 'string' && !d.last_rc_donation_date.includes('0001-01-01')) lastRcDate.value = d.last_rc_donation_date;
+                    }
+                    if (lastHospDate) {
+                        if (isoDate && (lastHospDate.value === '' || lastHospDate.value === null)) lastHospDate.value = isoDate;
+                        else if (d.last_hosp_donation_date && typeof d.last_hosp_donation_date === 'string' && !d.last_hosp_donation_date.includes('0001-01-01')) lastHospDate.value = d.last_hosp_donation_date;
+                    }
+                    if (lastRcPlace && d.last_rc_donation_place) lastRcPlace.value = d.last_rc_donation_place;
+                    if (lastHospPlace && d.last_hosp_donation_place) lastHospPlace.value = d.last_hosp_donation_place;
+                } else if (historyDetails) {
+                    historyDetails.style.display = 'none';
+                }
+            })
+            .catch((e) => { console.warn('[Screening Prefill] Fetch failed', e); });
+    } catch (e) {}
+}
+
+// Make openScreeningModal function globally available
+window.openScreeningModal = openScreeningModal;

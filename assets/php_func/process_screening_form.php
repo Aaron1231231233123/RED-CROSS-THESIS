@@ -160,6 +160,37 @@ function processScreeningForm() {
             'units_needed' => ($_POST['donation-type'] === 'patient-directed' || $_POST['donation-type'] === 'mobile-patient-directed') && !empty($_POST['no-units']) ? intval($_POST['no-units']) : 0
         ];
 
+        // Fetch staff info: surname, first_name, office_address
+        $staff_full_name = '';
+        $staff_office_address = '';
+        if (isset($_SESSION['user_id'])) {
+            $user_id = $_SESSION['user_id'];
+            $u_ch = curl_init(SUPABASE_URL . '/rest/v1/users?select=surname,first_name,office_address&user_id=eq.' . $user_id);
+            curl_setopt($u_ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($u_ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json'
+            ]);
+            $u_resp = curl_exec($u_ch);
+            $u_http = curl_getinfo($u_ch, CURLINFO_HTTP_CODE);
+            curl_close($u_ch);
+            if ($u_http === 200) {
+                $u_rows = json_decode($u_resp, true) ?: [];
+                if (!empty($u_rows)) {
+                    $u = $u_rows[0];
+                    $surname = isset($u['surname']) ? trim($u['surname']) : '';
+                    $firstname = isset($u['first_name']) ? trim($u['first_name']) : '';
+                    $staff_full_name = trim($surname . (strlen($surname) && strlen($firstname) ? ', ' : '') . $firstname);
+                    $staff_office_address = isset($u['office_address']) ? trim($u['office_address']) : '';
+                }
+            }
+        }
+
+        if ($staff_full_name !== '') {
+            $screening_data['staff'] = $staff_full_name;
+        }
+
         // Check if there's an existing screening record to update
         $should_update = false;
         $existing_screening_id = null;
@@ -229,6 +260,16 @@ function processScreeningForm() {
             }
         } else {
             // INSERT new record
+            // If the user explicitly selected No history, set defaults
+            if (!(isset($_POST['history']) && $_POST['history'] === 'yes')) {
+                $screening_data['has_previous_donation'] = false;
+                $screening_data['red_cross_donations'] = 1;
+                $screening_data['hospital_donations'] = 0;
+                $screening_data['last_rc_donation_date'] = date('Y-m-d');
+                if (!empty($staff_office_address)) {
+                    $screening_data['last_rc_donation_place'] = $staff_office_address;
+                }
+            }
             $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form');
 
             $headers = array(

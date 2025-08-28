@@ -910,7 +910,7 @@ $donor_history = $unique_donor_history;
                                     <th>Interviewer</th>
                                     <th>Donor Type</th>
                                     <th>Registered via</th>
-                                    <th>Action</th>
+                                    <th>View</th>
                                 </tr>
                             </thead>
                             <tbody id="donorTableBody">
@@ -945,12 +945,6 @@ $donor_history = $unique_donor_history;
                                                         title="View Details"
                                                         style="width: 35px; height: 30px;">
                                                     <i class="fas fa-eye"></i>
-                                                </button>
-                                                <button type="button" class="btn btn-warning btn-sm edit-donor-btn" 
-                                                        data-donor-id="<?php echo $entry['donor_id']; ?>" 
-                                                        title="Edit"
-                                                        style="width: 35px; height: 30px;">
-                                                    <i class="fas fa-edit"></i>
                                                 </button>
                                             </td>
                                         </tr>
@@ -1221,6 +1215,9 @@ $donor_history = $unique_donor_history;
             </div>
         </div>
     </div>
+
+
+
     <script>
         function showConfirmationModal() {
             const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
@@ -1915,6 +1912,8 @@ $donor_history = $unique_donor_history;
             // Do not bind a global handler; enabled per-row only for returning
         });
 
+
+
         // Function to generate medical history questions in the modal
         function generateMedicalHistoryQuestions() {
             console.log("Starting to generate medical history questions...");
@@ -2321,7 +2320,7 @@ $donor_history = $unique_donor_history;
                 });
             } else {
                 // Fallback to browser confirm if custom confirm is not available
-            if (confirm(message)) {
+                if (confirm(message)) {
                     processFormSubmission(action);
                 }
             }

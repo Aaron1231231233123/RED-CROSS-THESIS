@@ -16,7 +16,7 @@ $start_time = microtime(true);
 
 
 // STEP 1: Get all blood collection records to identify physical exams that already have blood collection
-$blood_collection_url = SUPABASE_URL . '/rest/v1/blood_collection?select=physical_exam_id,is_successful,donor_reaction,management_done,status,blood_bag_type,amount_taken,created_at';
+$blood_collection_url = SUPABASE_URL . '/rest/v1/blood_collection?select=blood_collection_id,physical_exam_id,is_successful,donor_reaction,management_done,status,blood_bag_type,blood_bag_brand,amount_taken,start_time,end_time,unit_serial_number,needs_review,phlebotomist,created_at,updated_at';
 $ch = curl_init($blood_collection_url);
 $headers = array(
     'apikey: ' . SUPABASE_API_KEY,
@@ -38,6 +38,29 @@ if ($http_code !== 200) {
     $blood_collections = json_decode($response, true) ?: [];
 }
 
+// Fetch eligibility blood_collection_id list to detect returnees
+$eligibility_url = SUPABASE_URL . '/rest/v1/eligibility?select=blood_collection_id,donor_id';
+$ch = curl_init($eligibility_url);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+$elig_response = curl_exec($ch);
+$elig_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+
+$eligibility_collection_ids = [];
+$eligibility_by_donor = [];
+if ($elig_http_code === 200) {
+    $elig_rows = json_decode($elig_response, true) ?: [];
+    foreach ($elig_rows as $erow) {
+        if (!empty($erow['blood_collection_id'])) {
+            $eligibility_collection_ids[(string)$erow['blood_collection_id']] = true;
+        }
+        if (isset($erow['donor_id'])) {
+            $eligibility_by_donor[(int)$erow['donor_id']] = true;
+        }
+    }
+}
+
 // Create a lookup array of physical_exam_ids that already have blood collection
 $collected_physical_exam_ids = [];
 $approved_collections = [];
@@ -51,6 +74,11 @@ foreach ($blood_collections as $collection) {
         $collected_physical_exam_ids[] = $exam_id;
         
         // Store full collection data for results display
+        // Annotate if eligibility exists for this blood_collection_id
+        $collection_id = isset($collection['blood_collection_id']) ? (string)$collection['blood_collection_id'] : null;
+        if ($collection_id && isset($eligibility_collection_ids[$collection_id])) {
+            $collection['has_eligibility'] = true;
+        }
         $blood_collection_data[$exam_id] = $collection;
         
         // Track approved and declined collections based on is_successful
@@ -164,8 +192,10 @@ $today_count = 0; // Today's collections
 $today = date('Y-m-d');
 
 foreach ($all_records as $record) {
+    $bc = $record['blood_collection_data'] ?? null;
+    $needs_review_flag = ($bc && isset($bc['needs_review']) && ($bc['needs_review'] === true || $bc['needs_review'] === 1 || $bc['needs_review'] === '1'));
     // Count unprocessed records
-    if ($record['is_unprocessed']) {
+    if ($record['is_unprocessed'] || $needs_review_flag) {
         $incoming_count++;
     }
     
@@ -215,26 +245,49 @@ switch ($status_filter) {
         
     case 'incoming':
     default:
-        // Show unprocessed records (no blood collection yet)
+        // Show items needing action: unprocessed OR needs_review === true
         $display_records = array_filter($all_records, function($record) {
-            return $record['is_unprocessed'];
+            $bc = $record['blood_collection_data'] ?? null;
+            $needs_review_flag = ($bc && isset($bc['needs_review']) && ($bc['needs_review'] === true || $bc['needs_review'] === 1 || $bc['needs_review'] === '1'));
+            return $record['is_unprocessed'] || $needs_review_flag;
         });
         break;
 }
 
-// Sort records with priority: unprocessed first, then FIFO (oldest first)
+// Sort records with priority:
+// 1) needs_review === true first
+// 2) unprocessed next
+// 3) FIFO by time (prefer blood_collection.updated_at, fallback created_at, else exam created_at)
 usort($display_records, function($a, $b) {
-    // First priority: unprocessed records come first
-    if ($a['is_unprocessed'] && !$b['is_unprocessed']) {
-        return -1;
+    $a_needs_review = (!empty($a['blood_collection_data']) && isset($a['blood_collection_data']['needs_review']) && ($a['blood_collection_data']['needs_review'] === true || $a['blood_collection_data']['needs_review'] === 1 || $a['blood_collection_data']['needs_review'] === '1'));
+    $b_needs_review = (!empty($b['blood_collection_data']) && isset($b['blood_collection_data']['needs_review']) && ($b['blood_collection_data']['needs_review'] === true || $b['blood_collection_data']['needs_review'] === 1 || $b['blood_collection_data']['needs_review'] === '1'));
+
+    if ($a_needs_review !== $b_needs_review) {
+        return $a_needs_review ? -1 : 1;
     }
-    if (!$a['is_unprocessed'] && $b['is_unprocessed']) {
-        return 1;
-    }
-    
-    // If both have same processing status, sort by created_at (FIFO: oldest first)
-    $a_time = isset($a['created_at']) ? strtotime($a['created_at']) : 0;
-    $b_time = isset($b['created_at']) ? strtotime($b['created_at']) : 0;
+
+    // Unprocessed first
+    if ($a['is_unprocessed'] && !$b['is_unprocessed']) return -1;
+    if (!$a['is_unprocessed'] && $b['is_unprocessed']) return 1;
+
+    $normalizeTs = function($ts) {
+        if (!$ts || !is_string($ts)) return 0;
+        $s = preg_replace('/\.[0-9]{1,6}/', '', $ts);
+        $s = str_replace('T', ' ', $s);
+        $s = preg_replace('/(Z|[+-][0-9]{2}:[0-9]{2})$/', '', $s);
+        return strtotime(trim($s)) ?: 0;
+    };
+
+    $resolveTime = function($rec) use ($normalizeTs) {
+        if (!empty($rec['has_blood_collection']) && !empty($rec['blood_collection_data'])) {
+            if (!empty($rec['blood_collection_data']['updated_at'])) return $normalizeTs($rec['blood_collection_data']['updated_at']);
+            if (!empty($rec['blood_collection_data']['created_at'])) return strtotime($rec['blood_collection_data']['created_at']);
+        }
+        return isset($rec['created_at']) ? strtotime($rec['created_at']) : 0;
+    };
+
+    $a_time = $resolveTime($a);
+    $b_time = $resolveTime($b);
     return $a_time <=> $b_time;
 });
 
@@ -1777,18 +1830,60 @@ foreach ($display_records as $index => $record) {
                                         // Format the date
                                         $created_date = date('F d, Y', strtotime($created_at));
                                         
-                                        // Determine status and result based on record data
-                                        if ($record['is_unprocessed']) {
-                                            $status = '<span class="badge bg-warning">Pending Collection</span>';
+                                        // Determine status and result
+                                        $bc = $record['blood_collection_data'] ?? null;
+                                        // Robust needs_review parsing (handles true/false, 1/0, '1', 't', 'true', 'yes')
+                                        $needs_review = false;
+                                        if ($bc && array_key_exists('needs_review', $bc)) {
+                                            $nr = $bc['needs_review'];
+                                            if (is_bool($nr)) {
+                                                $needs_review = $nr === true;
+                                            } elseif (is_numeric($nr)) {
+                                                $needs_review = intval($nr) === 1;
+                                            } elseif (is_string($nr)) {
+                                                $val = strtolower(trim($nr));
+                                                $needs_review = in_array($val, ['true','t','1','yes','y','on'], true);
+                                            }
+                                        }
+                                        $core_fields = ['is_successful','start_time','end_time','amount_taken','unit_serial_number'];
+                                        $has_any_core = false;
+                                        if ($bc && is_array($bc)) {
+                                            foreach ($core_fields as $cf) {
+                                                if (isset($bc[$cf]) && $bc[$cf] !== null && $bc[$cf] !== '') { $has_any_core = true; break; }
+                                            }
+                                        }
+
+                                        // Compute eligibility presence by collection_id or donor fallback
+                                        $has_elig = false;
+                                        if ($bc && isset($bc['blood_collection_id'])) {
+                                            $bcid = (string)$bc['blood_collection_id'];
+                                            $has_elig = isset($eligibility_collection_ids[$bcid]);
+                                        }
+                                        if (!$has_elig && isset($record['donor_id']) && isset($eligibility_by_donor[(int)$record['donor_id']])) {
+                                            $has_elig = true;
+                                        }
+                                        if ($has_elig && !$needs_review) {
+                                            $status = '<span class="badge bg-success">Completed</span>';
+                                            $result = '<span class="badge bg-success">Successful</span>';
+                                        } elseif ($needs_review && $has_elig) {
+                                            $status = '<span class="badge bg-secondary">Returning Not Started</span>';
+                                            $result = '<span class="badge bg-secondary">Awaiting</span>';
+                                        } elseif ($record['is_unprocessed']) {
+                                            // No collection yet
+                                            $status = '<span class="badge bg-secondary">Not Started</span>';
                                             $result = '<span class="badge bg-secondary">Awaiting</span>';
                                         } else {
-                                            // Processed record
-                                            if (isset($record['blood_collection_data']['is_successful']) && $record['blood_collection_data']['is_successful'] === true) {
-                                                $status = '<span class="badge bg-success">Collected</span>';
+                                            // Has collection row; only mark failed if explicitly false
+                                            if (isset($bc['is_successful']) && $bc['is_successful'] === true) {
+                                                $status = '<span class="badge bg-success">Completed</span>';
                                                 $result = '<span class="badge bg-success">Successful</span>';
-                                            } else {
+                                            } elseif (isset($bc['is_successful']) && $bc['is_successful'] === false) {
                                                 $status = '<span class="badge bg-danger">Failed</span>';
                                                 $result = '<span class="badge bg-danger">Unsuccessful</span>';
+                                            } else {
+                                                // is_successful is null → treat as not started
+                                                $status = '<span class="badge bg-secondary">Not Started</span>';
+                                                $result = '<span class="badge bg-secondary">Awaiting</span>';
                                             }
                                         }
                                         
@@ -1805,8 +1900,9 @@ foreach ($display_records as $index => $record) {
                                         ];
                                         $data_exam = htmlspecialchars(json_encode($modal_data, JSON_UNESCAPED_UNICODE));
                                         
-                                        // Conditional action buttons - only show Collect for unprocessed records
-                                        if ($record['is_unprocessed']) {
+                                        // Conditional action buttons - Collect only when action is needed
+                                        // Show when: needs_review is true OR (no collection yet AND no prior eligibility)
+                                        if ($needs_review || ($record['is_unprocessed'] && !$has_elig)) {
                                             $action_buttons = "
                                                 <button type='button' class='btn btn-success btn-sm collect-btn' data-examination='{$data_exam}' title='Collect Blood'>
                                                     <i class='fas fa-tint'></i> Collect
@@ -1824,19 +1920,29 @@ foreach ($display_records as $index => $record) {
                                         // Screening status is always completed since these are physical examination records
                                         $screening_status = '<span class="badge bg-success">Completed</span>';
                                         
-                                        // Determine collection status
-                                        if ($record['is_unprocessed']) {
+                                        // Determine collection status (concise rules)
+                                        if ($has_elig && !$needs_review) {
+                                            $collection_status = '<span class="badge bg-success">Completed</span>';
+                                        } elseif ($needs_review && $has_elig) {
+                                            $collection_status = '<span class="badge bg-secondary">Returning Not Started</span>';
+                                        } elseif ($record['is_unprocessed']) {
                                             $collection_status = '<span class="badge bg-secondary">Not Started</span>';
                                         } else {
-                                            if (isset($record['blood_collection_data']['is_successful']) && $record['blood_collection_data']['is_successful'] === true) {
+                                            if (isset($bc['is_successful']) && $bc['is_successful'] === true) {
                                                 $collection_status = '<span class="badge bg-success">Completed</span>';
-                                            } else {
+                                            } elseif (isset($bc['is_successful']) && $bc['is_successful'] === false) {
                                                 $collection_status = '<span class="badge bg-danger">Failed</span>';
+                                            } else {
+                                                $collection_status = '<span class="badge bg-secondary">Not Started</span>';
                                             }
                                         }
                                         
-                                        // Phlebotomist placeholder (you can update this with actual phlebotomist data)
-                                        $phlebotomist = $record['is_unprocessed'] ? 'Pending' : 'Assigned';
+                                        // Phlebotomist from blood_collection when available; else Pending/Assigned by state
+                                        if ($bc && !empty($bc['phlebotomist'])) {
+                                            $phlebotomist = htmlspecialchars($bc['phlebotomist']);
+                                        } else {
+                                            $phlebotomist = $record['is_unprocessed'] ? 'Pending' : 'Assigned';
+                                        }
                                         
                                         echo "<tr class='clickable-row' data-examination='{$data_exam}'>
                                             <td>{$counter}</td>
@@ -2195,6 +2301,9 @@ foreach ($display_records as $index => $record) {
                     <!-- Hidden unit serial number for form submission -->
                     <input type="hidden" id="blood-unit-serial" name="unit_serial_number">
 
+                    <!-- Hidden phlebotomist (auto-filled from logged-in user) -->
+                    <input type="hidden" id="blood-phlebotomist" name="phlebotomist">
+
                     <!-- Reaction Section (Show only if failed) -->
                     <div class="blood-reaction-section" style="display: none;">
                         <div class="row">
@@ -2346,6 +2455,13 @@ foreach ($display_records as $index => $record) {
     </div>
 
     <script>
+        // Expose logged-in staff name for phlebotomist auto-fill
+        <?php 
+            $staff_first = isset($_SESSION['first_name']) ? $_SESSION['first_name'] : '';
+            $staff_last = isset($_SESSION['surname']) ? $_SESSION['surname'] : '';
+            $staff_fullname = trim($staff_first . ' ' . $staff_last);
+        ?>
+        const LOGGED_PHLEBOTOMIST = <?php echo json_encode($staff_fullname); ?>;
         function showConfirmationModal() {
             const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
             confirmationModal.show();
@@ -2443,6 +2559,11 @@ foreach ($display_records as $index => $record) {
                 // Open the Blood Collection modal
                 if (window.bloodCollectionModal) {
                     window.bloodCollectionModal.openModal(currentCollectionData);
+                    // Auto-fill phlebotomist hidden field
+                    const phField = document.getElementById('blood-phlebotomist');
+                    if (phField && LOGGED_PHLEBOTOMIST) {
+                        phField.value = LOGGED_PHLEBOTOMIST;
+                    }
                 } else {
                     console.error("Blood collection modal not initialized");
                     alert("Error: Modal not properly initialized. Please refresh the page.");

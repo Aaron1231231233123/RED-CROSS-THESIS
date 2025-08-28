@@ -65,6 +65,10 @@ try {
             // For interviewer/physician using the "NEXT" button
             $medical_history_data['medical_approval'] = 'Approved';
             $medical_history_data['needs_review'] = false; // Medical history no longer needs review
+        } elseif ($action === 'save_edit') {
+            // For saving edited data without changing approval status
+            // Keep existing approval status and just update the form data
+            $medical_history_data['updated_at'] = date('Y-m-d H:i:s');
         }
     }
 
@@ -203,9 +207,14 @@ try {
             }
         }
         
+        $message = 'Medical history updated successfully';
+        if ($action === 'save_edit') {
+            $message = 'Medical history data saved successfully';
+        }
+        
         echo json_encode([
             'success' => true, 
-            'message' => 'Medical history updated successfully',
+            'message' => $message,
             'action' => $action ?? 'unknown'
         ]);
     } else {

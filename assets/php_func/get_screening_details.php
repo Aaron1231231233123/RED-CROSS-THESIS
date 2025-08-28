@@ -2,16 +2,27 @@
 header('Content-Type: application/json');
 require_once '../conn/db_conn.php';
 
-if (!isset($_GET['screening_id'])) {
-    echo json_encode(['success' => false, 'message' => 'Screening ID is required']);
+// Support both screening_id and donor_id parameters
+$screening_id = $_GET['screening_id'] ?? null;
+$donor_id = $_GET['donor_id'] ?? null;
+
+if (!$screening_id && !$donor_id) {
+    echo json_encode(['success' => false, 'message' => 'Either screening_id or donor_id is required']);
     exit();
 }
 
-$screening_id = $_GET['screening_id'];
-
 try {
+    // Build the query based on available parameter
+    $query_url = SUPABASE_URL . '/rest/v1/screening_form?select=*';
+    
+    if ($screening_id) {
+        $query_url .= '&screening_id=eq.' . $screening_id;
+    } else {
+        $query_url .= '&donor_form_id=eq.' . $donor_id . '&order=created_at.desc&limit=1';
+    }
+    
     // Fetch screening form data
-    $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=*&screening_id=eq.' . $screening_id);
+    $ch = curl_init($query_url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'apikey: ' . SUPABASE_API_KEY,
