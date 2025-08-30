@@ -111,7 +111,7 @@ if ($http_code !== 200) {
 }
 
 // Query 2: Get all donor_form records
-$donor_form_url = SUPABASE_URL . '/rest/v1/donor_form?select=donor_id,surname,first_name,middle_name,birthdate,age';
+$donor_form_url = SUPABASE_URL . '/rest/v1/donor_form?select=donor_id,surname,first_name,middle_name,birthdate,age,prc_donor_number';
 
 $ch2 = curl_init($donor_form_url);
 curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
@@ -1768,7 +1768,7 @@ foreach ($display_records as $index => $record) {
                         </a>
                     </div>
                     
-                    <h5 class="section-header">Blood Collection Records (Needs Review)</h5>
+                    <h5 class="section-header">Blood Collection Records</h5>
                     
                     <!-- Search Bar -->
                     <div class="search-container">
@@ -1943,9 +1943,18 @@ foreach ($display_records as $index => $record) {
                                             $phlebotomist = 'Assigned';
                                         }
                                         
+                                        // Extract only the number part from prc_donor_number (remove "PRC-" prefix)
+                                        $prc_number = $donor_form['prc_donor_number'] ?? '';
+                                        $display_number = $prc_number;
+                                        if (!empty($prc_number) && strpos($prc_number, 'PRC-') === 0) {
+                                            $display_number = substr($prc_number, 4); // Remove "PRC-" prefix
+                                        } elseif (empty($prc_number)) {
+                                            $display_number = $donor_id;
+                                        }
+                                        
                                         echo "<tr class='clickable-row' data-examination='{$data_exam}'>
                                             <td>{$counter}</td>
-                                            <td>{$donor_id}</td>
+                                            <td>" . htmlspecialchars($display_number) . "</td>
                                             <td>{$surname}</td>
                                             <td>{$first_name}</td>
                                             <td>{$screening_status}</td>

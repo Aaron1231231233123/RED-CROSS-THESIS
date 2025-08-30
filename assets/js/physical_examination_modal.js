@@ -357,18 +357,22 @@ class PhysicalExaminationModal {
         // Populate donor information
         const fullName = `${donorData.surname || ''}, ${donorData.first_name || ''} ${donorData.middle_name || ''}`.trim();
         document.getElementById('donor-name').textContent = fullName || 'N/A';
+        document.getElementById('donor-id').textContent = donorData.prc_donor_number || 'N/A';
         document.getElementById('donor-age').textContent = donorData.age || 'N/A';
         document.getElementById('donor-sex').textContent = donorData.sex || 'N/A';
         document.getElementById('donor-civil-status').textContent = donorData.civil_status || 'N/A';
         document.getElementById('donor-mobile').textContent = donorData.mobile || 'N/A';
         document.getElementById('donor-address').textContent = donorData.permanent_address || 'N/A';
         document.getElementById('donor-occupation').textContent = donorData.occupation || 'N/A';
+        
+        
     }
     
     setDefaultScreeningValues() {
         // Set default values if data fetch fails
         document.getElementById('screening-date').textContent = new Date().toLocaleDateString();
         document.getElementById('donor-name').textContent = 'Loading...';
+        document.getElementById('donor-id').textContent = 'Loading...';
         document.getElementById('donor-blood-type').textContent = 'Loading...';
         document.getElementById('donation-type').textContent = 'Loading...';
         document.getElementById('body-weight').textContent = 'Loading...';
@@ -379,6 +383,8 @@ class PhysicalExaminationModal {
         document.getElementById('donor-mobile').textContent = 'Loading...';
         document.getElementById('donor-address').textContent = 'Loading...';
         document.getElementById('donor-occupation').textContent = 'Loading...';
+        
+        
     }
 
     updateSummary() {

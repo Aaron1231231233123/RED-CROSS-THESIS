@@ -862,6 +862,18 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             font-size: 1.4rem;
         }
         
+        .donor-id-display {
+            color: #6c757d;
+            font-weight: 500;
+            font-size: 1rem;
+        }
+        
+        .donor-info-right {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
         .donor-basic-details {
             display: flex;
             gap: 12px;
@@ -2511,10 +2523,9 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                             <td><?php echo htmlspecialchars($firstName); ?></td>
                                             <td>
                                                 <?php 
-                                                // Donor type text with stage label in parentheses, colored
+                                                // Donor type text only (no stage label), colored
                                                 $donor_type = isset($record['donor_type']) ? $record['donor_type'] : 'New';
-                                                $stage_label = isset($record['stage_label']) ? $record['stage_label'] : (($record['type'] === 'physical_exam') ? 'Physical' : 'Screening');
-                                                $type_text = $donor_type . ' (' . $stage_label . ')';
+                                                $type_text = $donor_type; // Only show donor type, no stage label
                                                 $cls = ($donor_type === 'Returning') ? 'type-returning' : 'type-new';
                                                 ?>
                                                 <span class="<?php echo $cls; ?>"><?php echo htmlspecialchars($type_text); ?></span>
@@ -2887,26 +2898,33 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         
                         <div class="initial-screening-container">
                             <!-- Header Section with Key Info -->
-                            <div class="screening-header-info">
-                                <div class="row g-3">
-                                    <div class="col-md-8">
-                                        <div class="donor-info-primary">
-                                            <h5 class="donor-name-display" id="donor-name">Loading...</h5>
-                                            <div class="donor-basic-details">
-                                                <span class="info-badge" id="donor-age">-</span>
-                                                <span class="info-badge" id="donor-sex">-</span>
-                                                <span class="info-badge blood-type-badge" id="donor-blood-type">-</span>
+                                                          <div class="screening-header-info">
+                                  <div class="row g-3">
+                                     <div class="col-md-8">
+                                          <div class="donor-info-primary">
+                                              <div class="d-flex align-items-center mb-2">
+                                                  <h5 class="donor-name-display me-3" id="donor-name">Loading...</h5>
+                                              </div>
+                                              <div class="donor-basic-details mb-2">
+                                                  <span class="info-badge" id="donor-age">-</span>
+                                                  <span class="info-badge" id="donor-sex">-</span>
+                                                  <span class="info-badge blood-type-badge" id="donor-blood-type">-</span>
+                                              </div>
+                                          </div>
+                                      </div>
+                                                                              <div class="col-md-4">
+                                            <div class="donor-info-right">
+                                                <div class="screening-date-badge mb-2">
+                                                    <i class="fas fa-calendar-alt me-2"></i>
+                                                    <span class="date-label">Date Screened:</span>
+                                                    <span id="screening-date">-</span>
+                                                </div>
+                                                <div class="donor-id-display">
+                                                    <strong>Donor ID:</strong> <span id="donor-id">-</span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div class="col-md-4 text-end">
-                                        <div class="screening-date-badge">
-                                            <i class="fas fa-calendar-alt me-2"></i>
-                                            <span class="date-label">Date Screened:</span>
-                                            <span id="screening-date">-</span>
-                                        </div>
-                                    </div>
-                                </div>
+                                  </div>
                             </div>
                             
                             <!-- Main Information Grid -->

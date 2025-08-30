@@ -22,7 +22,7 @@ try {
     // Fetch donor information from donor_form table (expanded fields)
     $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select='
         . 'donor_id,surname,first_name,middle_name,birthdate,age,sex,civil_status,permanent_address,'
-        . 'nationality,occupation,telephone,mobile,email,submitted_at'
+        . 'nationality,occupation,telephone,mobile,email,submitted_at,prc_donor_number'
         . '&donor_id=eq.' . $donor_id);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [

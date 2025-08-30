@@ -67,7 +67,7 @@ function getDonorType($donor_id, $medical_info, $eligibility_by_donor, $stage = 
             }
     }
     
-        return 'Returning (' . $needs_review_stage . ')';
+        return 'Returning';
     } else {
         // NEW DONOR LOGIC - Based on medical_approval and table IDs
         $stage_name = '';
@@ -91,7 +91,7 @@ function getDonorType($donor_id, $medical_info, $eligibility_by_donor, $stage = 
             $stage_name = 'Medical'; // Default for new donors (not approved yet)
         }
         
-        return 'New (' . $stage_name . ')';
+        return 'New';
     }
 }
 
@@ -120,7 +120,7 @@ $curl_handles = [];
 
 // Define the queries with optimized field selection
 $queries = [
-    'donor_forms' => '/rest/v1/donor_form?select=donor_id,surname,first_name,submitted_at,registration_channel&order=submitted_at.desc',
+    'donor_forms' => '/rest/v1/donor_form?select=donor_id,surname,first_name,submitted_at,registration_channel,prc_donor_number&order=submitted_at.desc',
     // include needs_review flag and updated_at to prioritize and display review time
     'medical_histories' => '/rest/v1/medical_history?select=donor_id,medical_history_id,medical_approval,needs_review,created_at,updated_at&order=created_at.desc',
     'screening_forms' => '/rest/v1/screening_form?select=screening_id,donor_form_id,needs_review,created_at&order=created_at.desc',
@@ -185,7 +185,10 @@ $donors_with_screening = [];
 $donor_history = [];
 $counter = 1;
 
-// PRIORITY 1: Process Blood Collections (Highest Priority) - Donors who completed donation
+// FILTER: Only process Medical Review stage donors (New Medical and Returning Medical)
+// Skip Blood Collections, Physical Examinations, and Screening Forms for New donors
+
+// PRIORITY 1: Process Blood Collections (Highest Priority) - Only for Returning donors
 foreach ($blood_collections as $blood_info) {
     $screening_id = $blood_info['screening_id'];
     $screening_info = $screenings_by_donor[$screening_id] ?? null;
@@ -200,11 +203,14 @@ foreach ($blood_collections as $blood_info) {
     $medical_info = $medical_by_donor[$donor_id] ?? null;
     $donor_type_label = getDonorType($donor_id, $medical_info, $eligibility_by_donor, 'blood_collection');
     
-    $donor_history[] = [
+    // Only include if it's a Returning donor (has eligibility record)
+    if (isset($eligibility_by_donor[$donor_id])) {
+            $donor_history[] = [
         'no' => $counter++,
         'date' => ($medical_info['updated_at'] ?? null) ?: ($blood_info['start_time'] ?? $screening_info['created_at'] ?? $donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
         'surname' => $donor_info['surname'] ?? 'N/A',
         'first_name' => $donor_info['first_name'] ?? 'N/A',
+        'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
         'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
         'donor_type' => $donor_type_label,
         'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
@@ -212,9 +218,10 @@ foreach ($blood_collections as $blood_info) {
         'stage' => 'blood_collection',
         'medical_history_id' => $medical_info['medical_history_id'] ?? null
     ];
+    }
 }
 
-// PRIORITY 2: Process Physical Examinations (Medium Priority)
+// PRIORITY 2: Process Physical Examinations (Medium Priority) - Only for Returning donors
 foreach ($physical_exams as $physical_info) {
     $donor_id = $physical_info['donor_id'];
     if (isset($donors_with_blood[$donor_id])) continue;
@@ -227,21 +234,25 @@ foreach ($physical_exams as $physical_info) {
     // compute donor_type_label safely
     $donor_type_label = getDonorType($donor_id, $medical_info, $eligibility_by_donor, 'physical_examination', null, $physical_info);
     
-    $donor_history[] = [
-        'no' => $counter++,
-        'date' => ($medical_info['updated_at'] ?? null) ?: ($physical_info['created_at'] ?? $donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
-        'surname' => $donor_info['surname'] ?? 'N/A',
-        'first_name' => $donor_info['first_name'] ?? 'N/A',
-        'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
-        'donor_type' => $donor_type_label,
-        'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
-        'donor_id' => $donor_id,
-        'stage' => 'physical_examination',
-        'medical_history_id' => $medical_info['medical_history_id'] ?? null
-    ];
+    // Only include if it's a Returning donor (has eligibility record)
+    if (isset($eligibility_by_donor[$donor_id])) {
+        $donor_history[] = [
+            'no' => $counter++,
+            'date' => ($medical_info['updated_at'] ?? null) ?: ($physical_info['created_at'] ?? $donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
+            'surname' => $donor_info['surname'] ?? 'N/A',
+            'first_name' => $donor_info['first_name'] ?? 'N/A',
+            'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
+            'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
+            'donor_type' => $donor_type_label,
+            'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
+            'donor_id' => $donor_id,
+            'stage' => 'physical_examination',
+            'medical_history_id' => $medical_info['medical_history_id'] ?? null
+        ];
+    }
 }
 
-// PRIORITY 3: Process Screening Forms (Low Priority)
+// PRIORITY 3: Process Screening Forms (Low Priority) - Only for Returning donors
 foreach ($screening_forms as $screening_info) {
     $donor_id = $screening_info['donor_form_id'];
     if (isset($donors_with_blood[$donor_id]) || isset($donors_with_physical[$donor_id])) continue;
@@ -254,21 +265,26 @@ foreach ($screening_forms as $screening_info) {
     // compute donor_type_label safely
     $donor_type_label = getDonorType($donor_id, $medical_info, $eligibility_by_donor, 'screening_form', $screening_info);
     
-    $donor_history[] = [
-        'no' => $counter++,
-        'date' => ($medical_info['updated_at'] ?? null) ?: ($screening_info['created_at'] ?? $donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
-        'surname' => $donor_info['surname'] ?? 'N/A',
-        'first_name' => $donor_info['first_name'] ?? 'N/A',
-        'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
-        'donor_type' => $donor_type_label,
-        'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
-        'donor_id' => $donor_id,
-        'stage' => 'screening_form',
-        'medical_history_id' => $medical_info['medical_history_id'] ?? null
-    ];
+    // Only include if it's a Returning donor (has eligibility record)
+    if (isset($eligibility_by_donor[$donor_id])) {
+        $donor_history[] = [
+            'no' => $counter++,
+            'date' => ($medical_info['updated_at'] ?? null) ?: ($screening_info['created_at'] ?? $donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
+            'surname' => $donor_info['surname'] ?? 'N/A',
+            'first_name' => $donor_info['first_name'] ?? 'N/A',
+            'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
+            'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
+            'donor_type' => $donor_type_label,
+            'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
+            'donor_id' => $donor_id,
+            'stage' => 'screening_form',
+            'medical_history_id' => $medical_info['medical_history_id'] ?? null
+        ];
+    }
 }
 
 // PRIORITY 4: Process Donor Forms with ONLY registration (Medical Review stage)
+// Only include New donors in Medical stage and Returning donors in Medical stage
 $all_processed_donors = $donors_with_blood + $donors_with_physical + $donors_with_screening;
 foreach ($donor_forms as $donor_info) {
     $donor_id = $donor_info['donor_id'];
@@ -279,63 +295,54 @@ foreach ($donor_forms as $donor_info) {
     // compute donor_type_label safely
     $donor_type_label = getDonorType($donor_id, $medical_info, $eligibility_by_donor, 'medical_review');
     
-    $donor_history[] = [
-        'no' => $counter++,
-        'date' => ($medical_info['updated_at'] ?? null) ?: ($donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
-        'surname' => $donor_info['surname'] ?? 'N/A',
-        'first_name' => $donor_info['first_name'] ?? 'N/A',
-        'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
-        'donor_type' => $donor_type_label,
-        'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
-        'donor_id' => $donor_id,
-        'stage' => 'medical_review',
-        'medical_history_id' => $medical_info['medical_history_id'] ?? null
-    ];
+    // Only include if it's a New donor (no eligibility record) or Returning donor in Medical stage
+    $is_new_donor = !isset($eligibility_by_donor[$donor_id]);
+    $is_returning_medical = isset($eligibility_by_donor[$donor_id]) && strpos($donor_type_label, 'Medical') !== false;
+    
+    if ($is_new_donor || $is_returning_medical) {
+        $donor_history[] = [
+            'no' => $counter++,
+            'date' => ($medical_info['updated_at'] ?? null) ?: ($donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
+            'surname' => $donor_info['surname'] ?? 'N/A',
+            'first_name' => $donor_info['first_name'] ?? 'N/A',
+            'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
+            'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
+            'donor_type' => $donor_type_label,
+            'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
+            'donor_id' => $donor_id,
+            'stage' => 'medical_review',
+            'medical_history_id' => $medical_info['medical_history_id'] ?? null
+        ];
+    }
 }
 
-// Optimized sorting with pre-computed stage priorities
-$stage_priority = ['Medical' => 1, 'Screening' => 2, 'Physical' => 3, 'Collection' => 4, 'Completed' => 5];
-
-usort($donor_history, function($a, $b) use ($stage_priority, $medical_by_donor) {
-    // Determine stages first
-    $getStageFromType = function($label) use ($stage_priority) {
-        foreach ($stage_priority as $stage => $_) {
-            if (strpos($label, $stage) !== false) return $stage;
-        }
-        return '';
-    };
-    $a_stage = $getStageFromType($a['donor_type'] ?? '');
-    $b_stage = $getStageFromType($b['donor_type'] ?? '');
-
-    // Priority 0: needs_review true first (prioritize donors that need review)
+// Prioritize donors with empty medical_approval OR needs_review=true, then others by oldest first
+usort($donor_history, function($a, $b) use ($medical_by_donor) {
+    // Get medical approval and needs_review status directly from database
+    $a_medical_approval = !empty($a['donor_id']) && isset($medical_by_donor[$a['donor_id']]) ? ($medical_by_donor[$a['donor_id']]['medical_approval'] ?? null) : null;
+    $b_medical_approval = !empty($b['donor_id']) && isset($medical_by_donor[$b['donor_id']]) ? ($medical_by_donor[$b['donor_id']]['medical_approval'] ?? null) : null;
+    
     $a_needs_review = !empty($a['donor_id']) && isset($medical_by_donor[$a['donor_id']]) && !empty($medical_by_donor[$a['donor_id']]['needs_review']);
     $b_needs_review = !empty($b['donor_id']) && isset($medical_by_donor[$b['donor_id']]) && !empty($medical_by_donor[$b['donor_id']]['needs_review']);
-    if ($a_needs_review !== $b_needs_review) return $a_needs_review ? -1 : 1;
-
-    // Priority 1: stage priority
-    if ($a_stage !== $b_stage) {
-        return $stage_priority[$a_stage] - $stage_priority[$b_stage];
-    }
     
-    // Priority 2: date grouping (newest day first), then time within day (oldest first)
+    // Priority 1: Donors with empty approval OR needs_review=true
+    $a_priority = (empty($a_medical_approval) || $a_needs_review);
+    $b_priority = (empty($b_medical_approval) || $b_needs_review);
+    
+    if ($a_priority !== $b_priority) return $a_priority ? -1 : 1;
+    
+    // Priority 2: All donors by timestamp (oldest first - ascending)
     $toDt = function($s) {
         try { return new DateTime($s); } catch (Exception $e) { return new DateTime('@0'); }
     };
     $adt = $toDt($a['date'] ?? null);
     $bdt = $toDt($b['date'] ?? null);
 
-    $a_day = $adt->format('Y-m-d');
-    $b_day = $bdt->format('Y-m-d');
-    if ($a_day !== $b_day) {
-        // Newest day first (descending by day)
-        return strcmp($b_day, $a_day);
-    }
-
-    // Same day: oldest time first (ascending by time with microseconds)
-    $am = (float)$adt->format('U.u');
-    $bm = (float)$bdt->format('U.u');
-    if ($am === $bm) return 0;
-    return ($am < $bm) ? -1 : 1;
+    $a_timestamp = (float)$adt->format('U.u');
+    $b_timestamp = (float)$bdt->format('U.u');
+    
+    if ($a_timestamp === $b_timestamp) return 0;
+    return ($a_timestamp < $b_timestamp) ? -1 : 1;
 });
 
 // Calculate counts from already processed data
@@ -869,6 +876,7 @@ $donor_history = $unique_donor_history;
                 <div class="content-wrapper">
                     <div class="welcome-section">
                         <h2 class="welcome-title">Welcome, Interviewer!</h2>
+                        <p class="text-muted mb-0">This dashboard shows only donors in the Medical stage (New Medical and Returning Medical).</p>
                     </div>
                     
                     <!-- Status Cards -->
@@ -887,7 +895,7 @@ $donor_history = $unique_donor_history;
                         </a>
                     </div>
                     
-                    <h5 class="section-header">Medical History Submissions</h5>
+                    <h5 class="section-header">Medical Stage Donors Only</h5>
                     
                     <!-- Search Bar -->
                     <div class="search-container">
@@ -934,6 +942,7 @@ $donor_history = $unique_donor_history;
                                                     echo 'N/A';
                                                 }
                                             ?></td>
+
                                             <td><?php echo isset($entry['surname']) ? htmlspecialchars($entry['surname']) : ''; ?></td>
                                             <td><?php echo isset($entry['first_name']) ? htmlspecialchars($entry['first_name']) : ''; ?></td>
                                             <td><?php echo isset($entry['interviewer']) ? htmlspecialchars($entry['interviewer']) : 'N/A'; ?></td>
@@ -1219,6 +1228,9 @@ $donor_history = $unique_donor_history;
 
 
     <script>
+        // Pass PHP data to JavaScript
+        const medicalByDonor = <?php echo json_encode($medical_by_donor); ?>;
+        
         function showConfirmationModal() {
             const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
             confirmationModal.show();
@@ -1297,8 +1309,19 @@ $donor_history = $unique_donor_history;
                     else if (typeText.includes('collection') || typeText.includes('completed')) stageFromType = 'blood_collection';
                     const effectiveStage = stageFromType !== 'unknown' ? stageFromType : stageAttr;
                     currentStage = effectiveStage;
-                    allowProcessing = isNew && (effectiveStage === 'medical_review');
-                    modalContextType = allowProcessing ? 'new_medical' : (isNew ? 'new_other_stage' : (isReturning ? 'returning' : 'other'));
+                    // Allow processing for new donors in medical_review OR any donor with needs_review=true
+                    allowProcessing = (isNew && (effectiveStage === 'medical_review')) || 
+                                    (effectiveStage === 'medical_review' && currentDonorId && medicalByDonor[currentDonorId] && medicalByDonor[currentDonorId].needs_review);
+                    // Determine modal context type
+                    if (allowProcessing) {
+                        modalContextType = 'new_medical'; // Can process medical history
+                    } else if (isNew) {
+                        modalContextType = 'new_other_stage';
+                    } else if (isReturning) {
+                        modalContextType = 'returning';
+                    } else {
+                        modalContextType = 'other';
+                    }
                     window.modalContextType = modalContextType;
                     
                     if (!allowProcessing && !isReturning) {
@@ -1343,8 +1366,11 @@ $donor_history = $unique_donor_history;
                     }
                     
                     if (isReturning) {
-                        if (effectiveStage === 'medical_review') {
-                            // Returning (Medical): go straight to details with Review available
+                        // Check if returning donor has needs_review=true
+                        const hasNeedsReview = currentDonorId && medicalByDonor[currentDonorId] && medicalByDonor[currentDonorId].needs_review;
+                        
+                        if (effectiveStage === 'medical_review' || hasNeedsReview) {
+                            // Returning (Medical) OR Returning with needs_review: go straight to details with Review available
                         deferralStatusContent.innerHTML = `
                             <div class="d-flex justify-content-center">
                                 <div class="spinner-border text-primary" role="status">
@@ -1361,7 +1387,7 @@ $donor_history = $unique_donor_history;
                         fetchDonorStatusInfo(donorId);
                             return;
                         }
-                        // Returning but not Medical: friendly confirmation with mark option
+                        // Returning but not Medical and no needs_review: friendly confirmation with mark option
                         returningInfoModal.show();
                         if (returningInfoViewBtn) {
                             returningInfoViewBtn.onclick = () => {
@@ -1581,11 +1607,14 @@ $donor_history = $unique_donor_history;
                     // Header
                         donorInfoHTML += `
                         <div class="mb-3">
-                            <h5 class="mb-2" style="color:#9c0000; font-weight:700;">Donor Profile</h5>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h5 style="color:#9c0000; font-weight:700; margin:0;">Donor Profile</h5>
+                                <div style="font-weight:700; font-size:1.1rem;"><strong>Donor ID:</strong> ${safe(donor.prc_donor_number || 'N/A')}</div>
+                            </div>
                             <div class="d-flex justify-content-between align-items-center small text-muted">
                                 <div><strong>${fullName}</strong> &nbsp; ${safe(donor.age)}${donor.sex ? ', ' + donor.sex : ''}</div>
                                 <div><strong>Current Status:</strong> ${currentStatus}</div>
-                                </div>
+                            </div>
                             <hr/>
                             </div>`;
                         
@@ -1758,9 +1787,9 @@ $donor_history = $unique_donor_history;
                     }
                 }
                 
-                // Returning banner (suppress when in Medical stage)
-                if (modalContextType === 'returning' && currentStage !== 'medical_review') {
-                    donorInfoHTML = '<div class="alert alert-primary mb-3"><strong>Returning donor:</strong> This donor has previous donations. Review details as needed. Processing here is for New (Medical) only.</div>' + donorInfoHTML;
+                // Returning banner (suppress when in Medical stage or has needs_review)
+                if (modalContextType === 'returning' && currentStage !== 'medical_review' && !(currentDonorId && medicalByDonor[currentDonorId] && medicalByDonor[currentDonorId].needs_review)) {
+                    donorInfoHTML = '<div class="alert alert-primary mb-3"><strong>Returning donor:</strong> This donor has previous donations. Review details as needed. Processing here is for New (Medical) and donors needing review only.</div>' + donorInfoHTML;
                 }
                 
                 deferralStatusContent.innerHTML = donorInfoHTML;
@@ -1768,7 +1797,9 @@ $donor_history = $unique_donor_history;
                 try {
                     const proceedButton = getProceedButton();
                     if (proceedButton && proceedButton.style) {
-                        const showReview = allowProcessing || currentStage === 'medical_review';
+                        // Show button for donors who can process OR have needs_review=true
+                        const hasNeedsReview = currentDonorId && medicalByDonor[currentDonorId] && medicalByDonor[currentDonorId].needs_review;
+                        const showReview = allowProcessing || currentStage === 'medical_review' || hasNeedsReview;
                         proceedButton.style.display = showReview ? 'inline-block' : 'none';
                         proceedButton.textContent = 'Review Medical History';
                     }
@@ -2115,7 +2146,12 @@ $donor_history = $unique_donor_history;
             initializeModalStepNavigation(modalUserRole, modalIsMale);
             
             // Make form fields read-only for interviewers and physicians (but allow Edit button to override)
-            if (modalUserRole === 'interviewer' || modalUserRole === 'physician') {
+            // Don't make readonly for donors with needs_review=true or current status "Medical"
+            const currentDonorStatus = window.currentDonorStage || 'Medical';
+            const currentDonorId = window.currentDonorId;
+            const hasNeedsReview = currentDonorId && medicalByDonor[currentDonorId] && medicalByDonor[currentDonorId].needs_review;
+            
+            if ((modalUserRole === 'interviewer' || modalUserRole === 'physician') && currentDonorStatus !== 'Medical' && !hasNeedsReview) {
                 setTimeout(() => {
                     const radioButtons = document.querySelectorAll('#modalMedicalHistoryForm input[type="radio"]');
                     const selectFields = document.querySelectorAll('#modalMedicalHistoryForm select.remarks-input');
