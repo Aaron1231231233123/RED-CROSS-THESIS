@@ -3,6 +3,162 @@ session_start();
 require_once '../../assets/conn/db_conn.php';
 require '../../assets/php_func/user_roles_staff.php';
 
+// Lightweight endpoint to transition a donor from screening to physical examination review
+// - If physical_examination record for donor_id exists: update needs_review=true and updated_at
+// - If none exists: create with needs_review=true and updated_at
+// - Always set screening_form.needs_review=false for the donor's screening
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $raw_input = file_get_contents('php://input');
+    $payload = json_decode($raw_input, true);
+    // Support both JSON and form-encoded
+    if (!$payload || !is_array($payload)) {
+        $payload = $_POST;
+    }
+    if (is_array($payload) && isset($payload['action']) && $payload['action'] === 'transition_to_physical') {
+        header('Content-Type: application/json');
+
+        try {
+            if (!isset($_SESSION['user_id'])) {
+                echo json_encode(['success' => false, 'message' => 'Not authenticated']);
+                exit;
+            }
+            if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] != 3) {
+                echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+                exit;
+            }
+
+            $donor_id = intval($payload['donor_id'] ?? 0);
+            if ($donor_id <= 0) {
+                echo json_encode(['success' => false, 'message' => 'Invalid donor_id']);
+                exit;
+            }
+
+            // Get screening_id if provided (from screening form submission)
+            $screening_id = $payload['screening_id'] ?? null;
+
+            $now_iso = gmdate('c');
+
+            // 1) Check if physical_examination exists
+            $check_ch = curl_init();
+            curl_setopt_array($check_ch, [
+                CURLOPT_URL => SUPABASE_URL . '/rest/v1/physical_examination?select=physical_exam_id&donor_id=eq.' . $donor_id . '&limit=1',
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY
+                ]
+            ]);
+            $check_resp = curl_exec($check_ch);
+            $check_http = curl_getinfo($check_ch, CURLINFO_HTTP_CODE);
+            curl_close($check_ch);
+
+            $existing_exam = ($check_http === 200) ? (json_decode($check_resp, true) ?: []) : [];
+            $has_existing = is_array($existing_exam) && !empty($existing_exam);
+
+            // 2) Insert or Update physical_examination
+            if ($has_existing) {
+                // UPDATE existing record - only update needs_review and updated_at
+                $pe_ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?donor_id=eq.' . $donor_id);
+                curl_setopt($pe_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+                
+                $pe_body = [
+                    'needs_review' => true,
+                    'updated_at' => $now_iso
+                ];
+                
+                // Add screening_id if provided
+                if ($screening_id) {
+                    $pe_body['screening_id'] = $screening_id;
+                }
+            } else {
+                // INSERT new record - include all required fields
+                $pe_ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination');
+                curl_setopt($pe_ch, CURLOPT_POST, true);
+                
+                $pe_body = [
+                    'donor_id' => $donor_id,
+                    'needs_review' => true,
+                    'updated_at' => $now_iso
+                ];
+                
+                // Add screening_id if provided
+                if ($screening_id) {
+                    $pe_body['screening_id'] = $screening_id;
+                }
+            }
+            curl_setopt($pe_ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($pe_ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json',
+                'Prefer: return=minimal'
+            ]);
+            curl_setopt($pe_ch, CURLOPT_POSTFIELDS, json_encode($pe_body));
+            $pe_resp = curl_exec($pe_ch);
+            $pe_http = curl_getinfo($pe_ch, CURLINFO_HTTP_CODE);
+            curl_close($pe_ch);
+
+            // Log the physical examination update attempt
+            error_log("Physical examination update - Donor ID: $donor_id, Has existing: " . ($has_existing ? 'true' : 'false') . ", HTTP: $pe_http, Response: $pe_resp, Body: " . json_encode($pe_body));
+
+            // For inserts, some schemas require more fields; tolerate failure and continue as long as screening update proceeds
+            $pe_ok = $has_existing ? ($pe_http >= 200 && $pe_http < 300) : ($pe_http === 201);
+
+            // 3) Set medical_history.needs_review=false
+            $mh_ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $donor_id);
+            curl_setopt($mh_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            curl_setopt($mh_ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($mh_ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json',
+                'Prefer: return=minimal'
+            ]);
+            $mh_body = [
+                'needs_review' => false
+            ];
+            curl_setopt($mh_ch, CURLOPT_POSTFIELDS, json_encode($mh_body));
+            $mh_resp = curl_exec($mh_ch);
+            $mh_http = curl_getinfo($mh_ch, CURLINFO_HTTP_CODE);
+            curl_close($mh_ch);
+
+            if (!($mh_http >= 200 && $mh_http < 300)) {
+                echo json_encode(['success' => false, 'message' => 'Failed updating medical_history', 'http' => $mh_http]);
+                exit;
+            }
+
+            // 4) Set screening_form.needs_review=false
+            $sf_ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?donor_form_id=eq.' . $donor_id);
+            curl_setopt($sf_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            curl_setopt($sf_ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($sf_ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json',
+                'Prefer: return=minimal'
+            ]);
+            $sf_body = [
+                'needs_review' => false
+            ];
+            curl_setopt($sf_ch, CURLOPT_POSTFIELDS, json_encode($sf_body));
+            $sf_resp = curl_exec($sf_ch);
+            $sf_http = curl_getinfo($sf_ch, CURLINFO_HTTP_CODE);
+            curl_close($sf_ch);
+
+            if (!($sf_http >= 200 && $sf_http < 300)) {
+                echo json_encode(['success' => false, 'message' => 'Failed updating screening_form', 'http' => $sf_http]);
+                exit;
+            }
+
+            echo json_encode(['success' => true, 'message' => 'Transitioned to physical examination review - Medical history and screening form updated', 'physical_updated' => $pe_ok]);
+            exit;
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+            exit;
+        }
+    }
+}
+
 // Add this function at the top with other PHP code
 function generateSecureToken($donor_id) {
     // Create a unique token using donor_id and a random component
@@ -322,8 +478,8 @@ usort($donor_history, function($a, $b) use ($medical_by_donor) {
     $a_medical_approval = !empty($a['donor_id']) && isset($medical_by_donor[$a['donor_id']]) ? ($medical_by_donor[$a['donor_id']]['medical_approval'] ?? null) : null;
     $b_medical_approval = !empty($b['donor_id']) && isset($medical_by_donor[$b['donor_id']]) ? ($medical_by_donor[$b['donor_id']]['medical_approval'] ?? null) : null;
     
-    $a_needs_review = !empty($a['donor_id']) && isset($medical_by_donor[$a['donor_id']]) && !empty($medical_by_donor[$a['donor_id']]['needs_review']);
-    $b_needs_review = !empty($b['donor_id']) && isset($medical_by_donor[$b['donor_id']]) && !empty($medical_by_donor[$b['donor_id']]['needs_review']);
+    $a_needs_review = !empty($a['donor_id']) && isset($medical_by_donor[$a['donor_id']]) && ($medical_by_donor[$a['donor_id']]['needs_review'] === true);
+    $b_needs_review = !empty($b['donor_id']) && isset($medical_by_donor[$b['donor_id']]) && ($medical_by_donor[$b['donor_id']]['needs_review'] === true);
     
     // Priority 1: Donors with empty approval OR needs_review=true
     $a_priority = (empty($a_medical_approval) || $a_needs_review);
@@ -414,6 +570,7 @@ $donor_history = $unique_donor_history;
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <script src="../../assets/js/screening_form_modal.js"></script>
     <style>
         :root {
             --bg-color: #f5f5f5;
@@ -842,6 +999,562 @@ $donor_history = $unique_donor_history;
         /* Blur background when modal is open */
         .modal-backdrop.show {
             backdrop-filter: blur(4px);
+        }
+
+        /* Screening Form Modal Styles */
+        .screening-modal-content {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .screening-modal-header {
+            background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+            color: white;
+            border-radius: 15px 15px 0 0;
+            padding: 1.5rem;
+            border-bottom: none;
+        }
+
+        .screening-modal-icon {
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .screening-modal-body {
+            padding: 0;
+            background-color: #f8f9fa;
+            min-height: 400px;
+        }
+
+        .screening-modal-footer {
+            background-color: white;
+            border-top: 1px solid #e9ecef;
+            border-radius: 0 0 15px 15px;
+            padding: 1.5rem;
+        }
+
+        /* Progress Indicator */
+        .screening-progress-container {
+            background: white;
+            padding: 20px;
+            border-bottom: 1px solid #e9ecef;
+            position: relative;
+        }
+
+        .screening-progress-steps {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            z-index: 2;
+        }
+
+        .screening-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .screening-step-number {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #e9ecef;
+            color: #6c757d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            margin-bottom: 8px;
+        }
+
+        .screening-step-label {
+            font-size: 12px;
+            color: #6c757d;
+            font-weight: 500;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .screening-step.active .screening-step-number,
+        .screening-step.completed .screening-step-number {
+            background: #b22222;
+            color: white;
+        }
+
+        .screening-step.active .screening-step-label,
+        .screening-step.completed .screening-step-label {
+            color: #b22222;
+            font-weight: 600;
+        }
+
+        .screening-progress-line {
+            position: absolute;
+            top: 40%;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #e9ecef;
+            transform: translateY(-50%);
+            z-index: 1;
+        }
+
+        .screening-progress-fill {
+            height: 100%;
+            background: #b22222;
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+
+        /* Step Content */
+        .screening-step-content {
+            display: none;
+            padding: 30px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .screening-step-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .screening-step-title {
+            margin-bottom: 25px;
+        }
+
+        .screening-step-title h6 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .screening-step-title p {
+            color: #6c757d;
+            margin-bottom: 0;
+            font-size: 14px;
+        }
+
+        /* Form Elements */
+        .screening-label {
+            display: block;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .screening-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .screening-input:focus {
+            outline: none;
+            border-color: #b22222;
+            box-shadow: 0 0 0 3px rgba(178, 34, 34, 0.1);
+        }
+
+        .screening-input-group {
+            position: relative;
+        }
+
+        .screening-input-suffix {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #6c757d;
+            font-weight: 500;
+            pointer-events: none;
+        }
+
+        /* Donation Categories */
+        .screening-donation-categories {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .screening-category-card {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .screening-category-card:hover {
+            border-color: #b22222;
+            box-shadow: 0 4px 12px rgba(178, 34, 34, 0.1);
+        }
+
+        .screening-category-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #b22222;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .screening-donation-options {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .screening-donation-option {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            border: 2px solid #f8f9fa;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+        }
+
+        .screening-donation-option:hover {
+            border-color: #b22222;
+            background: white;
+        }
+
+        .screening-donation-option input {
+            display: none;
+        }
+
+        .screening-radio-custom {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #e9ecef;
+            border-radius: 50%;
+            margin-right: 12px;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .screening-donation-option input:checked ~ .screening-radio-custom {
+            border-color: #b22222;
+            background: #b22222;
+        }
+
+        .screening-donation-option input:checked ~ .screening-radio-custom::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 8px;
+            height: 8px;
+            background: white;
+            border-radius: 50%;
+        }
+
+        .screening-option-text {
+            font-weight: 500;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .screening-donation-option input:checked ~ .screening-option-text {
+            color: #b22222;
+            font-weight: 600;
+        }
+
+        /* Detail Cards */
+        .screening-detail-card {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .screening-detail-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #b22222;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f8f9fa;
+        }
+
+        /* History Section */
+        .screening-history-question {
+            margin-bottom: 25px;
+        }
+
+        .screening-radio-group {
+            display: flex;
+            gap: 20px;
+        }
+
+        .screening-radio-option {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            padding: 12px 20px;
+            border: 2px solid #f8f9fa;
+            border-radius: 8px;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+
+        .screening-radio-option:hover {
+            border-color: #b22222;
+            background: white;
+        }
+
+        .screening-radio-option input {
+            display: none;
+        }
+
+        .screening-radio-option input:checked ~ .screening-radio-custom {
+            border-color: #b22222;
+            background: #b22222;
+        }
+
+        .screening-radio-option input:checked ~ .screening-option-text {
+            color: #b22222;
+            font-weight: 600;
+        }
+
+        .screening-history-table .table-danger th {
+            background-color: #b22222 !important;
+            border-color: #b22222 !important;
+            color: white;
+        }
+
+        /* New Donation History Grid Layout */
+        .screening-history-grid {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .screening-history-header {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            background: #b22222;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .screening-history-header-text {
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .screening-history-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .screening-history-row:last-child {
+            border-bottom: none;
+        }
+
+        .screening-history-label {
+            background: #f8f9fa;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+            color: #495057;
+            border-right: 1px solid #e9ecef;
+        }
+
+        .screening-history-column {
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+        }
+
+        .screening-history-input {
+            width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .screening-history-input:focus {
+            border-color: #b22222;
+            box-shadow: 0 0 0 2px rgba(178, 34, 34, 0.1);
+            outline: none;
+        }
+
+        .screening-history-input::placeholder {
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        /* Ensure input groups work properly in the grid */
+        .screening-history-column .screening-input-group {
+            width: 100%;
+            position: relative;
+        }
+
+        .screening-history-column .screening-input-group .screening-input {
+            padding-right: 35px;
+        }
+
+        .screening-history-column .screening-input-icon {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #6c757d;
+            pointer-events: none;
+        }
+
+        /* Patient Table */
+        .screening-patient-table-container {
+            margin-top: 15px;
+        }
+
+        .screening-patient-table {
+            margin-bottom: 0;
+        }
+
+        .screening-patient-table .table-danger th {
+            background-color: #b22222 !important;
+            border-color: #b22222 !important;
+            color: white;
+            text-align: center;
+            font-weight: 600;
+            font-size: 14px;
+            padding: 12px 8px;
+        }
+
+        .screening-patient-table td {
+            padding: 8px;
+            vertical-align: middle;
+        }
+
+        .screening-patient-table .form-control-sm {
+            font-size: 13px;
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+        }
+
+        .screening-patient-table .form-control-sm:focus {
+            border-color: #b22222;
+            box-shadow: 0 0 0 2px rgba(178, 34, 34, 0.1);
+        }
+
+        /* Review Section */
+        .screening-review-card {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 25px;
+        }
+
+        .screening-review-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #b22222;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f8f9fa;
+        }
+
+        .screening-review-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+
+        .screening-review-item:last-child {
+            border-bottom: none;
+        }
+
+        .screening-review-label {
+            font-weight: 500;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        .screening-review-value {
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .screening-interviewer-info {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 25px;
+        }
+
+        /* Responsive adjustments for screening form */
+        @media (max-width: 991.98px) {
+            .screening-progress-steps {
+                flex-wrap: wrap;
+                gap: 10px;
+                justify-content: center;
+            }
+            
+            .screening-step {
+                min-width: 60px;
+            }
+            
+            .screening-step-label {
+                font-size: 10px;
+            }
+            
+            .screening-radio-group {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .screening-donation-categories {
+                gap: 15px;
+            }
+            
+            .screening-patient-table-container {
+                overflow-x: auto;
+            }
+            
+            .screening-patient-table {
+                min-width: 600px;
+            }
+            
+            .screening-patient-table th,
+            .screening-patient-table td {
+                min-width: 120px;
+                font-size: 12px;
+            }
         }
     </style>
 </head>
@@ -2378,7 +3091,7 @@ $donor_history = $unique_donor_history;
                 .then(data => {
                     if (data.success) {
                         if (action === 'next' || action === 'approve') {
-                            // Close medical history modal and open declaration form modal
+                            // Close medical history modal and open screening form modal
                             const medicalModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModal'));
                             medicalModal.hide();
                             
@@ -2403,7 +3116,8 @@ $donor_history = $unique_donor_history;
                             } catch (e) {}
                             
                             if (donorId) {
-                                showDeclarationFormModal(donorId);
+                                // Show screening form modal instead of declaration form
+                                showScreeningFormModal(donorId);
                             } else {
                                 // Use custom modal instead of browser alert
                                 if (window.customConfirm) {
@@ -2451,8 +3165,31 @@ $donor_history = $unique_donor_history;
                 });
         }
         
+        // Function to show screening form modal
+        function showScreeningFormModal(donorId) {
+            console.log('Showing screening form modal for donor ID:', donorId);
+            
+            // Set donor data for the screening form
+            window.currentDonorData = { donor_id: donorId };
+            
+            // Show the screening form modal
+            const screeningModal = new bootstrap.Modal(document.getElementById('screeningFormModal'));
+            screeningModal.show();
+            
+            // Set the donor ID in the screening form
+            const donorIdInput = document.querySelector('#screeningFormModal input[name="donor_id"]');
+            if (donorIdInput) {
+                donorIdInput.value = donorId;
+            }
+            
+            // Initialize the screening form
+            if (window.initializeScreeningForm) {
+                window.initializeScreeningForm(donorId);
+            }
+        }
+        
         // Function to show declaration form modal
-        function showDeclarationFormModal(donorId) {
+        window.showDeclarationFormModal = function(donorId) {
             console.log('Showing declaration form modal for donor ID:', donorId);
             
             const declarationModal = new bootstrap.Modal(document.getElementById('declarationFormModal'));
@@ -2928,5 +3665,8 @@ $donor_history = $unique_donor_history;
             opacity: 0.5 !important;
         }
     </style>
+
+    <!-- Include Screening Form Modal -->
+    <?php include '../../src/views/forms/staff_donor_initial_screening_form_modal.php'; ?>
 </body>
 </html>

@@ -471,7 +471,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.log(key + ':', value);
                 }
                 
-                fetch('dashboard-staff-donor-submission.php', {
+                fetch('dashboard-staff-medical-history-submissions.php', {
                     method: 'POST',
                     body: transitionData
                 })
@@ -490,16 +490,23 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error('Transition error:', transitionError);
                 })
                 .finally(() => {
-                    // Close the modal
+                    // Close the screening modal
                     const modal = bootstrap.Modal.getInstance(screeningModal);
                     if (modal) {
                         modal.hide();
                     }
                     
-                    // Refresh the page to show updated data
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 1500);
+                    // Show declaration form modal instead of refreshing
+                    if (window.showDeclarationFormModal && window.currentDonorData && window.currentDonorData.donor_id) {
+                        setTimeout(() => {
+                            window.showDeclarationFormModal(window.currentDonorData.donor_id);
+                        }, 500);
+                    } else {
+                        // Fallback: refresh the page
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1500);
+                    }
                 });
             } else {
                 showAlert('Error submitting screening form: ' + (data.message || 'Unknown error'), 'danger');

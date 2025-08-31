@@ -51,69 +51,33 @@ try {
     ];
 
     // Check which button was clicked and set the approval status
-    if (isset($_POST['action'])) {
-        $action = $_POST['action'];
-        error_log("Processing action: " . $action);
-        
-        if ($action === 'approve') {
-            $medical_history_data['medical_approval'] = 'Approved';
-            $medical_history_data['needs_review'] = false; // Medical history no longer needs review
-            $medical_history_data['updated_at'] = gmdate('c'); // ISO 8601 UTC timestamp
-        } elseif ($action === 'decline') {
-            $medical_history_data['medical_approval'] = 'Declined';
-            $medical_history_data['needs_review'] = false; // Medical history no longer needs review
-            $medical_history_data['updated_at'] = gmdate('c'); // ISO 8601 UTC timestamp
-        } elseif ($action === 'next') {
-            // For interviewer/physician using the "NEXT" button
-            $medical_history_data['medical_approval'] = 'Approved';
-            $medical_history_data['needs_review'] = false; // Medical history no longer needs review
-            $medical_history_data['updated_at'] = gmdate('c'); // ISO 8601 UTC timestamp
-        } elseif ($action === 'save_edit') {
-            // For saving edited data without changing approval status
-            // Keep existing approval status and just update the form data
-            $medical_history_data['updated_at'] = gmdate('c'); // ISO 8601 UTC timestamp
-        }
+    $action = isset($_POST['action']) ? $_POST['action'] : null;
+    
+    if ($action === 'approve') {
+        $medical_history_data['medical_approval'] = 'Approved';
+        $medical_history_data['needs_review'] = false;
+    } elseif ($action === 'decline') {
+        $medical_history_data['medical_approval'] = 'Declined';
+        $medical_history_data['needs_review'] = false;
+    } elseif ($action === 'next') {
+        // For 'next' action, just save the data without setting approval status
+        // This allows for draft saving
+    } else {
+        throw new Exception("Invalid action specified");
     }
 
-    // Function to get field name based on question number
+    // Helper function to get field name based on question number
     function getFieldName($count) {
         $fields = [
-            1 => 'feels_well',
-            2 => 'previously_refused',
-            3 => 'testing_purpose_only',
-            4 => 'understands_transmission_risk',
-            5 => 'recent_alcohol_consumption',
-            6 => 'recent_aspirin',
-            7 => 'recent_medication',
-            8 => 'recent_donation',
-            9 => 'zika_travel',
-            10 => 'zika_contact',
-            11 => 'zika_sexual_contact',
-            12 => 'blood_transfusion',
-            13 => 'surgery_dental',
-            14 => 'tattoo_piercing',
-            15 => 'risky_sexual_contact',
-            16 => 'unsafe_sex',
-            17 => 'hepatitis_contact',
-            18 => 'imprisonment',
-            19 => 'uk_europe_stay',
-            20 => 'foreign_travel',
-            21 => 'drug_use',
-            22 => 'clotting_factor',
-            23 => 'positive_disease_test',
-            24 => 'malaria_history',
-            25 => 'std_history',
-            26 => 'cancer_blood_disease',
-            27 => 'heart_disease',
-            28 => 'lung_disease',
-            29 => 'kidney_disease',
-            30 => 'chicken_pox',
-            31 => 'chronic_illness',
-            32 => 'recent_fever',
-            33 => 'pregnancy_history',
-            34 => 'last_childbirth',
-            35 => 'recent_miscarriage',
-            36 => 'breastfeeding',
+            1 => 'feels_well', 2 => 'previously_refused', 3 => 'testing_purpose_only', 4 => 'understands_transmission_risk',
+            5 => 'recent_alcohol_consumption', 6 => 'recent_aspirin', 7 => 'recent_medication', 8 => 'recent_donation',
+            9 => 'zika_travel', 10 => 'zika_contact', 11 => 'zika_sexual_contact', 12 => 'blood_transfusion',
+            13 => 'surgery_dental', 14 => 'tattoo_piercing', 15 => 'risky_sexual_contact', 16 => 'unsafe_sex',
+            17 => 'hepatitis_contact', 18 => 'imprisonment', 19 => 'uk_europe_stay', 20 => 'foreign_travel',
+            21 => 'drug_use', 22 => 'clotting_factor', 23 => 'positive_disease_test', 24 => 'malaria_history',
+            25 => 'std_history', 26 => 'cancer_blood_disease', 27 => 'heart_disease', 28 => 'lung_disease',
+            29 => 'kidney_disease', 30 => 'chicken_pox', 31 => 'chronic_illness', 32 => 'recent_fever',
+            33 => 'pregnancy_history', 34 => 'last_childbirth', 35 => 'recent_miscarriage', 36 => 'breastfeeding',
             37 => 'last_menstruation'
         ];
         return $fields[$count] ?? null;
@@ -132,9 +96,51 @@ try {
         }
     }
 
-    error_log("Final data to be sent: " . print_r($medical_history_data, true));
+    // NEW: Fetch screening data for session storage (not database storage)
+    $screening_data_for_session = [];
+    try {
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?donor_form_id=eq.' . $donor_id . '&order=created_at.desc&limit=1');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY
+        ]);
 
-    // Update the medical history record
+        $screening_response = curl_exec($ch);
+        $screening_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($screening_http_code === 200) {
+            $screening_data = json_decode($screening_response, true);
+            if (is_array($screening_data) && !empty($screening_data)) {
+                $latest_screening = $screening_data[0];
+                
+                // Store screening data in session (not in medical_history table)
+                $screening_data_for_session = [
+                    'body_weight' => $latest_screening['body_weight'] ?? null,
+                    'specific_gravity' => $latest_screening['specific_gravity'] ?? null,
+                    'blood_type' => $latest_screening['blood_type'] ?? null,
+                    'donation_type' => $latest_screening['donation_type'] ?? null,
+                    'mobile_location' => $latest_screening['mobile_location'] ?? null,
+                    'mobile_organizer' => $latest_screening['mobile_organizer'] ?? null,
+                    'patient_name' => $latest_screening['patient_name'] ?? null,
+                    'hospital' => $latest_screening['hospital'] ?? null,
+                    'patient_blood_type' => $latest_screening['patient_blood_type'] ?? null,
+                    'component_type' => $latest_screening['component_type'] ?? null,
+                    'units_needed' => $latest_screening['units_needed'] ?? null
+                ];
+                
+                error_log("Screening data for session: " . print_r($screening_data_for_session, true));
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Error fetching screening data: " . $e->getMessage());
+        // Continue without screening data
+    }
+
+    error_log("Final medical history data to be sent: " . print_r($medical_history_data, true));
+
+    // Update the medical history record (only with existing fields)
     $ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $donor_id);
     
     $jsonData = json_encode($medical_history_data);
@@ -159,75 +165,24 @@ try {
     curl_close($ch);
 
     if ($http_code >= 200 && $http_code < 300) {
-        error_log("Medical history update successful");
-        
-        // Update screening_forms needs_review based on medical history outcome
-        // This ensures proper workflow: medical_history.needs_review = false, screening_form.needs_review = true
-        if ($action === 'approve' || $action === 'next' || $action === 'decline') {
-            if ($medical_history_data['medical_approval'] === 'Approved') {
-                // If approved, set screening_forms needs_review to true (ready for next stage)
-                error_log("Updating screening_forms needs_review to true for donor_id: $donor_id");
-                $screening_needs_review = true;
-            } else {
-                // If declined, set screening_forms needs_review to false (won't proceed)
-                error_log("Updating screening_forms needs_review to false for donor_id: $donor_id (declined)");
-                $screening_needs_review = false;
-            }
-            
-            // Update screening_forms table
-            $screening_update_data = [
-                'needs_review' => $screening_needs_review,
-                'updated_at' => date('Y-m-d H:i:s')
-            ];
-            
-            $screening_ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?donor_form_id=eq.' . $donor_id);
-            
-            $screening_json = json_encode($screening_update_data);
-            error_log("Screening update JSON: " . $screening_json);
-            
-            curl_setopt($screening_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
-            curl_setopt($screening_ch, CURLOPT_POSTFIELDS, $screening_json);
-            curl_setopt($screening_ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($screening_ch, CURLOPT_HTTPHEADER, [
-                'apikey: ' . SUPABASE_API_KEY,
-                'Authorization: Bearer ' . SUPABASE_API_KEY,
-                'Content-Type: application/json',
-                'Prefer: return=representation'
-            ]);
-            
-            $screening_response = curl_exec($screening_ch);
-            $screening_http_code = curl_getinfo($screening_ch, CURLINFO_HTTP_CODE);
-            
-            error_log("Screening update response code: " . $screening_http_code);
-            error_log("Screening update response: " . $screening_response);
-            
-            curl_close($screening_ch);
-            
-            if ($screening_http_code >= 200 && $screening_http_code < 300) {
-                error_log("Screening form needs_review updated successfully");
-            } else {
-                error_log("Warning: Failed to update screening form needs_review. HTTP Code: $screening_http_code, Response: " . $screening_response);
-            }
-        }
-        
-        $message = 'Medical history updated successfully';
-        if ($action === 'save_edit') {
-            $message = 'Medical history data saved successfully';
-        }
+        // Store the screening data in session for declaration form
+        $_SESSION['transferred_screening_data'] = $screening_data_for_session;
+        $_SESSION['medical_history_processed'] = true;
         
         echo json_encode([
-            'success' => true, 
-            'message' => $message,
-            'action' => $action ?? 'unknown'
+            'success' => true,
+            'message' => 'Medical history processed successfully',
+            'action' => $action
         ]);
     } else {
-        throw new Exception("Error updating medical history. HTTP Code: $http_code, Response: " . $response);
+        throw new Exception("Failed to update medical history. HTTP code: " . $http_code . ". Response: " . $response);
     }
 
 } catch (Exception $e) {
-    error_log("Error in modal form submission: " . $e->getMessage());
-    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    error_log("Error in medical history processing: " . $e->getMessage());
+    echo json_encode([
+        'success' => false,
+        'message' => $e->getMessage()
+    ]);
 }
-
-error_log("=== END OF MODAL FORM SUBMISSION ===");
 ?> 

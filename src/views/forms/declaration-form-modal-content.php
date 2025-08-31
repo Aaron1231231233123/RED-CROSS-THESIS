@@ -85,6 +85,58 @@ try {
     exit();
 }
 
+// NEW: Fetch screening data directly from screening_form table
+$screeningData = null;
+try {
+    $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?donor_form_id=eq.' . $donor_id . '&order=created_at.desc&limit=1');
+    
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ]);
+    
+    $screening_response = curl_exec($ch);
+    $screening_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($screening_http_code === 200) {
+        $screening_result = json_decode($screening_response, true);
+        if (is_array($screening_result) && !empty($screening_result)) {
+            $screeningData = $screening_result[0];
+        }
+    }
+} catch (Exception $e) {
+    error_log("Error fetching screening data: " . $e->getMessage());
+    // Continue without screening data
+}
+
+// NEW: Fetch medical approval status from medical_history table
+$medicalApproval = null;
+try {
+    $ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $donor_id . '&select=medical_approval');
+    
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ]);
+    
+    $medical_response = curl_exec($ch);
+    $medical_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($medical_http_code === 200) {
+        $medical_result = json_decode($medical_response, true);
+        if (is_array($medical_result) && !empty($medical_result)) {
+            $medicalApproval = $medical_result[0]['medical_approval'] ?? null;
+        }
+    }
+} catch (Exception $e) {
+    error_log("Error fetching medical approval: " . $e->getMessage());
+    // Continue without medical approval
+}
+
 // Calculate age from birthdate if not in donor data
 if (!isset($donorData['age']) && isset($donorData['birthdate'])) {
     $birthdate = new DateTime($donorData['birthdate']);
@@ -149,6 +201,28 @@ $today = date('F d, Y');
         font-size: 16px;
         color: #333;
         font-weight: 500;
+    }
+    
+    .screening-info {
+        background-color: #e8f5e8;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px 0;
+        border: 1px solid #28a745;
+        border-left: 4px solid #28a745;
+    }
+    
+    .screening-info h4 {
+        color: #28a745;
+        font-weight: bold;
+        margin-bottom: 15px;
+        font-size: 16px;
+    }
+    
+    .screening-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
     }
     
     .declaration-content {
@@ -289,6 +363,112 @@ $today = date('F d, Y');
     </div>
 </div>
 
+<?php if ($screeningData): ?>
+<!-- NEW: Screening Information Section -->
+<div class="screening-info">
+    <h4><i class="fas fa-clipboard-check me-2"></i>Screening Information</h4>
+    <div class="screening-grid">
+        <div class="donor-info-item">
+            <div class="donor-info-label">Body Weight:</div>
+            <div class="donor-info-value">
+                <?php echo isset($screeningData['body_weight']) ? htmlspecialchars($screeningData['body_weight']) . ' kg' : 'N/A'; ?>
+            </div>
+        </div>
+        <div class="donor-info-item">
+            <div class="donor-info-label">Specific Gravity:</div>
+            <div class="donor-info-value">
+                <?php echo isset($screeningData['specific_gravity']) ? htmlspecialchars($screeningData['specific_gravity']) : 'N/A'; ?>
+            </div>
+        </div>
+        <div class="donor-info-item">
+            <div class="donor-info-label">Blood Type:</div>
+            <div class="donor-info-value">
+                <?php echo isset($screeningData['blood_type']) ? htmlspecialchars($screeningData['blood_type']) : 'N/A'; ?>
+            </div>
+        </div>
+        <div class="donor-info-item">
+            <div class="donor-info-label">Donation Type:</div>
+            <div class="donor-info-value">
+                <?php 
+                $donationType = isset($screeningData['donation_type']) ? $screeningData['donation_type'] : '';
+                if ($donationType) {
+                    echo htmlspecialchars(ucwords(str_replace('-', ' ', $donationType)));
+                } else {
+                    echo 'N/A';
+                }
+                ?>
+            </div>
+        </div>
+        <?php if (isset($screeningData['mobile_location']) && !empty($screeningData['mobile_location'])): ?>
+        <div class="donor-info-item">
+            <div class="donor-info-label">Mobile Location:</div>
+            <div class="donor-info-value">
+                <?php echo htmlspecialchars($screeningData['mobile_location']); ?>
+            </div>
+        </div>
+        <?php endif; ?>
+        <?php if (isset($screeningData['mobile_organizer']) && !empty($screeningData['mobile_organizer'])): ?>
+        <div class="donor-info-item">
+            <div class="donor-info-label">Mobile Organizer:</div>
+            <div class="donor-info-value">
+                <?php echo htmlspecialchars($screeningData['mobile_organizer']); ?>
+            </div>
+        </div>
+        <?php endif; ?>
+        <?php if (isset($screeningData['patient_name']) && !empty($screeningData['patient_name'])): ?>
+        <div class="donor-info-item">
+            <div class="donor-info-label">Patient Name:</div>
+            <div class="donor-info-value">
+                <?php echo htmlspecialchars($screeningData['patient_name']); ?>
+            </div>
+        </div>
+        <?php endif; ?>
+        <?php if (isset($screeningData['hospital']) && !empty($screeningData['hospital'])): ?>
+        <div class="donor-info-item">
+            <div class="donor-info-label">Hospital:</div>
+            <div class="donor-info-value">
+                <?php echo htmlspecialchars($screeningData['hospital']); ?>
+            </div>
+        </div>
+        <?php endif; ?>
+        <?php if (isset($screeningData['patient_blood_type']) && !empty($screeningData['patient_blood_type'])): ?>
+        <div class="donor-info-item">
+            <div class="donor-info-label">Patient Blood Type:</div>
+            <div class="donor-info-value">
+                <?php echo htmlspecialchars($screeningData['patient_blood_type']); ?>
+            </div>
+        </div>
+        <?php endif; ?>
+        <?php if (isset($screeningData['component_type']) && !empty($screeningData['component_type'])): ?>
+        <div class="donor-info-item">
+            <div class="donor-info-label">Component Type:</div>
+            <div class="donor-info-value">
+                <?php echo htmlspecialchars($screeningData['component_type']); ?>
+            </div>
+        </div>
+        <?php endif; ?>
+        <?php if (isset($screeningData['units_needed']) && !empty($screeningData['units_needed'])): ?>
+        <div class="donor-info-item">
+            <div class="donor-info-label">Units Needed:</div>
+            <div class="donor-info-value">
+                <?php echo htmlspecialchars($screeningData['units_needed']); ?>
+            </div>
+        </div>
+        <?php endif; ?>
+    </div>
+    <?php if ($medicalApproval): ?>
+    <div class="donor-info-row" style="margin-top: 15px;">
+        <div class="donor-info-item">
+            <div class="donor-info-label">Medical Approval Status:</div>
+            <div class="donor-info-value" style="color: <?php echo $medicalApproval === 'Approved' ? '#28a745' : '#dc3545'; ?>; font-weight: bold;">
+                <?php echo htmlspecialchars($medicalApproval); ?>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <div class="declaration-content">
     <p>I hereby voluntarily donate my blood to the Philippine Red Cross, which is authorized to withdraw my blood and utilize it in any way they deem advisable. I understand this is a voluntary donation and I will receive no payment.</p>
     
@@ -331,6 +511,8 @@ $today = date('F d, Y');
 <script type="application/json" id="modalDeclarationData">
 {
     "donorData": <?php echo json_encode($donorData); ?>,
+    "screeningData": <?php echo json_encode($screeningData); ?>,
+    "medicalApproval": <?php echo json_encode($medicalApproval); ?>,
     "userRole": <?php echo json_encode($user_role); ?>
 }
 </script>
@@ -338,5 +520,5 @@ $today = date('F d, Y');
 <script>
 // Functions are now globally available from the main dashboard
 // Print and submit functions are handled by the parent window
-console.log('Declaration form modal content loaded');
+console.log('Declaration form modal content loaded with screening data');
 </script> 
