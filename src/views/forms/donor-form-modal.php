@@ -33,15 +33,15 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role_id']) && $_SESSION['rol
 function getDashboardByRole($role) {
     switch($role) {
         case 'reviewer':
-            return '/REDCROSS/public/Dashboards/dashboard-staff-medical-history-submissions.php';
+            return '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-medical-history-submissions.php';
         case 'interviewer':
-            return '/REDCROSS/public/Dashboards/dashboard-staff-donor-submission.php';
+            return '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-donor-submission.php';
         case 'physician':
-            return '/REDCROSS/public/Dashboards/dashboard-staff-physical-submission.php';
+            return '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-physical-submission.php';
         case 'phlebotomist':
-            return '/REDCROSS/public/Dashboards/dashboard-staff-blood-collection-submission.php';
+            return '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-blood-collection-submission.php';
         default:
-            return '/REDCROSS/public/Dashboards/dashboard-Inventory-System.php'; // Admin fallback
+            return '/RED-CROSS-THESIS/public/Dashboards/dashboard-Inventory-System.php'; // Admin fallback
     }
 }
 
@@ -71,16 +71,16 @@ if (isset($_SESSION['role_id']) && $_SESSION['role_id'] == 3 && !empty($user_sta
             $query = isset($parsed_url['query']) ? '?' . $parsed_url['query'] : '';
             
             // Convert to absolute path
-            $referrer = '/REDCROSS/public/Dashboards/' . $filename . $query;
+            $referrer = '/RED-CROSS-THESIS/public/Dashboards/' . $filename . $query;
         }
     }
     
     // Default fallback for admin
     if (!$referrer) {
         if (isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1) {
-            $referrer = '/REDCROSS/public/Dashboards/dashboard-Inventory-System.php';
+            $referrer = '/RED-CROSS-THESIS/public/Dashboards/dashboard-Inventory-System.php';
         } else {
-            $referrer = '/REDCROSS/public/login.php';
+            $referrer = '/RED-CROSS-THESIS/public/login.php';
         }
     }
 }
@@ -1185,24 +1185,24 @@ document.addEventListener('DOMContentLoaded', function() {
         if (roleId === '3' && userRole) {
             switch (userRole) {
                 case 'reviewer':
-                    dashboardUrl = "/REDCROSS/public/Dashboards/dashboard-staff-medical-history-submissions.php";
+                    dashboardUrl = "/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-medical-history-submissions.php";
                     break;
                 case 'interviewer':
-                    dashboardUrl = "/REDCROSS/public/Dashboards/dashboard-staff-donor-submission.php";
+                    dashboardUrl = "/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-donor-submission.php";
                     break;
                 case 'physician':
-                    dashboardUrl = "/REDCROSS/public/Dashboards/dashboard-staff-physical-submission.php";
+                    dashboardUrl = "/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-physical-submission.php";
                     break;
                 case 'phlebotomist':
-                    dashboardUrl = "/REDCROSS/public/Dashboards/dashboard-staff-blood-collection-submission.php";
+                    dashboardUrl = "/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-blood-collection-submission.php";
                     break;
                 default:
-                    dashboardUrl = phpReferrer || "/REDCROSS/public/Dashboards/dashboard-staff-donor-submission.php";
+                    dashboardUrl = phpReferrer || "/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-donor-submission.php";
                     break;
             }
         } else {
             // For admin users (role_id 1) or others, use the PHP-determined referrer
-            dashboardUrl = phpReferrer || "/REDCROSS/public/Dashboards/dashboard-Inventory-System.php";
+            dashboardUrl = phpReferrer || "/RED-CROSS-THESIS/public/Dashboards/dashboard-Inventory-System.php";
         }
         
         console.log("Redirecting to:", dashboardUrl);

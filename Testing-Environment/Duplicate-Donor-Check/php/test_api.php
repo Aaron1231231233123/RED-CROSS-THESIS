@@ -16,7 +16,7 @@ echo "<h3>Test Data:</h3>";
 echo "<pre>" . json_encode($testData, JSON_PRETTY_PRINT) . "</pre>";
 
 // Make a request to the API
-$url = 'http://localhost/REDCROSS/assets/php_func/check_duplicate_donor.php';
+$url = 'http://localhost/RED-CROSS-THESIS/assets/php_func/check_duplicate_donor.php';
 $jsonData = json_encode($testData);
 
 $ch = curl_init();
@@ -72,7 +72,7 @@ if ($error) {
 echo "<hr>";
 echo "<h3>Test Instructions:</h3>";
 echo "<ol>";
-echo "<li>Access this file at: <code>http://localhost/REDCROSS/test_api.php</code></li>";
+echo "<li>Access this file at: <code>http://localhost/RED-CROSS-THESIS/test_api.php</code></li>";
 echo "<li>Check if the API returns proper results</li>";
 echo "<li>If successful, the duplicate checker should work in the form</li>";
 echo "</ol>";

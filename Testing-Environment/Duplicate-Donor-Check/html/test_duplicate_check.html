@@ -131,7 +131,7 @@
                  <div class="alert alert-info">
              <strong>Test Instructions:</strong>
              <ul class="mb-0 mt-2">
-                 <li><strong>Important:</strong> This test page must be accessed through Apache server (http://localhost/REDCROSS/test_duplicate_check.html)</li>
+                 <li><strong>Important:</strong> This test page must be accessed through Apache server (http://localhost/RED-CROSS-THESIS/test_duplicate_check.html)</li>
                  <li>Fill in the form below with donor information</li>
                  <li>The system will automatically check for duplicates as you type</li>
                  <li>Try entering existing donor data to test the duplicate detection</li>
@@ -142,7 +142,7 @@
          <div class="alert alert-warning" id="corsWarning" style="display: none;">
              <strong>⚠️ CORS Error Detected:</strong> You are accessing this page via file:// protocol. 
              Please access it through your Apache server: 
-             <code>http://localhost/REDCROSS/test_duplicate_check.html</code>
+             <code>http://localhost/RED-CROSS-THESIS/test_duplicate_check.html</code>
          </div>
         
         <form id="donorForm" method="post" action="#" onsubmit="return handleFormSubmit()">
@@ -314,7 +314,7 @@
                          return await originalPerformCheck.call(this, forceSubmit);
                      } catch (error) {
                          if (error.message.includes('Failed to fetch') && window.location.protocol === 'file:') {
-                             console.error('CORS Error: Please access this page through Apache server (http://localhost/REDCROSS/test_duplicate_check.html)');
+                             console.error('CORS Error: Please access this page through Apache server (http://localhost/RED-CROSS-THESIS/test_duplicate_check.html)');
                              document.getElementById('corsWarning').style.display = 'block';
                          } else {
                              console.error('Duplicate check error:', error);

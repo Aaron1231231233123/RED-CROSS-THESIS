@@ -9,7 +9,7 @@ ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
 if (!isset($_SESSION['user_id'])) {
-    header("Location: /REDCROSS/public/login.php");
+    header("Location: /RED-CROSS-THESIS/public/login.php");
     exit();
 }
 

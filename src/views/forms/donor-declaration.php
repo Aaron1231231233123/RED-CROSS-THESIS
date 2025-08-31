@@ -919,7 +919,7 @@ input[type="file"].is-invalid {
     <div class="loading-spinner" id="loadingSpinner"></div>
 
     <!-- Signature Pad Library -->
-    <script src="/REDCROSS/assets/js/signature_pad.umd.min.js"></script>
+    <script src="/RED-CROSS-THESIS/assets/js/signature_pad.umd.min.js"></script>
     <script>
         // Verify if SignaturePad loaded correctly
         window.addEventListener('load', function() {

@@ -4,22 +4,22 @@
 
 ### Main Testing Interface
 ```
-http://localhost/REDCROSS/Testing-Environment/Duplicate-Donor-Check/html/test_duplicate_check.html
+http://localhost/RED-CROSS-THESIS/Testing-Environment/Duplicate-Donor-Check/html/test_duplicate_check.html
 ```
 
 ### API Testing
 ```
-http://localhost/REDCROSS/Testing-Environment/Duplicate-Donor-Check/php/test_api.php
+http://localhost/RED-CROSS-THESIS/Testing-Environment/Duplicate-Donor-Check/php/test_api.php
 ```
 
 ### Workflow Testing
 ```
-http://localhost/REDCROSS/Testing-Environment/Duplicate-Donor-Check/php/test_donor_workflow.php
+http://localhost/RED-CROSS-THESIS/Testing-Environment/Duplicate-Donor-Check/php/test_donor_workflow.php
 ```
 
 ### Debug Tools
 ```
-http://localhost/REDCROSS/Testing-Environment/Duplicate-Donor-Check/php/debug_supabase.php
+http://localhost/RED-CROSS-THESIS/Testing-Environment/Duplicate-Donor-Check/php/debug_supabase.php
 ```
 
 ## 🎯 Test Cases

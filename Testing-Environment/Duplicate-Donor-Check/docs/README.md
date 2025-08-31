@@ -47,17 +47,17 @@ Duplicate-Donor-Check/
 
 ### 1. Basic Duplicate Check Test
 ```
-Access: http://localhost/REDCROSS/Testing-Environment/Duplicate-Donor-Check/html/test_duplicate_check.html
+Access: http://localhost/RED-CROSS-THESIS/Testing-Environment/Duplicate-Donor-Check/html/test_duplicate_check.html
 ```
 
 ### 2. API Direct Test
 ```
-Access: http://localhost/REDCROSS/Testing-Environment/Duplicate-Donor-Check/php/test_api.php
+Access: http://localhost/RED-CROSS-THESIS/Testing-Environment/Duplicate-Donor-Check/php/test_api.php
 ```
 
 ### 3. Complete Workflow Test
 ```
-Access: http://localhost/REDCROSS/Testing-Environment/Duplicate-Donor-Check/php/test_donor_workflow.php
+Access: http://localhost/RED-CROSS-THESIS/Testing-Environment/Duplicate-Donor-Check/php/test_donor_workflow.php
 ```
 
 ## 🔧 Test Data Examples

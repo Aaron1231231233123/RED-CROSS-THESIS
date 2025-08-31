@@ -13,7 +13,7 @@ error_log("Hospital account check - Session: " . json_encode($_SESSION));
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
     error_log("User not logged in - redirecting to login");
-    header("Location: /REDCROSS/public/login.php");
+    header("Location: /RED-CROSS-THESIS/public/login.php");
     exit();
 }
 
@@ -25,7 +25,7 @@ error_log("User role ID: " . $user_role_id . " (Type: " . gettype($user_role_id)
 $required_role = 2; // Hospital Role
 if ($user_role_id !== $required_role) {
     error_log("Access denied - User role_id: " . $user_role_id . ", Required role: " . $required_role);
-    header("Location: /REDCROSS/public/login.php");
+    header("Location: /RED-CROSS-THESIS/public/login.php");
     exit();
 }
 

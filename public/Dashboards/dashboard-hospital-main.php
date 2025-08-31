@@ -2052,7 +2052,7 @@ foreach ($bloodByType as $type => $count) {
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Signature Pad Library -->
-    <script src="/REDCROSS/assets/js/signature_pad.umd.min.js"></script>
+            <script src="/RED-CROSS-THESIS/assets/js/signature_pad.umd.min.js"></script>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 

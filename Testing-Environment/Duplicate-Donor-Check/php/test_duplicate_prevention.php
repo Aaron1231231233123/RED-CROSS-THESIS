@@ -48,7 +48,7 @@ function testDuplicatePrevention() {
 }
 
 function callCreateEligibility($donorId) {
-    $url = 'http://localhost/REDCROSS/assets/php_func/create_eligibility.php';
+    $url = 'http://localhost/RED-CROSS-THESIS/assets/php_func/create_eligibility.php';
     $data = [
         'donor_id' => $donorId,
         'status' => 'approved'
@@ -58,7 +58,7 @@ function callCreateEligibility($donorId) {
 }
 
 function callCreateEligibilityRecord($donorId) {
-    $url = 'http://localhost/REDCROSS/assets/php_func/create_eligibility_record.php';
+    $url = 'http://localhost/RED-CROSS-THESIS/assets/php_func/create_eligibility_record.php';
     $data = [
         'donor_id' => $donorId,
         'status' => 'approved'

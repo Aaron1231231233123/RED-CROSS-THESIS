@@ -11,7 +11,7 @@ session_start();
 
 // Check if user is logged in before including other files
 if (!isset($_SESSION['user_id'])) {
-    header("Location: /REDCROSS/public/login.php");
+    header("Location: /RED-CROSS-THESIS/public/login.php");
     exit();
 }
 

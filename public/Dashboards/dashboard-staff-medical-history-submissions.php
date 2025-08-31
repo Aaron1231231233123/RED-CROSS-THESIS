@@ -253,7 +253,7 @@ function getDonorType($donor_id, $medical_info, $eligibility_by_donor, $stage = 
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
-    header("Location: /REDCROSS/public/login.php");
+    header("Location: /RED-CROSS-THESIS/public/login.php");
     exit();
 }
 // Check for correct role (admin with role_id 3)

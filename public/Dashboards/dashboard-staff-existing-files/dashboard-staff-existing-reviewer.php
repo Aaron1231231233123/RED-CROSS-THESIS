@@ -4,7 +4,7 @@ require_once '../../../assets/conn/db_conn.php';
 require '../../../assets/php_func/user_roles_staff.php';
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
-    header("Location: /REDCROSS/public/login.php");
+    header("Location: /RED-CROSS-THESIS/public/login.php");
     exit();
 }
 // Check for correct role (admin with role_id 3)
