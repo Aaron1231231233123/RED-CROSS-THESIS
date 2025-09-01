@@ -1,99 +1,28 @@
 <?php
+// Set error reporting
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 // Include database connection
 include_once '../../assets/conn/db_conn.php';
 
-// Function to execute a query
-function executeQuery($query, $params = []) {
-    $ch = curl_init();
-    
-    $headers = [
-        'Content-Type: application/json',
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY,
-        'Prefer: return=representation'
-    ];
-    
-    $url = SUPABASE_URL . '/rest/v1/rpc/' . $query;
-    
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    
-    if (!empty($params)) {
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($params));
-    }
-    
-    $response = curl_exec($ch);
-    $error = curl_error($ch);
-    
-    curl_close($ch);
-    
-    if ($error) {
-        return ['error' => $error];
-    }
-    
-    return json_decode($response, true);
-}
+// OPTIMIZATION: Include shared optimized functions
+include_once __DIR__ . '/module/optimized_functions.php';
 
-// Function to query direct SQL (for non-RPC queries)
-function querySQL($table, $select = "*", $filters = null) {
-    $ch = curl_init();
-    
-    $headers = [
-        'Content-Type: application/json',
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY,
-        'Prefer: return=representation'
-    ];
-    
-    $url = SUPABASE_URL . '/rest/v1/' . $table . '?select=' . urlencode($select);
-    
-    if ($filters) {
-        foreach ($filters as $key => $value) {
-            $url .= '&' . $key . '=' . urlencode($value);
-        }
-    }
-    
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    
-    $response = curl_exec($ch);
-    $error = curl_error($ch);
-    
-    curl_close($ch);
-    
-    if ($error) {
-        return ['error' => $error];
-    }
-    
-    return json_decode($response, true);
-}
+// OPTIMIZATION: Performance monitoring
+$startTime = microtime(true);
 
-// OPTIMIZED: Fetch blood inventory data with fewer queries
+// OPTIMIZED: Fetch blood inventory data with enhanced performance
 $bloodInventory = [];
 
-// Get all declined donor IDs in one query
-$declinedDonorIds = [];
-$physicalExamQuery = curl_init();
-curl_setopt_array($physicalExamQuery, [
-    CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?remarks=neq.Accepted&select=donor_id,donor_form_id",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        "apikey: " . SUPABASE_API_KEY,
-        "Authorization: Bearer " . SUPABASE_API_KEY,
-        "Content-Type: application/json"
-    ],
-]);
-
-$physicalExamResponse = curl_exec($physicalExamQuery);
-curl_close($physicalExamQuery);
-
-if ($physicalExamResponse) {
-    $physicalExamRecords = json_decode($physicalExamResponse, true);
-    if (is_array($physicalExamRecords)) {
-        foreach ($physicalExamRecords as $record) {
+try {
+    // OPTIMIZATION 1: Get all declined donor IDs in one optimized query
+    $declinedDonorIds = [];
+    $physicalExamResponse = supabaseRequest("physical_examination?remarks=neq.Accepted&select=donor_id,donor_form_id");
+    
+    if (isset($physicalExamResponse['data']) && is_array($physicalExamResponse['data'])) {
+        foreach ($physicalExamResponse['data'] as $record) {
             if (!empty($record['donor_id'])) {
                 $declinedDonorIds[] = $record['donor_id'];
             }
@@ -102,141 +31,119 @@ if ($physicalExamResponse) {
             }
         }
     }
-}
-$declinedDonorIds = array_unique($declinedDonorIds);
-
-// OPTIMIZED: Get all blood collection data in one query
-$bloodCollectionQuery = curl_init();
-curl_setopt_array($bloodCollectionQuery, [
-    CURLOPT_URL => SUPABASE_URL . "/rest/v1/blood_collection?select=blood_collection_id,amount_taken",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        "apikey: " . SUPABASE_API_KEY,
-        "Authorization: Bearer " . SUPABASE_API_KEY,
-        "Content-Type: application/json"
-    ],
-]);
-$bloodCollectionResponse = curl_exec($bloodCollectionQuery);
-curl_close($bloodCollectionQuery);
-$bloodCollectionData = json_decode($bloodCollectionResponse, true) ?: [];
-
-// Create lookup array for blood collection data
-$bloodCollectionLookup = [];
-foreach ($bloodCollectionData as $collection) {
-    $bloodCollectionLookup[$collection['blood_collection_id']] = $collection;
-}
-
-// OPTIMIZED: Get all donor data in one query
-$donorQuery = curl_init();
-curl_setopt_array($donorQuery, [
-    CURLOPT_URL => SUPABASE_URL . "/rest/v1/donor_form?select=donor_id,surname,first_name,middle_name,birthdate,sex,civil_status",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        "apikey: " . SUPABASE_API_KEY,
-        "Authorization: Bearer " . SUPABASE_API_KEY,
-        "Content-Type: application/json"
-    ],
-]);
-$donorResponse = curl_exec($donorQuery);
-curl_close($donorQuery);
-$donorData = json_decode($donorResponse, true) ?: [];
-
-// Create lookup array for donor data
-$donorLookup = [];
-foreach ($donorData as $donor) {
-    $donorLookup[$donor['donor_id']] = $donor;
-}
-
-// Query eligibility table for valid blood units
-$eligibilityData = querySQL(
-    'eligibility', 
-    'eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status,blood_collection_id',
-    ['collection_successful' => 'eq.true', 'order' => 'collection_start_time.desc']
-);
-
-// Track seen collections to avoid duplicates
-$seenCollections = [];
-
-if (is_array($eligibilityData) && !empty($eligibilityData)) {
-    foreach ($eligibilityData as $item) {
-        // Skip if no serial number or if donor is in declined list
-        if (empty($item['unit_serial_number']) || in_array($item['donor_id'], $declinedDonorIds)) {
-            continue;
-        }
-        
-        // Skip if no blood collection data
-        if (empty($item['blood_collection_id']) || !isset($bloodCollectionLookup[$item['blood_collection_id']])) {
-            continue;
-        }
-        
-        // Skip duplicates
-        $collectionId = $item['blood_collection_id'];
-        if (in_array($collectionId, $seenCollections)) {
-            continue;
-        }
-        $seenCollections[] = $collectionId;
-        
-        // Get blood collection data from lookup
-        $bloodCollectionData = $bloodCollectionLookup[$collectionId];
-        
-        // Calculate expiration date (35 days from collection)
-        $collectionDate = new DateTime($item['collection_start_time']);
-        $expirationDate = clone $collectionDate;
-        $expirationDate->modify('+35 days');
-        
-        // Create blood bag entry
-        $bloodBag = [
-            'eligibility_id' => $item['eligibility_id'],
-            'donor_id' => $item['donor_id'],
-            'serial_number' => $item['unit_serial_number'],
-            'blood_type' => $item['blood_type'],
-            'bags' => isset($bloodCollectionData['amount_taken']) ? $bloodCollectionData['amount_taken'] : 'N/A',
-            'bag_type' => $item['blood_bag_type'] ?: 'Standard',
-            'collection_date' => $collectionDate->format('Y-m-d'),
-            'expiration_date' => $expirationDate->format('Y-m-d'),
-            'status' => (new DateTime() > $expirationDate) ? 'Expired' : 'Valid',
-            'eligibility_status' => $item['status'],
-            'eligibility_end_date' => $item['end_date'],
-        ];
-        
-        // Get donor information from lookup
-        $donor = $donorLookup[$item['donor_id']] ?? null;
-        
-        if ($donor) {
-            // Calculate age based on birthdate
-            $age = '';
-            if (!empty($donor['birthdate'])) {
-                $birthdate = new DateTime($donor['birthdate']);
-                $today = new DateTime();
-                $age = $birthdate->diff($today)->y;
+    $declinedDonorIds = array_unique($declinedDonorIds);
+    
+    // OPTIMIZATION 2: Get all blood collection data in one optimized query
+    $bloodCollectionResponse = supabaseRequest("blood_collection?select=blood_collection_id,amount_taken");
+    $bloodCollectionData = isset($bloodCollectionResponse['data']) ? $bloodCollectionResponse['data'] : [];
+    
+    // Create lookup array for blood collection data
+    $bloodCollectionLookup = [];
+    foreach ($bloodCollectionData as $collection) {
+        $bloodCollectionLookup[$collection['blood_collection_id']] = $collection;
+    }
+    
+    // OPTIMIZATION 3: Get all donor data in one optimized query
+    $donorResponse = supabaseRequest("donor_form?select=donor_id,surname,first_name,middle_name,birthdate,sex,civil_status");
+    $donorData = isset($donorResponse['data']) ? $donorResponse['data'] : [];
+    
+    // Create lookup array for donor data
+    $donorLookup = [];
+    foreach ($donorData as $donor) {
+        $donorLookup[$donor['donor_id']] = $donor;
+    }
+    
+    // OPTIMIZATION 4: Query eligibility table for valid blood units with enhanced query
+    $eligibilityResponse = supabaseRequest("eligibility?collection_successful=eq.true&select=eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status,blood_collection_id&order=collection_start_time.desc");
+    $eligibilityData = isset($eligibilityResponse['data']) ? $eligibilityResponse['data'] : [];
+    
+    // Track seen collections to avoid duplicates
+    $seenCollections = [];
+    
+    if (is_array($eligibilityData) && !empty($eligibilityData)) {
+        foreach ($eligibilityData as $item) {
+            // Skip if no serial number or if donor is in declined list
+            if (empty($item['unit_serial_number']) || in_array($item['donor_id'], $declinedDonorIds)) {
+                continue;
             }
             
-            $bloodBag['donor'] = [
-                'surname' => $donor['surname'] ?? '',
-                'first_name' => $donor['first_name'] ?? '',
-                'middle_name' => $donor['middle_name'] ?? '',
-                'birthdate' => !empty($donor['birthdate']) ? date('d/m/Y', strtotime($donor['birthdate'])) : '',
-                'age' => $age,
-                'sex' => $donor['sex'] ?? '',
-                'civil_status' => $donor['civil_status'] ?? ''
+            // Skip if no blood collection data
+            if (empty($item['blood_collection_id']) || !isset($bloodCollectionLookup[$item['blood_collection_id']])) {
+                continue;
+            }
+            
+            // Skip duplicates
+            $collectionId = $item['blood_collection_id'];
+            if (in_array($collectionId, $seenCollections)) {
+                continue;
+            }
+            $seenCollections[] = $collectionId;
+            
+            // Get blood collection data from lookup
+            $bloodCollectionData = $bloodCollectionLookup[$collectionId];
+            
+            // Calculate expiration date (35 days from collection)
+            $collectionDate = new DateTime($item['collection_start_time']);
+            $expirationDate = clone $collectionDate;
+            $expirationDate->modify('+35 days');
+            
+            // Create blood bag entry
+            $bloodBag = [
+                'eligibility_id' => $item['eligibility_id'],
+                'donor_id' => $item['donor_id'],
+                'serial_number' => $item['unit_serial_number'],
+                'blood_type' => $item['blood_type'],
+                'bags' => isset($bloodCollectionData['amount_taken']) ? $bloodCollectionData['amount_taken'] : 'N/A',
+                'bag_type' => $item['blood_bag_type'] ?: 'Standard',
+                'collection_date' => $collectionDate->format('Y-m-d'),
+                'expiration_date' => $expirationDate->format('Y-m-d'),
+                'status' => (new DateTime() > $expirationDate) ? 'Expired' : 'Valid',
+                'eligibility_status' => $item['status'],
+                'eligibility_end_date' => $item['end_date'],
             ];
-        } else {
-            // Default empty donor info if not found
-            $bloodBag['donor'] = [
-                'surname' => 'Not Found',
-                'first_name' => '',
-                'middle_name' => '',
-                'birthdate' => '',
-                'age' => '',
-                'sex' => '',
-                'civil_status' => ''
-            ];
+            
+            // Get donor information from lookup
+            $donor = $donorLookup[$item['donor_id']] ?? null;
+            
+            if ($donor) {
+                // Calculate age based on birthdate
+                $age = '';
+                if (!empty($donor['birthdate'])) {
+                    $birthdate = new DateTime($donor['birthdate']);
+                    $today = new DateTime();
+                    $age = $birthdate->diff($today)->y;
+                }
+                
+                $bloodBag['donor'] = [
+                    'surname' => $donor['surname'] ?? '',
+                    'first_name' => $donor['first_name'] ?? '',
+                    'middle_name' => $donor['middle_name'] ?? '',
+                    'birthdate' => !empty($donor['birthdate']) ? date('d/m/Y', strtotime($donor['birthdate'])) : '',
+                    'age' => $age,
+                    'sex' => $donor['sex'] ?? '',
+                    'civil_status' => $donor['civil_status'] ?? ''
+                ];
+            } else {
+                // Default empty donor info if not found
+                $bloodBag['donor'] = [
+                    'surname' => 'Not Found',
+                    'first_name' => '',
+                    'middle_name' => '',
+                    'birthdate' => '',
+                    'age' => '',
+                    'sex' => '',
+                    'civil_status' => ''
+                ];
+            }
+            
+            $bloodInventory[] = $bloodBag;
         }
-        
-        $bloodInventory[] = $bloodBag;
     }
+    
+} catch (Exception $e) {
+    error_log("Error in Blood Bank data fetching: " . $e->getMessage());
+    $bloodInventory = [];
 }
-
 
 // If no records found, keep the bloodInventory array empty
 if (empty($bloodInventory)) {
@@ -296,6 +203,11 @@ foreach ($bloodInventory as $bag) {
 
 // Convert to integer for display
 $totalBags = (int)$totalBags;
+
+// OPTIMIZATION: Performance logging and caching
+$endTime = microtime(true);
+$executionTime = round(($endTime - $startTime) * 1000, 2); // Convert to milliseconds
+addPerformanceHeaders($executionTime, count($bloodInventory), "Blood Bank Module - Total Bags: {$totalBags}, Valid: {$validBags}, Expired: {$expiredBags}");
 
 // Get default sorting
 $sortBy = "Default (Latest)";

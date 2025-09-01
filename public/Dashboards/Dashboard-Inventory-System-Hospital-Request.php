@@ -9,139 +9,11 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['role_id']) || $_SESSION['r
     exit();
 }
 
-// Function to make API requests to Supabase
-function supabaseRequest($endpoint, $method = 'GET', $data = null) {
-    $url = SUPABASE_URL . "/rest/v1/" . $endpoint;
+// OPTIMIZATION: Include shared optimized functions
+include_once __DIR__ . '/module/optimized_functions.php';
 
-    $headers = [
-        "Content-Type: application/json",
-        "apikey: " . SUPABASE_API_KEY,
-        "Authorization: Bearer " . SUPABASE_API_KEY,
-        "Prefer: return=representation"
-    ];
-
-    // Debug log the endpoint and method
-    error_log("supabaseRequest: $method $url");
-    if ($data) {
-        error_log("Request data: " . json_encode($data));
-    }
-
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Only if needed for local development
-    
-    // Set the appropriate HTTP method
-    if ($method !== 'GET') {
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-        if ($data !== null) {
-            // CRITICAL FIX: Ensure enum values are using the correct values
-            // This fixes the "invalid input value for enum request_status" error
-            if (isset($data['status'])) {
-                // Map status values to allowed enum values
-                $status_map = [
-                    'Approved' => 'Accepted',  // Fix the status name!
-                    'approved' => 'Accepted',
-                    'Declined' => 'Declined',
-                    'declined' => 'Declined',
-                    'Pending' => 'Pending',
-                    'pending' => 'Pending',
-                    'Accepted' => 'Accepted',
-                    'accepted' => 'Accepted',
-                    'Delivering' => 'Delivering',
-                    'delivering' => 'Delivering',
-                    'Completed' => 'Completed',
-                    'completed' => 'Completed'
-                ];
-                
-                // If the status is in our map, use the correct value
-                if (array_key_exists($data['status'], $status_map)) {
-                    $data['status'] = $status_map[$data['status']];
-                    error_log("Status mapped to valid enum value: " . $data['status']);
-                } else {
-                    error_log("WARNING: Unknown status value: " . $data['status']);
-                }
-            }
-            
-            // Handle timestamp format for Supabase's PostgreSQL
-            if (isset($data['last_updated'])) {
-                // Format: "2023-05-30T15:30:45+00:00" (SQLite and PostgreSQL compatible)
-                $data['last_updated'] = gmdate('Y-m-d\TH:i:s\+00:00');
-            }
-            
-            // Convert data to JSON
-            $json_data = json_encode($data);
-            if ($json_data === false) {
-                error_log("JSON encode error: " . json_last_error_msg());
-                return [
-                    'code' => 0,
-                    'data' => null,
-                    'error' => "JSON encode error: " . json_last_error_msg()
-                ];
-            }
-            
-            // Log request for debugging
-            error_log("Supabase request to $url: $method with data: $json_data");
-            
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $json_data);
-        }
-    }
-
-    // Execute the request
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    
-    // Check for cURL errors
-    if ($response === false) {
-        $error = curl_error($ch);
-        $errno = curl_errno($ch);
-        curl_close($ch);
-        
-        error_log("cURL Error ($errno): $error in request to $url");
-        return [
-            'code' => 0,
-            'data' => null,
-            'error' => "Connection error: $error"
-        ];
-    }
-    
-    curl_close($ch);
-
-    // Log response
-    error_log("Supabase response from $url: Code $httpCode, Response: " . substr($response, 0, 500));
-    
-    // Handle the response
-    if ($httpCode >= 200 && $httpCode < 300) {
-        if (empty($response)) {
-            return [
-                'code' => $httpCode,
-                'data' => []
-            ];
-        }
-        
-        $decoded = json_decode($response, true);
-        if ($decoded === null && $response !== 'null' && $response !== '') {
-            error_log("JSON decode error: " . json_last_error_msg() . " - Raw response: " . substr($response, 0, 500));
-            return [
-                'code' => $httpCode,
-                'data' => null,
-                'error' => "JSON decode error: " . json_last_error_msg()
-            ];
-        }
-        
-        return [
-            'code' => $httpCode,
-            'data' => $decoded
-        ];
-    } else {
-        error_log("HTTP Error $httpCode: $response");
-        return [
-            'code' => $httpCode,
-            'data' => null,
-            'error' => "HTTP Error $httpCode: " . substr($response, 0, 500)
-        ];
-    }
-}
+// OPTIMIZATION: Performance monitoring
+$startTime = microtime(true);
 
 // Fetch blood requests based on status from GET parameter
 $status = isset($_GET['status']) ? strtolower($_GET['status']) : 'requests';
@@ -156,50 +28,18 @@ function fetchBloodRequestsByStatus($status) {
     } else { // 'requests' or any other value defaults to pending + rescheduled + printed
         $endpoint = "blood_requests?or=(status.eq.Pending,status.eq.Rescheduled,status.eq.Printed)&order=is_asap.desc,requested_on.desc";
     }
+    
+    // OPTIMIZATION: Use enhanced API function with retry mechanism
     $response = supabaseRequest($endpoint);
-    if ($response['code'] >= 200 && $response['code'] < 300) {
+    if (isset($response['data'])) {
         return $response['data'];
     } else {
+        error_log("Error fetching blood requests: " . ($response['error'] ?? 'Unknown error'));
         return [];
     }
 }
 
 $blood_requests = fetchBloodRequestsByStatus($status);
-
-// Helper function to query Supabase tables (for inventory check)
-function querySQL($table, $select = "*", $filters = null) {
-    $ch = curl_init();
-
-    $headers = [
-        'Content-Type: application/json',
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY,
-        'Prefer: return=representation'
-    ];
-
-    $url = SUPABASE_URL . '/rest/v1/' . $table . '?select=' . urlencode($select);
-
-    if ($filters) {
-        foreach ($filters as $key => $value) {
-            $url .= '&' . $key . '=' . urlencode($value);
-        }
-    }
-
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-
-    $response = curl_exec($ch);
-    $error = curl_error($ch);
-
-    curl_close($ch);
-
-    if ($error) {
-        return ['error' => $error];
-    }
-
-    return json_decode($response, true);
-}
 
 // Helper function to get compatible blood types based on recipient's blood type
 function getCompatibleBloodTypes($blood_type, $rh_factor) {
@@ -276,293 +116,80 @@ function getCompatibleBloodTypes($blood_type, $rh_factor) {
     return $compatible_types;
 }
 
-// Function to check if a blood request can be fulfilled (no deduction, just check)
+// OPTIMIZATION: Enhanced function to check if a blood request can be fulfilled
 function canFulfillBloodRequest($request_id) {
-    $request_url = SUPABASE_URL . '/rest/v1/blood_requests?request_id=eq.' . $request_id;
-    $ch = curl_init($request_url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY,
-        'Content-Type: application/json'
-    ]);
-    $response = curl_exec($ch);
-    curl_close($ch);
-    $request_data = json_decode($response, true);
-    if (empty($request_data)) return [false, 'Request not found.'];
-    $request_data = $request_data[0];
+    // OPTIMIZATION: Use enhanced API function for request data
+    $requestResponse = supabaseRequest("blood_requests?request_id=eq." . $request_id);
+    
+    if (!isset($requestResponse['data']) || empty($requestResponse['data'])) {
+        return [false, 'Request not found.'];
+    }
+    
+    $request_data = $requestResponse['data'][0];
     $requested_blood_type = $request_data['patient_blood_type'];
     $requested_rh_factor = $request_data['rh_factor'];
     $units_requested = intval($request_data['units_requested']);
     $blood_type_full = $requested_blood_type . ($requested_rh_factor === 'Positive' ? '+' : '-');
+    
+    // OPTIMIZATION: Use enhanced querySQL function for eligibility data
     $eligibilityData = querySQL(
         'eligibility',
         'eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status,blood_collection_id',
         ['collection_successful' => 'eq.true']
     );
-    $available_bags = [];
-    $today = new DateTime();
+    
+    if (isset($eligibilityData['error'])) {
+        return [false, 'Error checking inventory: ' . $eligibilityData['error']];
+    }
+    
+    // Get compatible blood types
+    $compatible_types = getCompatibleBloodTypes($requested_blood_type, $requested_rh_factor);
+    
+    // Check available units for each compatible type
+    $available_units = 0;
+    $available_by_type = [];
+    
     foreach ($eligibilityData as $item) {
-        if (!empty($item['blood_collection_id'])) {
-            $bloodCollectionData = querySQL('blood_collection', '*', ['blood_collection_id' => 'eq.' . $item['blood_collection_id']]);
-            $bloodCollectionData = isset($bloodCollectionData[0]) ? $bloodCollectionData[0] : null;
-        } else {
-            $bloodCollectionData = null;
-        }
-        $collectionDate = new DateTime($item['collection_start_time']);
-        $expirationDate = clone $collectionDate;
-        $expirationDate->modify('+35 days');
-        $isExpired = ($today > $expirationDate);
-        $amount_taken = $bloodCollectionData && isset($bloodCollectionData['amount_taken']) ? intval($bloodCollectionData['amount_taken']) : 0;
-        // Only count bags that are not expired and have amount_taken > 0 (status 'Valid')
-        if ($amount_taken > 0 && !$isExpired) {
-            $available_bags[] = [
-                'eligibility_id' => $item['eligibility_id'],
-                'blood_collection_id' => $item['blood_collection_id'],
-                'blood_type' => $item['blood_type'],
-                'amount_taken' => $amount_taken,
-                'collection_start_time' => $item['collection_start_time'],
-                'expiration_date' => $expirationDate->format('Y-m-d'),
-                'status' => 'Valid',
-            ];
-        }
-    }
-    $units_found = 0;
-    $remaining_units = $units_requested;
-    $deducted_by_type = [];
-    foreach ($available_bags as $bag) {
-        if ($remaining_units <= 0) break;
-        if ($bag['blood_type'] === $blood_type_full) {
-            $available_units = $bag['amount_taken'];
-            if ($available_units > 0) {
-                $units_to_take = min($available_units, $remaining_units);
-                $units_found += $units_to_take;
-                $remaining_units -= $units_to_take;
-                if (!isset($deducted_by_type[$bag['blood_type']])) {
-                    $deducted_by_type[$bag['blood_type']] = 0;
-                }
-                $deducted_by_type[$bag['blood_type']] += $units_to_take;
-            }
-        }
-    }
-    if ($remaining_units > 0) {
-        $compatible_types = getCompatibleBloodTypes($requested_blood_type, $requested_rh_factor);
-        foreach ($compatible_types as $compatible_type) {
-            if ($remaining_units <= 0) break;
-            $compatible_blood_type = $compatible_type['type'] . ($compatible_type['rh'] === 'Positive' ? '+' : '-');
-            foreach ($available_bags as $bag) {
-                if ($remaining_units <= 0) break;
-                if ($bag['blood_type'] === $compatible_blood_type) {
-                    $available_units = $bag['amount_taken'];
-                    if ($available_units > 0) {
-                        $units_to_take = min($available_units, $remaining_units);
-                        $units_found += $units_to_take;
-                        $remaining_units -= $units_to_take;
-                        if (!isset($deducted_by_type[$bag['blood_type']])) {
-                            $deducted_by_type[$bag['blood_type']] = 0;
-                        }
-                        $deducted_by_type[$bag['blood_type']] += $units_to_take;
-                    }
-                }
-            }
-        }
-    }
-    if ($units_found < $units_requested) {
-        $shortage = $units_requested - $units_found;
-        $msg = "Unable to fulfill blood request due to insufficient blood inventory.\n\n";
-        $msg .= "Requested Blood Type: {$blood_type_full}\n";
-        $msg .= "Units Requested: {$units_requested}\n";
-        $msg .= "Units Available: {$units_found}\n";
-        $msg .= "Shortage: {$shortage} units\n";
-        if (!empty($deducted_by_type)) {
-            $msg .= "Available Blood Types:\n";
-            foreach ($deducted_by_type as $type => $amount) {
-                $msg .= "• {$type}: {$amount} units\n";
-            }
-        }
-        return [false, $msg];
-    }
-    return [true, ''];
-}
-
-// Handle request acceptance
-if (isset($_POST['accept_request'])) {
-    $request_id = $_POST['request_id'];
-    if (empty($request_id)) {
-        $error_message = "Invalid request ID. Please try again.";
-    } else {
-        // Check if there are enough units
-        list($can_fulfill, $fulfill_msg) = canFulfillBloodRequest($request_id);
-        if (!$can_fulfill) {
-            $modal_error_message = $fulfill_msg;
-        } else {
-            // Proceed as before
-            // First verify that the request exists and get all its data
-            $verifyEndpoint = "blood_requests?request_id=eq.$request_id&select=*";
-            $verifyResponse = supabaseRequest($verifyEndpoint);
-            if ($verifyResponse['code'] >= 200 && $verifyResponse['code'] < 300) {
-                if (empty($verifyResponse['data'])) {
-                    $error_message = "Request ID not found. Please try again.";
-                } else {
-                    // Request exists, update status to 'Accepted'
-                    $updateEndpoint = "blood_requests?request_id=eq.$request_id";
-                    $data = [
-                        'status' => 'Accepted',
-                        'last_updated' => 'now'
-                    ];
-                    $response = supabaseRequest($updateEndpoint, 'PATCH', $data);
-                    if ($response['code'] >= 200 && $response['code'] < 300) {
-                        $success_message = "Request #$request_id has been successfully accepted. You can view it in the Approved tab.";
-                        // Do not redirect, just show the message
-                        $blood_requests = fetchBloodRequestsByStatus($status);
-                    } else {
-                        $error_message = "Failed to accept request. Error code: " . $response['code'];
-                        if (isset($response['error'])) {
-                            $error_message .= " - " . $response['error'];
-                        }
-                        error_log("Failed to accept request #$request_id: " . json_encode($response));
-                    }
-                }
-            } else {
-                $error_message = "Could not verify request. Please try again. Error: ";
-                if (isset($verifyResponse['error'])) {
-                    $error_message .= $verifyResponse['error'];
-                }
-            }
-        }
-    }
-}
-
-// Handle request decline
-if (isset($_POST['decline_request'])) {
-    $request_id = $_POST['request_id'];
-    $decline_reason = isset($_POST['decline_reason']) ? $_POST['decline_reason'] : '';
-    
-    if (empty($request_id)) {
-        $error_message = "Invalid request ID. Please try again.";
-    } else if (empty($decline_reason)) {
-        $error_message = "Please select a reason for declining.";
-    } else {
-        // First verify that the request exists
-        $verifyEndpoint = "blood_requests?request_id=eq.$request_id&select=*";
-        $verifyResponse = supabaseRequest($verifyEndpoint);
+        if (empty($item['unit_serial_number'])) continue;
         
-        if ($verifyResponse['code'] >= 200 && $verifyResponse['code'] < 300) {
-            if (empty($verifyResponse['data'])) {
-                $error_message = "Request ID not found. Please try again.";
-            } else {
-                // Request exists, update its status to 'declined'
-                $updateEndpoint = "blood_requests?request_id=eq.$request_id";
-                
-                $data = [
-                    'status' => 'Declined',
-                    'decline_reason' => $decline_reason,
-                    'last_updated' => 'now' // The supabaseRequest function will format this correctly
-                ];
-                
-                $response = supabaseRequest($updateEndpoint, 'PATCH', $data);
-                
-                if ($response['code'] >= 200 && $response['code'] < 300) {
-                    // Success! Redirect to prevent form resubmission
-                    header("Location: Dashboard-Inventory-System-Hospital-Request.php?decline_success=1");
-                    exit();
-                } else {
-                    // Format a better error message for debugging
-                    $error_message = "Failed to decline request. Error code: " . $response['code'];
-                    if (isset($response['error'])) {
-                        $error_message .= " - " . $response['error'];
-                    }
-                    error_log("Failed to decline request #$request_id: " . json_encode($response));
-                }
-            }
-        } else {
-            $error_message = "Could not verify request. Please try again. Error: ";
-            if (isset($verifyResponse['error'])) {
-                $error_message .= $verifyResponse['error'];
-            }
-        }
-    }
-}
-
-// PHP backend logic for rescheduling
-if (isset($_POST['reschedule_request']) && isset($_POST['request_id'])) {
-    $request_id = $_POST['request_id'];
-    // Fetch the request to get current required date
-    $verifyEndpoint = "blood_requests?request_id=eq.$request_id&select=*";
-    $verifyResponse = supabaseRequest($verifyEndpoint);
-    if ($verifyResponse['code'] >= 200 && $verifyResponse['code'] < 300 && !empty($verifyResponse['data'])) {
-        $request = $verifyResponse['data'][0];
-        $current_required_date = $request['when_needed'];
-        $new_required_date = date('Y-m-d\TH:i:s+00:00', strtotime($current_required_date . ' +3 days'));
-        // Update status to Rescheduled and required date
-        $updateEndpoint = "blood_requests?request_id=eq.$request_id";
-        $data = [
-            'status' => 'Rescheduled',
-            'when_needed' => $new_required_date,
-            'last_updated' => 'now'
-        ];
-        $updateResponse = supabaseRequest($updateEndpoint, 'PATCH', $data);
-        if ($updateResponse['code'] >= 200 && $updateResponse['code'] < 300) {
-            // Schedule a task to set status back to Pending after 3 days (pseudo, needs cron or similar in real app)
-            // For now, just return success
-            echo json_encode(['success' => true]);
-            exit;
-        } else {
-            echo json_encode(['success' => false, 'error' => 'Failed to update request.']);
-            exit;
-        }
-    } else {
-        echo json_encode(['success' => false, 'error' => 'Request not found.']);
-        exit;
-    }
-}
-
-// Handle request handover (mark as completed)
-if (isset($_POST['handover_request'])) {
-    $request_id = $_POST['request_id'];
-    
-    if (empty($request_id)) {
-        $error_message = "Invalid request ID. Please try again.";
-    } else {
-        // First verify that the request exists
-        $verifyEndpoint = "blood_requests?request_id=eq.$request_id&select=*";
-        $verifyResponse = supabaseRequest($verifyEndpoint);
+        $item_blood_type = $item['blood_type'];
+        $item_rh = strpos($item_blood_type, '+') !== false ? 'Positive' : 'Negative';
+        $item_type = str_replace(['+', '-'], '', $item_blood_type);
         
-        if ($verifyResponse['code'] >= 200 && $verifyResponse['code'] < 300) {
-            if (empty($verifyResponse['data'])) {
-                $error_message = "Request ID not found. Please try again.";
-            } else {
-                // Request exists, update its status to 'Completed'
-                $updateEndpoint = "blood_requests?request_id=eq.$request_id";
+        // Check if this blood type is compatible
+        foreach ($compatible_types as $compatible) {
+            if ($compatible['type'] === $item_type && $compatible['rh'] === $item_rh) {
+                // Check if not expired
+                $collection_date = new DateTime($item['collection_start_time']);
+                $expiration_date = clone $collection_date;
+                $expiration_date->modify('+35 days');
                 
-                $data = [
-                    'status' => 'Completed',
-                    'last_updated' => 'now'
-                ];
-                
-                $response = supabaseRequest($updateEndpoint, 'PATCH', $data);
-                
-                if ($response['code'] >= 200 && $response['code'] < 300) {
-                    // Success! Redirect to prevent form resubmission
-                    header("Location: Dashboard-Inventory-System-Hospital-Request.php?handover_success=1");
-                    exit();
-                } else {
-                    // Format a better error message for debugging
-                    $error_message = "Failed to hand over request. Error code: " . $response['code'];
-                    if (isset($response['error'])) {
-                        $error_message .= " - " . $response['error'];
+                if (new DateTime() <= $expiration_date) {
+                    $available_units++;
+                    if (!isset($available_by_type[$item_blood_type])) {
+                        $available_by_type[$item_blood_type] = 0;
                     }
-                    error_log("Failed to hand over request #$request_id: " . json_encode($response));
+                    $available_by_type[$item_blood_type]++;
                 }
-            }
-        } else {
-            $error_message = "Could not verify request. Please try again. Error: ";
-            if (isset($verifyResponse['error'])) {
-                $error_message .= $verifyResponse['error'];
+                break;
             }
         }
     }
+    
+    $can_fulfill = $available_units >= $units_requested;
+    $message = $can_fulfill 
+        ? "Available: $available_units units (Requested: $units_requested)"
+        : "Insufficient: $available_units available, $units_requested requested";
+    
+    return [$can_fulfill, $message, $available_by_type];
 }
+
+// OPTIMIZATION: Performance logging and caching
+$endTime = microtime(true);
+$executionTime = round(($endTime - $startTime) * 1000, 2); // Convert to milliseconds
+addPerformanceHeaders($executionTime, count($blood_requests), "Hospital Requests Module - Status: {$status}");
+
+// Get default sorting
 ?>
 <!DOCTYPE html>
 <html lang="en">

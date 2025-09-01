@@ -216,10 +216,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_
         $start_timestamp = date('Y-m-d\TH:i:s.000\Z', strtotime("$today $start_time"));
         $end_timestamp = date('Y-m-d\TH:i:s.000\Z', strtotime("$today $end_time"));
 
-        // Get the latest screening_id that doesn't have a blood collection yet
+        // Get the latest screening_id for the current donor
+        $donor_id = $_SESSION['donor_id'];
         $ch = curl_init();
         curl_setopt_array($ch, [
-            CURLOPT_URL => SUPABASE_URL . '/rest/v1/screening_form?select=screening_id&order=created_at.desc',
+            CURLOPT_URL => SUPABASE_URL . '/rest/v1/screening_form?select=screening_id&donor_form_id=eq.' . $donor_id . '&order=created_at.desc&limit=1',
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER => [
                 'apikey: ' . SUPABASE_API_KEY,
@@ -227,38 +228,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_
             ]
         ]);
         $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
+
+        if ($http_code !== 200) {
+            error_log("Error fetching screening form. HTTP code: " . $http_code . ", Response: " . $response);
+            throw new Exception("Error fetching screening form data");
+        }
 
         $screening_data = json_decode($response, true);
         if (empty($screening_data)) {
-            throw new Exception("No screening form found");
+            throw new Exception("No screening form found for donor ID: " . $donor_id);
         }
 
-        // Find the first screening ID that doesn't have a blood collection
-        $screening_id = null;
-        foreach ($screening_data as $screening) {
-            $ch = curl_init();
-            curl_setopt_array($ch, [
-                CURLOPT_URL => SUPABASE_URL . '/rest/v1/blood_collection?screening_id=eq.' . $screening['screening_id'],
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER => [
-                    'apikey: ' . SUPABASE_API_KEY,
-                    'Authorization: Bearer ' . SUPABASE_API_KEY
-                ]
-            ]);
-            $response = curl_exec($ch);
-            curl_close($ch);
-
-            $existing_collection = json_decode($response, true);
-            if (empty($existing_collection)) {
-                $screening_id = $screening['screening_id'];
-                break;
-            }
-        }
-
-        if ($screening_id === null) {
-            throw new Exception("No available screening form found for blood collection");
-        }
+        $screening_id = $screening_data[0]['screening_id'];
+        error_log("Using screening_id: " . $screening_id . " for donor_id: " . $donor_id);
 
         // Prepare data for Supabase
         $data = [
@@ -340,6 +324,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_
         error_log('Supabase Response Code: ' . $http_code);
         error_log('Supabase Response: ' . $response);
         error_log('Data sent to Supabase: ' . json_encode($data));
+
+        // Check for specific error responses
+        if ($http_code !== 201) {
+            $error_data = json_decode($response, true);
+            $error_message = "Failed to save blood collection data.";
+            
+            if (isset($error_data['message'])) {
+                $error_message .= " " . $error_data['message'];
+            } elseif (isset($error_data['error'])) {
+                $error_message .= " " . $error_data['error'];
+            }
+            
+            error_log('Supabase Error Details: ' . json_encode($error_data));
+            throw new Exception($error_message);
+        }
 
         if ($http_code === 201) {
             // Parse the response to get the blood collection ID
@@ -511,6 +510,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Red Cross Blood Collection Form</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -935,84 +936,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_
                 max-width: 100%;
             }
         }
-        .time-section {
-            margin-bottom: 20px;
-            display: flex;
-            gap: 40px;
-            align-items: center;
-            justify-content: flex-start;
-        }
-        .time-input-group {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-        }
-        .time-input-group label {
+        /* Time input styling to match staff dashboard */
+        .form-label {
             font-weight: bold;
             color: #721c24;
             margin-bottom: 8px;
         }
-        .time-input-wrapper {
-            position: relative;
-            display: inline-block;
-        }
-        .time-input-wrapper input[type="text"] {
+        
+        .form-control {
             padding: 8px 12px;
-            padding-left: 35px; /* Space for the clock icon */
             border: 2px solid #d9534f;
             border-radius: 8px;
             font-size: 16px;
-            font-family: monospace;
             color: #721c24;
             background-color: #fff;
-            width: 120px;
-            text-align: center;
-            letter-spacing: 2px;
+            width: 100%;
             cursor: pointer;
         }
-        .time-input-wrapper::before {
-            content: "⏱";
-            position: absolute;
-            left: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 16px;
-            color: #d9534f;
-            z-index: 1;
-            pointer-events: none;
-        }
-        .time-input-wrapper::after {
-            content: "s";
-            position: absolute;
-            right: -20px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 16px;
-            color: #721c24;
-            font-weight: bold;
-        }
-        .time-input-wrapper .ampm-toggle {
-            position: absolute;
-            right: 8px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 30px;
-            height: 100%;
-            cursor: pointer;
-            background: linear-gradient(to right, transparent, rgba(217, 83, 79, 0.1));
-            border-radius: 0 6px 6px 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background-color 0.2s;
-        }
-        .time-input-wrapper .ampm-toggle:hover {
-            background: rgba(217, 83, 79, 0.2);
-        }
-        .time-input-wrapper input[type="text"]:focus {
+        
+        .form-control:focus {
             outline: none;
             border-color: #721c24;
             box-shadow: 0 0 0 2px rgba(114, 28, 36, 0.2);
+        }
+        
+        .form-text {
+            margin-top: 5px;
+            font-size: 0.85rem;
+            color: #6c757d;
+            font-style: italic;
         }
         /* Add styles for the unit serial number field */
         .unit-serial-field {
@@ -1047,10 +999,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_
                 ?>
             </div>
         <?php endif; ?>
-        
-        <div class="form-info" style="background-color: #e8f4ff; padding: 10px; margin-bottom: 20px; border: 1px solid #c5e2ff; border-radius: 4px;">
-            <p style="margin: 0;"><strong>Note:</strong> The "Amount of Blood Taken" must be a whole number (integer). Decimal values are not supported.</p>
-        </div>
+
+        <?php if (isset($_GET['success']) && $_GET['success'] === '1'): ?>
+            <div class="alert alert-success" style="background-color: #d4edda; color: #155724; padding: 10px; margin-bottom: 20px; border: 1px solid #c3e6cb; border-radius: 4px;">
+                Blood collection has been successfully completed!
+            </div>
+        <?php endif; ?>
         
         <form id="bloodCollectionForm" method="POST">
             <h3>VI. BLOOD COLLECTION (To be accomplished by the phlebotomist)</h3>
@@ -1180,20 +1134,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_
                 <input type="text" name="serial_number" class="unit-serial-field" value="<?php echo htmlspecialchars($generated_serial); ?>" readonly>
             </div>
 
-            <div class="time-section">
-                <div class="time-input-group">
-                    <label>Start Time</label>
-                    <div class="time-input-wrapper">
-                        <input type="text" name="start_time" required placeholder="--:-- --" maxlength="8">
-                        <div class="ampm-toggle" title="Click to toggle AM/PM">⇅</div>
-                    </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="blood-start-time" class="form-label">Start Time *</label>
+                    <input type="time" 
+                           class="form-control" 
+                           id="blood-start-time" 
+                           name="start_time" 
+                           required>
                 </div>
-                <div class="time-input-group">
-                    <label>End Time</label>
-                    <div class="time-input-wrapper">
-                        <input type="text" name="end_time" required placeholder="--:-- --" maxlength="8">
-                        <div class="ampm-toggle" title="Click to toggle AM/PM">⇅</div>
-                    </div>
+                <div class="col-md-6 mb-3">
+                    <label for="blood-end-time" class="form-label">End Time *</label>
+                    <input type="time" 
+                           class="form-control" 
+                           id="blood-end-time" 
+                           name="end_time" 
+                           required>
+                    <div class="form-text">Must be at least 5 minutes after start time</div>
                 </div>
             </div>
         
@@ -1218,10 +1175,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_
         // Add form submission validation
         document.getElementById('bloodCollectionForm').addEventListener('submit', function(e) {
             const bagType = document.querySelector('input[name="blood-bag"]:checked');
+            const amount = document.querySelector('input[name="amount"]').value;
+            const successful = document.querySelector('input[name="successful"]:checked');
+            const startTime = document.querySelector('input[name="start_time"]').value;
+            const endTime = document.querySelector('input[name="end_time"]').value;
             
+            // Validate blood bag selection
             if (!bagType) {
                 e.preventDefault();
                 alert('Please select a blood bag type');
+                return false;
+            }
+            
+            // Validate amount
+            if (!amount || amount <= 0) {
+                e.preventDefault();
+                alert('Please enter a valid amount');
+                return false;
+            }
+            
+            // Validate successful selection
+            if (!successful) {
+                e.preventDefault();
+                alert('Please select whether the collection was successful');
+                return false;
+            }
+            
+            // Validate times
+            if (!startTime || !endTime) {
+                e.preventDefault();
+                alert('Please enter both start time and end time');
+                return false;
+            }
+            
+            if (startTime >= endTime) {
+                e.preventDefault();
+                alert('End time must be after start time');
                 return false;
             }
 
@@ -1263,79 +1252,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_
             confirmationDialog.classList.remove('show');
         });
 
-        function formatTimeInput(input) {
-            const wrapper = input.closest('.time-input-wrapper');
-            const ampmToggle = wrapper.querySelector('.ampm-toggle');
-
-            // Set current time on click
-            input.addEventListener('click', function(e) {
-                // Don't set time if clicking on the AM/PM toggle area
-                if (e.clientX > input.getBoundingClientRect().right - 30) {
-                    return;
-                }
+        // Add time validation and default values
+        document.addEventListener('DOMContentLoaded', function() {
+            const startTimeInput = document.querySelector('input[name="start_time"]');
+            const endTimeInput = document.querySelector('input[name="end_time"]');
+            
+            if (startTimeInput && endTimeInput) {
+                // Set current time as default for start time
+                const now = new Date();
+                const currentTime = now.toTimeString().slice(0, 5);
+                startTimeInput.value = currentTime;
                 
-                if (!this.value || this.value === '--:-- --') {
-                    const now = new Date();
-                    let hours = now.getHours();
-                    const minutes = now.getMinutes();
-                    const ampm = hours >= 12 ? 'PM' : 'AM';
-                    hours = hours % 12;
-                    hours = hours ? hours : 12;
-                    const timeString = 
-                        (hours < 10 ? '0' + hours : hours) + ':' +
-                        (minutes < 10 ? '0' + minutes : minutes) + ' ' +
-                        ampm;
-                    this.value = timeString;
-                }
-            });
-
-            // Handle manual input
-            input.addEventListener('input', function(e) {
-                let value = e.target.value.replace(/[^0-9]/g, '');
+                // Set end time to 5 minutes later
+                const endTime = new Date(now.getTime() + 5 * 60000);
+                endTimeInput.value = endTime.toTimeString().slice(0, 5);
                 
-                if (value.length > 4) {
-                    value = value.substr(0, 4);
-                }
-                
-                if (value.length >= 2) {
-                    value = value.substr(0, 2) + ':' + value.substr(2);
-                }
-                
-                if (value.length >= 5) {
-                    let hours = parseInt(value.substr(0, 2));
-                    if (hours > 12) {
-                        hours = 12;
-                        value = '12' + value.substr(2);
+                // Validate end time is after start time
+                endTimeInput.addEventListener('change', function() {
+                    const startTime = startTimeInput.value;
+                    const endTime = this.value;
+                    
+                    if (startTime && endTime && startTime >= endTime) {
+                        alert('End time must be after start time');
+                        this.value = '';
                     }
-                    if (hours === 0) {
-                        value = '12' + value.substr(2);
-                    }
-                    const currentAMPM = this.value.slice(-2);
-                    if (currentAMPM === 'AM' || currentAMPM === 'PM') {
-                        value += ' ' + currentAMPM;
-                    } else {
-                        value += ' AM';
-                    }
-                }
-                
-                e.target.value = value;
-            });
-
-            // Toggle AM/PM when clicking the toggle button
-            ampmToggle.addEventListener('click', function() {
-                const input = this.parentElement.querySelector('input');
-                if (input.value && input.value !== '--:-- --') {
-                    const timeWithoutAMPM = input.value.slice(0, -2);
-                    const currentAMPM = input.value.slice(-2);
-                    input.value = timeWithoutAMPM + (currentAMPM === 'AM' ? 'PM' : 'AM');
-                }
-            });
-        }
-
-        // Initialize time inputs
-        document.querySelectorAll('.time-input-wrapper input[type="text"]').forEach(input => {
-            formatTimeInput(input);
+                });
+            }
         });
     </script>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

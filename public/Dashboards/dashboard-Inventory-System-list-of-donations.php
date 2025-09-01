@@ -52,6 +52,9 @@ if (!is_array($donations)) {
 // Data is ordered by created_at.desc in the API query to implement First In, First Out (FIFO) order
 // This ensures newest entries appear at the top of the table on the first page
 
+// OPTIMIZATION: Add performance monitoring
+$startTime = microtime(true);
+
 // Pagination settings
 $itemsPerPage = 10;
 $totalItems = count($donations);
@@ -70,6 +73,11 @@ $startIndex = ($currentPage - 1) * $itemsPerPage;
 
 // Get the subset of donations for the current page
 $currentPageDonations = array_slice($donations, $startIndex, $itemsPerPage);
+
+// OPTIMIZATION: Performance logging
+$endTime = microtime(true);
+$executionTime = round(($endTime - $startTime) * 1000, 2); // Convert to milliseconds
+error_log("Dashboard page load time: {$executionTime}ms for {$totalItems} total items, showing page {$currentPage}");
 
 // Calculate age from birthdate
 function calculateAge($birthdate) {
@@ -748,6 +756,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </div>
                         <?php endif; ?>
 
+                        <!-- OPTIMIZATION: Loading indicator for slow connections -->
+                        <div id="loadingIndicator" class="text-center py-4" style="display: none;">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2 text-muted">Loading approved donations...</p>
+                        </div>
+
                         <?php if (isset($_GET['processed']) && $_GET['processed'] === 'true'): ?>
                         <div class="alert alert-success alert-dismissible fade show">
                             <i class="fas fa-check-circle me-2"></i>
@@ -1008,6 +1024,27 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <script>
         // Document ready event listener
         document.addEventListener('DOMContentLoaded', function() {
+            // OPTIMIZATION: Show loading indicator for slow connections
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const tableContainer = document.querySelector('.table-responsive');
+            
+            // Show loading indicator if page takes more than 1 second to load
+            const loadingTimeout = setTimeout(function() {
+                if (loadingIndicator && tableContainer) {
+                    loadingIndicator.style.display = 'block';
+                    tableContainer.style.opacity = '0.5';
+                }
+            }, 1000);
+            
+            // Hide loading indicator when page is fully loaded
+            window.addEventListener('load', function() {
+                clearTimeout(loadingTimeout);
+                if (loadingIndicator && tableContainer) {
+                    loadingIndicator.style.display = 'none';
+                    tableContainer.style.opacity = '1';
+                }
+            });
+            
             // Check if we need to refresh data (e.g. after processing a donor)
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.has('processed')) {
@@ -1032,6 +1069,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             // Global variables for tracking current donor
             var currentDonorId = null;
             var currentEligibilityId = null;
+            
+            // OPTIMIZATION: Debounced search function for better performance
+            let searchTimeout;
             
             // Search function for the donations table
             function searchDonations() {
@@ -1069,10 +1109,17 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     updateSearchInfo();
                 };
                 
-                // Perform search filtering
+                // OPTIMIZATION: Perform search filtering with early exit for better performance
                 function performSearch() {
                     const value = searchInput.value.toLowerCase().trim();
                     const category = searchCategory.value;
+                    
+                    // Early exit if search is empty
+                    if (!value) {
+                        rows.forEach(row => row.style.display = '');
+                        updateSearchInfo();
+                        return;
+                    }
                     
                     // Remove any existing "no results" message
                     const existingNoResults = tbody.querySelector('.no-results');
@@ -1082,18 +1129,20 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     
                     let visibleCount = 0;
                     
-                    // Filter rows based on search criteria
-                    rows.forEach(row => {
+                    // OPTIMIZATION: Use more efficient filtering with early exit
+                    for (let i = 0; i < rows.length; i++) {
+                        const row = rows[i];
                         let found = false;
                         
                         if (category === 'all') {
-                            // Search all cells
-                            const cells = Array.from(row.querySelectorAll('td'));
-                            cells.forEach(cell => {
-                                if (cell.textContent.toLowerCase().includes(value)) {
+                            // Search all cells with early exit
+                            const cells = row.querySelectorAll('td');
+                            for (let j = 0; j < cells.length; j++) {
+                                if (cells[j].textContent.toLowerCase().includes(value)) {
                                     found = true;
+                                    break; // Early exit once found
                                 }
-                            });
+                            }
                         } else if (category === 'donor') {
                             // Search donor name (columns 0 and 1 for surname and first name)
                             const nameColumns = [row.cells[0], row.cells[1]];
@@ -1101,11 +1150,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 nameColumns.push(row.cells[2]); // Middle name if it exists
                             }
                             
-                            nameColumns.forEach(cell => {
-                                if (cell && cell.textContent.toLowerCase().includes(value)) {
+                            for (let j = 0; j < nameColumns.length; j++) {
+                                if (nameColumns[j] && nameColumns[j].textContent.toLowerCase().includes(value)) {
                                     found = true;
+                                    break; // Early exit once found
                                 }
-                            });
+                            }
                         } else if (category === 'status') {
                             // Search for status badge or status column
                             const statusBadge = row.querySelector('.badge');
@@ -1117,15 +1167,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             }
                         } else if (category === 'date') {
                             // Search for date in any cell
-                            const cells = Array.from(row.querySelectorAll('td'));
-                            cells.forEach(cell => {
-                                if (cell.textContent.toLowerCase().includes(value)) {
+                            const cells = row.querySelectorAll('td');
+                            for (let j = 0; j < cells.length; j++) {
+                                if (cells[j].textContent.toLowerCase().includes(value)) {
                                     // Simple check for date patterns
-                                    if (/\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}|\d{4}-\d{2}-\d{2}|[a-z]{3}\s\d{1,2},\s\d{4}/i.test(cell.textContent)) {
+                                    if (/\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}|\d{4}-\d{2}-\d{2}|[a-z]{3}\s\d{1,2},\s\d{4}/i.test(cells[j].textContent)) {
                                         found = true;
+                                        break; // Early exit once found
                                     }
                                 }
-                            });
+                            }
                         }
                         
                         // Show/hide row based on search result
@@ -1135,7 +1186,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         } else {
                             row.style.display = 'none';
                         }
-                    });
+                    }
                     
                     // Show "no results" message if needed
                     if (visibleCount === 0 && rows.length > 0) {
@@ -1178,8 +1229,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             // Initialize search
             searchDonations();
             
-            // Add event listeners for search
-            document.getElementById('searchInput').addEventListener('keyup', searchDonations);
+            // OPTIMIZATION: Debounced search for better performance
+            document.getElementById('searchInput').addEventListener('keyup', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(searchDonations, 300); // Wait 300ms after user stops typing
+            });
             document.getElementById('searchCategory').addEventListener('change', searchDonations);
             
             // Initialize all modals
