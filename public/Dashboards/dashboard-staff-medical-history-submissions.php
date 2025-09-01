@@ -575,7 +575,6 @@ $donor_history = $unique_donor_history;
         :root {
             --bg-color: #f5f5f5;
             --text-color: #000;
-            --sidebar-bg: #ffffff;
             --hover-bg: #f0f0f0;
             --primary-color: #b22222; /* Red Cross red */
             --primary-dark: #8b0000; /* Darker red for hover and separator */
@@ -593,10 +592,15 @@ $donor_history = $unique_donor_history;
 
         /* Header styling */
         .dashboard-home-header {
-            margin-left: 16.66666667%;
             background: white;
             border-bottom: 1px solid #e0e0e0;
             padding: 0.75rem 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .header-left {
             display: flex;
             align-items: center;
         }
@@ -605,13 +609,19 @@ $donor_history = $unique_donor_history;
             font-weight: 600;
             font-size: 1rem;
             margin: 0;
-            flex-grow: 1;
+            color: #333;
         }
         
         .header-date {
             color: #777;
             font-size: 0.8rem;
             margin-left: 0.5rem;
+        }
+        
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
         }
         
         .register-btn {
@@ -623,143 +633,31 @@ $donor_history = $unique_donor_history;
             font-weight: 500;
             text-decoration: none;
             display: inline-block;
-            margin-left: auto;
             font-size: 0.9rem;
         }
-
-        /* Sidebar Styles */
-        .sidebar {
-            background: var(--sidebar-bg);
-            height: 100vh;
-            padding: 1rem;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 16.66666667%;
-            overflow-y: auto;
-            z-index: 1000;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-            border-right: 1px solid #e0e0e0;
-        }
-
-        .sidebar h4 {
-            padding: 1rem 0;
-            margin-bottom: 1.5rem;
-            border-bottom: 2px solid #dee2e6;
-            color: #000;
-            font-weight: bold;
-        }
-
-        .sidebar .nav-link {
-            padding: 0.8rem 1rem;
-            margin-bottom: 0.5rem;
-            border-radius: 0;
-            transition: all 0.3s ease;
-            color: #000 !important;
-            text-decoration: none;
-            border-left: 5px solid transparent;
-        }
-
-        .sidebar .nav-link:hover,
-        .sidebar  {
-            background: var(--hover-bg);
-            color: var(--active-color) !important;
-            border-left-color: var(--active-color);
-            border-radius: 4px !important;
-        }
-
-        .nav-link.active{
-            background-color: var(--active-color);
-            color: white !important;
-            border-radius: 4px !important;
-        }   
         
-        /* Dropdown Menu Styles */
-        .dropdown-menu-custom {
-            margin-bottom: 0.5rem;
-        }
-        
-        .dropdown-toggle-custom {
-            background: var(--primary-color);
+        .logout-btn {
+            background-color: var(--primary-color);
             color: white;
             border: none;
-            padding: 12px 16px;
-            width: 100%;
-            text-align: left;
-            border-radius: 4px;
+            padding: 0.4rem 0.75rem;
+            border-radius: 3px;
             font-weight: 500;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 0.9rem;
             transition: all 0.3s ease;
-            text-decoration: none;
         }
         
-        .dropdown-toggle-custom:hover {
-            background: var(--primary-dark);
+        .logout-btn:hover {
+            background-color: var(--primary-dark);
             color: white;
-            font-weight: bold;
-            transform: translateY(-1px);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .dropdown-toggle-custom:focus {
-            box-shadow: none;
-            background: var(--primary-dark);
-            color: white;
-            outline: none;
-        }
-        
-        .dropdown-menu-items {
-            background: white;
-            border: 1px solid #e0e0e0;
-            border-top: none;
-            border-radius: 0 0 4px 4px;
-            padding: 0;
-            margin: 0;
-            list-style: none;
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .dropdown-menu-items.show {
-            max-height: 300px;
-        }
-        
-        .dropdown-item-custom {
-            padding: 10px 20px;
-            color: #333;
             text-decoration: none;
-            display: block;
-            border-bottom: 1px solid #f0f0f0;
-            transition: all 0.2s ease;
-        }
-        
-        .dropdown-item-custom:hover {
-            background: #f8f9fa;
-            color: var(--primary-color);
-            text-decoration: none;
-            font-weight: bold;
-            padding-left: 25px;
-        }
-        
-        .dropdown-item-custom:last-child {
-            border-bottom: none;
-        }
-        
-        .dropdown-item-custom.active {
-            background: #f8f9fa;
-            color: var(--primary-color);
-            font-weight: 600;
-            border-left: 4px solid var(--primary-color);
         }
 
         /* Main Content */
         .main-content {
             padding: 1rem;
-            margin-left: 16.66666667%;
             background-color: var(--bg-color);
         }
         
@@ -1556,6 +1454,105 @@ $donor_history = $unique_donor_history;
                 font-size: 12px;
             }
         }
+        
+        /* Physical Examination Modal Styles */
+        #physicalExaminationModal .modal-content {
+            border-radius: 15px;
+            border: none;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        #physicalExaminationModal .modal-header {
+            background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+            color: white;
+            border-radius: 15px 15px 0 0;
+            padding: 1.5rem;
+            border-bottom: none;
+        }
+        
+        #physicalExaminationModal .modal-body {
+            padding: 1.5rem;
+            background-color: #f8f9fa;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        
+        #physicalExaminationModal .modal-footer {
+            background-color: white;
+            border-top: 1px solid #e9ecef;
+            border-radius: 0 0 15px 15px;
+            padding: 1.5rem;
+        }
+        
+        #physicalExaminationModal .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1rem;
+        }
+        
+        #physicalExaminationModal .card-header {
+            border-radius: 12px 12px 0 0;
+            border-bottom: none;
+            padding: 1rem 1.5rem;
+        }
+        
+        #physicalExaminationModal .card-body {
+            padding: 1.5rem;
+        }
+        
+        #physicalExaminationModal .form-control,
+        #physicalExaminationModal .form-control:read-only {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            font-size: 14px;
+        }
+        
+        #physicalExaminationModal .form-control:read-only {
+            color: #495057;
+            font-weight: 500;
+        }
+        
+        #physicalExaminationModal .form-label {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 0.5rem;
+        }
+        
+        #physicalExaminationModal .alert-info {
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+            color: #0c5460;
+            border-radius: 8px;
+        }
+        
+        #physicalExaminationModal textarea.form-control {
+            resize: none;
+            min-height: 80px;
+        }
+        
+        /* Responsive adjustments for physical examination modal */
+        @media (max-width: 767.98px) {
+            #physicalExaminationModal .modal-dialog {
+                margin: 0.5rem;
+            }
+            
+            #physicalExaminationModal .modal-body {
+                padding: 1rem;
+                max-height: 60vh;
+            }
+            
+            #physicalExaminationModal .card-body {
+                padding: 1rem;
+            }
+            
+            #physicalExaminationModal .row.g-2 > .col-6,
+            #physicalExaminationModal .row.g-2 > .col-md-4 {
+                margin-bottom: 1rem;
+            }
+        }
     </style>
 </head>
 
@@ -1563,29 +1560,22 @@ $donor_history = $unique_donor_history;
     <div class="container-fluid p-0">
         <!-- Header -->
         <div class="dashboard-home-header">
-            <h4 class="header-title">Interviewer Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
-            <button class="register-btn" onclick="showConfirmationModal()">
-                Register Donor
-            </button>
+            <div class="header-left">
+                <h4 class="header-title">Interviewer Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
+            </div>
+            <div class="header-right">
+                <button class="register-btn" onclick="showConfirmationModal()">
+                    Register Donor
+                </button>
+                <a href="../../assets/php_func/logout.php" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            </div>
         </div>
 
         <div class="row g-0">
-            <!-- Sidebar -->
-            <nav class="col-md-3 col-lg-2 d-md-block sidebar">
-                <h4>Interviewer</h4>
-                
-                <ul class="nav flex-column">
-                    <li class="nav-item">
-                        <a class="nav-link active" href="dashboard-staff-medical-history-submissions.php">Medical Screening</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="../../assets/php_func/logout.php">Logout</a>
-                    </li>
-                </ul>
-            </nav>
-            
             <!-- Main Content -->
-            <main class="col-md-9 col-lg-10 main-content">
+            <main class="col-12 main-content">
                 <div class="content-wrapper">
                     <div class="welcome-section">
                         <h2 class="welcome-title">Welcome, Interviewer!</h2>
@@ -2539,47 +2529,220 @@ $donor_history = $unique_donor_history;
             // Handle proceed button click with confirmation
             function openMedicalHistoryForCurrentDonor() {
                 if (!currentDonorId) return;
-                    // Hide the deferral status modal first
-                    deferralStatusModal.hide();
-                    
-                    // Show the medical history modal
-                    const medicalHistoryModal = new bootstrap.Modal(document.getElementById('medicalHistoryModal'));
-                    const modalContent = document.getElementById('medicalHistoryModalContent');
-                    
-                    // Reset modal content to loading state
+                
+                // Check if this is a returning donor with physical examination data
+                const isReturningDonor = window.currentDonorType && window.currentDonorType.toLowerCase().includes('returning');
+                
+                if (isReturningDonor) {
+                    // For returning donors, show physical examination modal first
+                    showPhysicalExaminationModal(currentDonorId);
+                } else {
+                    // For new donors, proceed directly to medical history
+                    proceedToMedicalHistoryModal();
+                }
+            }
+            
+            // Function to show physical examination modal
+            function showPhysicalExaminationModal(donorId) {
+                const physicalModal = new bootstrap.Modal(document.getElementById('physicalExaminationModal'));
+                const modalContent = document.getElementById('physicalExaminationModalContent');
+                
+                // Reset modal content to loading state
                 modalContent.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+                
+                // Show the modal
+                physicalModal.show();
+                
+                // Fetch physical examination data
+                fetch('../../assets/php_func/fetch_physical_examination_info.php?donor_id=' + donorId)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.data) {
+                            displayPhysicalExaminationInfo(data.data, donorId);
+                        } else {
+                            modalContent.innerHTML = `
+                                <div class="alert alert-info">
+                                    <h6>No Physical Examination Data</h6>
+                                    <p>This returning donor doesn't have physical examination records yet.</p>
+                                    <p>You can proceed directly to medical history review.</p>
+                                </div>`;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching physical examination info:', error);
+                        modalContent.innerHTML = `
+                            <div class="alert alert-danger">
+                                <h6>Error Loading Data</h6>
+                                <p>Unable to load physical examination information. Please try again.</p>
+                            </div>`;
+                    });
+            }
+            
+            // Function to display physical examination information
+            function displayPhysicalExaminationInfo(physicalData, donorId) {
+                const modalContent = document.getElementById('physicalExaminationModalContent');
+                
+                // Format date
+                const formatDate = (dateString) => {
+                    if (!dateString) return 'N/A';
+                    const date = new Date(dateString);
+                    return date.toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                };
+                
+                // Calculate age from birthdate
+                const calculateAge = (birthdate) => {
+                    if (!birthdate) return 'N/A';
+                    const birth = new Date(birthdate);
+                    const today = new Date();
+                    let age = today.getFullYear() - birth.getFullYear();
+                    const monthDiff = today.getMonth() - birth.getMonth();
+                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+                        age--;
+                    }
+                    return age;
+                };
+                
+                const safe = (value) => value || 'N/A';
+                const fullName = `${safe(physicalData.surname)}, ${safe(physicalData.first_name)} ${safe(physicalData.middle_name)}`.trim();
+                const age = calculateAge(physicalData.birthdate);
+                const donorAgeGender = `${age}${physicalData.sex ? ', ' + physicalData.sex : ''}`;
+                
+                const physicalHTML = `
+                    <!-- Donor Information Header (Simple Layout like 2nd image) -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <div style="color:#666; font-size:0.9rem; margin-bottom:5px;">Date Screened: ${formatDate(physicalData.created_at)}</div>
+                                <div style="color:#333; font-weight:700; font-size:1.2rem; margin-bottom:5px;">${fullName}</div>
+                                <div style="color:#333; font-size:1rem;">${donorAgeGender}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="color:#666; font-size:0.9rem; margin-bottom:5px;">&nbsp;</div>
+                                <div style="color:#333; font-weight:700; font-size:1.1rem; margin-bottom:5px;">Donor ID ${safe(physicalData.prc_donor_number || 'N/A')}</div>
+                                <div style="color:#333; font-size:1rem;">${safe(physicalData.blood_type || 'N/A')}</div>
+                            </div>
+                        </div>
+                        <hr style="margin: 15px 0;"/>
+                    </div>
                     
-                    // Show the modal
-                    medicalHistoryModal.show();
+                    <!-- Physical Examination Results Section -->
+                    <div class="mb-3">
+                        <h6 class="mb-2" style="color:#b22222; font-weight:700;">Physical Examination Results</h6>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label small mb-1">Interviewer Remarks</label>
+                                <input class="form-control" value="${safe(physicalData.reason)}" readonly>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label small mb-1">Physical Exam Notes</label>
+                                <input class="form-control" value="${safe(physicalData.skin)}${physicalData.heent ? ' | HEENT: ' + physicalData.heent : ''}${physicalData.heart_and_lungs ? ' | Heart & Lungs: ' + physicalData.heart_and_lungs : ''}" readonly>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-1">Blood Type</label>
+                                <input class="form-control" value="${safe(physicalData.blood_type)}" readonly>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label small mb-1">Type of Donation</label>
+                                <input class="form-control" value="${safe(physicalData.donation_type)}" readonly>
+                            </div>
+                        </div>
+                    </div>
                     
-                    // Load the medical history form content
-                                    fetch('../../src/views/forms/medical-history-modal-content.php?donor_id=' + currentDonorId)
-                        .then(response => response.text())
-                        .then(data => {
-                            modalContent.innerHTML = data;
-                            
-                            // Execute any script tags in the loaded content
-                            const scripts = modalContent.querySelectorAll('script');
-                            scripts.forEach(script => {
-                                try {
-                                    const newScript = document.createElement('script');
-                                    if (script.type) newScript.type = script.type;
-                                    if (script.src) {
-                                        newScript.src = script.src;
-                                    } else {
-                                        newScript.text = script.textContent || '';
-                                    }
-                                    document.body.appendChild(newScript);
-                                } catch (e) {
-                                    console.log('Script execution error:', e);
+                    <!-- Vital Signs Section -->
+                    <div class="mb-3">
+                        <h6 class="mb-2" style="color:#b22222; font-weight:700;">Vital Signs</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead class="table-danger">
+                                    <tr>
+                                        <th>Blood Pressure (BP)</th>
+                                        <th>Weight</th>
+                                        <th>Pulse</th>
+                                        <th>Temperature</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><input class="form-control form-control-sm" value="${safe(physicalData.blood_pressure)}" readonly></td>
+                                        <td><input class="form-control form-control-sm" value="${safe(physicalData.body_weight)}" readonly></td>
+                                        <td><input class="form-control form-control-sm" value="${safe(physicalData.pulse_rate)}" readonly></td>
+                                        <td><input class="form-control form-control-sm" value="${safe(physicalData.body_temp)}" readonly></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Final Assessment Section -->
+                    <div class="mb-3">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label small mb-1">Fitness to Donate</label>
+                                <input class="form-control" value="${safe(physicalData.remarks)}" readonly>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label small mb-1">Final Remarks</label>
+                                <input class="form-control" value="${safe(physicalData.disapproval_reason)}" readonly>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                modalContent.innerHTML = physicalHTML;
+                
+                // Store donor ID for the proceed button
+                modalContent.setAttribute('data-donor-id', donorId);
+            }
+            
+            // Function to proceed to medical history modal
+            function proceedToMedicalHistoryModal() {
+                // Hide the deferral status modal first
+                deferralStatusModal.hide();
+                
+                // Show the medical history modal
+                const medicalHistoryModal = new bootstrap.Modal(document.getElementById('medicalHistoryModal'));
+                const modalContent = document.getElementById('medicalHistoryModalContent');
+                
+                // Reset modal content to loading state
+                modalContent.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+                
+                // Show the modal
+                medicalHistoryModal.show();
+                
+                // Load the medical history form content
+                fetch('../../src/views/forms/medical-history-modal-content.php?donor_id=' + currentDonorId)
+                    .then(response => response.text())
+                    .then(data => {
+                        modalContent.innerHTML = data;
+                        
+                        // Execute any script tags in the loaded content
+                        const scripts = modalContent.querySelectorAll('script');
+                        scripts.forEach(script => {
+                            try {
+                                const newScript = document.createElement('script');
+                                if (script.type) newScript.type = script.type;
+                                if (script.src) {
+                                    newScript.src = script.src;
+                                } else {
+                                    newScript.text = script.textContent || '';
                                 }
-                            });
-                            
-                            // After loading content, generate the questions
-                            generateMedicalHistoryQuestions();
-                        })
-                        .catch(error => {
-                            console.error('Error loading medical history form:', error);
+                                document.body.appendChild(newScript);
+                            } catch (e) {
+                                console.log('Script execution error:', e);
+                            }
+                        });
+                        
+                        // After loading content, generate the questions
+                        generateMedicalHistoryQuestions();
+                    })
+                    .catch(error => {
+                        console.error('Error loading medical history form:', error);
                         modalContent.innerHTML = '<div class="alert alert-danger"><h6>Error Loading Form</h6><p>Unable to load the medical history form. Please try again.</p><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>';
                     });
             }
@@ -2601,6 +2764,21 @@ $donor_history = $unique_donor_history;
                             proceedBtn.onclick = () => { confirmModal.hide(); openMedicalHistoryForCurrentDonor(); };
                         }
                         confirmModal.show();
+                    });
+                }
+                
+                // Bind physical examination modal proceed button
+                const physicalProceedButton = document.getElementById('proceedToMedicalHistoryFromPhysical');
+                if (physicalProceedButton && physicalProceedButton.addEventListener) {
+                    physicalProceedButton.addEventListener('click', function() {
+                        // Hide physical examination modal
+                        const physicalModal = bootstrap.Modal.getInstance(document.getElementById('physicalExaminationModal'));
+                        if (physicalModal) {
+                            physicalModal.hide();
+                        }
+                        
+                        // Proceed to medical history modal
+                        proceedToMedicalHistoryModal();
                     });
                 }
             }, 100);
@@ -3668,5 +3846,31 @@ $donor_history = $unique_donor_history;
 
     <!-- Include Screening Form Modal -->
     <?php include '../../src/views/forms/staff_donor_initial_screening_form_modal.php'; ?>
+
+    <!-- Physical Examination Review Modal -->
+    <div class="modal fade" id="physicalExaminationModal" tabindex="-1" aria-labelledby="physicalExaminationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;">
+                    <h5 class="modal-title" id="physicalExaminationModalLabel">
+                        <i class="fas fa-stethoscope me-2"></i>
+                        Physical Examination Results
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="physicalExaminationModalContent">
+                    <div class="d-flex justify-content-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="proceedToMedicalHistoryFromPhysical">Proceed to Medical History</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

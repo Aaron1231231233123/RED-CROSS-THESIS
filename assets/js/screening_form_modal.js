@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!screeningModal || !screeningForm) return;
 
     let currentStep = 1;
-    const totalSteps = 5;
+    const totalSteps = 3;
 
     // Initialize form functionality when modal is shown
     screeningModal.addEventListener('shown.bs.modal', function() {
@@ -66,20 +66,36 @@ document.addEventListener('DOMContentLoaded', function() {
         prefillFromExisting();
 
         // Add donation type change handlers
-        const donationTypeRadios = document.querySelectorAll('input[name="donation-type"]');
-        donationTypeRadios.forEach(radio => {
-            radio.addEventListener('change', function() {
-                updateStep3Content(this.value);
+        const inhouseDonationTypeSelect = document.getElementById('inhouseDonationTypeSelect');
+        const mobileDonationTypeSelect = document.getElementById('mobileDonationTypeSelect');
+        
+        if (inhouseDonationTypeSelect) {
+            inhouseDonationTypeSelect.addEventListener('change', function() {
+                handleDonationTypeChange('inhouse', this.value);
             });
-        });
+        }
+        
+        if (mobileDonationTypeSelect) {
+            mobileDonationTypeSelect.addEventListener('change', function() {
+                handleDonationTypeChange('mobile', this.value);
+            });
+        }
 
-        // Add history change handlers
-        const historyRadios = document.querySelectorAll('input[name="history"]');
-        historyRadios.forEach(radio => {
-            radio.addEventListener('change', function() {
-                updateHistoryDetails(this.value);
+        // Add real-time validation for basic screening fields
+        const bodyWeightInput = document.getElementById('bodyWeightInput');
+        const specificGravityInput = document.getElementById('specificGravityInput');
+        
+        if (bodyWeightInput) {
+            bodyWeightInput.addEventListener('input', function() {
+                validateBodyWeight(this.value);
             });
-        });
+        }
+        
+        if (specificGravityInput) {
+            specificGravityInput.addEventListener('input', function() {
+                validateSpecificGravity(this.value);
+            });
+        }
     }
 
     function resetToStep(step) {
@@ -98,23 +114,12 @@ document.addEventListener('DOMContentLoaded', function() {
         updateButtons();
 
         // Ensure prefill has run by the time user navigates
-        if (step === 1 || step === 4) {
+        if (step === 1 || step === 3) {
             prefillFromExisting();
         }
 
-        // Update Step 3 content based on selected donation type when entering step 3
+        // Generate review content if going to step 3
         if (step === 3) {
-            const selectedDonationType = document.querySelector('input[name="donation-type"]:checked');
-            if (selectedDonationType) {
-                updateStep3Content(selectedDonationType.value);
-            } else {
-                // If no donation type selected, show the default "no additional details"
-                updateStep3Content('');
-            }
-        }
-
-        // Generate review content if going to step 5
-        if (step === 5) {
             generateReviewContent();
         }
     }
@@ -201,6 +206,113 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         return isValid;
+    }
+
+    function validateBodyWeight(value) {
+        const alert = document.getElementById('bodyWeightAlert');
+        const input = document.getElementById('bodyWeightInput');
+        
+        if (!alert || !input) return;
+        
+        const weight = parseFloat(value);
+        
+        if (weight < 50 && weight > 0) {
+            // Show warning alert
+            alert.style.display = 'block';
+            input.style.borderColor = '#dc3545';
+        } else {
+            // Hide alert and reset border
+            alert.style.display = 'none';
+            input.style.borderColor = weight > 0 ? '#28a745' : '#e9ecef';
+        }
+    }
+
+    function validateSpecificGravity(value) {
+        const alert = document.getElementById('specificGravityAlert');
+        const input = document.getElementById('specificGravityInput');
+        
+        if (!alert || !input) return;
+        
+        const gravity = parseFloat(value);
+        
+        if (gravity < 12.5 && gravity > 0) {
+            // Show warning alert
+            alert.style.display = 'block';
+            input.style.borderColor = '#dc3545';
+        } else {
+            // Hide alert and reset border
+            alert.style.display = 'none';
+            input.style.borderColor = gravity > 0 ? '#28a745' : '#e9ecef';
+        }
+    }
+
+    function handleDonationTypeChange(type, value) {
+        const inhouseSelect = document.getElementById('inhouseDonationTypeSelect');
+        const mobileSelect = document.getElementById('mobileDonationTypeSelect');
+        
+        if (type === 'inhouse') {
+            // If IN-HOUSE is selected, clear and hide MOBILE dropdown
+            if (value && value !== '') {
+                mobileSelect.value = '';
+                mobileSelect.style.display = 'none';
+                mobileSelect.parentElement.style.display = 'none';
+            } else {
+                // If IN-HOUSE is cleared, show MOBILE dropdown again
+                mobileSelect.style.display = 'block';
+                mobileSelect.parentElement.style.display = 'block';
+            }
+        } else if (type === 'mobile') {
+            // If MOBILE is selected, clear and hide IN-HOUSE dropdown
+            if (value && value !== '') {
+                inhouseSelect.value = '';
+                inhouseSelect.style.display = 'none';
+                inhouseSelect.parentElement.style.display = 'none';
+            } else {
+                // If MOBILE is cleared, show IN-HOUSE dropdown again
+                inhouseSelect.style.display = 'block';
+                inhouseSelect.parentElement.style.display = 'block';
+            }
+        }
+        
+        // Update conditional sections based on the selected value
+        updateConditionalSections(value);
+    }
+
+    function updateConditionalSections(donationType) {
+        const mobileDonationSection = document.getElementById('mobileDonationSection');
+        const patientDetailsSection = document.getElementById('patientDetailsSection');
+        const noAdditionalDetails = document.getElementById('noAdditionalDetails');
+        
+        // Hide all sections first
+        if (mobileDonationSection) mobileDonationSection.style.display = 'none';
+        if (patientDetailsSection) patientDetailsSection.style.display = 'none';
+        if (noAdditionalDetails) noAdditionalDetails.style.display = 'none';
+
+        // If no donation type is selected, show nothing
+        if (!donationType) {
+            return;
+        }
+
+        // Check donation type conditions
+        const isMobile = donationType.startsWith('mobile-');
+        const isPatientDirected = donationType === 'patient-directed' || donationType === 'mobile-patient-directed';
+        const isWalkInOrReplacement = donationType === 'walk-in' || donationType === 'replacement' || 
+                                     donationType === 'mobile-walk-in' || donationType === 'mobile-replacement';
+        
+        // Show mobile section for ANY mobile donation type
+        if (isMobile && mobileDonationSection) {
+            mobileDonationSection.style.display = 'block';
+        }
+        
+        // Show patient details section for ANY patient-directed donation (mobile or in-house)
+        if (isPatientDirected && patientDetailsSection) {
+            patientDetailsSection.style.display = 'block';
+        }
+        
+        // Show "no additional details" only for walk-in/replacement (non-patient-directed donations)
+        if (isWalkInOrReplacement && !isPatientDirected && noAdditionalDetails) {
+            noAdditionalDetails.style.display = 'block';
+        }
     }
 
     function updateStep3Content(donationType) {
@@ -294,7 +406,10 @@ document.addEventListener('DOMContentLoaded', function() {
         reviewHtml += '</div>';
 
         // Donation Type
-        const donationType = formData.get('donation-type');
+        const inhouseType = formData.get('inhouse-donation-type');
+        const mobileType = formData.get('mobile-donation-type');
+        const donationType = inhouseType || mobileType;
+        
         reviewHtml += '<div class="mb-3">';
         reviewHtml += '<h6 class="text-danger mb-2">Donation Type</h6>';
         reviewHtml += `<div class="screening-review-item">
@@ -415,6 +530,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Get all form data
         const formData = new FormData(screeningForm);
+        
+        // Combine donation type fields into a single field for backend compatibility
+        const inhouseType = formData.get('inhouse-donation-type');
+        const mobileType = formData.get('mobile-donation-type');
+        const donationType = inhouseType || mobileType;
+        if (donationType) {
+            formData.set('donation-type', donationType);
+        }
         
         // Apply auto-increment logic for Red Cross donations before submission
         const rcInput = document.querySelector('input[name="red-cross"]');
@@ -639,83 +762,81 @@ function prefillFromExisting() {
                 const bt = document.querySelector('select[name="blood-type"]');
                 if (bt && (bt.value === '' || bt.value === null)) bt.value = d.blood_type || '';
 
-                // Donation type
-                const dt = document.querySelector(`input[name="donation-type"][value="${d.donation_type}"]`);
-                if (dt && !dt.checked) {
-                    dt.checked = true;
-                    // Trigger content update for step 3 sections
-                    const event = new Event('change');
-                    dt.dispatchEvent(event);
+                // Trigger validation for any existing values
+                const bodyWeightInput = document.getElementById('bodyWeightInput');
+                const specificGravityInput = document.getElementById('specificGravityInput');
+                
+                if (bodyWeightInput && bodyWeightInput.value) {
+                    validateBodyWeight(bodyWeightInput.value);
+                }
+                if (specificGravityInput && specificGravityInput.value) {
+                    validateSpecificGravity(specificGravityInput.value);
                 }
 
-                // History (infer yes if any signals present)
-                const inferredPrev = (
-                    d.has_previous_donation === true ||
-                    (typeof d.red_cross_donations === 'number' && d.red_cross_donations > 0) ||
-                    (typeof d.hospital_donations === 'number' && d.hospital_donations > 0) ||
-                    (d.last_donated_at && d.last_donated_at !== '0001-01-01' && d.last_donated_at !== '0001-01-01T00:00:00Z')
-                );
-                const hasPrev = inferredPrev;
-                const yesRadio = document.querySelector('input[name="history"][value="yes"]');
-                const noRadio = document.querySelector('input[name="history"][value="no"]');
-                if (hasPrev && yesRadio && !yesRadio.checked) yesRadio.checked = true;
-                if (!hasPrev && noRadio && !noRadio.checked) noRadio.checked = true;
-                const historyDetails = document.getElementById('historyDetails');
-                if (hasPrev) {
-                    if (historyDetails) historyDetails.style.display = 'block';
-                    const rcTimes = document.querySelector('input[name="red-cross"]');
-                    const hospTimes = document.querySelector('input[name="hospital-history"]');
-                    const lastRcDate = document.querySelector('input[name="last-rc-donation-date"]');
-                    const lastHospDate = document.querySelector('input[name="last-hosp-donation-date"]');
-                    const lastRcPlace = document.querySelector('input[name="last-rc-donation-place"]');
-                    const lastHospPlace = document.querySelector('input[name="last-hosp-donation-place"]');
-                    
-                    console.log('[Screening Prefill] Reached donation history section, hasPrev:', hasPrev);
-                    
-                    // Set donation counts - show original value in form but prepare incremented value for submission
-                    if (rcTimes) {
-                        const currentRcCount = (typeof d.red_cross_donations === 'number') ? d.red_cross_donations : (d.red_cross_donations ? parseInt(d.red_cross_donations, 10) || 0 : 0);
-                        // Show original value in form for debugging
-                        rcTimes.value = currentRcCount;
-                        // Store incremented value for submission
-                        rcTimes.setAttribute('data-incremented-value', currentRcCount + 1);
-                        console.log('[Auto-Increment] Red Cross: Form shows', currentRcCount, 'but will submit', currentRcCount + 1);
-                    }
-                    
-                    if (hospTimes) {
-                        // Hospital donations should only be filled manually by user
-                        // Keep existing value or set to 0 if not set
-                        const currentHospCount = (typeof d.hospital_donations === 'number') ? d.hospital_donations : (d.hospital_donations ? parseInt(d.hospital_donations, 10) || 0 : 0);
-                        hospTimes.value = currentHospCount;
-                        console.log('[Auto-Increment] Hospital:', currentHospCount, '(no auto-increment)');
-                    }
-                    // Prefer last_donated_at (timestampz) if present, fallback to per-source dates
-                    let isoDate = null;
-                    if (d.last_donated_at && typeof d.last_donated_at === 'string' && !d.last_donated_at.includes('0001-01-01')) {
-                        try {
-                            const dt = new Date(d.last_donated_at);
-                            const year = dt.getUTCFullYear();
-                            if (!isNaN(dt.getTime()) && year > 1) {
-                                // yyyy-mm-dd
-                                const yyyy = year;
-                                const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
-                                const dd = String(dt.getUTCDate()).padStart(2, '0');
-                                isoDate = `${yyyy}-${mm}-${dd}`;
+                // Donation type
+                const inhouseSelect = document.querySelector('select[name="inhouse-donation-type"]');
+                const mobileSelect = document.querySelector('select[name="mobile-donation-type"]');
+                
+                if (d.donation_type) {
+                    if (d.donation_type.startsWith('mobile-')) {
+                        // Mobile donation type
+                        if (mobileSelect) {
+                            mobileSelect.value = d.donation_type;
+                            // Apply the same hiding logic as handleDonationTypeChange
+                            const inhouseSelect = document.getElementById('inhouseDonationTypeSelect');
+                            if (inhouseSelect) {
+                                inhouseSelect.value = '';
+                                inhouseSelect.style.display = 'none';
+                                inhouseSelect.parentElement.style.display = 'none';
                             }
-                        } catch (_) {}
+                            updateConditionalSections(d.donation_type);
+                        }
+                    } else {
+                        // In-house donation type
+                        if (inhouseSelect) {
+                            inhouseSelect.value = d.donation_type;
+                            // Apply the same hiding logic as handleDonationTypeChange
+                            const mobileSelect = document.getElementById('mobileDonationTypeSelect');
+                            if (mobileSelect) {
+                                mobileSelect.value = '';
+                                mobileSelect.style.display = 'none';
+                                mobileSelect.parentElement.style.display = 'none';
+                            }
+                            updateConditionalSections(d.donation_type);
+                        }
                     }
-                    if (lastRcDate) {
-                        if (isoDate && (lastRcDate.value === '' || lastRcDate.value === null)) lastRcDate.value = isoDate;
-                        else if (d.last_rc_donation_date && typeof d.last_rc_donation_date === 'string' && !d.last_rc_donation_date.includes('0001-01-01')) lastRcDate.value = d.last_rc_donation_date;
-                    }
-                    if (lastHospDate) {
-                        if (isoDate && (lastHospDate.value === '' || lastHospDate.value === null)) lastHospDate.value = isoDate;
-                        else if (d.last_hosp_donation_date && typeof d.last_hosp_donation_date === 'string' && !d.last_hosp_donation_date.includes('0001-01-01')) lastHospDate.value = d.last_hosp_donation_date;
-                    }
-                    if (lastRcPlace && d.last_rc_donation_place) lastRcPlace.value = d.last_rc_donation_place;
-                    if (lastHospPlace && d.last_hosp_donation_place) lastHospPlace.value = d.last_hosp_donation_place;
-                } else if (historyDetails) {
-                    historyDetails.style.display = 'none';
+                }
+
+                // Mobile donation details
+                if (d.mobile_place) {
+                    const mobilePlace = document.querySelector('input[name="mobile-place"]');
+                    if (mobilePlace) mobilePlace.value = d.mobile_place;
+                }
+                if (d.mobile_organizer) {
+                    const mobileOrganizer = document.querySelector('input[name="mobile-organizer"]');
+                    if (mobileOrganizer) mobileOrganizer.value = d.mobile_organizer;
+                }
+
+                // Patient details
+                if (d.patient_name) {
+                    const patientName = document.querySelector('input[name="patient-name"]');
+                    if (patientName) patientName.value = d.patient_name;
+                }
+                if (d.hospital) {
+                    const hospital = document.querySelector('input[name="hospital"]');
+                    if (hospital) hospital.value = d.hospital;
+                }
+                if (d.blood_type_patient) {
+                    const bloodTypePatient = document.querySelector('select[name="blood-type-patient"]');
+                    if (bloodTypePatient) bloodTypePatient.value = d.blood_type_patient;
+                }
+                if (d.wb_component) {
+                    const wbComponent = document.querySelector('input[name="wb-component"]');
+                    if (wbComponent) wbComponent.value = d.wb_component;
+                }
+                if (d.no_units) {
+                    const noUnits = document.querySelector('input[name="no-units"]');
+                    if (noUnits) noUnits.value = d.no_units;
                 }
             })
             .catch((e) => { console.warn('[Screening Prefill] Fetch failed', e); });

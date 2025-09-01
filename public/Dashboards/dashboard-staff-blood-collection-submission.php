@@ -334,7 +334,6 @@ foreach ($display_records as $index => $record) {
         :root {
             --bg-color: #f5f5f5;
             --text-color: #000;
-            --sidebar-bg: #ffffff;
             --hover-bg: #f0f0f0;
             --primary-color: #b22222; /* Red Cross red */
             --primary-dark: #8b0000; /* Darker red for hover and separator */
@@ -352,10 +351,15 @@ foreach ($display_records as $index => $record) {
 
         /* Header styling */
         .dashboard-home-header {
-            margin-left: 16.66666667%;
             background: white;
             border-bottom: 1px solid #e0e0e0;
             padding: 0.75rem 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .header-left {
             display: flex;
             align-items: center;
         }
@@ -364,13 +368,19 @@ foreach ($display_records as $index => $record) {
             font-weight: 600;
             font-size: 1rem;
             margin: 0;
-            flex-grow: 1;
+            color: #333;
         }
         
         .header-date {
             color: #777;
             font-size: 0.8rem;
             margin-left: 0.5rem;
+        }
+        
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
         }
         
         .register-btn {
@@ -382,61 +392,31 @@ foreach ($display_records as $index => $record) {
             font-weight: 500;
             text-decoration: none;
             display: inline-block;
-            margin-left: auto;
             font-size: 0.9rem;
         }
-
-        /* Sidebar Styles */
-        .sidebar {
-            background: var(--sidebar-bg);
-            height: 100vh;
-            padding: 1rem;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 16.66666667%;
-            overflow-y: auto;
-            z-index: 1000;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-            border-right: 1px solid #e0e0e0;
-        }
-
-        .sidebar h4 {
-            padding: 1rem 0;
-            margin-bottom: 1.5rem;
-            border-bottom: 2px solid #dee2e6;
-            color: #000;
-            font-weight: bold;
-        }
-
-        .sidebar .nav-link {
-            padding: 0.8rem 1rem;
-            margin-bottom: 0.5rem;
-            border-radius: 0;
-            transition: all 0.3s ease;
-            color: #000 !important;
+        
+        .logout-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.4rem 0.75rem;
+            border-radius: 3px;
+            font-weight: 500;
             text-decoration: none;
-            border-left: 5px solid transparent;
+            display: inline-block;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
         }
-
-        .sidebar .nav-link:hover,
-        .sidebar  {
-            background: var(--hover-bg);
-            color: var(--active-color) !important;
-            border-left-color: var(--active-color);
-            border-radius: 4px !important;
-        }
-
-        .nav-link.active{
-            background-color: var(--active-color);
-            color: white !important;
-            border-radius: 4px !important;
+        
+        .logout-btn:hover {
+            background-color: var(--primary-dark);
+            color: white;
+            text-decoration: none;
         }
 
         /* Main Content */
         .main-content {
             padding: 1rem;
-            margin-left: 16.66666667%;
             background-color: var(--bg-color);
         }
         
@@ -1686,61 +1666,22 @@ foreach ($display_records as $index => $record) {
     <div class="container-fluid p-0">
         <!-- Header -->
         <div class="dashboard-home-header">
-            <h4 class="header-title">Phlebotomist Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
-            <button class="register-btn" onclick="showConfirmationModal()">
-                Register Donor
-            </button>
+            <div class="header-left">
+                <h4 class="header-title">Phlebotomist Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
+            </div>
+            <div class="header-right">
+                <button class="register-btn" onclick="showConfirmationModal()">
+                    Register Donor
+                </button>
+                <a href="../../assets/php_func/logout.php" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            </div>
         </div>
 
         <div class="row g-0">
-            <!-- Sidebar -->
-            <nav class="col-md-3 col-lg-2 d-md-block sidebar">
-                <h4>Staff</h4>
-                <ul class="nav flex-column">
-                    
-                <?php if ($user_staff_roles === 'interviewer'): ?>
-                        <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-donor-submission.php">
-                                System Registration
-                            </a>
-                        </li>
-                    <?php endif; ?>
-
-                    <?php if ($user_staff_roles === 'reviewer'): ?>
-                        <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-medical-history-submissions.php">
-                                New Donor
-                            </a>
-                        </li>
-                    <?php endif; ?>
-                    
-                    <?php if ($user_staff_roles === 'physician'): ?>
-                        <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-physical-submission.php">
-                                Physical Exam Submissions
-                            </a>
-                        </li>
-                    <?php endif; ?>
-                    
-                    <?php if ($user_staff_roles === 'phlebotomist'): ?>
-                        <li class="nav-item">
-                            <a class="nav-link active" href="dashboard-staff-blood-collection-submission.php">
-                                Blood Collection 
-                                Queue
-                            </a>
-                        </li>
-                    <?php endif; ?>
-                    <li class="nav-item">
-                        <a class="nav-link" href="dashboard-staff-history/dashboard-blood-collection-history.php">Blood Collection History</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="../../assets/php_func/logout.php">Logout</a>
-                    </li>
-                </ul>
-            </nav>
-            
             <!-- Main Content -->
-            <main class="col-md-9 col-lg-10 main-content">
+            <main class="col-12 main-content">
                 <div class="content-wrapper">
 
                     
