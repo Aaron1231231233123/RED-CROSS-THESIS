@@ -15,99 +15,14 @@ if ($_SESSION['role_id'] !== $required_role) {
     exit();
 }
 
-// Function to make API requests to Supabase
-function supabaseRequest($endpoint, $method = 'GET', $data = null) {
-    $url = SUPABASE_URL . "/rest/v1/" . $endpoint;
+// OPTIMIZATION: Include shared optimized functions
+include_once __DIR__ . '/module/optimized_functions.php';
 
-    $headers = [
-        "Content-Type: application/json",
-        "apikey: " . SUPABASE_API_KEY,
-        "Authorization: Bearer " . SUPABASE_API_KEY,
-        "Prefer: return=representation"
-    ];
-
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    
-    if ($method !== 'GET') {
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-        if ($data !== null) {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-        }
-    }
-
-    // Execute the request
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    
-    if ($response === false) {
-        $error = curl_error($ch);
-        curl_close($ch);
-        error_log("API Error: " . $error);
-        return [
-            'code' => 0,
-            'data' => null,
-            'error' => "Connection error: $error"
-        ];
-    }
-    
-    curl_close($ch);
-    
-    if ($httpCode >= 200 && $httpCode < 300) {
-        $decoded = json_decode($response, true);
-        return [
-            'code' => $httpCode,
-            'data' => $decoded
-        ];
-    } else {
-        error_log("HTTP Error $httpCode: " . substr($response, 0, 500));
-        return [
-            'code' => $httpCode,
-            'data' => null,
-            'error' => "HTTP Error $httpCode: " . substr($response, 0, 500)
-        ];
-    }
-}
-
-// Function to query direct SQL
-function querySQL($table, $select = "*", $filters = null) {
-    $ch = curl_init();
-    
-    $headers = [
-        'Content-Type: application/json',
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY,
-        'Prefer: return=representation'
-    ];
-    
-    $url = SUPABASE_URL . '/rest/v1/' . $table . '?select=' . urlencode($select);
-    
-    if ($filters) {
-        foreach ($filters as $key => $value) {
-            $url .= '&' . $key . '=' . urlencode($value);
-        }
-    }
-    
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    
-    $response = curl_exec($ch);
-    $error = curl_error($ch);
-    
-    curl_close($ch);
-    
-    if ($error) {
-        error_log("Query SQL Error: " . $error);
-        return ['error' => $error];
-    }
-    
-    return json_decode($response, true);
-}
+// OPTIMIZATION: Performance monitoring
+$startTime = microtime(true);
 
 // ----------------------------------------------------
-// PART 1: GET HOSPITAL REQUESTS COUNT
+// PART 1: GET HOSPITAL REQUESTS COUNT (OPTIMIZED)
 // ----------------------------------------------------
 $hospitalRequestsCount = 0;
 $bloodRequestsResponse = supabaseRequest("blood_requests?status=eq.Pending&select=request_id");
@@ -116,36 +31,21 @@ if (isset($bloodRequestsResponse['data']) && is_array($bloodRequestsResponse['da
 }
 
 // ----------------------------------------------------
-// SHARED: GET DECLINED DONOR IDS (for reuse across parts)
+// SHARED: GET DECLINED DONOR IDS (OPTIMIZED)
 // ----------------------------------------------------
 // Get all donors with non-accepted remarks in physical examination
 $declinedDonorIds = [];
 
-// Query physical examination for non-accepted remarks
-$physicalExamQuery = curl_init();
-curl_setopt_array($physicalExamQuery, [
-    CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?remarks=neq.Accepted&select=donor_id,donor_form_id",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        "apikey: " . SUPABASE_API_KEY,
-        "Authorization: Bearer " . SUPABASE_API_KEY,
-        "Content-Type: application/json"
-    ],
-]);
+// OPTIMIZATION: Use enhanced querySQL function with retry mechanism
+$physicalExamRecords = querySQL('physical_examination', 'donor_id,donor_form_id', ['remarks' => 'neq.Accepted']);
 
-$physicalExamResponse = curl_exec($physicalExamQuery);
-curl_close($physicalExamQuery);
-
-if ($physicalExamResponse) {
-    $physicalExamRecords = json_decode($physicalExamResponse, true);
-    if (is_array($physicalExamRecords)) {
-        foreach ($physicalExamRecords as $record) {
-            if (!empty($record['donor_id'])) {
-                $declinedDonorIds[] = $record['donor_id'];
-            }
-            if (!empty($record['donor_form_id'])) {
-                $declinedDonorIds[] = $record['donor_form_id'];
-            }
+if (is_array($physicalExamRecords) && !isset($physicalExamRecords['error'])) {
+    foreach ($physicalExamRecords as $record) {
+        if (!empty($record['donor_id'])) {
+            $declinedDonorIds[] = $record['donor_id'];
+        }
+        if (!empty($record['donor_form_id'])) {
+            $declinedDonorIds[] = $record['donor_form_id'];
         }
     }
 }
@@ -162,14 +62,23 @@ $bloodReceivedCount = 0;
 // Get all declined donor IDs in one query (reuse from PART 1)
 $declinedDonorIdsForApproved = $declinedDonorIds; // Reuse the already fetched declined IDs
 
-// Now get approved eligibility records
-$approvedDonationsResponse = supabaseRequest("eligibility?status=eq.approved&select=eligibility_id,donor_id");
+// OPTIMIZATION: Get approved eligibility records with enhanced query
+$approvedDonationsResponse = supabaseRequest("eligibility?or=(status.eq.approved,status.eq.eligible,collection_successful.eq.true)&select=eligibility_id,donor_id,status,collection_successful");
 $seenApprovedDonorIds = [];
 
 if (isset($approvedDonationsResponse['data']) && is_array($approvedDonationsResponse['data'])) {
     // Filter out donors with non-accepted physical examination remarks
     foreach ($approvedDonationsResponse['data'] as $donation) {
-        if (!in_array($donation['donor_id'], $declinedDonorIdsForApproved)) {
+        // Check if this donation is actually approved
+        $isApproved = false;
+        $status = $donation['status'] ?? '';
+        $collectionSuccessful = $donation['collection_successful'] ?? false;
+        
+        if ($status === 'approved' || $status === 'eligible' || $collectionSuccessful === true) {
+            $isApproved = true;
+        }
+        
+        if ($isApproved && !in_array($donation['donor_id'], $declinedDonorIdsForApproved)) {
             // Only count each donor_id once
             if (!in_array($donation['donor_id'], $seenApprovedDonorIds)) {
                 $bloodReceivedCount++;
@@ -186,20 +95,11 @@ if (isset($approvedDonationsResponse['data']) && is_array($approvedDonationsResp
 $bloodInStockCount = 0;
 $today = date('Y-m-d');
 
-// OPTIMIZED: Get all blood collection data in one query
-$bloodCollectionQuery = curl_init();
-curl_setopt_array($bloodCollectionQuery, [
-    CURLOPT_URL => SUPABASE_URL . "/rest/v1/blood_collection?select=blood_collection_id,amount_taken",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        "apikey: " . SUPABASE_API_KEY,
-        "Authorization: Bearer " . SUPABASE_API_KEY,
-        "Content-Type: application/json"
-    ],
-]);
-$bloodCollectionResponse = curl_exec($bloodCollectionQuery);
-curl_close($bloodCollectionQuery);
-$bloodCollectionData = json_decode($bloodCollectionResponse, true) ?: [];
+// OPTIMIZATION: Get all blood collection data in one query with enhanced settings
+$bloodCollectionData = querySQL('blood_collection', 'blood_collection_id,amount_taken');
+if (!is_array($bloodCollectionData) || isset($bloodCollectionData['error'])) {
+    $bloodCollectionData = [];
+}
 
 // Create lookup array for blood collection data
 $bloodCollectionLookup = [];
@@ -277,6 +177,11 @@ foreach ($bloodInventory as $bag) {
 
 // Round to nearest integer
 $bloodInStockCount = (int)$bloodInStockCount;
+
+// OPTIMIZATION: Performance logging and caching
+$endTime = microtime(true);
+$executionTime = round(($endTime - $startTime) * 1000, 2); // Convert to milliseconds
+addPerformanceHeaders($executionTime, $bloodReceivedCount, "Dashboard - Hospital Requests: {$hospitalRequestsCount}, Blood In Stock: {$bloodInStockCount}");
 
 // ----------------------------------------------------
 // PART 4: GET BLOOD AVAILABILITY BY TYPE

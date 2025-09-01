@@ -15,132 +15,19 @@ if ($_SESSION['role_id'] !== $required_role) {
     exit();
 }
 
-// Function to make API requests to Supabase
-function supabaseRequest($endpoint, $method = 'GET', $data = null) {
-    $url = SUPABASE_URL . "/rest/v1/" . $endpoint;
+// OPTIMIZATION: Include shared optimized functions
+include_once __DIR__ . '/module/optimized_functions.php';
 
-    $headers = [
-        "Content-Type: application/json",
-        "apikey: " . SUPABASE_API_KEY,
-        "Authorization: Bearer " . SUPABASE_API_KEY,
-        "Prefer: return=representation"
-    ];
+// OPTIMIZATION: Performance monitoring
+$startTime = microtime(true);
 
-    // Debug log the endpoint and method
-    error_log("supabaseRequest: $method $url");
-    if ($data) {
-        error_log("Request data: " . json_encode($data));
-    }
-
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Only if needed for local development
-    
-    // Set the appropriate HTTP method
-    if ($method !== 'GET') {
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-        if ($data !== null) {
-            // CRITICAL FIX: Ensure enum values are using the correct values
-            // This fixes the "invalid input value for enum request_status" error
-            if (isset($data['status'])) {
-                // Map status values to allowed enum values
-                $status_map = [// Fix the status name!
-                    'Declined' => 'Declined',
-                    'Pending' => 'Pending',
-                    'Accepted' => 'Accepted',
-                ];
-                
-                // If the status is in our map, use the correct value
-                if (array_key_exists($data['status'], $status_map)) {
-                    $data['status'] = $status_map[$data['status']];
-                    error_log("Status mapped to valid enum value: " . $data['status']);
-                } else {
-                    error_log("WARNING: Unknown status value: " . $data['status']);
-                }
-            }
-            
-            // Handle timestamp format for Supabase's PostgreSQL
-            if (isset($data['last_updated'])) {
-                // Format: "2023-05-30T15:30:45+00:00" (SQLite and PostgreSQL compatible)
-                $data['last_updated'] = gmdate('Y-m-d\TH:i:s\+00:00');
-            }
-            
-            // Convert data to JSON
-            $json_data = json_encode($data);
-            if ($json_data === false) {
-                error_log("JSON encode error: " . json_last_error_msg());
-                return [
-                    'code' => 0,
-                    'data' => null,
-                    'error' => "JSON encode error: " . json_last_error_msg()
-                ];
-            }
-            
-            // Log request for debugging
-            error_log("Supabase request to $url: $method with data: $json_data");
-            
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $json_data);
-        }
-    }
-
-    // Execute the request
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    
-    // Check for cURL errors
-    if ($response === false) {
-        $error = curl_error($ch);
-        $errno = curl_errno($ch);
-        curl_close($ch);
-        
-        error_log("cURL Error ($errno): $error in request to $url");
-        return [
-            'code' => 0,
-            'data' => null,
-            'error' => "Connection error: $error"
-        ];
-    }
-    
-    curl_close($ch);
-
-    // Log response
-    error_log("Supabase response from $url: Code $httpCode, Response: " . substr($response, 0, 500));
-    
-    // Handle the response
-    if ($httpCode >= 200 && $httpCode < 300) {
-        if (empty($response)) {
-            return [
-                'code' => $httpCode,
-                'data' => []
-            ];
-        }
-        
-        $decoded = json_decode($response, true);
-        if ($decoded === null && $response !== 'null' && $response !== '') {
-            error_log("JSON decode error: " . json_last_error_msg() . " - Raw response: " . substr($response, 0, 500));
-            return [
-                'code' => $httpCode,
-                'data' => null,
-                'error' => "JSON decode error: " . json_last_error_msg()
-            ];
-        }
-        
-        return [
-            'code' => $httpCode,
-            'data' => $decoded
-        ];
-    } else {
-        error_log("HTTP Error $httpCode: $response");
-        return [
-            'code' => $httpCode,
-            'data' => null,
-            'error' => "HTTP Error $httpCode: " . substr($response, 0, 500)
-        ];
-    }
+// OPTIMIZATION: Enhanced function to make API requests to Supabase with retry mechanism
+// This replaces the old supabaseRequest function with the optimized version
+function supabaseRequestOptimized($endpoint, $method = 'GET', $data = null) {
+    return supabaseRequest($endpoint, $method, $data);
 }
 
-// Fetch handover requests
+// OPTIMIZATION: Enhanced fetch handover requests with better error handling
 function fetchHandoverRequests() {
     // Get requests with status Accepted OR Printed OR Confirmed OR Declined using explicit OR conditions
     $endpoint = "blood_requests?or=(status.eq.Accepted,status.eq.Printed,status.eq.Confirmed,status.eq.Declined)&order=request_id.desc";
@@ -165,7 +52,7 @@ $error_message = '';
 if (isset($_GET['accepted'])) {
     $accepted_id = $_GET['accepted'];
     
-    // Fetch the details of the accepted request to verify it was updated correctly
+    // OPTIMIZATION: Use enhanced API function for verification
     $verifyEndpoint = "blood_requests?request_id=eq.$accepted_id&select=*";
     $verifyResponse = supabaseRequest($verifyEndpoint);
     
@@ -181,47 +68,22 @@ if (isset($_GET['accepted'])) {
     }
 }
 
-// --- Helper function for Supabase REST queries (from dashboard-hospital-request-history.php) ---
-function querySQL($table, $select = '*', $filters = []) {
-    $url = SUPABASE_URL . "/rest/v1/$table?select=$select";
-    foreach ($filters as $key => $value) {
-        $url .= "&$key=$value";
-    }
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY,
-        'Content-Type: application/json'
-    ]);
-    $response = curl_exec($ch);
-    curl_close($ch);
-    return json_decode($response, true);
-}
-
+// OPTIMIZATION: Enhanced testSupabaseConnection with retry mechanism
 function testSupabaseConnection() {
-    $ch = curl_init();
-    $headers = [
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY,
-        'Accept: application/json'
-    ];
     $test_url = SUPABASE_URL . '/rest/v1/blood_collection?select=blood_collection_id&limit=1';
-    curl_setopt($ch, CURLOPT_URL, $test_url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curl_error = curl_error($ch);
-    curl_close($ch);
+    
+    // Use the optimized supabaseRequest function
+    $response = supabaseRequest('blood_collection?select=blood_collection_id&limit=1');
+    
     return [
-        'success' => $http_code === 200,
-        'http_code' => $http_code,
-        'response' => $response,
-        'error' => $curl_error
+        'success' => $response['code'] === 200,
+        'http_code' => $response['code'],
+        'response' => json_encode($response['data']),
+        'error' => isset($response['error']) ? $response['error'] : null
     ];
 }
 
+// OPTIMIZATION: Enhanced getCompatibleBloodTypes (no changes needed, already optimized)
 function getCompatibleBloodTypes($blood_type, $rh_factor) {
     $is_positive = $rh_factor === 'Positive';
     $compatible_types = [];
@@ -296,56 +158,60 @@ function getCompatibleBloodTypes($blood_type, $rh_factor) {
     return $compatible_types;
 }
 
+// OPTIMIZATION: Enhanced updateBloodRequestAndInventory with better error handling and performance
 function updateBloodRequestAndInventory($request_id) {
     try {
+        // OPTIMIZATION: Use enhanced connection test
         $connection_test = testSupabaseConnection();
         if (!$connection_test['success']) {
             throw new Exception("Unable to connect to the database. Please try again later.");
         }
-        $ch = curl_init();
-        $headers = [
-            'apikey: ' . SUPABASE_API_KEY,
-            'Authorization: Bearer ' . SUPABASE_API_KEY,
-            'Content-Type: application/json',
-            'Prefer: return=representation'
-        ];
-        $request_url = SUPABASE_URL . '/rest/v1/blood_requests?request_id=eq.' . $request_id;
-        curl_setopt($ch, CURLOPT_URL, $request_url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        if ($http_code !== 200) {
-            throw new Exception("Failed to fetch blood request. HTTP Code: " . $http_code);
+        
+        // OPTIMIZATION: Use enhanced API function for fetching request data
+        $requestResponse = supabaseRequest("blood_requests?request_id=eq.$request_id");
+        if ($requestResponse['code'] !== 200 || empty($requestResponse['data'])) {
+            throw new Exception("Failed to fetch blood request. HTTP Code: " . $requestResponse['code']);
         }
-        $request_data = json_decode($response, true);
-        if (empty($request_data)) {
-            throw new Exception("No blood request found with ID: " . $request_id);
-        }
-        $request_data = $request_data[0];
+        
+        $request_data = $requestResponse['data'][0];
         $requested_blood_type = $request_data['patient_blood_type'];
         $requested_rh_factor = $request_data['rh_factor'];
         $units_requested = intval($request_data['units_requested']);
         $blood_type_full = $requested_blood_type . ($requested_rh_factor === 'Positive' ? '+' : '-');
+        
+        // OPTIMIZATION: Use enhanced querySQL function for eligibility data
         $eligibilityData = querySQL(
             'eligibility',
             'eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status,blood_collection_id',
             ['collection_successful' => 'eq.true']
         );
+        
+        if (isset($eligibilityData['error'])) {
+            throw new Exception("Failed to fetch eligibility data: " . $eligibilityData['error']);
+        }
+        
         $available_bags = [];
         $today = new DateTime();
+        
         foreach ($eligibilityData as $item) {
             if (!empty($item['blood_collection_id'])) {
+                // OPTIMIZATION: Use enhanced querySQL for blood collection data
                 $bloodCollectionData = querySQL('blood_collection', '*', ['blood_collection_id' => 'eq.' . $item['blood_collection_id']]);
+                if (isset($bloodCollectionData['error'])) {
+                    error_log("Failed to fetch blood collection data for ID " . $item['blood_collection_id'] . ": " . $bloodCollectionData['error']);
+                    continue;
+                }
                 $bloodCollectionData = isset($bloodCollectionData[0]) ? $bloodCollectionData[0] : null;
             } else {
                 $bloodCollectionData = null;
             }
+            
             $collectionDate = new DateTime($item['collection_start_time']);
             $expirationDate = clone $collectionDate;
             $expirationDate->modify('+35 days');
             $isExpired = ($today > $expirationDate);
             $amount_taken = $bloodCollectionData && isset($bloodCollectionData['amount_taken']) ? intval($bloodCollectionData['amount_taken']) : 0;
+            
             if ($amount_taken > 0 && !$isExpired) {
                 $available_bags[] = [
                     'eligibility_id' => $item['eligibility_id'],
@@ -357,10 +223,12 @@ function updateBloodRequestAndInventory($request_id) {
                 ];
             }
         }
+        
         $units_found = 0;
         $collections_to_update = [];
         $remaining_units = $units_requested;
         $deducted_by_type = [];
+        
         foreach ($available_bags as $bag) {
             if ($remaining_units <= 0) break;
             if ($bag['blood_type'] === $blood_type_full) {
@@ -378,6 +246,7 @@ function updateBloodRequestAndInventory($request_id) {
                 }
             }
         }
+        
         if ($remaining_units > 0) {
             $compatible_types = getCompatibleBloodTypes($requested_blood_type, $requested_rh_factor);
             foreach ($compatible_types as $compatible_type) {
@@ -403,6 +272,7 @@ function updateBloodRequestAndInventory($request_id) {
                 }
             }
         }
+        
         if ($units_found < $units_requested) {
             $shortage = $units_requested - $units_found;
             $error_message = "Unable to fulfill blood request due to insufficient fresh blood inventory.\n\n";
@@ -419,51 +289,44 @@ function updateBloodRequestAndInventory($request_id) {
             }
             throw new Exception($error_message);
         }
+        
+        // OPTIMIZATION: Use enhanced API function for batch updates
         foreach ($collections_to_update as $collection) {
             $new_amount = intval($collection['amount_taken']) - intval($collection['units_to_take']);
             if ($new_amount < 0) $new_amount = 0;
-            $update_data = json_encode([
+            
+            $update_data = [
                 'amount_taken' => $new_amount,
                 'updated_at' => date('Y-m-d H:i:s')
-            ]);
-            $update_url = SUPABASE_URL . '/rest/v1/blood_collection';
-            $update_url .= '?blood_collection_id=eq.' . $collection['blood_collection_id'];
-            curl_setopt($ch, CURLOPT_URL, $update_url);
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $update_data);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'apikey: ' . SUPABASE_API_KEY,
-                'Authorization: Bearer ' . SUPABASE_API_KEY,
-                'Content-Type: application/json',
-                'Prefer: return=minimal'
-            ]);
-            $update_response = curl_exec($ch);
-            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            if ($http_code !== 200 && $http_code !== 204) {
-                throw new Exception("Failed to update blood collection {$collection['blood_collection_id']}. HTTP Code: {$http_code}");
+            ];
+            
+            $updateResponse = supabaseRequest(
+                "blood_collection?blood_collection_id=eq." . $collection['blood_collection_id'],
+                'PATCH',
+                $update_data
+            );
+            
+            if ($updateResponse['code'] !== 200 && $updateResponse['code'] !== 204) {
+                throw new Exception("Failed to update blood collection {$collection['blood_collection_id']}. HTTP Code: {$updateResponse['code']}");
             }
         }
-        $request_update_data = json_encode([
+        
+        // OPTIMIZATION: Use enhanced API function for request status update
+        $request_update_data = [
             'status' => 'Confirmed',
             'last_updated' => date('Y-m-d H:i:s')
-        ]);
-        $update_url = SUPABASE_URL . '/rest/v1/blood_requests';
-        $update_url .= '?request_id=eq.' . $request_id;
-        curl_setopt($ch, CURLOPT_URL, $update_url);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $request_update_data);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'apikey: ' . SUPABASE_API_KEY,
-            'Authorization: Bearer ' . SUPABASE_API_KEY,
-            'Content-Type: application/json',
-            'Prefer: return=minimal'
-        ]);
-        $request_update = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        if ($http_code !== 200 && $http_code !== 204) {
-            throw new Exception('Failed to update request status. HTTP Code: ' . $http_code);
+        ];
+        
+        $requestUpdateResponse = supabaseRequest(
+            "blood_requests?request_id=eq.$request_id",
+            'PATCH',
+            $request_update_data
+        );
+        
+        if ($requestUpdateResponse['code'] !== 200 && $requestUpdateResponse['code'] !== 204) {
+            throw new Exception('Failed to update request status. HTTP Code: ' . $requestUpdateResponse['code']);
         }
-        curl_close($ch);
+        
         $detailed_message = "Successfully processed blood request #{$request_id}:\n";
         $detailed_message .= "- Requested blood type: {$blood_type_full}\n";
         $detailed_message .= "- Total units deducted: {$units_requested}\n\n";
@@ -471,6 +334,7 @@ function updateBloodRequestAndInventory($request_id) {
         foreach ($deducted_by_type as $type => $amount) {
             $detailed_message .= "- {$type}: {$amount} units\n";
         }
+        
         return [
             'success' => true,
             'request_id' => $request_id,
@@ -505,7 +369,7 @@ if (isset($_POST['update_delivering'])) {
 if (isset($_POST['update_completed'])) {
     $request_id = $_POST['request_id'];
     
-    // Update the request status to 'Declined' since Completed is not a valid enum
+    // OPTIMIZATION: Use enhanced API function for status update
     $endpoint = "blood_requests?request_id=eq.".$request_id;
     
     $data = [
@@ -527,7 +391,7 @@ if (isset($_POST['update_completed'])) {
     }
 }
 
-// Fetch blood requests
+// OPTIMIZATION: Fetch blood requests with enhanced performance
 $handover_requests = fetchHandoverRequests();
 
 // Filter by status if GET parameter is set
@@ -545,6 +409,11 @@ if ($filter_status === 'accepted') {
         return isset($req['status']) && $req['status'] === 'Declined';
     });
 }
+
+// OPTIMIZATION: Performance logging and caching headers
+$endTime = microtime(true);
+$executionTime = round(($endTime - $startTime) * 1000, 2); // Convert to milliseconds
+addPerformanceHeaders($executionTime, count($handover_requests), "Handed Over - Filter: $filter_status");
 ?>
 <!DOCTYPE html>
 <html lang="en">
