@@ -2,7 +2,7 @@
 class PhysicalExaminationModal {
     constructor() {
         this.currentStep = 1;
-        this.totalSteps = 5; // Updated to 5 steps since we removed remarks
+        this.totalSteps = 4; // Steps: 1 Vital, 2 Exam, 3 Blood Bag, 4 Review
         this.formData = {};
         this.screeningData = null;
         
@@ -69,6 +69,11 @@ class PhysicalExaminationModal {
             
             // Populate initial screening summary
             this.populateInitialScreeningSummary(screeningData);
+
+            // If a physical examination exists with status pending, fetch and hydrate form
+            if (screeningData.donor_form_id) {
+                this.fetchExistingPhysicalExamination(screeningData.donor_form_id);
+            }
         }
         
         const modal = document.getElementById('physicalExaminationModal');
@@ -87,6 +92,50 @@ class PhysicalExaminationModal {
             modal.style.display = 'none';
             this.resetForm();
         }, 300);
+    }
+
+    async fetchExistingPhysicalExamination(donorId) {
+        try {
+            // Fetch the latest physical examination record for this donor (includes status)
+            const resp = await fetch(`../../assets/php_func/fetch_physical_examination_info.php?donor_id=${donorId}`);
+            const json = await resp.json();
+            if (!json || !json.success || !json.data) return;
+            const exam = json.data;
+            const status = (exam.status || '').toString().toLowerCase();
+            if (status !== 'pending') return;
+
+            // Hydrate fields
+            const setVal = (id, value) => {
+                const el = document.getElementById(id);
+                if (el && value !== undefined && value !== null && value !== '') {
+                    el.value = value;
+                    // mark valid for visuals
+                    el.classList.add('is-valid');
+                }
+            };
+
+            setVal('physical-blood-pressure', exam.blood_pressure);
+            setVal('physical-pulse-rate', exam.pulse_rate);
+            setVal('physical-body-temp', exam.body_temp);
+            setVal('physical-gen-appearance', exam.gen_appearance);
+            setVal('physical-skin', exam.skin);
+            setVal('physical-heent', exam.heent);
+            setVal('physical-heart-lungs', exam.heart_and_lungs);
+
+            // Blood bag type
+            if (exam.blood_bag_type) {
+                const radio = document.querySelector(`input[name="blood_bag_type"][value="${exam.blood_bag_type}"]`);
+                if (radio) {
+                    radio.checked = true;
+                    this.updateOptionCardSelection(radio);
+                }
+            }
+
+            // Update review summary if already on final step
+            this.updateSummary();
+        } catch (e) {
+            console.warn('Failed to fetch existing physical exam:', e);
+        }
     }
     
     resetForm() {
@@ -116,7 +165,7 @@ class PhysicalExaminationModal {
                 this.showStep(this.currentStep);
                 
                 // Update summary if we're at the review step
-                if (this.currentStep === 5) {
+                if (this.currentStep === 4) {
                     this.updateSummary();
                 }
             }
@@ -137,7 +186,7 @@ class PhysicalExaminationModal {
             this.updateProgressIndicator();
             this.showStep(step);
             
-            if (step === 5) {
+            if (step === 4) {
                 this.updateSummary();
             }
         }
@@ -205,7 +254,7 @@ class PhysicalExaminationModal {
             });
             
             // Additional step-specific validation
-            if (this.currentStep === 4) {
+            if (this.currentStep === 3) {
                 // Validate blood bag type selection (step 4 is now blood bag selection)
                 const bloodBagSelected = document.querySelector('input[name="blood_bag_type"]:checked');
                 if (!bloodBagSelected) {
@@ -441,8 +490,10 @@ class PhysicalExaminationModal {
                 data.screening_id = this.screeningData.screening_id;
             }
             
-            // Auto-set remarks as "Accepted" since donor passed physical examination
-            data.remarks = 'Accepted';
+            // Always submit status as Pending (finalization happens later)
+            // Provide a placeholder remarks value to satisfy required validation
+            data.status = 'Pending';
+            data.remarks = 'Pending';
             
             // Flag to indicate this is an accepted examination (don't update eligibility table)
             data.is_accepted_examination = true;
@@ -459,18 +510,17 @@ class PhysicalExaminationModal {
             const result = await response.json();
             
             if (result.success) {
-                this.showToast('Physical examination submitted successfully!', 'success');
-                
+                this.showToast('Physical examination saved!', 'success');
                 // Add interviewer name to summary if available
                 if (result.interviewer_name) {
-                    document.getElementById('summary-interviewer').textContent = result.interviewer_name;
+                    const el = document.getElementById('summary-interviewer');
+                    if (el) el.textContent = result.interviewer_name;
                 }
-                
+                // Close only; donor profile will reopen (managed by parent logic)
                 setTimeout(() => {
                     this.closeModal();
-                    // Reload the page to update the table
-                    window.location.reload();
-                }, 2000);
+                    try { if (window.tryReopenDonorProfile) window.tryReopenDonorProfile(); } catch (e) {}
+                }, 800);
             } else {
                 throw new Error(result.message || 'Submission failed');
             }

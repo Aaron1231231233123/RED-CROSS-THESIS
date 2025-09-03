@@ -54,7 +54,7 @@ function fetchPhysicalExaminationInfo($donorId) {
     // Then, get physical examination data
     $physical_curl = curl_init();
     curl_setopt_array($physical_curl, [
-        CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?donor_id=eq." . $donorId . "&select=physical_exam_id,donor_id,blood_pressure,pulse_rate,body_temp,gen_appearance,skin,heent,heart_and_lungs,remarks,reason,blood_bag_type,created_at,updated_at,disapproval_reason,needs_review,physician,screening_id&order=created_at.desc&limit=1",
+        CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?donor_id=eq." . $donorId . "&select=physical_exam_id,donor_id,blood_pressure,pulse_rate,body_temp,gen_appearance,skin,heent,heart_and_lungs,remarks,reason,blood_bag_type,status,created_at,updated_at,disapproval_reason,needs_review,physician,screening_id&order=created_at.desc&limit=1",
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
             "apikey: " . SUPABASE_API_KEY,

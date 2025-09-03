@@ -31,6 +31,9 @@ require_once '../conn/db_conn.php';
 
 // Helper function to format data for Supabase
 function formatPhysicalExamDataForSupabase($post_data) {
+    $status = isset($post_data['status']) && is_string($post_data['status']) && trim($post_data['status']) !== ''
+        ? trim($post_data['status'])
+        : 'Pending';
     return [
         'donor_id' => intval($post_data['donor_id']),
         'blood_pressure' => strval($post_data['blood_pressure']),
@@ -42,7 +45,8 @@ function formatPhysicalExamDataForSupabase($post_data) {
         'heart_and_lungs' => strval(trim($post_data['heart_and_lungs'])),
         'remarks' => strval(trim($post_data['remarks'])),
         'blood_bag_type' => strval(trim($post_data['blood_bag_type'])),
-        'reason' => isset($post_data['reason']) ? strval(trim($post_data['reason'])) : ''
+        'reason' => isset($post_data['reason']) ? strval(trim($post_data['reason'])) : '',
+        'status' => $status
     ];
 }
 
@@ -161,10 +165,8 @@ try {
     // Format data for Supabase
     $physical_exam_data = formatPhysicalExamDataForSupabase($data);
     
-    // Add common fields for both insert and update
-    $physical_exam_data['needs_review'] = false;
+    // Add optional common fields for both insert and update (no needs_review/updated_at here)
     $physical_exam_data['physician'] = getPhysicianName($_SESSION['user_id']);
-    $physical_exam_data['updated_at'] = gmdate('Y-m-d H:i:s') . '+00';
     
     // Add screening_id if available
     if ($screening_id) {
@@ -221,110 +223,7 @@ try {
             }
         }
         
-        // Handle blood collection record
-        error_log("Starting blood collection processing - physical_exam_id: $physical_exam_id, screening_id: $screening_id");
-        
-        if ($physical_exam_id) {
-            // Check if blood collection record already exists
-            $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=blood_collection_id&physical_exam_id=eq.' . $physical_exam_id);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'apikey: ' . SUPABASE_API_KEY,
-                'Authorization: Bearer ' . SUPABASE_API_KEY,
-                'Content-Type: application/json'
-            ]);
-            
-            $response = curl_exec($ch);
-            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-            
-            error_log("Blood collection lookup response - HTTP: $http_code, Response: $response");
-            
-            if ($response !== false && $http_code === 200) {
-                $existing_collection = json_decode($response, true);
-                error_log("Parsed existing collection: " . json_encode($existing_collection));
-                
-                if (!empty($existing_collection)) {
-                    // UPDATE existing blood collection record
-                    $blood_collection_id = $existing_collection[0]['blood_collection_id'];
-                    error_log("Updating existing blood collection: $blood_collection_id");
-                    
-                    $update_payload = [
-                        'needs_review' => true,
-                        'updated_at' => gmdate('Y-m-d H:i:s') . '+00'
-                    ];
-                    
-                    $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?blood_collection_id=eq.' . $blood_collection_id);
-                    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                        'apikey: ' . SUPABASE_API_KEY,
-                        'Authorization: Bearer ' . SUPABASE_API_KEY,
-                        'Content-Type: application/json',
-                        'Prefer: return=minimal'
-                    ]);
-                    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($update_payload));
-                    
-                    $update_response = curl_exec($ch);
-                    $update_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                    curl_close($ch);
-                    
-                    error_log("Blood collection PATCH response - HTTP: $update_http_code, Response: $update_response");
-                    
-                    if ($update_http_code < 200 || $update_http_code >= 300) {
-                        error_log("blood_collection PATCH failed: HTTP $update_http_code Resp: $update_response");
-                    } else {
-                        error_log("blood_collection PATCH successful: Updated blood_collection_id $blood_collection_id");
-                    }
-                } else {
-                    // INSERT new blood collection record
-                    error_log("No existing blood collection found, creating new record");
-                    
-                    $payload = [
-                        'physical_exam_id' => $physical_exam_id,
-                        'needs_review' => true,
-                        'status' => 'pending',
-                        'blood_bag_brand' => 'TERUMO',
-                        'blood_bag_type' => 'T',
-                        'updated_at' => gmdate('Y-m-d H:i:s') . '+00'
-                    ];
-                    
-                    // Add screening_id if available
-                    if ($screening_id) {
-                        $payload['screening_id'] = $screening_id;
-                    }
-                    
-                    error_log("Blood collection INSERT payload: " . json_encode($payload));
-                    
-                    $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection');
-                    curl_setopt($ch, CURLOPT_POST, true);
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                        'apikey: ' . SUPABASE_API_KEY,
-                        'Authorization: Bearer ' . SUPABASE_API_KEY,
-                        'Content-Type: application/json',
-                        'Prefer: return=minimal'
-                    ]);
-                    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-                    
-                    $insert_response = curl_exec($ch);
-                    $insert_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                    curl_close($ch);
-                    
-                    error_log("Blood collection INSERT response - HTTP: $insert_http_code, Response: $insert_response");
-                    
-                    if ($insert_http_code < 200 || $insert_http_code >= 300) {
-                        error_log("blood_collection INSERT failed: HTTP $insert_http_code Resp: $insert_response");
-                    } else {
-                        error_log("blood_collection INSERT successful");
-                    }
-                }
-            } else {
-                error_log("Failed to lookup blood collection records - HTTP: $http_code, Response: $response");
-            }
-        } else {
-            error_log("No physical_exam_id available for blood collection processing");
-        }
+        // Note: Blood collection transitions are now handled by donor modal Confirm action
         
         // Get physician name for response
         $physician_name = getPhysicianName($_SESSION['user_id']);
