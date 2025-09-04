@@ -1,0 +1,486 @@
+/* Medical History Approval Modals Styles */
+/* This file contains all CSS styles for the medical history approval and decline modals */
+
+/* Ensure ONLY medical history approval modals appear on top */
+#medicalHistoryApprovalModal,
+#medicalHistoryDeclineModal,
+#medicalHistoryDeclinedModal {
+    z-index: 9999 !important;
+}
+
+/* Force modal content to be on top */
+#medicalHistoryApprovalModal .modal-dialog,
+#medicalHistoryDeclineModal .modal-dialog,
+#medicalHistoryDeclinedModal .modal-dialog {
+    z-index: 10000 !important;
+}
+
+/* Modal backdrop should also be on top */
+.modal-backdrop {
+    z-index: 9998 !important;
+}
+
+/* Make decline modal appear right in front - MAXIMUM PRIORITY */
+#medicalHistoryDeclineModal {
+    z-index: 99999 !important;
+}
+
+#medicalHistoryDeclineModal .modal-dialog {
+    z-index: 100000 !important;
+}
+
+/* Ensure declined confirmation modal appears on top of everything */
+#medicalHistoryDeclinedModal {
+    z-index: 100001 !important;
+}
+
+#medicalHistoryDeclinedModal .modal-dialog {
+    z-index: 100002 !important;
+}
+
+/* Force modal backdrop to be behind but visible */
+#medicalHistoryDeclinedModal + .modal-backdrop {
+    z-index: 100000 !important;
+}
+
+/* Force modal backdrop to be behind but visible */
+#medicalHistoryDeclineModal + .modal-backdrop {
+    z-index: 99998 !important;
+}
+
+/* FIX: Prevent decline modal from scrolling with page */
+#medicalHistoryDeclineModal {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    overflow: visible !important;
+}
+
+#medicalHistoryDeclineModal .modal-dialog {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    margin: 0 !important;
+}
+
+#medicalHistoryDeclineModal .modal-content {
+    position: relative !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+}
+
+/* Prevent page from scrolling when decline modal is open */
+body.modal-open:has(#medicalHistoryDeclineModal) {
+    overflow: auto !important;
+    padding-right: 0 !important;
+}
+
+/* Keep modal backdrop normal */
+
+/* FIX FOR DONOR PROFILE MODAL - Prevent layout shifts */
+#donorProfileModal {
+    /* Ensure this modal doesn't affect body padding */
+}
+
+/* Target the donor profile modal specifically */
+#donorProfileModal .modal-dialog {
+    /* Prevent modal from affecting page layout */
+}
+
+/* When donor profile modal is open, prevent body changes */
+body:has(#donorProfileModal.modal-open),
+body.modal-open:has(#donorProfileModal) {
+    padding-right: 0 !important;
+    overflow: auto !important;
+}
+
+/* NUCLEAR OPTION: Completely override Bootstrap modal behavior */
+.modal-open {
+    padding-right: 0 !important;
+    overflow: auto !important;
+}
+
+/* Dashboard header positioning is now handled in the dashboard file itself */
+
+
+
+/* Modal Content Styling */
+#medicalHistoryApprovalModal .modal-content,
+#medicalHistoryDeclineModal .modal-content,
+#medicalHistoryDeclinedModal .modal-content {
+    border: none;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+/* Modal Header Styling */
+#medicalHistoryApprovalModal .modal-header,
+#medicalHistoryDeclineModal .modal-header,
+#medicalHistoryDeclinedModal .modal-header {
+    border-bottom: none;
+    padding: 1.5rem 1.5rem 1rem;
+}
+
+#medicalHistoryApprovalModal .modal-title,
+#medicalHistoryDeclineModal .modal-title,
+#medicalHistoryDeclinedModal .modal-title {
+    font-weight: 600;
+    font-size: 1.25rem;
+}
+
+/* Modal Body Styling */
+#medicalHistoryApprovalModal .modal-body,
+#medicalHistoryDeclineModal .modal-body,
+#medicalHistoryDeclinedModal .modal-body {
+    padding: 1rem 1.5rem 1.5rem;
+}
+
+/* Approval Modal Specific Styles */
+#medicalHistoryApprovalModal .modal-body {
+    text-align: center;
+}
+
+#medicalHistoryApprovalModal .fa-check-circle {
+    color: #28a745;
+    margin-bottom: 1rem;
+}
+
+#medicalHistoryApprovalModal .text-success {
+    color: #28a745 !important;
+}
+
+/* Decline Modal Specific Styles */
+#medicalHistoryDeclineModal .alert-warning {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    border: 1px solid #ffc107;
+    border-left: 4px solid #ffc107;
+    color: #856404;
+}
+
+#medicalHistoryDeclineModal .alert-warning i {
+    color: #ffc107;
+}
+
+#medicalHistoryDeclineModal .form-label {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 0.5rem;
+}
+
+#medicalHistoryDeclineModal .form-control,
+#medicalHistoryDeclineModal .form-select {
+    border-radius: 8px;
+    border: 2px solid #e9ecef;
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+}
+
+#medicalHistoryDeclineModal .form-control:focus,
+#medicalHistoryDeclineModal .form-select:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+#medicalHistoryDeclineModal .form-text {
+    color: #6c757d;
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+}
+
+/* Date Selection Styling */
+#medicalHistoryDeclineModal .row {
+    margin: 0 -0.5rem;
+}
+
+#medicalHistoryDeclineModal .col-md-6 {
+    padding: 0 0.5rem;
+}
+
+#medicalHistoryDeclineModal #dateSelectionSection {
+    transition: all 0.3s ease;
+}
+
+#medicalHistoryDeclineModal #donationRestrictionDate {
+    background: #ffffff;
+    border: 2px solid #e9ecef;
+}
+
+#medicalHistoryDeclineModal #donationRestrictionDate:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+/* Restriction Type Styling */
+#medicalHistoryDeclineModal #restrictionType {
+    background: #ffffff;
+    border: 2px solid #e9ecef;
+}
+
+#medicalHistoryDeclineModal #restrictionType:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+/* Additional Notes Styling */
+#medicalHistoryDeclineModal #restrictionNotes {
+    background: #ffffff;
+    border: 2px solid #e9ecef;
+    resize: vertical;
+    min-height: 80px;
+}
+
+#medicalHistoryDeclineModal #restrictionNotes:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+/* Declined Modal Specific Styles */
+#medicalHistoryDeclinedModal .modal-body {
+    text-align: center;
+}
+
+#medicalHistoryDeclinedModal .fa-ban {
+    color: #dc3545;
+    margin-bottom: 1rem;
+}
+
+#medicalHistoryDeclinedModal .text-danger {
+    color: #dc3545 !important;
+}
+
+#medicalHistoryDeclinedModal .bg-light {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+    border: 1px solid #dee2e6;
+}
+
+#medicalHistoryDeclinedModal #restrictionSummary {
+    margin-top: 0.5rem;
+    font-weight: 500;
+}
+
+#medicalHistoryDeclinedModal #restrictionSummary .text-danger {
+    color: #dc3545 !important;
+}
+
+#medicalHistoryDeclinedModal #restrictionSummary .text-warning {
+    color: #ffc107 !important;
+}
+
+/* Modal Footer Styling */
+#medicalHistoryApprovalModal .modal-footer,
+#medicalHistoryDeclineModal .modal-footer,
+#medicalHistoryDeclinedModal .modal-footer {
+    border-top: none;
+    padding: 1rem 1.5rem 1.5rem;
+}
+
+#medicalHistoryApprovalModal .modal-footer,
+#medicalHistoryDeclinedModal .modal-footer {
+    justify-content: center;
+}
+
+/* Button Styling */
+#medicalHistoryApprovalModal .btn,
+#medicalHistoryDeclineModal .btn,
+#medicalHistoryDeclinedModal .btn {
+    border-radius: 8px;
+    padding: 0.5rem 1.5rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+#medicalHistoryApprovalModal .btn-primary,
+#medicalHistoryDeclinedModal .btn-primary {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    border: none;
+    color: white;
+}
+
+#medicalHistoryApprovalModal .btn-primary:hover,
+#medicalHistoryDeclinedModal .btn-primary:hover {
+    background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+}
+
+#medicalHistoryDeclineModal .btn-light {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    color: #6c757d;
+}
+
+#medicalHistoryDeclineModal .btn-light:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+    color: #495057;
+}
+
+#medicalHistoryDeclineModal .btn-danger {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    border: none;
+    color: white;
+}
+
+#medicalHistoryDeclineModal .btn-danger:hover {
+    background: linear-gradient(135deg, #c82333 0%, #a71e2a 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
+}
+
+/* Toast Notification Styles */
+.medical-history-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: white;
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    z-index: 10000;
+    transform: translateX(100%);
+    transition: transform 0.4s ease;
+    border-left: 5px solid #007bff;
+    min-width: 300px;
+}
+
+.medical-history-toast.show {
+    transform: translateX(0);
+}
+
+.medical-history-toast-success {
+    border-left-color: #28a745;
+}
+
+.medical-history-toast-error {
+    border-left-color: #dc3545;
+}
+
+.medical-history-toast-info {
+    border-left-color: #17a2b8;
+}
+
+.medical-history-toast-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.medical-history-toast-content i {
+    font-size: 1.3rem;
+}
+
+.medical-history-toast-success i {
+    color: #28a745;
+}
+
+.medical-history-toast-error i {
+    color: #dc3545;
+}
+
+.medical-history-toast-info i {
+    color: #17a2b8;
+}
+
+.medical-history-toast-text {
+    flex: 1;
+}
+
+.medical-history-toast-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 0.95rem;
+}
+
+.medical-history-toast-message {
+    font-size: 0.85rem;
+    color: #6c757d;
+    line-height: 1.3;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    #medicalHistoryApprovalModal .modal-dialog,
+    #medicalHistoryDeclineModal .modal-dialog,
+    #medicalHistoryDeclinedModal .modal-dialog {
+        margin: 1rem;
+    }
+    
+    #medicalHistoryApprovalModal .modal-content,
+    #medicalHistoryDeclineModal .modal-content,
+    #medicalHistoryDeclinedModal .modal-content {
+        border-radius: 12px;
+    }
+    
+    #medicalHistoryApprovalModal .modal-header,
+    #medicalHistoryDeclineModal .modal-header,
+    #medicalHistoryDeclinedModal .modal-header {
+        padding: 1rem 1rem 0.5rem;
+    }
+    
+    #medicalHistoryApprovalModal .modal-body,
+    #medicalHistoryDeclineModal .modal-body,
+    #medicalHistoryDeclinedModal .modal-body {
+        padding: 0.75rem 1rem 1rem;
+    }
+    
+    #medicalHistoryApprovalModal .modal-footer,
+    #medicalHistoryDeclineModal .modal-footer,
+    #medicalHistoryDeclinedModal .modal-footer {
+        padding: 0.75rem 1rem 1rem;
+    }
+    
+    .medical-history-toast {
+        min-width: 280px;
+        right: 10px;
+        left: 10px;
+    }
+    
+    /* Mobile date selection layout */
+    #medicalHistoryDeclineModal .col-md-6 {
+        margin-bottom: 1rem;
+    }
+    
+    #medicalHistoryDeclineModal .row {
+        margin: 0;
+    }
+}
+
+@media (max-width: 576px) {
+    #medicalHistoryApprovalModal .modal-dialog,
+    #medicalHistoryDeclineModal .modal-dialog,
+    #medicalHistoryDeclinedModal .modal-dialog {
+        margin: 0.5rem;
+    }
+    
+    #medicalHistoryApprovalModal .btn,
+    #medicalHistoryDeclineModal .btn,
+    #medicalHistoryDeclinedModal .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+    }
+    
+    .medical-history-toast {
+        min-width: auto;
+        right: 5px;
+        left: 5px;
+        padding: 12px 16px;
+    }
+    
+    .medical-history-toast-title {
+        font-size: 0.9rem;
+    }
+    
+    .medical-history-toast-message {
+        font-size: 0.8rem;
+    }
+    
+    /* Small mobile adjustments */
+    #medicalHistoryDeclineModal .form-control,
+    #medicalHistoryDeclineModal .form-select {
+        padding: 0.6rem 0.8rem;
+        font-size: 0.9rem;
+    }
+}

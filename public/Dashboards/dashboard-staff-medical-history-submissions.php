@@ -570,6 +570,7 @@ $donor_history = $unique_donor_history;
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="../../assets/css/defer-donor-modal.css">
     <script src="../../assets/js/screening_form_modal.js"></script>
     <style>
         :root {
@@ -2758,12 +2759,12 @@ $donor_history = $unique_donor_history;
                 if (proceedButton && proceedButton.addEventListener) {
                     proceedButton.addEventListener('click', function() {
                         if (!currentDonorId) return;
-                        const confirmModal = new bootstrap.Modal(document.getElementById('reviewConfirmModal'));
-                        const proceedBtn = document.getElementById('reviewConfirmProceedBtn');
-                        if (proceedBtn) {
-                            proceedBtn.onclick = () => { confirmModal.hide(); openMedicalHistoryForCurrentDonor(); };
-                        }
-                        confirmModal.show();
+                        
+                        // Close the current deferral status modal
+                        deferralStatusModal.hide();
+                        
+                        // Open the physical examination modal
+                        showPhysicalExaminationModal(currentDonorId);
                     });
                 }
                 
@@ -3842,10 +3843,32 @@ $donor_history = $unique_donor_history;
         .modal-backdrop.show {
             opacity: 0.5 !important;
         }
+        
+        /* Defer button styling to match physical submission dashboard */
+        #screeningDeferButton {
+            border-color: #dc3545;
+            color: #dc3545;
+            background-color: white;
+        }
+
+        #screeningDeferButton:hover {
+            background-color: #dc3545;
+            color: white;
+            border-color: #dc3545;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+        }
+
+        #screeningDeferButton:focus {
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+        }
     </style>
 
     <!-- Include Screening Form Modal -->
     <?php include '../../src/views/forms/staff_donor_initial_screening_form_modal.php'; ?>
+    
+    <!-- Include Defer Donor Modal -->
+    <?php include '../../src/views/modals/defer-donor-modal.php'; ?>
 
     <!-- Physical Examination Review Modal -->
     <div class="modal fade" id="physicalExaminationModal" tabindex="-1" aria-labelledby="physicalExaminationModalLabel" aria-hidden="true">
@@ -3872,5 +3895,13 @@ $donor_history = $unique_donor_history;
             </div>
         </div>
     </div>
+    
+    <!-- Include Defer Donor Modal JavaScript -->
+    <script src="../../assets/js/initial-screening-defer-button.js"></script>
+    
+    <script>
+        // Defer button functionality is now handled within the screening form modal
+        // No additional initialization needed here
+    </script>
 </body>
 </html>

@@ -215,19 +215,29 @@
                 </form>
             </div>
             
-            <div class="modal-footer screening-modal-footer">
-                <button type="button" class="btn btn-outline-secondary" id="screeningCancelButton">
-                    <i class="fas fa-times me-2"></i>Cancel
-                </button>
-                <button type="button" class="btn btn-outline-danger" id="screeningPrevButton" style="display: none;">
-                    <i class="fas fa-arrow-left me-2"></i>Previous
-                </button>
-                <button type="button" class="btn btn-danger" id="screeningNextButton">
-                    <i class="fas fa-arrow-right me-2"></i>Next
-                </button>
-                <button type="button" class="btn btn-success" id="screeningSubmitButton" style="display: none;">
-                    <i class="fas fa-check me-2"></i>Submit Screening
-                </button>
+            <div class="modal-footer screening-modal-footer" style="justify-content: space-between; align-items: center;">
+                <!-- Left side - Cancel button -->
+                <div>
+                    <button type="button" class="btn btn-outline-secondary" id="screeningCancelButton">
+                        <i class="fas fa-times me-1"></i>Cancel
+                    </button>
+                </div>
+                
+                <!-- Right side - Action buttons -->
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn btn-outline-danger" id="screeningPrevButton" style="display: none;">
+                        <i class="fas fa-arrow-left me-1"></i>Previous
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" id="screeningDeferButton" style="display: none;">
+                        <i class="fas fa-ban me-1"></i>Defer Donor
+                    </button>
+                    <button type="button" class="btn btn-danger" id="screeningNextButton">
+                        <i class="fas fa-arrow-right me-1"></i>Next
+                    </button>
+                    <button type="button" class="btn btn-success" id="screeningSubmitButton" style="display: none;">
+                        <i class="fas fa-check me-1"></i>Submit Screening
+                    </button>
+                </div>
             </div>
         </div>
     </div>

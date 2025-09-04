@@ -21,6 +21,11 @@ if (!$donor_id) {
 // Set donor_id in session for form processing
 $_SESSION['donor_id'] = $donor_id;
 
+// Debug: Check what's in the session
+echo "<!-- Session Debug: donor_id = " . htmlspecialchars($donor_id) . " -->";
+echo "<!-- Session Debug: screening_id = " . (isset($_SESSION['screening_id']) ? htmlspecialchars($_SESSION['screening_id']) : 'NOT SET') . " -->";
+echo "<!-- Session Debug: All session vars = " . htmlspecialchars(print_r($_SESSION, true)) . " -->";
+
 // Check for correct roles (admin role_id 1 or staff role_id 3)
 if (!isset($_SESSION['role_id'])) {
     http_response_code(401);
@@ -110,6 +115,12 @@ if ($http_code === 200) {
 }
 ?>
 
+<!-- Include Font Awesome for icons -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+<!-- Include Medical History Approval CSS -->
+<link rel="stylesheet" href="../../assets/css/medical-history-approval-modals.css">
+
 <style>
     /* Step Indicators */
     .step-indicators {
@@ -192,6 +203,56 @@ if ($http_code === 200) {
         grid-template-columns: 60px 1fr 80px 80px 200px;
         gap: 1px;
         width: 100%;
+    
+    /* Bootstrap Button Styles for Medical History Approval */
+    .btn {
+        display: inline-block;
+        font-weight: 400;
+        line-height: 1.5;
+        text-align: center;
+        text-decoration: none;
+        vertical-align: middle;
+        cursor: pointer;
+        user-select: none;
+        border: 1px solid transparent;
+        padding: 0.375rem 0.75rem;
+        font-size: 1rem;
+        border-radius: 0.375rem;
+        transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    }
+    
+    .btn-outline-danger {
+        color: #dc3545;
+        border-color: #dc3545;
+        background-color: transparent;
+    }
+    
+    .btn-outline-danger:hover {
+        color: #fff;
+        background-color: #dc3545;
+        border-color: #dc3545;
+    }
+    
+    .btn-success {
+        color: #fff;
+        background-color: #198754;
+        border-color: #198754;
+    }
+    
+    .btn-success:hover {
+        color: #fff;
+        background-color: #157347;
+        border-color: #146c43;
+    }
+    
+    .px-4 {
+        padding-left: 1.5rem !important;
+        padding-right: 1.5rem !important;
+    }
+    
+    .me-2 {
+        margin-right: 0.5rem !important;
+    }
         margin-bottom: 20px;
         border: 1px solid #ddd;
         border-radius: 8px;
@@ -642,6 +703,89 @@ if ($http_code === 200) {
     <div class="footer-right">
         <button class="prev-button" id="modalPrevButton" style="display: none;">&#8592; Previous</button>
         <button class="edit-button" id="modalEditButton" style="margin-right: 10px;">Edit</button>
+        <?php
+        // Try to get screening_id from multiple sources
+        $screening_id = null;
+        
+        // First try session
+        if (isset($_SESSION['screening_id']) && !empty($_SESSION['screening_id'])) {
+            $screening_id = $_SESSION['screening_id'];
+        }
+        // Then try GET parameter
+        elseif (isset($_GET['screening_id']) && !empty($_GET['screening_id'])) {
+            $screening_id = $_GET['screening_id'];
+        }
+        // Then try to extract from medical history data if available
+        elseif ($medical_history_data && isset($medical_history_data['screening_id'])) {
+            $screening_id = $medical_history_data['screening_id'];
+        }
+        // Try to get from screening_form table using donor_id
+        elseif ($donor_id) {
+            $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?donor_id=eq.' . $donor_id . '&select=screening_id&order=created_at.desc&limit=1');
+            
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY
+            ]);
+            
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($http_code === 200) {
+                $screening_data = json_decode($response, true);
+                if (!empty($screening_data)) {
+                    $screening_id = $screening_data[0]['screening_id'];
+                    echo "<!-- Found screening_id from screening_form: $screening_id -->";
+                } else {
+                    echo "<!-- No screening data found for donor_id: $donor_id -->";
+                }
+            } else {
+                echo "<!-- Failed to fetch screening data. HTTP code: $http_code -->";
+            }
+        }
+        // Try to get from physical_examination table using donor_id
+        elseif ($donor_id) {
+            $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?donor_id=eq.' . $donor_id . '&select=screening_id&order=created_at.desc&limit=1');
+            
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY
+            ]);
+            
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($http_code === 200) {
+                $physical_data = json_decode($response, true);
+                if (!empty($physical_data)) {
+                    $screening_id = $physical_data[0]['screening_id'];
+                    echo "<!-- Found screening_id from physical_examination: $screening_id -->";
+                } else {
+                    echo "<!-- No physical examination data found for donor_id: $donor_id -->";
+                }
+            } else {
+                echo "<!-- Failed to fetch physical examination data. HTTP code: $http_code -->";
+            }
+        }
+        // Finally, try to get from donor profile if available
+        elseif (isset($_SESSION['current_screening_id'])) {
+            $screening_id = $_SESSION['current_screening_id'];
+        }
+        
+        // If still no screening_id, use a placeholder
+        if (!$screening_id) {
+            $screening_id = 'no-screening-id';
+        }
+        ?>
+        
+        <button type="button" class="btn btn-outline-danger decline-medical-history-btn px-4" 
+                data-donor-id="<?php echo htmlspecialchars($donor_id); ?>">
+            <i class="fas fa-times-circle me-2"></i>Decline
+        </button>
         <button class="next-button" id="modalNextButton">Next →</button>
     </div>
 </div>
@@ -918,4 +1062,78 @@ function initializeSaveConfirmation() {
 
 // Call this after the edit functionality is initialized
 setTimeout(initializeSaveConfirmation, 100);
+
+// Initialize medical history approval functionality
+setTimeout(() => {
+    if (typeof initializeMedicalHistoryApproval === 'function') {
+        initializeMedicalHistoryApproval();
+    } else {
+        console.log('Medical history approval functions not loaded yet');
+    }
+}, 200);
+
+// Debug: Check modal loading status
+setTimeout(() => {
+    const declineModal = document.getElementById('medicalHistoryDeclineModal');
+    const approvalModal = document.getElementById('medicalHistoryApprovalModal');
+    
+    const declineStatus = document.getElementById('declineModalStatus');
+    const approvalStatus = document.getElementById('approvalModalStatus');
+    
+    if (declineStatus) {
+        declineStatus.textContent = declineModal ? 'Found' : 'Not Found';
+        declineStatus.style.color = declineModal ? 'green' : 'red';
+    }
+    
+    if (approvalStatus) {
+        approvalStatus.textContent = approvalModal ? 'Found' : 'Not Found';
+        approvalStatus.style.color = approvalModal ? 'green' : 'red';
+    }
+    
+    console.log('Modal Debug - Decline:', declineModal, 'Approval:', approvalModal);
+}, 500);
 </script>
+
+<!-- Include Medical History Approval Modals -->
+<?php 
+echo "<!-- Loading medical history approval modals... -->";
+$modalPath = '../modals/medical-history-approval-modals.php';
+if (file_exists($modalPath)) {
+    include $modalPath;
+    echo "<!-- Medical history approval modals loaded successfully -->";
+} else {
+    echo "<!-- ERROR: Modal file not found at: $modalPath -->";
+    echo "<!-- Current directory: " . __DIR__ . " -->";
+}
+?>
+
+<!-- Debug: Check if modals are loaded -->
+<div id="modalDebugInfo" style="display: none;">
+    <p>Decline Modal: <span id="declineModalStatus">Checking...</span></p>
+    <p>Approval Modal: <span id="approvalModalStatus">Checking...</span></p>
+</div>
+
+<!-- Fallback Modal for Testing (remove this after fixing the main modal) -->
+<div class="modal fade" id="fallbackDeclineModal" tabindex="-1" aria-labelledby="fallbackDeclineModalLabel" aria-hidden="true" style="z-index: 99999 !important;">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="fallbackDeclineModalLabel">Decline Medical History (Fallback)</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>This is a fallback modal for testing. The main modal system should be working.</p>
+                <p>If you see this, there's an issue with the main modal include.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Include Medical History Approval CSS -->
+<link rel="stylesheet" href="../../assets/css/medical-history-approval-modals.css">
+
+<!-- Include Medical History Approval JavaScript -->
+<script src="../../assets/js/medical-history-approval.js"></script>

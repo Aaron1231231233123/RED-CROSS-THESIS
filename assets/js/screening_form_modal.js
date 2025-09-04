@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const prevButton = document.getElementById('screeningPrevButton');
         const submitButton = document.getElementById('screeningSubmitButton');
         const cancelButton = document.getElementById('screeningCancelButton');
+        const deferButton = document.getElementById('screeningDeferButton');
 
         // Navigation handlers
         if (nextButton) {
@@ -59,6 +60,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     backdrops.forEach(backdrop => backdrop.remove());
                     document.body.classList.remove('modal-open');
                 }
+            });
+        }
+
+        if (deferButton) {
+            deferButton.addEventListener('click', function() {
+                handleDeferDonor();
             });
         }
 
@@ -159,10 +166,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const nextButton = document.getElementById('screeningNextButton');
         const prevButton = document.getElementById('screeningPrevButton');
         const submitButton = document.getElementById('screeningSubmitButton');
+        const deferButton = document.getElementById('screeningDeferButton');
 
         // Show/hide previous button
         if (prevButton) {
             prevButton.style.display = currentStep > 1 ? 'inline-block' : 'none';
+        }
+
+        // Show/hide defer button (show on all steps)
+        if (deferButton) {
+            deferButton.style.display = 'inline-block';
         }
 
         // Show/hide next vs submit button
@@ -841,6 +854,43 @@ function prefillFromExisting() {
             })
             .catch((e) => { console.warn('[Screening Prefill] Fetch failed', e); });
     } catch (e) {}
+}
+
+// Handle defer donor functionality
+function handleDeferDonor() {
+    console.log('Defer donor button clicked in screening form');
+    
+    // Get donor ID from the form
+    const donorIdInput = document.querySelector('input[name="donor_id"]');
+    const donorId = donorIdInput ? donorIdInput.value : null;
+    
+    if (!donorId) {
+        console.error('No donor ID found in screening form');
+        alert('Error: No donor ID found. Please try again.');
+        return;
+    }
+    
+    console.log('Opening defer modal for donor ID:', donorId);
+    
+    // Close the screening modal first
+    const screeningModal = document.getElementById('screeningFormModal');
+    if (screeningModal) {
+        const modal = bootstrap.Modal.getInstance(screeningModal);
+        if (modal) {
+            modal.hide();
+        }
+    }
+    
+    // Wait a moment for modal to close, then open defer modal
+    setTimeout(() => {
+        // Check if screening defer modal functions are available
+        if (typeof handleScreeningDeferDonor === 'function') {
+            handleScreeningDeferDonor();
+        } else {
+            console.error('handleScreeningDeferDonor function not found. Make sure initial-screening-defer-button.js is loaded.');
+            alert('Error: Defer functionality not available. Please refresh the page and try again.');
+        }
+    }, 300);
 }
 
 // Make openScreeningModal function globally available

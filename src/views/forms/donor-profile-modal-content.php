@@ -577,6 +577,45 @@ if ($donor_info && isset($donor_info['birthdate'])) {
 <script>
     (function(){
         try {
+            // NUCLEAR OPTION: Completely override Bootstrap modal behavior
+            document.addEventListener('DOMContentLoaded', function() {
+                // Override Bootstrap's modal behavior before it can affect the page
+                const originalAddClass = Element.prototype.classList.add;
+                Element.prototype.classList.add = function(...classes) {
+                    if (classes.includes('modal-open')) {
+                        // Prevent modal-open class from being added to body
+                        return;
+                    }
+                    return originalAddClass.apply(this, classes);
+                };
+                
+                const originalSetAttribute = Element.prototype.setAttribute;
+                Element.prototype.setAttribute = function(name, value) {
+                    if (name === 'style' && this === document.body) {
+                        // Prevent body style changes
+                        if (value.includes('padding-right')) {
+                            value = value.replace(/padding-right[^;]*;?/g, '');
+                        }
+                    }
+                    return originalSetAttribute.call(this, name, value);
+                };
+                
+                // Also prevent any existing modal-open class
+                if (document.body.classList.contains('modal-open')) {
+                    document.body.classList.remove('modal-open');
+                }
+                
+                // Force dashboard header positioning
+                const dashboardHeader = document.querySelector('.dashboard-home-header');
+                if (dashboardHeader) {
+                    dashboardHeader.style.position = 'static';
+                    dashboardHeader.style.left = 'auto';
+                    dashboardHeader.style.right = 'auto';
+                    dashboardHeader.style.top = 'auto';
+                    dashboardHeader.style.zIndex = 'auto';
+                }
+            });
+            
             const select = document.getElementById('eligibilityStatus');
             const proceedBtn = document.getElementById('proceedToPhysicalBtn');
             const mhApproved = <?php echo $mhApprovedFlag ? 'true' : 'false'; ?>;
