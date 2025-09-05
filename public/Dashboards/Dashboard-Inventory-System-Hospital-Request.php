@@ -131,15 +131,15 @@ function canFulfillBloodRequest($request_id) {
     $units_requested = intval($request_data['units_requested']);
     $blood_type_full = $requested_blood_type . ($requested_rh_factor === 'Positive' ? '+' : '-');
     
-    // OPTIMIZATION: Use enhanced querySQL function for eligibility data
-    $eligibilityData = querySQL(
-        'eligibility',
-        'eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status,blood_collection_id',
-        ['collection_successful' => 'eq.true']
+    // OPTIMIZATION: Use enhanced querySQL function for blood_bank_units data
+    $bloodBankUnitsData = querySQL(
+        'blood_bank_units',
+        'unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,created_at,updated_at',
+        []
     );
     
-    if (isset($eligibilityData['error'])) {
-        return [false, 'Error checking inventory: ' . $eligibilityData['error']];
+    if (isset($bloodBankUnitsData['error'])) {
+        return [false, 'Error checking inventory: ' . $bloodBankUnitsData['error']];
     }
     
     // Get compatible blood types
@@ -149,7 +149,7 @@ function canFulfillBloodRequest($request_id) {
     $available_units = 0;
     $available_by_type = [];
     
-    foreach ($eligibilityData as $item) {
+    foreach ($bloodBankUnitsData as $item) {
         if (empty($item['unit_serial_number'])) continue;
         
         $item_blood_type = $item['blood_type'];
@@ -159,12 +159,11 @@ function canFulfillBloodRequest($request_id) {
         // Check if this blood type is compatible
         foreach ($compatible_types as $compatible) {
             if ($compatible['type'] === $item_type && $compatible['rh'] === $item_rh) {
-                // Check if not expired
-                $collection_date = new DateTime($item['collection_start_time']);
-                $expiration_date = clone $collection_date;
-                $expiration_date->modify('+35 days');
+                // Check if not expired and not already handed over
+                $expiration_date = new DateTime($item['expires_at']);
+                $current_status = $item['status'] ?? 'available';
                 
-                if (new DateTime() <= $expiration_date) {
+                if (new DateTime() <= $expiration_date && $current_status !== 'handed_over') {
                     $available_units++;
                     if (!isset($available_by_type[$item_blood_type])) {
                         $available_by_type[$item_blood_type] = 0;

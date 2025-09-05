@@ -533,8 +533,6 @@ if (isset($_SESSION['error_message'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Medical History Modal</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="../../assets/css/medical-history-approval-modals.css">
     <script>
         // Store error message in sessionStorage if it exists
         <?php if (!empty($error_message)): ?>
@@ -853,54 +851,6 @@ if (isset($_SESSION['error_message'])) {
         .next-button:hover,
         .submit-button:hover {
             background-color: #7e0000;
-        }
-        
-        /* Bootstrap button styles for approve/decline buttons */
-        .btn {
-            display: inline-block;
-            font-weight: 400;
-            text-align: center;
-            vertical-align: middle;
-            user-select: none;
-            border: 1px solid transparent;
-            padding: 0.375rem 0.75rem;
-            font-size: 1rem;
-            line-height: 1.5;
-            border-radius: 0.25rem;
-            transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-        }
-        
-        .btn-outline-danger {
-            color: #dc3545;
-            border-color: #dc3545;
-            background-color: transparent;
-        }
-        
-        .btn-outline-danger:hover {
-            color: #fff;
-            background-color: #dc3545;
-            border-color: #dc3545;
-        }
-        
-        .btn-success {
-            color: #fff;
-            background-color: #28a745;
-            border-color: #28a745;
-        }
-        
-        .btn-success:hover {
-            color: #fff;
-            background-color: #218838;
-            border-color: #1e7e34;
-        }
-        
-        .px-4 {
-            padding-left: 1.5rem !important;
-            padding-right: 1.5rem !important;
-        }
-        
-        .me-2 {
-            margin-right: 0.5rem !important;
         }
         
         .form-step {
@@ -1998,18 +1948,8 @@ if (isset($_SESSION['error_message'])) {
                 </button>
             </div>
             <div class="footer-right">
-                <button class="prev-button" id="prevButton">&#8592; Previous</button>
-                <button type="button" class="btn btn-outline-danger decline-medical-history-btn px-4" 
-                        data-donor-id="<?php echo isset($_GET['donor_id']) ? htmlspecialchars($_GET['donor_id']) : ''; ?>" 
-                        data-screening-id="<?php echo isset($_SESSION['screening_id']) ? htmlspecialchars($_SESSION['screening_id']) : ''; ?>">
-                    <i class="fas fa-times-circle me-2"></i>Decline
-                </button>
-                <button type="button" class="btn btn-success approve-medical-history-btn px-4"
-                        data-donor-id="<?php echo isset($_GET['donor_id']) ? htmlspecialchars($_GET['donor_id']) : ''; ?>" 
-                        data-screening-id="<?php echo isset($_SESSION['screening_id']) ? htmlspecialchars($_SESSION['screening_id']) : ''; ?>">
-                    <i class="fas fa-check-circle me-2"></i>Approve
-                </button>
-                <button class="next-button" id="nextButton">Next →</button>
+            <button class="prev-button" id="prevButton">&#8592; Previous</button>
+            <button class="next-button" id="nextButton">Next →</button>
             </div>
         </div>
     </div>
@@ -2017,12 +1957,6 @@ if (isset($_SESSION['error_message'])) {
     <!-- Loading Spinner -->
     <div class="loading-spinner" id="loadingSpinner" style="display: none; position: fixed; top: 50%; left: 50%; width: 50px; height: 50px; border-radius: 50%; border: 8px solid #ddd; border-top: 8px solid #9c0000; animation: rotateSpinner 1s linear infinite; z-index: 10000; transform: translate(-50%, -50%);">
     </div>
-    
-    <!-- Medical History Approval Modals -->
-    <?php include '../modals/medical-history-approval-modals.php'; ?>
-    
-    <!-- Medical History Approval JavaScript -->
-    <script src="../../assets/js/medical-history-approval.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -2554,11 +2488,6 @@ if (isset($_SESSION['error_message'])) {
                     sessionStorage.removeItem('error_message');
                 }
                 errorMessage.style.display = 'block';
-            }
-            
-            // Initialize medical history approval functionality
-            if (typeof initializeMedicalHistoryApproval === 'function') {
-                initializeMedicalHistoryApproval();
             }
             
             // Function to handle cancellation of registration

@@ -1,4 +1,9 @@
 <?php
+// Prevent browser caching
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
+
 // Set error reporting
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -13,108 +18,149 @@ include_once __DIR__ . '/module/optimized_functions.php';
 // OPTIMIZATION: Performance monitoring
 $startTime = microtime(true);
 
+// OPTIMIZATION: Smart caching with intelligent change detection
+$cacheKey = 'bloodbank_dashboard_v1_' . date('Y-m-d'); // Daily cache key
+$cacheFile = sys_get_temp_dir() . '/' . $cacheKey . '.json';
+$cacheMetaFile = sys_get_temp_dir() . '/' . $cacheKey . '_meta.json';
+
+// Cache enabled with improved change detection
+$useCache = false;
+$needsFullRefresh = false;
+
+// Manual cache refresh option
+if (isset($_GET['refresh']) && $_GET['refresh'] == '1') {
+    // Force cache refresh
+    if (file_exists($cacheFile)) unlink($cacheFile);
+    if (file_exists($cacheMetaFile)) unlink($cacheMetaFile);
+    $useCache = false; // Force no cache usage
+}
+
+// Check if cache exists and is valid
+if (file_exists($cacheFile) && file_exists($cacheMetaFile)) {
+    $cacheMeta = json_decode(file_get_contents($cacheMetaFile), true);
+    $cacheAge = time() - $cacheMeta['timestamp'];
+    
+    // SMART CHANGE DETECTION: Check for status changes that affect counts
+    $hasChanges = false;
+    
+    // Only check for changes if cache is not too old (max 30 minutes)
+    if ($cacheAge < 1800) { // 30 minutes max cache age
+        // Quick check: Get recent status changes
+        $statusCheckResponse = supabaseRequest("blood_bank_units?select=status,updated_at&order=updated_at.desc&limit=10");
+        $currentStatusHash = md5(json_encode($statusCheckResponse ?: []));
+        
+        // Additional check: Specifically look for handed_over status changes
+        $handedOverCheckResponse = supabaseRequest("blood_bank_units?select=unit_id,status&status=eq.handed_over");
+        $currentHandedOverHash = md5(json_encode($handedOverCheckResponse ?: []));
+        
+        // Check if statuses have changed since last cache
+        if (isset($cacheMeta['statusHash']) && $cacheMeta['statusHash'] !== $currentStatusHash) {
+            $hasChanges = true;
+        }
+        
+        // Check specifically for handed_over changes
+        if (isset($cacheMeta['handedOverHash']) && $cacheMeta['handedOverHash'] !== $currentHandedOverHash) {
+            $hasChanges = true;
+        }
+        
+        // Also check cache age - if older than 5 minutes, consider it stale
+        if ($cacheAge > 300) { // 5 minutes
+            $hasChanges = true;
+        }
+        
+        if (!$hasChanges) {
+            // No changes detected - use cache for instant loading
+            $useCache = true;
+            $cachedData = json_decode(file_get_contents($cacheFile), true);
+            if ($cachedData && !empty($cachedData['bloodInventory'])) {
+                $bloodInventory = $cachedData['bloodInventory'];
+                $totalBags = $cachedData['totalBags'] ?? 0;
+                $validBags = $cachedData['validBags'] ?? 0;
+                $expiredBags = $cachedData['expiredBags'] ?? 0;
+                $expiringBags = $cachedData['expiringBags'] ?? 0;
+                $availableTypes = $cachedData['availableTypes'] ?? [];
+                
+                // Skip to the end of data processing
+                goto cache_loaded;
+            } else {
+                // Cache data is invalid or empty - force refresh
+                $useCache = false;
+                if (file_exists($cacheFile)) unlink($cacheFile);
+                if (file_exists($cacheMetaFile)) unlink($cacheMetaFile);
+            }
+        }
+    }
+}
+
 // OPTIMIZED: Fetch blood inventory data with enhanced performance
 $bloodInventory = [];
 
 try {
-    // OPTIMIZATION 1: Get all declined donor IDs in one optimized query
-    $declinedDonorIds = [];
-    $physicalExamResponse = supabaseRequest("physical_examination?remarks=neq.Accepted&select=donor_id,donor_form_id");
+    // OPTIMIZATION 1: Single query to blood_bank_units table (has all the data we need!)
+    $bloodBankUnitsResponse = supabaseRequest("blood_bank_units?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,created_at,updated_at&unit_serial_number=not.is.null&order=collected_at.desc");
+    $bloodBankUnitsData = isset($bloodBankUnitsResponse['data']) ? $bloodBankUnitsResponse['data'] : [];
     
-    if (isset($physicalExamResponse['data']) && is_array($physicalExamResponse['data'])) {
-        foreach ($physicalExamResponse['data'] as $record) {
-            if (!empty($record['donor_id'])) {
-                $declinedDonorIds[] = $record['donor_id'];
-            }
-            if (!empty($record['donor_form_id'])) {
-                $declinedDonorIds[] = $record['donor_form_id'];
-            }
+    // OPTIMIZATION 2: Get donor data only for units we actually have (reduces data transfer)
+    if (!empty($bloodBankUnitsData)) {
+        $donorIds = array_unique(array_column($bloodBankUnitsData, 'donor_id'));
+        $donorIdsFilter = implode(',', array_map('intval', $donorIds));
+        
+        $donorResponse = supabaseRequest("donor_form?select=donor_id,surname,first_name,middle_name,birthdate,sex,civil_status&donor_id=in.({$donorIdsFilter})");
+        $donorData = isset($donorResponse['data']) ? $donorResponse['data'] : [];
+        
+        // Create lookup array for donor data
+        $donorLookup = [];
+        foreach ($donorData as $donor) {
+            $donorLookup[$donor['donor_id']] = $donor;
         }
-    }
-    $declinedDonorIds = array_unique($declinedDonorIds);
-    
-    // OPTIMIZATION 2: Get all blood collection data in one optimized query
-    $bloodCollectionResponse = supabaseRequest("blood_collection?select=blood_collection_id,amount_taken");
-    $bloodCollectionData = isset($bloodCollectionResponse['data']) ? $bloodCollectionResponse['data'] : [];
-    
-    // Create lookup array for blood collection data
-    $bloodCollectionLookup = [];
-    foreach ($bloodCollectionData as $collection) {
-        $bloodCollectionLookup[$collection['blood_collection_id']] = $collection;
+    } else {
+        $donorLookup = [];
     }
     
-    // OPTIMIZATION 3: Get all donor data in one optimized query
-    $donorResponse = supabaseRequest("donor_form?select=donor_id,surname,first_name,middle_name,birthdate,sex,civil_status");
-    $donorData = isset($donorResponse['data']) ? $donorResponse['data'] : [];
+    // No need to check declined donors - blood_bank_units already contains only successful donations
     
-    // Create lookup array for donor data
-    $donorLookup = [];
-    foreach ($donorData as $donor) {
-        $donorLookup[$donor['donor_id']] = $donor;
-    }
-    
-    // OPTIMIZATION 4: Query eligibility table for valid blood units with enhanced query
-    $eligibilityResponse = supabaseRequest("eligibility?collection_successful=eq.true&select=eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status,blood_collection_id&order=collection_start_time.desc");
-    $eligibilityData = isset($eligibilityResponse['data']) ? $eligibilityResponse['data'] : [];
-    
-    // Track seen collections to avoid duplicates
-    $seenCollections = [];
-    
-    if (is_array($eligibilityData) && !empty($eligibilityData)) {
-        foreach ($eligibilityData as $item) {
-            // Skip if no serial number or if donor is in declined list
-            if (empty($item['unit_serial_number']) || in_array($item['donor_id'], $declinedDonorIds)) {
-                continue;
+    // OPTIMIZATION 3: Batch process with array functions instead of loops
+    if (is_array($bloodBankUnitsData) && !empty($bloodBankUnitsData)) {
+        // Filter out empty serial numbers in one pass
+        $filteredUnits = array_filter($bloodBankUnitsData, function($item) {
+            return !empty($item['unit_serial_number']);
+        });
+        
+        // OPTIMIZATION 7: Use array_map for parallel processing
+        $bloodInventory = array_map(function($item) use ($donorLookup) {
+            // Parse dates once
+            $collectionDate = new DateTime($item['collected_at']);
+            $expirationDate = new DateTime($item['expires_at']);
+            $today = new DateTime();
+            
+            // Determine status efficiently
+            $status = 'Valid';
+            if ($today > $expirationDate) {
+                $status = 'Expired';
+            } elseif ($item['status'] === 'handed_over') {
+                $status = 'Handed Over';
             }
             
-            // Skip if no blood collection data
-            if (empty($item['blood_collection_id']) || !isset($bloodCollectionLookup[$item['blood_collection_id']])) {
-                continue;
-            }
-            
-            // Skip duplicates
-            $collectionId = $item['blood_collection_id'];
-            if (in_array($collectionId, $seenCollections)) {
-                continue;
-            }
-            $seenCollections[] = $collectionId;
-            
-            // Get blood collection data from lookup
-            $bloodCollectionData = $bloodCollectionLookup[$collectionId];
-            
-            // Calculate expiration date (35 days from collection)
-            $collectionDate = new DateTime($item['collection_start_time']);
-            $expirationDate = clone $collectionDate;
-            $expirationDate->modify('+35 days');
-            
-            // Create blood bag entry
-            $bloodBag = [
-                'eligibility_id' => $item['eligibility_id'],
-                'donor_id' => $item['donor_id'],
-                'serial_number' => $item['unit_serial_number'],
-                'blood_type' => $item['blood_type'],
-                'bags' => isset($bloodCollectionData['amount_taken']) ? $bloodCollectionData['amount_taken'] : 'N/A',
-                'bag_type' => $item['blood_bag_type'] ?: 'Standard',
-                'collection_date' => $collectionDate->format('Y-m-d'),
-                'expiration_date' => $expirationDate->format('Y-m-d'),
-                'status' => (new DateTime() > $expirationDate) ? 'Expired' : 'Valid',
-                'eligibility_status' => $item['status'],
-                'eligibility_end_date' => $item['end_date'],
+            // Get donor info efficiently
+            $donor = $donorLookup[$item['donor_id']] ?? null;
+            $donorInfo = [
+                'surname' => 'Not Found',
+                'first_name' => '',
+                'middle_name' => '',
+                'birthdate' => '',
+                'age' => '',
+                'sex' => '',
+                'civil_status' => ''
             ];
             
-            // Get donor information from lookup
-            $donor = $donorLookup[$item['donor_id']] ?? null;
-            
             if ($donor) {
-                // Calculate age based on birthdate
                 $age = '';
                 if (!empty($donor['birthdate'])) {
                     $birthdate = new DateTime($donor['birthdate']);
-                    $today = new DateTime();
                     $age = $birthdate->diff($today)->y;
                 }
                 
-                $bloodBag['donor'] = [
+                $donorInfo = [
                     'surname' => $donor['surname'] ?? '',
                     'first_name' => $donor['first_name'] ?? '',
                     'middle_name' => $donor['middle_name'] ?? '',
@@ -123,21 +169,28 @@ try {
                     'sex' => $donor['sex'] ?? '',
                     'civil_status' => $donor['civil_status'] ?? ''
                 ];
-            } else {
-                // Default empty donor info if not found
-                $bloodBag['donor'] = [
-                    'surname' => 'Not Found',
-                    'first_name' => '',
-                    'middle_name' => '',
-                    'birthdate' => '',
-                    'age' => '',
-                    'sex' => '',
-                    'civil_status' => ''
-                ];
             }
             
-            $bloodInventory[] = $bloodBag;
-        }
+            return [
+                'unit_id' => $item['unit_id'],
+                'donor_id' => $item['donor_id'],
+                'serial_number' => $item['unit_serial_number'],
+                'blood_type' => $item['blood_type'],
+                'bags' => 1,
+                'bag_type' => $item['bag_type'] ?: 'Standard',
+                'bag_brand' => $item['bag_brand'] ?: 'N/A',
+                'collection_date' => $collectionDate->format('Y-m-d'),
+                'expiration_date' => $expirationDate->format('Y-m-d'),
+                'status' => $status,
+                'unit_status' => $item['status'],
+                'created_at' => $item['created_at'],
+                'updated_at' => $item['updated_at'],
+                'donor' => $donorInfo
+            ];
+        }, $filteredUnits);
+        
+        // Convert to indexed array
+        $bloodInventory = array_values($bloodInventory);
     }
     
 } catch (Exception $e) {
@@ -150,7 +203,93 @@ if (empty($bloodInventory)) {
     $bloodInventory = [];
 }
 
-// Pagination settings
+// OPTIMIZATION 8: Efficient statistics calculation using array functions
+$today = new DateTime();
+$expiryLimit = (new DateTime())->modify('+7 days');
+
+// Use array_reduce for single-pass statistics calculation
+$stats = array_reduce($bloodInventory, function($carry, $bag) use ($today, $expiryLimit) {
+    // Count total bags (exclude expired and handed_over units)
+    // Each unit in blood_bank_units represents 1 bag
+    if ($bag['status'] != 'Expired' && $bag['status'] != 'Handed Over') {
+        $carry['totalBags'] += 1; // Each unit = 1 bag
+    }
+    
+    // Count valid bags
+    if ($bag['status'] == 'Valid') {
+        $carry['validBags']++;
+        // Track available blood types
+        if (!in_array($bag['blood_type'], $carry['availableTypes'])) {
+            $carry['availableTypes'][] = $bag['blood_type'];
+        }
+    }
+    
+    // Count expired bags
+    if ($bag['status'] == 'Expired') {
+        $carry['expiredBags']++;
+    }
+    
+    // Count expiring soon (valid units expiring within 7 days)
+    if ($bag['status'] == 'Valid') {
+        $expirationDate = new DateTime($bag['expiration_date']);
+        if ($expirationDate <= $expiryLimit && $today <= $expirationDate) {
+            $carry['expiringBags']++;
+        }
+    }
+    
+    return $carry;
+}, [
+    'totalBags' => 0,
+    'validBags' => 0,
+    'expiredBags' => 0,
+    'expiringBags' => 0,
+    'availableTypes' => []
+]);
+
+// Extract statistics
+$totalBags = $stats['totalBags'];
+$validBags = $stats['validBags'];
+$expiredBags = $stats['expiredBags'];
+$expiringBags = $stats['expiringBags'];
+$availableTypes = $stats['availableTypes'];
+
+// Convert to integer for display
+$totalBags = (int)$totalBags;
+
+
+// OPTIMIZATION: Save to cache with smart change detection
+$cacheData = [
+    'bloodInventory' => $bloodInventory,
+    'totalBags' => $totalBags,
+    'validBags' => $validBags,
+    'expiredBags' => $expiredBags,
+    'expiringBags' => $expiringBags,
+    'availableTypes' => $availableTypes,
+    'timestamp' => time()
+];
+
+// Get current status hash for change detection
+$statusCheckResponse = supabaseRequest("blood_bank_units?select=status,updated_at&order=updated_at.desc&limit=10");
+$currentStatusHash = md5(json_encode($statusCheckResponse ?: []));
+
+// Get handed_over status hash for specific change detection
+$handedOverCheckResponse = supabaseRequest("blood_bank_units?select=unit_id,status&status=eq.handed_over");
+$currentHandedOverHash = md5(json_encode($handedOverCheckResponse ?: []));
+
+$cacheMeta = [
+    'timestamp' => time(),
+    'statusHash' => $currentStatusHash,
+    'handedOverHash' => $currentHandedOverHash,
+    'version' => 'v1'
+];
+
+file_put_contents($cacheFile, json_encode($cacheData));
+file_put_contents($cacheMetaFile, json_encode($cacheMeta));
+
+// Cache loaded marker
+cache_loaded:
+
+// Pagination settings (needed for both cached and fresh data)
 $itemsPerPage = 10;
 $totalItems = count($bloodInventory);
 $totalPages = ceil($totalItems / $itemsPerPage);
@@ -169,41 +308,6 @@ $startIndex = ($currentPage - 1) * $itemsPerPage;
 // Get the subset of blood inventory for the current page
 $currentPageInventory = array_slice($bloodInventory, $startIndex, $itemsPerPage);
 
-// Count stats for display
-$validBags = 0;
-$expiredBags = 0;
-$totalBags = 0; // Initialize to 0 instead of count($bloodInventory)
-
-// Calculate inventory statistics
-$availableTypes = [];
-$expiringBags = 0;
-
-$today = new DateTime();
-$expiryLimit = (new DateTime())->modify('+7 days');
-
-foreach ($bloodInventory as $bag) {
-    // Add to total bags (sum of amount_taken) only if valid
-    if (is_numeric($bag['bags']) && $bag['status'] == 'Valid') {
-        $totalBags += floatval($bag['bags']); // Sum the amount values
-        $validBags++;
-        // Only count available types if there is at least one valid unit
-        if (!in_array($bag['blood_type'], $availableTypes) && floatval($bag['bags']) > 0) {
-            $availableTypes[] = $bag['blood_type'];
-        }
-    }
-    
-    // Calculate expiration status
-    $expirationDate = new DateTime($bag['expiration_date']);
-    if ($today > $expirationDate) {
-        $expiredBags++;
-    } elseif ($expirationDate <= $expiryLimit) {
-        $expiringBags++;
-    }
-}
-
-// Convert to integer for display
-$totalBags = (int)$totalBags;
-
 // OPTIMIZATION: Performance logging and caching
 $endTime = microtime(true);
 $executionTime = round(($endTime - $startTime) * 1000, 2); // Convert to milliseconds
@@ -219,6 +323,11 @@ $sortBy = "Default (Latest)";
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Blood Bank Inventory</title>
+    
+    <!-- Prevent browser caching -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <!-- Bootstrap 5.3 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- FontAwesome for Icons -->
@@ -796,9 +905,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 <div class="container-fluid p-4 custom-margin">
                     <div class="d-flex justify-content-between align-items-center mb-4">
                         <h2 class="blood-inventory-heading mb-0">Blood Bank Inventory</h2>
-                        <p class="text-dark mb-0">
+                        <div class="d-flex align-items-center">
+                            <p class="text-dark mb-0 me-3">
                             <strong><?php echo date('d F Y'); ?></strong> <i class="fas fa-calendar-alt ms-2"></i>
                         </p>
+                        </div>
                     </div>
                     
                     <!-- Search Container -->
@@ -871,17 +982,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     <h5 class="mt-4 mb-3">Available Blood per Unit</h5>
                     
                     <?php
-                    // OPTIMIZED: Calculate blood type counts in one pass
-                    $bloodTypeCounts = [
+                    // OPTIMIZATION 9: Calculate blood type counts using array_reduce for efficiency
+                    $bloodTypeCounts = array_reduce($bloodInventory, function($carry, $bag) {
+                        if ($bag['status'] == 'Valid' && isset($carry[$bag['blood_type']])) {
+                            $carry[$bag['blood_type']] += 1; // Each unit = 1 bag
+                        }
+                        return $carry;
+                    }, [
                         'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
                         'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
-                    ];
-                    
-                    foreach ($bloodInventory as $bag) {
-                        if ($bag['status'] == 'Valid' && is_numeric($bag['bags']) && isset($bloodTypeCounts[$bag['blood_type']])) {
-                            $bloodTypeCounts[$bag['blood_type']] += floatval($bag['bags']);
-                        }
-                    }
+                    ]);
                     ?>
                     
                     <div class="row mb-4">
@@ -1236,6 +1346,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Simple cache prevention - only refresh if page was loaded from cache
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted) {
+                // Page was loaded from cache, force refresh
+                window.location.reload();
+            }
+        });
+    </script>
     <script>
         // Data for the current page
         const bloodInventory = <?php echo json_encode($bloodInventory); ?>;

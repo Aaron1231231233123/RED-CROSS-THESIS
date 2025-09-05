@@ -179,46 +179,43 @@ function updateBloodRequestAndInventory($request_id) {
         $units_requested = intval($request_data['units_requested']);
         $blood_type_full = $requested_blood_type . ($requested_rh_factor === 'Positive' ? '+' : '-');
         
-        // OPTIMIZATION: Use enhanced querySQL function for eligibility data
-        $eligibilityData = querySQL(
-            'eligibility',
-            'eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status,blood_collection_id',
-            ['collection_successful' => 'eq.true']
+        // OPTIMIZATION: Use enhanced querySQL function for blood_bank_units data
+        $bloodBankUnitsData = querySQL(
+            'blood_bank_units',
+            'unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,created_at,updated_at',
+            []
         );
         
-        if (isset($eligibilityData['error'])) {
-            throw new Exception("Failed to fetch eligibility data: " . $eligibilityData['error']);
+        if (isset($bloodBankUnitsData['error'])) {
+            throw new Exception("Failed to fetch blood bank units data: " . $bloodBankUnitsData['error']);
         }
         
         $available_bags = [];
         $today = new DateTime();
         
-        foreach ($eligibilityData as $item) {
-            if (!empty($item['blood_collection_id'])) {
-                // OPTIMIZATION: Use enhanced querySQL for blood collection data
-                $bloodCollectionData = querySQL('blood_collection', '*', ['blood_collection_id' => 'eq.' . $item['blood_collection_id']]);
-                if (isset($bloodCollectionData['error'])) {
-                    error_log("Failed to fetch blood collection data for ID " . $item['blood_collection_id'] . ": " . $bloodCollectionData['error']);
-                    continue;
-                }
-                $bloodCollectionData = isset($bloodCollectionData[0]) ? $bloodCollectionData[0] : null;
-            } else {
-                $bloodCollectionData = null;
+        foreach ($bloodBankUnitsData as $item) {
+            // Skip if no serial number
+            if (empty($item['unit_serial_number'])) {
+                continue;
             }
             
-            $collectionDate = new DateTime($item['collection_start_time']);
-            $expirationDate = clone $collectionDate;
-            $expirationDate->modify('+35 days');
+            // Parse collection and expiration dates
+            $collectionDate = new DateTime($item['collected_at']);
+            $expirationDate = new DateTime($item['expires_at']);
             $isExpired = ($today > $expirationDate);
-            $amount_taken = $bloodCollectionData && isset($bloodCollectionData['amount_taken']) ? intval($bloodCollectionData['amount_taken']) : 0;
+            $current_status = $item['status'] ?? 'available';
             
-            if ($amount_taken > 0 && !$isExpired) {
+            // Each unit represents 1 bag
+            $amount_taken = 1;
+            
+            // Only include units that are not expired and not already handed over
+            if ($amount_taken > 0 && !$isExpired && $current_status !== 'handed_over') {
                 $available_bags[] = [
-                    'eligibility_id' => $item['eligibility_id'],
-                    'blood_collection_id' => $item['blood_collection_id'],
+                    'unit_id' => $item['unit_id'],
+                    'unit_serial_number' => $item['unit_serial_number'],
                     'blood_type' => $item['blood_type'],
                     'amount_taken' => $amount_taken,
-                    'collection_start_time' => $item['collection_start_time'],
+                    'collection_start_time' => $item['collected_at'],
                     'expiration_date' => $expirationDate->format('Y-m-d'),
                 ];
             }
@@ -255,7 +252,7 @@ function updateBloodRequestAndInventory($request_id) {
                 foreach ($available_bags as $bag) {
                     if ($remaining_units <= 0) break;
                     if ($bag['blood_type'] === $compatible_blood_type &&
-                        !in_array($bag['blood_collection_id'], array_column($collections_to_update, 'blood_collection_id'))) {
+                        !in_array($bag['unit_id'], array_column($collections_to_update, 'unit_id'))) {
                         $available_units = $bag['amount_taken'];
                         if ($available_units > 0) {
                             $units_to_take = min($available_units, $remaining_units);
@@ -291,23 +288,22 @@ function updateBloodRequestAndInventory($request_id) {
         }
         
         // OPTIMIZATION: Use enhanced API function for batch updates
+        // Since we're working with individual units, we need to mark them as handed over
         foreach ($collections_to_update as $collection) {
-            $new_amount = intval($collection['amount_taken']) - intval($collection['units_to_take']);
-            if ($new_amount < 0) $new_amount = 0;
-            
             $update_data = [
-                'amount_taken' => $new_amount,
+                'status' => 'handed_over',
+                'handed_over_at' => date('Y-m-d H:i:s'),
                 'updated_at' => date('Y-m-d H:i:s')
             ];
             
             $updateResponse = supabaseRequest(
-                "blood_collection?blood_collection_id=eq." . $collection['blood_collection_id'],
+                "blood_bank_units?unit_id=eq." . $collection['unit_id'],
                 'PATCH',
                 $update_data
             );
             
             if ($updateResponse['code'] !== 200 && $updateResponse['code'] !== 204) {
-                throw new Exception("Failed to update blood collection {$collection['blood_collection_id']}. HTTP Code: {$updateResponse['code']}");
+                throw new Exception("Failed to update blood bank unit {$collection['unit_id']}. HTTP Code: {$updateResponse['code']}");
             }
         }
         
