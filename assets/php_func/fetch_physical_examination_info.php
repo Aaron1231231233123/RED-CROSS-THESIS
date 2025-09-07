@@ -7,79 +7,25 @@ require_once '../conn/db_conn.php';
 
 // Function to generate intelligent interviewer remarks based on medical history
 function generateInterviewerRemarks($data) {
-    $remarks = [];
-    
-    // Medical approval assessment
-    $medical_approval = $data['medical_approval'] ?? '';
-    $needs_review = $data['needs_review'] ?? false;
-    
-    if ($medical_approval) {
-        if ($medical_approval === 'approved' || $medical_approval === 'approved') {
-            $remarks[] = "Medical history approved for donation";
-        } elseif ($medical_approval === 'rejected' || $medical_approval === 'rejected') {
-            $remarks[] = "Medical history indicates rejection - donor not eligible";
-        } else {
-            $remarks[] = "Medical history status: {$medical_approval}";
-        }
+    // Concise rule: show only "Approved" when both IDs exist; else "Pending"
+    $hasScreening = !empty($data['screening_id']);
+    $hasMedicalHistory = !empty($data['medical_history_id']);
+    if ($hasScreening && $hasMedicalHistory) {
+        return 'Approved';
     }
-    
-    // Needs review assessment
-    if ($needs_review === true || $needs_review === 'true' || $needs_review === 1) {
-        $remarks[] = "Medical history requires additional review before final approval";
-    } elseif ($needs_review === false || $needs_review === 'false' || $needs_review === 0) {
-        $remarks[] = "Medical history review completed";
-    }
-    
-    // Blood type confirmation
-    $blood_type = $data['blood_type'] ?? '';
-    if ($blood_type) {
-        $remarks[] = "Blood type {$blood_type} confirmed";
-    }
-    
-    // Body weight assessment
-    $body_weight = floatval($data['body_weight'] ?? 0);
-    if ($body_weight > 0) {
-        if ($body_weight < 50) {
-            $remarks[] = "Underweight donor (below 50kg) - requires careful monitoring";
-        } elseif ($body_weight >= 50 && $body_weight <= 100) {
-            $remarks[] = "Normal weight range - suitable for donation";
-        } else {
-            $remarks[] = "Overweight donor - assess cardiovascular risk";
-        }
-    }
-    
-    return !empty($remarks) ? implode('. ', $remarks) . '.' : 'No specific medical assessment remarks noted';
+    return 'Pending';
 }
 
 // Function to generate physical exam notes from examination findings
 function generatePhysicalExamNotes($data) {
-    $notes = [];
-    
-    // General appearance
-    $gen_appearance = $data['gen_appearance'] ?? '';
-    if ($gen_appearance && $gen_appearance !== 'N/A' && $gen_appearance !== '') {
-        $notes[] = "General appearance: {$gen_appearance}";
-    }
-    
-    // Skin examination
-    $skin = $data['skin'] ?? '';
-    if ($skin && $skin !== 'N/A' && $skin !== '') {
-        $notes[] = "Skin examination: {$skin}";
-    }
-    
-    // HEENT examination
-    $heent = $data['heent'] ?? '';
-    if ($heent && $heent !== 'N/A' && $heent !== '') {
-        $notes[] = "HEENT (Head, Eyes, Ears, Nose, Throat): {$heent}";
-    }
-    
-    // Heart and lungs examination
-    $heart_and_lungs = $data['heart_and_lungs'] ?? '';
-    if ($heart_and_lungs && $heart_and_lungs !== 'N/A' && $heart_and_lungs !== '') {
-        $notes[] = "Heart and lungs: {$heart_and_lungs}";
-    }
-    
-    return !empty($notes) ? implode('. ', $notes) . '.' : 'No specific physical examination findings noted.';
+    // Concise summary; include only available items in short form
+    $parts = [];
+    if (!empty($data['gen_appearance'])) $parts[] = 'Appearance: ' . $data['gen_appearance'];
+    if (!empty($data['skin'])) $parts[] = 'Skin: ' . $data['skin'];
+    if (!empty($data['heent'])) $parts[] = 'HEENT: ' . $data['heent'];
+    if (!empty($data['heart_and_lungs'])) $parts[] = 'Heart/Lungs: ' . $data['heart_and_lungs'];
+    if (empty($parts)) return 'N/A';
+    return implode('. ', $parts) . '.';
 }
 
 // Function to fetch physical examination information for a donor

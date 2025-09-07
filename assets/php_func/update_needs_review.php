@@ -21,6 +21,7 @@ try {
     $now = gmdate('c'); // ISO 8601 UTC
     $payload = json_encode([
         'needs_review' => true,
+        'medical_approval' => 'Not Approved',
         'updated_at' => $now
     ]);
 

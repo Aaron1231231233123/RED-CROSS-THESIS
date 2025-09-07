@@ -241,10 +241,10 @@ function displayDonorMedicalInfo(donorData) {
                                         ${safe(donorData.medical_approval)}
                                     </span>
                                 </td>
-                                <td class="align-middle" style="text-align: left; padding: 1rem;">
-                                    <div class="interviewer-notes-content" style="line-height: 1.6; font-size: 0.95rem;">
-                                        ${formatInterviewerNotes(donorData.medical_notes)}
-                                    </div>
+                                <td class="text-center align-middle">
+                                    <span class="badge ${donorData.medical_notes && donorData.medical_notes.toLowerCase().includes('approved') ? 'bg-success' : 'bg-warning'} fs-6 px-3 py-2">
+                                        ${safe(donorData.medical_notes)}
+                                    </span>
                                 </td>
                             </tr>
                         </tbody>

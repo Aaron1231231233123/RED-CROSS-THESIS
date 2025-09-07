@@ -18,7 +18,7 @@ function fetchDonorMedicalInfo($eligibilityId) {
         // First get the eligibility record to get the donor_id
         $eligibility_curl = curl_init();
         curl_setopt_array($eligibility_curl, [
-            CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility?eligibility_id=eq." . $eligibilityId . "&select=donor_id,blood_type,donation_type,blood_pressure,pulse_rate,body_temp,gen_appearance,skin,heent,heart_and_lungs,body_weight,disapproval_reason,status,created_at&limit=1",
+            CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility?eligibility_id=eq." . $eligibilityId . "&select=donor_id,blood_type,donation_type,blood_pressure,pulse_rate,body_temp,gen_appearance,skin,heent,heart_and_lungs,body_weight,disapproval_reason,status,created_at,screening_id,medical_history_id&limit=1",
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER => [
                 "apikey: " . SUPABASE_API_KEY,
@@ -160,9 +160,10 @@ function fetchDonorMedicalInfo($eligibilityId) {
             $combined_data = array_merge($combined_data, $medical_info);
         }
         
-        // Generate medical history result and interviewer notes based on eligibility data
+        // Generate medical history result and concise interviewer/phys exam notes
         $combined_data['medical_approval'] = determineMedicalHistoryResult($combined_data);
-        $combined_data['medical_notes'] = generateVitalSignsSummary($combined_data);
+        $combined_data['medical_notes'] = generateConciseInterviewerNotes($combined_data);
+        $combined_data['physical_exam_notes'] = generateConcisePhysicalExamNotes($combined_data);
         
         // Determine screening status
         $combined_data['screening_status'] = determineScreeningStatus($combined_data);
@@ -179,50 +180,40 @@ function fetchDonorMedicalInfo($eligibilityId) {
 
 // Function to determine medical history result based on eligibility data
 function determineMedicalHistoryResult($data) {
+    // User requirement: if eligibility has both screening_id and medical_history_id → Approved
+    $hasScreening = !empty($data['screening_id']);
+    $hasMedicalHistory = !empty($data['medical_history_id']);
+    if ($hasScreening && $hasMedicalHistory) {
+        return 'Approved';
+    }
+
+    // Previous fallback: infer from basic fields
     $body_weight = $data['body_weight'] ?? '';
     $blood_type = $data['blood_type'] ?? '';
-    
-    // If both body_weight and blood_type exist in eligibility, it's successful
     if (!empty($body_weight) && !empty($blood_type)) {
-        return 'Successful';
-    } else {
-        return 'Pending';
+        return 'Approved';
     }
+    return 'Pending';
 }
 
-// Function to generate vital signs summary for interviewer notes
-function generateVitalSignsSummary($data) {
-    $notes = [];
-    
-    // Get vital signs from eligibility table
-    $blood_pressure = $data['blood_pressure'] ?? '';
-    $pulse_rate = $data['pulse_rate'] ?? '';
-    $body_temp = $data['body_temp'] ?? '';
-    $body_weight = $data['body_weight'] ?? '';
-    $blood_type = $data['blood_type'] ?? '';
-    
-    // Build vital signs summary
-    if ($blood_pressure && $blood_pressure !== 'N/A' && $blood_pressure !== '') {
-        $notes[] = "Blood pressure: {$blood_pressure}";
+// Concise interviewer notes
+function generateConciseInterviewerNotes($data) {
+    $approval = determineMedicalHistoryResult($data);
+    if ($approval === 'Approved') {
+        return 'Approved.';
     }
-    
-    if ($pulse_rate && $pulse_rate !== 'N/A' && $pulse_rate !== '') {
-        $notes[] = "Pulse rate: {$pulse_rate} bpm";
-    }
-    
-    if ($body_temp && $body_temp !== 'N/A' && $body_temp !== '') {
-        $notes[] = "Body temperature: {$body_temp}°C";
-    }
-    
-    if ($body_weight && $body_weight !== 'N/A' && $body_weight !== '') {
-        $notes[] = "Body weight: {$body_weight} kg";
-    }
-    
-    if ($blood_type && $blood_type !== 'N/A' && $blood_type !== '') {
-        $notes[] = "Blood type: {$blood_type}";
-    }
-    
-    return !empty($notes) ? implode('. ', $notes) . '.' : 'No vital signs data available';
+    return 'Pending.';
+}
+
+// Concise physical exam notes
+function generateConcisePhysicalExamNotes($data) {
+    $parts = [];
+    if (!empty($data['gen_appearance'])) $parts[] = 'Appearance: ' . $data['gen_appearance'];
+    if (!empty($data['skin'])) $parts[] = 'Skin: ' . $data['skin'];
+    if (!empty($data['heent'])) $parts[] = 'HEENT: ' . $data['heent'];
+    if (!empty($data['heart_and_lungs'])) $parts[] = 'Heart/Lungs: ' . $data['heart_and_lungs'];
+    if (empty($parts)) return 'N/A';
+    return implode('. ', $parts) . '.';
 }
 
 // Function to determine screening status

@@ -63,7 +63,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 $pe_body = [
                     'needs_review' => true,
-                    'updated_at' => $now_iso
+                    'updated_at' => $now_iso,
+                    // Ensure remarks reflect review status
+                    'remarks' => 'Pending'
                 ];
                 
                 // Add screening_id if provided
@@ -78,7 +80,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pe_body = [
                     'donor_id' => $donor_id,
                     'needs_review' => true,
-                    'updated_at' => $now_iso
+                    'updated_at' => $now_iso,
+                    // New record starts with Pending remarks
+                    'remarks' => 'Pending'
                 ];
                 
                 // Add screening_id if provided
@@ -282,7 +286,7 @@ $queries = [
     'screening_forms' => '/rest/v1/screening_form?select=screening_id,donor_form_id,needs_review,created_at&order=created_at.desc',
     'physical_exams' => '/rest/v1/physical_examination?select=donor_id,needs_review,created_at&order=created_at.desc',
     'blood_collections' => '/rest/v1/blood_collection?select=screening_id,start_time&order=start_time.desc',
-    'eligibility_records' => '/rest/v1/eligibility?select=donor_id&order=created_at.desc'
+    'eligibility_records' => '/rest/v1/eligibility?select=donor_id,status&order=created_at.desc'
 ];
 
 // Create parallel cURL requests
@@ -330,12 +334,29 @@ $medical_by_donor = array_column($medical_histories, null, 'donor_id');
 $screenings_by_donor = array_column($screening_forms, null, 'donor_form_id');
 $physicals_by_donor = array_column($physical_exams, null, 'donor_id');
 $blood_by_screening = array_column($blood_collections, null, 'screening_id');
-$eligibility_by_donor = array_column($eligibility_records, null, 'donor_id');
+// Build eligibility_by_donor using the most recent row per donor_id (records are ordered desc)
+$eligibility_by_donor = [];
+foreach ($eligibility_records as $row) {
+    $did = $row['donor_id'] ?? null;
+    if ($did === null) continue;
+    // Because list is desc by created_at, keep the first seen (newest) and ignore older duplicates
+    if (!isset($eligibility_by_donor[$did])) {
+        $eligibility_by_donor[$did] = $row;
+    }
+}
+
+// Optional debug hook: pass ?debug_donor_id=123 to verify eligibility presence for a specific donor
+if (isset($_GET['debug_donor_id'])) {
+    $dbg_id = intval($_GET['debug_donor_id']);
+    $dbg_row = $eligibility_by_donor[$dbg_id] ?? null;
+    error_log('[ELIG_DEBUG] donor_id=' . $dbg_id . ' present=' . ($dbg_row ? 'yes' : 'no') . ' row=' . json_encode($dbg_row));
+}
 
 // Create sets to track donors already processed at higher priority levels
 $donors_with_blood = [];
 $donors_with_physical = [];
 $donors_with_screening = [];
+$donors_with_review = [];
 
 // Process the donor history with OPTIMIZED HIERARCHY PRIORITY
 $donor_history = [];
@@ -344,7 +365,41 @@ $counter = 1;
 // FILTER: Only process Medical Review stage donors (New Medical and Returning Medical)
 // Skip Blood Collections, Physical Examinations, and Screening Forms for New donors
 
-// PRIORITY 1: Process Blood Collections (Highest Priority) - Only for Returning donors
+// ABSOLUTE PRIORITY: Any donor with needs_review=true must be shown, regardless of next-stage IDs
+foreach ($medical_by_donor as $rev_donor_id => $rev_medical) {
+    if (!isset($rev_medical['needs_review']) || $rev_medical['needs_review'] !== true) continue;
+    $donor_info = $donors_by_id[$rev_donor_id] ?? null;
+    if (!$donor_info) continue;
+    $donors_with_review[$rev_donor_id] = true;
+    // compute donor type based on eligibility presence
+    $donor_type_label = getDonorType($rev_donor_id, $rev_medical, $eligibility_by_donor, 'medical_review');
+    // Build status from eligibility (latest row)
+    $status = '-';
+    $elig = $eligibility_by_donor[$rev_donor_id] ?? null;
+    if ($elig && isset($elig['status'])) {
+        $st = strtolower($elig['status']);
+        if ($st === 'approved') $status = 'Eligible';
+        elseif ($st === 'temporary deferred') $status = 'Deferred';
+        elseif ($st === 'permanently deferred') $status = 'Ineligible';
+        elseif ($st === 'refused') $status = 'Refused';
+    }
+    $donor_history[] = [
+        'no' => $counter++,
+        'date' => ($rev_medical['updated_at'] ?? $donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
+        'surname' => $donor_info['surname'] ?? 'N/A',
+        'first_name' => $donor_info['first_name'] ?? 'N/A',
+        'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
+        'interviewer' => 'N/A',
+        'donor_type' => $donor_type_label,
+        'status' => $status,
+        'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
+        'donor_id' => $rev_donor_id,
+        'stage' => 'medical_review',
+        'medical_history_id' => $rev_medical['medical_history_id'] ?? null
+    ];
+}
+
+// PRIORITY 1: Process Blood Collections (but skip those already marked needs_review)
 foreach ($blood_collections as $blood_info) {
     $screening_id = $blood_info['screening_id'];
     $screening_info = $screenings_by_donor[$screening_id] ?? null;
@@ -354,6 +409,7 @@ foreach ($blood_collections as $blood_info) {
     if (!$donor_info) continue;
     
     $donor_id = $donor_info['donor_id'];
+    if (isset($donors_with_review[$donor_id])) continue;
     $donors_with_blood[$donor_id] = true;
     
     $medical_info = $medical_by_donor[$donor_id] ?? null;
@@ -361,6 +417,15 @@ foreach ($blood_collections as $blood_info) {
     
     // Only include if it's a Returning donor (has eligibility record)
     if (isset($eligibility_by_donor[$donor_id])) {
+            $elig = $eligibility_by_donor[$donor_id] ?? null;
+            $status = '-';
+            if ($elig && isset($elig['status'])) {
+                $st = strtolower($elig['status']);
+                if ($st === 'approved') $status = 'Eligible';
+                elseif ($st === 'temporary deferred') $status = 'Deferred';
+                elseif ($st === 'permanently deferred') $status = 'Ineligible';
+                elseif ($st === 'refused') $status = 'Refused';
+            }
             $donor_history[] = [
         'no' => $counter++,
         'date' => ($medical_info['updated_at'] ?? null) ?: ($blood_info['start_time'] ?? $screening_info['created_at'] ?? $donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
@@ -369,6 +434,8 @@ foreach ($blood_collections as $blood_info) {
         'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
         'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
         'donor_type' => $donor_type_label,
+        'status' => $status,
+        'status' => $status,
         'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
         'donor_id' => $donor_id,
         'stage' => 'blood_collection',
@@ -380,7 +447,7 @@ foreach ($blood_collections as $blood_info) {
 // PRIORITY 2: Process Physical Examinations (Medium Priority) - Only for Returning donors
 foreach ($physical_exams as $physical_info) {
     $donor_id = $physical_info['donor_id'];
-    if (isset($donors_with_blood[$donor_id])) continue;
+    if (isset($donors_with_review[$donor_id]) || isset($donors_with_blood[$donor_id])) continue;
     
     $donor_info = $donors_by_id[$donor_id] ?? null;
     if (!$donor_info) continue;
@@ -392,6 +459,15 @@ foreach ($physical_exams as $physical_info) {
     
     // Only include if it's a Returning donor (has eligibility record)
     if (isset($eligibility_by_donor[$donor_id])) {
+        $elig = $eligibility_by_donor[$donor_id] ?? null;
+        $status = '-';
+        if ($elig && isset($elig['status'])) {
+            $st = strtolower($elig['status']);
+            if ($st === 'approved') $status = 'Eligible';
+            elseif ($st === 'temporary deferred') $status = 'Deferred';
+            elseif ($st === 'permanently deferred') $status = 'Ineligible';
+            elseif ($st === 'refused') $status = 'Refused';
+        }
         $donor_history[] = [
             'no' => $counter++,
             'date' => ($medical_info['updated_at'] ?? null) ?: ($physical_info['created_at'] ?? $donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
@@ -400,6 +476,7 @@ foreach ($physical_exams as $physical_info) {
             'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
             'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
             'donor_type' => $donor_type_label,
+            'status' => $status,
             'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
             'donor_id' => $donor_id,
             'stage' => 'physical_examination',
@@ -411,7 +488,7 @@ foreach ($physical_exams as $physical_info) {
 // PRIORITY 3: Process Screening Forms (Low Priority) - Only for Returning donors
 foreach ($screening_forms as $screening_info) {
     $donor_id = $screening_info['donor_form_id'];
-    if (isset($donors_with_blood[$donor_id]) || isset($donors_with_physical[$donor_id])) continue;
+    if (isset($donors_with_review[$donor_id]) || isset($donors_with_blood[$donor_id]) || isset($donors_with_physical[$donor_id])) continue;
     
     $donor_info = $donors_by_id[$donor_id] ?? null;
     if (!$donor_info) continue;
@@ -423,6 +500,15 @@ foreach ($screening_forms as $screening_info) {
     
     // Only include if it's a Returning donor (has eligibility record)
     if (isset($eligibility_by_donor[$donor_id])) {
+        $elig = $eligibility_by_donor[$donor_id] ?? null;
+        $status = '-';
+        if ($elig && isset($elig['status'])) {
+            $st = strtolower($elig['status']);
+            if ($st === 'approved') $status = 'Eligible';
+            elseif ($st === 'temporary deferred') $status = 'Deferred';
+            elseif ($st === 'permanently deferred') $status = 'Ineligible';
+            elseif ($st === 'refused') $status = 'Refused';
+        }
         $donor_history[] = [
             'no' => $counter++,
             'date' => ($medical_info['updated_at'] ?? null) ?: ($screening_info['created_at'] ?? $donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
@@ -431,6 +517,7 @@ foreach ($screening_forms as $screening_info) {
             'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
             'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
             'donor_type' => $donor_type_label,
+            'status' => $status,
             'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
             'donor_id' => $donor_id,
             'stage' => 'screening_form',
@@ -444,7 +531,7 @@ foreach ($screening_forms as $screening_info) {
 $all_processed_donors = $donors_with_blood + $donors_with_physical + $donors_with_screening;
 foreach ($donor_forms as $donor_info) {
     $donor_id = $donor_info['donor_id'];
-    if (isset($all_processed_donors[$donor_id])) continue;
+    if (isset($donors_with_review[$donor_id]) || isset($all_processed_donors[$donor_id])) continue;
     if (isset($screenings_by_donor[$donor_id])) continue;
     
     $medical_info = $medical_by_donor[$donor_id] ?? null;
@@ -1892,6 +1979,7 @@ $donor_history = $unique_donor_history;
                                     <th>First Name</th>
                                     <th>Interviewer</th>
                                     <th>Donor Type</th>
+                                    <th>Status</th>
                                     <th>Registered via</th>
                                     <th>View</th>
                                 </tr>
@@ -1922,6 +2010,20 @@ $donor_history = $unique_donor_history;
                                             <td><?php echo isset($entry['first_name']) ? htmlspecialchars($entry['first_name']) : ''; ?></td>
                                             <td><?php echo isset($entry['interviewer']) ? htmlspecialchars($entry['interviewer']) : 'N/A'; ?></td>
                                             <td><span class="<?php echo stripos($entry['donor_type'],'returning')===0 ? 'type-returning' : 'type-new'; ?>"><?php echo htmlspecialchars($entry['donor_type']); ?></span></td>
+                                            <td>
+                                                <?php 
+                                                    $status = $entry['status'] ?? '-';
+                                                    $lower = strtolower($status);
+                                                    if ($status === '-') {
+                                                        echo '-';
+                                                    } else {
+                                                        if ($lower === 'ineligible') {
+                                                            echo '<i class="fas fa-flag me-1" style="color:#dc3545"></i>';
+                                                        }
+                                                        echo '<strong>' . htmlspecialchars($status) . '</strong>';
+                                                    }
+                                                ?>
+                                            </td>
                                             <td><span class="badge-tag badge-registered <?php echo strtolower($entry['registered_via'])==='mobile' ? 'badge-mobile' : 'badge-system'; ?>"><?php echo htmlspecialchars($entry['registered_via']); ?></span></td>
                                             <td>
                                                 <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" 
@@ -1993,17 +2095,21 @@ $donor_history = $unique_donor_history;
             
                     
                         </div>
-             <div class="modal-footer" style="background-color: #f8f9fa; border-top: 1px solid #dee2e6; border-radius: 0 0 15px 15px;">
-                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                     <i class="fas fa-times me-1"></i>Close
-                 </button>
-                 <button type="button" class="btn" id="proceedToMedicalHistory" style="background-color: #b22222; color: white; border: none;">
-                     <i class="fas fa-clipboard-list me-1"></i>Review Medical History
-                 </button>
-                 <button type="button" class="btn btn-outline-warning" id="markReviewFromMain">
-                     <i class="fas fa-flag me-1"></i>Mark for Medical Review
-                 </button>
-                            </div>
+             <div class="modal-footer d-flex justify-content-between align-items-center" style="background-color: #f8f9fa; border-top: 1px solid #dee2e6; border-radius: 0 0 15px 15px;">
+                <div>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>Close
+                    </button>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn" id="proceedToMedicalHistory" style="background-color: #b22222; color: white; border: none;">
+                        <i class="fas fa-clipboard-list me-1"></i>Review Medical History
+                    </button>
+                    <button type="button" class="btn btn-warning" id="markReviewFromMain" style="border: none; color: #8a5e00;">
+                        <i class="fas fa-flag me-1"></i>Mark for Medical Review
+                    </button>
+                </div>
+            </div>
                             </div>
                             </div>
 </div>
@@ -2671,6 +2777,10 @@ $donor_history = $unique_donor_history;
                                     </div>
                                 </div>`;
                     
+                    // Determine if donor is New; if so, hide history sections
+                    const __elig = Array.isArray(donor.eligibility) ? donor.eligibility : (donor.eligibility ? [donor.eligibility] : []);
+                    const isNewDonor = ((window.currentDonorType || '').toLowerCase().startsWith('new')) || __elig.length === 0;
+                    if (!isNewDonor) {
                     // Physical Assessment Table (based on eligibility table - show all records) - FIRST
                     const eligibilityRecords = Array.isArray(donor.eligibility) ? donor.eligibility : (donor.eligibility ? [donor.eligibility] : []);
                     let assessmentRows = '';
@@ -2855,6 +2965,7 @@ $donor_history = $unique_donor_history;
                                 </table>
                                 </div>
                         </div>`;
+                    }
                     
                     // If returning, enrich assessment section with eligibility details (all records)
                     if (modalContextType === 'returning' && donor.donor_id && donor.eligibility) {
@@ -2972,9 +3083,14 @@ $donor_history = $unique_donor_history;
             // Handle proceed button click with confirmation
             function openMedicalHistoryForCurrentDonor() {
                 if (!currentDonorId) return;
-                
-                // Show Physical Examination Results modal first
-                    showPhysicalExaminationModal(currentDonorId);
+                const isNew = (window.currentDonorType || '').toLowerCase().startsWith('new');
+                if (isNew) {
+                    // Skip physical examination for New donors
+                    proceedToMedicalHistoryModal();
+                    return;
+                }
+                // Show Physical Examination Results modal first for returning
+                showPhysicalExaminationModal(currentDonorId);
             }
             
             
@@ -4292,8 +4408,8 @@ $donor_history = $unique_donor_history;
     </div>
     
     <!-- Donor Information Medical Modal -->
-    <div class="modal fade" id="donorInformationMedicalModal" tabindex="-1" aria-labelledby="donorInformationMedicalModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg" style="max-width: 900px; width: 85%;">
+    <div class="modal fade" id="donorInformationMedicalModal" tabindex="-1" aria-labelledby="donorInformationMedicalModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-xl" style="max-width: 1200px; width: 90%;">
             <div class="modal-content" style="border-radius: 15px; overflow: hidden;">
                 <div id="donorMedicalModalContent">
                     <!-- Content will be dynamically loaded here -->
@@ -4311,15 +4427,40 @@ $donor_history = $unique_donor_history;
     
     <style>
         #donorInformationMedicalModal .modal-dialog {
-            max-width: 900px;
-            width: 85%;
+            max-width: 1200px;
+            width: 90%;
             margin: 1.75rem auto;
+        }
+        /* Ensure this modal appears above others */
+        #donorInformationMedicalModal { z-index: 1070; }
+        /* Stronger, blurred, darker backdrop when this modal is open */
+        .modal-backdrop.donor-info { 
+            z-index: 1069; 
+            opacity: 0.4 !important; 
+            background-color: rgba(0, 0, 0, 0.45) !important; 
+            backdrop-filter: blur(3px);
         }
         
         #donorInformationMedicalModal .modal-content {
             border-radius: 15px;
             overflow: hidden;
             border: none;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 0 2px rgba(178,34,34,0.15);
+            position: relative;
+        }
+        /* Smudge/Glow border to make the modal pop from anything behind it */
+        #donorInformationMedicalModal .modal-content::after {
+            content: '';
+            position: absolute;
+            inset: -8px; /* slightly smaller extension */
+            border-radius: 18px;
+            pointer-events: none;
+            /* lighter layered glow */
+            box-shadow:
+                0 0 0 6px rgba(255,255,255,0.35),
+                0 15px 40px rgba(0,0,0,0.25),
+                0 0 20px rgba(178,34,34,0.15);
+            filter: blur(1px);
         }
         
         #donorInformationMedicalModal .modal-header {
@@ -4502,18 +4643,18 @@ $donor_history = $unique_donor_history;
                     <h6 class="mb-2" style="color:#b22222; font-weight:600; border-bottom: 2px solid #b22222; padding-bottom: 0.3rem;">Final Assessment</h6>
                     <div class="row g-2">
                         <div class="col-md-6">
-                            <div class="p-3 text-center" style="background-color:#f8f9fa; border-radius:8px; border: 2px solid ${physicalData.disapproval_reason ? '#ffc107' : '#28a745'};">
+                            <div class="p-3 text-center" style="background-color:#f8f9fa; border-radius:8px; border: 2px solid ${physicalData.disapproval_reason ? '#dc3545' : '#28a745'};">
                                 <div class="fw-semibold mb-2" style="color:#b22222;">Fitness to Donate</div>
-                                <div class="fs-5 fw-bold" style="color: ${physicalData.disapproval_reason ? '#856404' : '#155724'};">
+                                <div class="fs-5 fw-bold" style="color: ${physicalData.disapproval_reason ? '#dc3545' : '#28a745'};">
                                     ${physicalData.disapproval_reason ? 'Deferred' : 'Accepted'}
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <div class="p-3 text-center" style="background-color:#f8f9fa; border-radius:8px; border: 2px solid #b22222;">
+                            <div class="p-3 text-center" style="background-color:#f8f9fa; border-radius:8px; border: 2px solid ${physicalData.disapproval_reason ? '#dc3545' : '#28a745'};">
                                 <div class="fw-semibold mb-2" style="color:#b22222;">Final Remarks</div>
-                                <div class="fs-5 fw-bold" style="color: #721c24;">
-                                    ${safe(physicalData.remarks || 'No remarks available')}
+                                <div class="fs-5 fw-bold" style="color: ${physicalData.disapproval_reason ? '#dc3545' : '#28a745'};">
+                                    ${physicalData.disapproval_reason ? 'Deferred' : 'Accepted'}
                                 </div>
                             </div>
                         </div>
@@ -4527,6 +4668,23 @@ $donor_history = $unique_donor_history;
             // Store donor ID for the proceed button
             modalContent.setAttribute('data-donor-id', donorId);
         }
+    </script>
+
+    <script>
+        // Add donor-info class to backdrop so this modal stands out
+        document.addEventListener('DOMContentLoaded', function () {
+            const donorInfoModalEl = document.getElementById('donorInformationMedicalModal');
+            if (donorInfoModalEl) {
+                donorInfoModalEl.addEventListener('shown.bs.modal', function () {
+                    const backdrop = document.querySelector('.modal-backdrop');
+                    if (backdrop) backdrop.classList.add('donor-info');
+                });
+                donorInfoModalEl.addEventListener('hidden.bs.modal', function () {
+                    const backdrop = document.querySelector('.modal-backdrop.donor-info');
+                    if (backdrop) backdrop.classList.remove('donor-info');
+                });
+            }
+        });
     </script>
 </body>
 </html>
