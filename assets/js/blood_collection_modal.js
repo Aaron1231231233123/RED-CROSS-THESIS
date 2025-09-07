@@ -52,7 +52,7 @@ class BloodCollectionModal {
                 
                 // Add a small delay to prevent rapid clicks
                 submitTimeout = setTimeout(() => {
-                    this.submitForm();
+                    this.showCollectionCompleteConfirmation();
                     submitTimeout = null;
                 }, 300);
             });
@@ -265,12 +265,17 @@ class BloodCollectionModal {
         }
 
         if (collectionDateDisplay) {
-            const today = new Date();
-            collectionDateDisplay.textContent = today.toLocaleDateString('en-US', {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric'
-            });
+            // Display donor's birthdate instead of current date
+            if (donorData.birthdate) {
+                const birthdate = new Date(donorData.birthdate);
+                collectionDateDisplay.textContent = birthdate.toLocaleDateString('en-US', {
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric'
+                });
+            } else {
+                collectionDateDisplay.textContent = 'Birthdate not available';
+            }
         }
 
         if (unitSerialDisplay) {
@@ -427,7 +432,6 @@ class BloodCollectionModal {
         
         const summaryElements = {
             'summary-blood-bag': formData.blood_bag_type || '-',
-            'summary-amount': formData.amount_taken || '-',
             'summary-successful': formData.is_successful === 'YES' ? 'Successful' : 'Failed',
             'summary-start-time': formData.start_time || '-',
             'summary-end-time': formData.end_time || '-',
@@ -475,69 +479,6 @@ class BloodCollectionModal {
         return data;
     }
 
-    async submitForm() {
-        // Prevent duplicate submissions
-        if (this.isSubmitting) {
-            console.log('Form is already being submitted, ignoring duplicate request');
-            return;
-        }
-
-        try {
-            this.isSubmitting = true;
-            
-            const formData = this.getFormData();
-            
-            // Validate final data
-            if (!this.validateFormData(formData)) {
-                this.isSubmitting = false;
-                return;
-            }
-
-            // Show loading and disable submit button immediately
-            this.showLoading(true);
-
-            const response = await fetch('../../assets/php_func/process_blood_collection.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(formData)
-            });
-
-            // Robust JSON parse with fallback
-            const raw = await response.text();
-            let result;
-            try { result = JSON.parse(raw); } catch (e) { result = { success: false, error: raw || 'Non-JSON response' }; }
-
-            if (result.success) {
-                this.showToast('Blood collection recorded successfully!', 'success');
-                
-                // Disable all form interaction to prevent further submissions
-                this.disableAllFormInteraction();
-                
-                setTimeout(() => {
-                    this.closeModal();
-                    window.location.reload(); // Refresh the page to show updated data
-                }, 2000);
-            } else {
-                // Handle specific error types
-                const errorMessage = result.error || result.message || 'Failed to record blood collection';
-
-                if (errorMessage.includes('already exists')) {
-                    // Instead of blocking, retry as an UPDATE with increment semantics
-                    await this.retryUpdateWithIncrement(formData);
-                } else {
-                    throw new Error(errorMessage);
-                }
-            }
-
-        } catch (error) {
-            console.error('Error submitting form:', error);
-            this.showToast(error.message || 'Error recording blood collection', 'error');
-            this.isSubmitting = false; // Reset flag on error to allow retry
-            this.showLoading(false);
-        }
-    }
 
     async retryUpdateWithIncrement(formData) {
         try {
@@ -576,7 +517,6 @@ class BloodCollectionModal {
     validateFormData(data) {
         const requiredFields = [
             'blood_bag_type',
-            'amount_taken', 
             'is_successful',
             'start_time',
             'end_time',
@@ -590,12 +530,8 @@ class BloodCollectionModal {
             }
         }
 
-        // Validate amount is a positive number
-        const amount = parseInt(data.amount_taken);
-        if (isNaN(amount) || amount <= 0 || amount > 10) {
-            this.showToast('Amount must be between 1 and 10 units', 'error');
-            return false;
-        }
+        // Amount is automatically set to 1 unit (standard donation)
+        // No validation needed as it's a hidden field with fixed value
 
         return true;
     }
@@ -608,6 +544,70 @@ class BloodCollectionModal {
         
         // Reset form
         this.resetForm();
+    }
+
+    showCollectionCompleteConfirmation() {
+        // Show the collection complete confirmation modal
+        if (window.showCollectionCompleteModal) {
+            window.showCollectionCompleteModal();
+        } else {
+            // Fallback to direct submission if modal function not available
+            this.submitForm();
+        }
+    }
+
+    submitForm() {
+        // This method will be called from the final confirmation modal
+        const formData = this.getFormData();
+        
+        if (!this.validateFormData(formData)) {
+            return;
+        }
+
+        this.showLoading(true);
+        this.isSubmitting = true;
+
+        // Submit to backend
+        fetch('../../assets/php_func/process_blood_collection.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            this.isSubmitting = false;
+            this.showLoading(false);
+            
+            if (data.success) {
+                this.showSuccessModal();
+            } else {
+                this.showToast(data.message || 'Submission failed', 'error');
+            }
+        })
+        .catch(error => {
+            this.isSubmitting = false;
+            this.showLoading(false);
+            console.error('Error:', error);
+            this.showToast('Network error occurred', 'error');
+        });
+    }
+
+    showSuccessModal() {
+        // Close the blood collection modal first
+        this.closeModal();
+        
+        // Show the donation success modal
+        if (window.showDonationSuccessModal) {
+            window.showDonationSuccessModal();
+        } else {
+            // Fallback to toast message
+            this.showToast('Donation completed successfully!', 'success');
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        }
     }
 
     resetForm() {

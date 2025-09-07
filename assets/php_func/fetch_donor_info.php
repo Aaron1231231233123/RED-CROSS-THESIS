@@ -22,7 +22,7 @@ try {
     // Fetch donor information from donor_form table (expanded fields)
     $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select='
         . 'donor_id,surname,first_name,middle_name,birthdate,age,sex,civil_status,permanent_address,'
-        . 'nationality,occupation,mobile,email,submitted_at,prc_donor_number'
+        . 'nationality,occupation,telephone,mobile,email,submitted_at,prc_donor_number'
         . '&donor_id=eq.' . $donor_id);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
@@ -47,7 +47,7 @@ try {
                    ($current_donor['middle_name'] ?? '') . '|' . 
                    ($current_donor['birthdate'] ?? '');
                    
-            $ch2 = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select=donor_id,submitted_at,blood_type,mobile,donation_type&order=submitted_at.desc');
+            $ch2 = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select=donor_id,submitted_at,blood_type,telephone,mobile,donation_type&order=submitted_at.desc');
             curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch2, CURLOPT_HTTPHEADER, [
                 'apikey: ' . SUPABASE_API_KEY,
@@ -78,7 +78,7 @@ try {
                         'date' => $donor['submitted_at'],
                         'blood_type' => $donor['blood_type'] ?? 'Unknown',
                         'donation_type' => $donor['donation_type'] ?? 'Unknown',
-                        'contact' => ($donor['mobile'] ?? 'Not provided')
+                        'contact' => ($donor['mobile'] ?? ($donor['telephone'] ?? 'Not provided'))
                     ];
                     
                     if (!$latest_submission || $donor['submitted_at'] > $latest_submission) {
@@ -93,8 +93,8 @@ try {
                 return strcmp($b['date'], $a['date']);
             });
             
-            // Get eligibility information for this donor (all records for history) with physician from physical examination
-            $eligibility_ch = curl_init(SUPABASE_URL . '/rest/v1/eligibility?donor_id=eq.' . $donor_id . '&select=*,physical_examination(physician)&order=created_at.desc');
+            // Get eligibility information for this donor
+            $eligibility_ch = curl_init(SUPABASE_URL . '/rest/v1/eligibility?donor_id=eq.' . $donor_id . '&select=*&order=created_at.desc&limit=1');
             curl_setopt($eligibility_ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($eligibility_ch, CURLOPT_HTTPHEADER, [
                 'apikey: ' . SUPABASE_API_KEY,
@@ -105,18 +105,12 @@ try {
             curl_close($eligibility_ch);
             
             $eligibility_data = json_decode($eligibility_response, true);
-            $eligibility_info = !empty($eligibility_data) ? $eligibility_data : [];
+            $eligibility_info = !empty($eligibility_data) ? $eligibility_data[0] : null;
             
-            // Get needs_review from medical_history table (only this field from medical_history)
-            $needs_review = false;
-            $debug_info = [];
-            $debug_info[] = "Starting needs_review check for donor_id: $donor_id";
-            
-            if ($donor_id) {
-                $medical_url = SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $donor_id . '&select=needs_review&order=created_at.desc&limit=1';
-                $debug_info[] = "Medical History URL: $medical_url";
-                
-                $medical_ch = curl_init($medical_url);
+            // Fetch medical history for the latest donation
+            $medical_history = null;
+            if ($latest_donor_id) {
+                $medical_ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $latest_donor_id . '&select=*&order=created_at.desc&limit=1');
                 curl_setopt($medical_ch, CURLOPT_RETURNTRANSFER, true);
                 curl_setopt($medical_ch, CURLOPT_HTTPHEADER, [
                     'apikey: ' . SUPABASE_API_KEY,
@@ -124,27 +118,10 @@ try {
                 ]);
                 
                 $medical_response = curl_exec($medical_ch);
-                $http_code = curl_getinfo($medical_ch, CURLINFO_HTTP_CODE);
-                $curl_error = curl_error($medical_ch);
                 curl_close($medical_ch);
                 
-                // Debug logging
-                $debug_info[] = "Medical History API Response for donor_id $donor_id:";
-                $debug_info[] = "HTTP Code: $http_code";
-                $debug_info[] = "CURL Error: $curl_error";
-                $debug_info[] = "Response: $medical_response";
-                
                 $medical_data = json_decode($medical_response, true);
-                $debug_info[] = "Decoded medical_data: " . json_encode($medical_data);
-                
-                if (!empty($medical_data) && isset($medical_data[0]['needs_review'])) {
-                    $needs_review = $medical_data[0]['needs_review'];
-                    $debug_info[] = "Extracted needs_review: " . var_export($needs_review, true) . " (type: " . gettype($needs_review) . ")";
-                } else {
-                    $debug_info[] = "No medical_data found or needs_review not set. medical_data count: " . (is_array($medical_data) ? count($medical_data) : 'not array');
-                }
-            } else {
-                $debug_info[] = "No donor_id found, skipping needs_review check";
+                $medical_history = !empty($medical_data) ? $medical_data[0] : null;
             }
             
             // Add donation count and latest submission to the donor data
@@ -152,16 +129,12 @@ try {
             $current_donor['latest_submission'] = $latest_submission;
             $current_donor['donation_history'] = $donation_history;
             $current_donor['eligibility'] = $eligibility_info;
-            $current_donor['needs_review'] = $needs_review;
-            
-            // Add debug info to response
-            $debug_info[] = "Final needs_review value being sent: " . var_export($needs_review, true) . " (type: " . gettype($needs_review) . ")";
+            $current_donor['medical_history'] = $medical_history;
             
             header('Content-Type: application/json');
             echo json_encode([
                 'success' => true,
-                'data' => $current_donor,
-                'debug_info' => $debug_info
+                'data' => $current_donor
             ]);
             exit();
         } else {

@@ -330,6 +330,7 @@ foreach ($display_records as $index => $record) {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <script src="../../assets/js/blood_collection_modal.js"></script>
+    <script src="../../assets/js/phlebotomist_blood_collection_details_modal.js"></script>
     <style>
         :root {
             --bg-color: #f5f5f5;
@@ -697,14 +698,13 @@ foreach ($display_records as $index => $record) {
             left: 50%;
             transform: translate(-50%, -50%);
             background: white;
-            padding: 25px;
             box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
-            text-align: center;
-            z-index: 9999;
+            z-index: 10001;
             border-radius: 10px;
-            width: 300px;
+            width: 500px;
             display: none;
             opacity: 0;
+            overflow: hidden;
         }
 
         /* Fade-in and Fade-out Animations */
@@ -727,45 +727,123 @@ foreach ($display_records as $index => $record) {
             animation: fadeOut 0.3s ease-in-out forwards;
         }
 
+        /* Phlebotomist Modal Loading Spinner */
+        .phlebotomist-modal-loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 10005;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        .phlebotomist-spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid #b22222;
+            border-radius: 50%;
+            animation: phlebotomist-spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        .phlebotomist-loading-text {
+            color: white;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        @keyframes phlebotomist-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
         .modal-headers {
+            background: #b22222;
+            color: white;
             font-size: 18px;
             font-weight: bold;
-            color: #d9534f;
-            margin-bottom: 15px;
+            padding: 15px 20px;
+            margin: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-close-btn:hover {
+            opacity: 0.8;
+        }
+
+        .modal-body {
+            padding: 25px 20px;
+            margin: 0;
+        }
+
+        .modal-body p {
+            margin: 0;
+            font-size: 16px;
+            color: #333;
+            line-height: 1.5;
+        }
+
+        #modal-donor-id {
+            font-weight: bold;
+            color: #b22222;
         }
 
         .modal-actions {
             display: flex;
-            justify-content: space-between;
-            margin-top: 20px;
+            justify-content: flex-end;
+            padding: 0 20px 20px 20px;
+            margin: 0;
         }
 
         .modal-button {
-            width: 45%;
-            padding: 10px;
+            padding: 12px 24px;
             font-size: 16px;
             font-weight: bold;
             border: none;
             cursor: pointer;
-            border-radius: 5px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
         }
 
         .cancel-action {
-            background: #aaa;
+            background: #6c757d;
             color: white;
+            margin-right: 10px;
         }
 
         .cancel-action:hover {
-            background: #888;
+            background: #5a6268;
         }
 
         .confirm-action {
-            background: #d9534f;
+            background: #b22222;
             color: white;
         }
 
         .confirm-action:hover {
-            background: #c9302c;
+            background: #8b0000;
         }
 
         /* Enhanced badge styling for blood collection results */
@@ -1813,8 +1891,9 @@ foreach ($display_records as $index => $record) {
                                             $status = '<span class="badge bg-success">Completed</span>';
                                             $result = '<span class="badge bg-success">Successful</span>';
                                         } elseif ($needs_review && $has_elig) {
-                                            $status = '<span class="badge bg-warning">Needs Review</span>';
-                                            $result = '<span class="badge bg-warning">Awaiting</span>';
+                                            // Show "Not Started" instead of "Needs Review" in frontend
+                                            $status = '<span class="badge bg-secondary">Not Started</span>';
+                                            $result = '<span class="badge bg-secondary">Awaiting</span>';
                                         } else {
                                             // Has collection row; only mark failed if explicitly false
                                             if (isset($bc['is_successful']) && $bc['is_successful'] === true) {
@@ -1839,11 +1918,12 @@ foreach ($display_records as $index => $record) {
                                             'first_name' => $donor_form['first_name'] ?? 'Unknown',
                                             'middle_name' => $donor_form['middle_name'] ?? '',
                                             'birthdate' => $donor_form['birthdate'] ?? '',
-                                            'age' => $donor_form['age'] ?? ''
+                                            'age' => $donor_form['age'] ?? '',
+                                            'prc_donor_number' => $donor_form['prc_donor_number'] ?? ''
                                         ];
                                         $data_exam = htmlspecialchars(json_encode($modal_data, JSON_UNESCAPED_UNICODE));
                                         
-                                        // Conditional action buttons - Collect only when needs_review is true
+                                        // Conditional action buttons - Collect only when needs_review is true (backend logic unchanged)
                                         if ($needs_review) {
                                             $action_buttons = "
                                                 <button type='button' class='btn btn-success btn-sm collect-btn' data-examination='{$data_exam}' title='Collect Blood'>
@@ -1851,23 +1931,20 @@ foreach ($display_records as $index => $record) {
                                                 </button>";
                                         } else {
                                             $action_buttons = "
-                                                <button type='button' class='btn btn-info btn-sm view-donor-btn me-1' data-donor-id='{$donor_id}' title='View Details'>
+                                                <button type='button' class='btn btn-info btn-sm view-donor-btn' data-donor-id='{$donor_id}' title='View Blood Collection Details'>
                                                     <i class='fas fa-eye'></i>
-                                                </button>
-                                                <button type='button' class='btn btn-warning btn-sm edit-donor-btn' data-donor-id='{$donor_id}' title='Edit'>
-                                                    <i class='fas fa-edit'></i>
                                                 </button>";
                                         }
                                         
                                         // Screening status is always completed since these are physical examination records
                                         $screening_status = '<span class="badge bg-success">Completed</span>';
                                         
-                                        // Determine collection status (concise rules)
-                                        if ($has_elig && !$needs_review) {
-                                            $collection_status = '<span class="badge bg-success">Completed</span>';
-                                        } elseif ($needs_review && $has_elig) {
-                                            $collection_status = '<span class="badge bg-warning">Needs Review</span>';
+                                        // Determine collection status - simplified logic to match action buttons
+                                        if ($needs_review) {
+                                            // If needs_review is true, show "Not Started" (matches Collect button)
+                                            $collection_status = '<span class="badge bg-secondary">Not Started</span>';
                                         } else {
+                                            // If needs_review is false, check if collection was successful
                                             if (isset($bc['is_successful']) && $bc['is_successful'] === true) {
                                                 $collection_status = '<span class="badge bg-success">Completed</span>';
                                             } elseif (isset($bc['is_successful']) && $bc['is_successful'] === false) {
@@ -1944,15 +2021,136 @@ foreach ($display_records as $index => $record) {
 
 <!-- Confirmation Modal -->
 <div class="confirmation-modal" id="confirmationDialog">
-                    <div class="modal-headers">Do you want to continue?</div>
+                    <div class="modal-headers">
+                        <span>Begin Collection?</span>
+                        <button class="modal-close-btn" id="modalCloseBtn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Confirm you're starting blood collection for donor <span id="modal-donor-id">[ID]</span>.</p>
+                    </div>
                     <div class="modal-actions">
                         <button class="modal-button cancel-action" id="cancelButton">No</button>
-                        <button class="modal-button confirm-action" id="confirmButton">Yes</button>
+                        <button class="modal-button confirm-action" id="confirmButton">Confirm</button>
+                    </div>
+                </div>
+
+<!-- Collection Complete Confirmation Modal -->
+<div class="confirmation-modal" id="collectionCompleteModal">
+                    <div class="modal-headers">
+                        <span>Collection Complete</span>
+                        <button class="modal-close-btn" id="collectionCompleteCloseBtn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Confirm blood unit was successfully collected and labeled?</p>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="modal-button cancel-action" id="goBackButton">Go Back</button>
+                        <button class="modal-button confirm-action" id="finalConfirmButton">Confirm</button>
+                    </div>
+                </div>
+
+<!-- Donation Successful Modal -->
+<div class="confirmation-modal" id="donationSuccessModal">
+                    <div class="modal-headers">
+                        <span>Donation Successful</span>
+                    </div>
+                    <div class="modal-body">
+                        <p>Donation completed successfully! Blood has been added to Blood Bank.</p>
                     </div>
                 </div>    
+
+    <!-- Phlebotomist Blood Collection Details Modal -->
+    <div class="phlebotomist-modal" id="phlebotomistBloodCollectionDetailsModal">
+        <div class="phlebotomist-modal-content">
+            <div class="phlebotomist-modal-header">
+                <h3><i class="fas fa-tint me-2"></i>Blood Collection Details</h3>
+                <button type="button" class="phlebotomist-close-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="phlebotomist-modal-body">
+                <!-- Donor Header -->
+                <div class="phlebotomist-donor-header">
+                    <div class="phlebotomist-donor-info">
+                        <h4 class="phlebotomist-donor-name" id="phlebotomist-donor-name">Loading...</h4>
+                        <p class="phlebotomist-donor-age-gender" id="phlebotomist-donor-age-gender">Loading...</p>
+                    </div>
+                    <div class="phlebotomist-donor-meta">
+                        <p class="phlebotomist-donor-id" id="phlebotomist-donor-id">Loading...</p>
+                        <p class="phlebotomist-blood-type" id="phlebotomist-blood-type">Loading...</p>
+                    </div>
+                </div>
+
+                <h5 class="phlebotomist-section-title">Blood Collection Details</h5>
+                <hr class="phlebotomist-title-line">
+
+                <!-- Donation Details Table -->
+                <h6 class="phlebotomist-section-subtitle">Donation Details</h6>
+                <table class="phlebotomist-details-table">
+                    <thead>
+                        <tr>
+                            <th>Collection Date</th>
+                            <th>Bag Type</th>
+                            <th>Unit Serial Number</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><input type="text" id="phlebotomist-collection-date" placeholder="--/--/--" readonly></td>
+                            <td><input type="text" id="phlebotomist-bag-type" placeholder="" readonly></td>
+                            <td><input type="text" id="phlebotomist-unit-serial" placeholder="" readonly></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- Procedure Details Table -->
+                <h6 class="phlebotomist-section-subtitle">Procedure Details</h6>
+                <table class="phlebotomist-details-table">
+                    <thead>
+                        <tr>
+                            <th>Start Time</th>
+                            <th>End Time</th>
+                            <th>Donor Reaction</th>
+                            <th>Expiration Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <div style="position: relative;">
+                                    <input type="text" id="phlebotomist-start-time" placeholder="--:--" readonly>
+                                    <button type="button" class="phlebotomist-time-btn" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #007bff; border: none; border-radius: 50%; width: 24px; height: 24px; color: white; font-size: 12px; cursor: pointer;">V</button>
+                                </div>
+                            </td>
+                            <td>
+                                <div style="position: relative;">
+                                    <input type="text" id="phlebotomist-end-time" placeholder="--:--" readonly>
+                                    <button type="button" class="phlebotomist-time-btn" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #007bff; border: none; border-radius: 50%; width: 24px; height: 24px; color: white; font-size: 12px; cursor: pointer;">V</button>
+                                </div>
+                            </td>
+                            <td><input type="text" id="phlebotomist-donor-reaction" placeholder="" readonly></td>
+                            <td><input type="text" id="phlebotomist-expiration-date" placeholder="--/--/--" readonly></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- Phlebotomist Section -->
+                <div class="phlebotomist-phlebotomist-section">
+                    <div class="phlebotomist-phlebotomist-label">Phlebotomist Name: -</div>
+                </div>
+            </div>
+        </div>
+    </div>
                 
                 <!-- Loading Spinner -->
                 <div class="loading-spinner" id="loadingSpinner"></div>
+                
+                <!-- Phlebotomist Modal Loading Spinner -->
+                <div class="phlebotomist-modal-loading" id="phlebotomistModalLoading">
+                    <div class="phlebotomist-spinner"></div>
+                    <div class="phlebotomist-loading-text">Loading donor details...</div>
+                </div>
             </main>
         </div>
     </div>
@@ -2046,7 +2244,7 @@ foreach ($display_records as $index => $record) {
                                                                 <div class="donor-metadata">
                                 <span class="collection-date">
                                     <i class="fas fa-calendar-alt me-2"></i>
-                                    <span id="blood-collection-date-display">Today's Date</span>
+                                    <span id="blood-collection-date-display">Loading...</span>
                                 </span>
                                 <span class="unit-serial-info">
                                     <i class="fas fa-barcode me-2"></i>
@@ -2186,22 +2384,6 @@ foreach ($display_records as $index => $record) {
                     <p class="text-muted">Record collection details and timing</p>
                     
                     <div class="row">
-                        <div class="col-md-12 mb-3">
-                            <label for="blood-amount-taken" class="form-label">Amount Collected (Units) *</label>
-                            <input type="number" 
-                                   class="form-control" 
-                                   id="blood-amount-taken" 
-                                   name="amount_taken" 
-                                   min="1" 
-                                   max="10" 
-                                   step="1" 
-                                   placeholder="Enter units" 
-                                   required>
-                            <div class="form-text">Standard: 1 unit (450mL)</div>
-                        </div>
-                    </div>
-
-                    <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="blood-start-time" class="form-label">Start Time *</label>
                             <input type="time" 
@@ -2220,6 +2402,9 @@ foreach ($display_records as $index => $record) {
                             <div class="form-text">Must be at least 5 minutes after start time</div>
                         </div>
                     </div>
+                    
+                    <!-- Hidden field for amount_taken - always 1 unit -->
+                    <input type="hidden" name="amount_taken" value="1">
                 </div>
 
                 <!-- Step 4: Collection Results -->
@@ -2307,8 +2492,8 @@ foreach ($display_records as $index => $record) {
                                     </div>
                                     <div class="blood-process-item">
                                         <span class="blood-process-label">Amount Collected</span>
-                                        <span class="blood-process-value" id="summary-amount">-</span>
-                                        <span class="blood-process-unit">units</span>
+                                        <span class="blood-process-value">1</span>
+                                        <span class="blood-process-unit">unit (450mL)</span>
                                     </div>
                                 </div>
                             </div>
@@ -2470,12 +2655,21 @@ foreach ($display_records as $index => $record) {
             let loadingSpinner = document.getElementById("loadingSpinner");
             let cancelButton = document.getElementById("cancelButton");
             let confirmButton = document.getElementById("confirmButton");
+            let modalCloseBtn = document.getElementById("modalCloseBtn");
+            
+            // New modal elements
+            let collectionCompleteModal = document.getElementById("collectionCompleteModal");
+            let donationSuccessModal = document.getElementById("donationSuccessModal");
+            let goBackButton = document.getElementById("goBackButton");
+            let finalConfirmButton = document.getElementById("finalConfirmButton");
+            let collectionCompleteCloseBtn = document.getElementById("collectionCompleteCloseBtn");
+            
             const searchInput = document.getElementById('searchInput');
             const bloodCollectionTableBody = document.getElementById('bloodCollectionTableBody');
             let currentCollectionData = null;
 
             // Check if elements exist before proceeding
-            if (!confirmationDialog || !loadingSpinner || !cancelButton || !confirmButton || !searchInput || !bloodCollectionTableBody) {
+            if (!confirmationDialog || !loadingSpinner || !cancelButton || !confirmButton || !modalCloseBtn || !searchInput || !bloodCollectionTableBody) {
                 console.error('Required elements not found on page');
                 return;
             }
@@ -2489,12 +2683,31 @@ foreach ($display_records as $index => $record) {
             function attachRowClickHandlers() {
                 document.querySelectorAll(".clickable-row").forEach(row => {
                     row.addEventListener("click", function(e) {
-                        // Don't trigger row click if clicking on a button
-                        if (e.target.closest('button')) {
+                        // Don't trigger row click if clicking on a button or view button
+                        if (e.target.closest('button') || e.target.closest('.view-donor-btn')) {
                             return;
                         }
                         
+                        // Only show blood collection modal for rows that need review (have collect button)
+                        const collectBtn = this.querySelector('.collect-btn');
+                        if (!collectBtn) {
+                            return; // Don't show modal for completed collections
+                        }
+                        
                         currentCollectionData = JSON.parse(this.dataset.examination);
+                        
+                        // Update modal with donor information
+                        const modalDonorId = document.getElementById('modal-donor-id');
+                        if (modalDonorId && currentCollectionData.prc_donor_number) {
+                            // Remove "PRC-" prefix if present
+                            const donorNumber = currentCollectionData.prc_donor_number.startsWith('PRC-') 
+                                ? currentCollectionData.prc_donor_number.substring(4) 
+                                : currentCollectionData.prc_donor_number;
+                            modalDonorId.textContent = donorNumber;
+                        } else if (modalDonorId) {
+                            modalDonorId.textContent = currentCollectionData.donor_id || 'Unknown';
+                        }
+                        
                         confirmationDialog.classList.remove("hide");
                         confirmationDialog.classList.add("show");
                         confirmationDialog.style.display = "block";
@@ -2509,6 +2722,18 @@ foreach ($display_records as $index => $record) {
                             currentCollectionData = JSON.parse(this.getAttribute('data-examination'));
                             console.log("Selected record for collection:", currentCollectionData);
                             
+                            // Update modal with donor information
+                            const modalDonorId = document.getElementById('modal-donor-id');
+                            if (modalDonorId && currentCollectionData.prc_donor_number) {
+                                // Remove "PRC-" prefix if present
+                                const donorNumber = currentCollectionData.prc_donor_number.startsWith('PRC-') 
+                                    ? currentCollectionData.prc_donor_number.substring(4) 
+                                    : currentCollectionData.prc_donor_number;
+                                modalDonorId.textContent = donorNumber;
+                            } else if (modalDonorId) {
+                                modalDonorId.textContent = currentCollectionData.donor_id || 'Unknown';
+                            }
+                            
                             confirmationDialog.classList.remove("hide");
                             confirmationDialog.classList.add("show");
                             confirmationDialog.style.display = "block";
@@ -2521,6 +2746,19 @@ foreach ($display_records as $index => $record) {
             }
 
             attachRowClickHandlers();
+            
+            // Attach click event to view buttons
+            document.addEventListener('click', function(e) {
+                if (e.target.closest('.view-donor-btn')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const donorId = e.target.closest('.view-donor-btn').getAttribute('data-donor-id');
+                    if (donorId && window.phlebotomistBloodCollectionDetailsModal) {
+                        window.phlebotomistBloodCollectionDetailsModal.openModal(donorId);
+                    }
+                }
+            });
 
             // Close Modal Function
             function closeModal() {
@@ -2529,6 +2767,45 @@ foreach ($display_records as $index => $record) {
                 setTimeout(() => {
                     confirmationDialog.style.display = "none";
                 }, 300);
+            }
+            
+            // Close Collection Complete Modal Function
+            function closeCollectionCompleteModal() {
+                collectionCompleteModal.classList.remove("show");
+                collectionCompleteModal.classList.add("hide");
+                setTimeout(() => {
+                    collectionCompleteModal.style.display = "none";
+                }, 300);
+            }
+            
+            // Close Donation Success Modal Function
+            function closeDonationSuccessModal() {
+                donationSuccessModal.classList.remove("show");
+                donationSuccessModal.classList.add("hide");
+                setTimeout(() => {
+                    donationSuccessModal.style.display = "none";
+                }, 300);
+            }
+            
+            // Show Collection Complete Modal Function
+            function showCollectionCompleteModal() {
+                if (collectionCompleteModal) {
+                    collectionCompleteModal.classList.remove("hide");
+                    collectionCompleteModal.classList.add("show");
+                    collectionCompleteModal.style.display = "block";
+                }
+            }
+            
+            // Show Donation Success Modal Function
+            function showDonationSuccessModal() {
+                donationSuccessModal.classList.remove("hide");
+                donationSuccessModal.classList.add("show");
+                donationSuccessModal.style.display = "block";
+                
+                // Auto-reload after 2 seconds
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
             }
 
             // Yes Button (Opens Blood Collection Modal)
@@ -2556,6 +2833,33 @@ foreach ($display_records as $index => $record) {
 
             // No Button (Closes Modal)
             cancelButton.addEventListener("click", closeModal);
+            
+            // Close Button (Closes Modal)
+            modalCloseBtn.addEventListener("click", closeModal);
+            
+            // Collection Complete Modal Event Handlers
+            if (goBackButton) {
+                goBackButton.addEventListener("click", function() {
+                    closeCollectionCompleteModal();
+                });
+            }
+            
+            if (finalConfirmButton) {
+                finalConfirmButton.addEventListener("click", function() {
+                    closeCollectionCompleteModal();
+                    // Trigger the actual form submission
+                    if (window.bloodCollectionModal) {
+                        window.bloodCollectionModal.submitForm();
+                    }
+                });
+            }
+            
+            if (collectionCompleteCloseBtn) {
+                collectionCompleteCloseBtn.addEventListener("click", function() {
+                    closeCollectionCompleteModal();
+                });
+            }
+            
 
             // FIXED: Search functionality - always use current table rows
             function performSearch() {
@@ -2613,6 +2917,9 @@ foreach ($display_records as $index => $record) {
             // Make functions globally available
             window.showProcessingModal = showProcessingModal;
             window.hideProcessingModal = hideProcessingModal;
+            window.showCollectionCompleteModal = showCollectionCompleteModal;
+            window.showDonationSuccessModal = showDonationSuccessModal;
+            
             
             // Show loading when blood collection form is submitted
             document.addEventListener('submit', function(e) {
@@ -2621,11 +2928,11 @@ foreach ($display_records as $index => $record) {
                 }
             });
             
-            // Show loading for any blood collection related AJAX calls
+            // Show loading for any blood collection related AJAX calls (except phlebotomist modal)
             const originalFetch = window.fetch;
             window.fetch = function(...args) {
                 const url = args[0];
-                if (typeof url === 'string' && url.includes('blood_collection')) {
+                if (typeof url === 'string' && url.includes('blood_collection') && !url.includes('phlebotomist_blood_collection_details')) {
                     showProcessingModal('Processing blood collection...');
                 }
                 return originalFetch.apply(this, args).finally(() => {
