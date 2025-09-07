@@ -1870,6 +1870,7 @@ $donor_history = $unique_donor_history;
                         </a>
                     </div>
                     
+                    <h5 class="section-header">Medical Stage Donors Only</h5>
                     
                     <!-- Search Bar -->
                     <div class="search-container">
@@ -2729,19 +2730,12 @@ $donor_history = $unique_donor_history;
                                 fitnessResult = 'Eligible';
                             }
                             
-                            // Remarks - based on collection_successful boolean field
+                            // Remarks - use disapproval reason or donor reaction
                             let remarks = '-';
-                            if (eligibility.collection_successful === true) {
-                                remarks = 'Successful';
-                            } else if (eligibility.collection_successful === false) {
-                                remarks = 'Failed';
-                            } else {
-                                // Fallback to disapproval reason if collection_successful is null/undefined
-                                if (eligibility.disapproval_reason) {
-                                    remarks = eligibility.disapproval_reason;
-                                } else if (eligibility.donor_reaction) {
-                                    remarks = eligibility.donor_reaction;
-                                }
+                            if (eligibility.disapproval_reason) {
+                                remarks = eligibility.disapproval_reason;
+                            } else if (eligibility.donor_reaction) {
+                                remarks = eligibility.donor_reaction;
                             }
                             
                             // Get physician name from physical_examination table
@@ -2903,15 +2897,17 @@ $donor_history = $unique_donor_history;
                             const fitnessResult = el.status === 'eligible' ? 'Eligible' : 
                                                 el.status === 'deferred' ? 'Deferred' : 
                                                 el.status === 'temporary_deferred' ? 'Temporary Deferred' : 'Eligible';
-                            // Remarks - based on collection_successful boolean field
-                            let remarks = '-';
-                            if (el.collection_successful === true) {
+                            let remarks = 'Pending';
+                            const parts = [];
+                            if (el.disapproval_reason) parts.push(el.disapproval_reason);
+                            if (el.donor_reaction) parts.push(el.donor_reaction);
+                            const details = parts.join(' | ');
+                            const success = el.collection_successful === true || el.status === 'eligible';
+                            const fail = el.collection_successful === false || el.status === 'deferred' || el.status === 'temporary_deferred';
+                            if (success) {
                                 remarks = 'Successful';
-                            } else if (el.collection_successful === false) {
-                                remarks = 'Failed';
-                            } else {
-                                // Fallback to disapproval reason if collection_successful is null/undefined
-                                remarks = el.disapproval_reason || el.donor_reaction || '-';
+                            } else if (fail) {
+                                remarks = details ? `Failed - ${details}` : 'Failed';
                             }
                             
                             allRowsHtml += '<tr><td>' + examDate + '</td><td>' + vitalSigns + '</td><td>' + hematology + '</td><td>' + physician + '</td><td>' + fitnessResult + '</td><td>' + remarks + '</td><td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showPhysicalExaminationModal(\'' + el.eligibility_id + '\')"><i class="fas fa-eye"></i></button></td></tr>';
