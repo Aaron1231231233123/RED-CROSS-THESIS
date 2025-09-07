@@ -1354,7 +1354,7 @@ $donor_history = $unique_donor_history;
             vertical-align: middle;
         }
 
-        .screening-patient-table .form-control-sm {
+        .screening-patient-table .form-control form-control-sm-sm {
             font-size: 13px;
             padding: 6px 8px;
             border: 1px solid #ddd;
@@ -1362,7 +1362,7 @@ $donor_history = $unique_donor_history;
             width: 100%;
         }
 
-        .screening-patient-table .form-control-sm:focus {
+        .screening-patient-table .form-control form-control-sm-sm:focus {
             border-color: #b22222;
             box-shadow: 0 0 0 2px rgba(178, 34, 34, 0.1);
         }
@@ -1457,10 +1457,28 @@ $donor_history = $unique_donor_history;
         }
         
         /* Physical Examination Modal Styles */
+        #physicalExaminationModal .modal-dialog {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: calc(100vh - 1rem);
+            max-height: 80vh;
+            width: 90%;
+            max-width: 1000px;
+            margin: 0 auto;
+            z-index: 1060;
+        }
+        
         #physicalExaminationModal .modal-content {
             border-radius: 15px;
             border: none;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            position: relative;
+            width: 100%;
+            max-height: 80vh;
+            overflow: hidden;
+            pointer-events: auto;
+            margin: 0;
         }
         
         #physicalExaminationModal .modal-header {
@@ -1471,11 +1489,196 @@ $donor_history = $unique_donor_history;
             border-bottom: none;
         }
         
+        #physicalExaminationModal .modal-header .modal-title {
+            font-size: 1.5rem !important;
+            font-weight: 700 !important;
+        }
+        
         #physicalExaminationModal .modal-body {
             padding: 1.5rem;
-            background-color: #f8f9fa;
-            max-height: 70vh;
+            background-color: #ffffff;
+            max-height: calc(80vh - 120px);
             overflow-y: auto;
+        }
+        
+        /* Main Modal Styles - Match Physical Examination Modal */
+        #deferralStatusModal .modal-content {
+            border-radius: 15px;
+            border: none;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        #deferralStatusModal .modal-body {
+            padding: 1.5rem;
+            background-color: #ffffff;
+        }
+        
+        /* Force Red Solid Headers */
+        #deferralStatusModal .table thead th {
+            background: #b22222 !important;
+            color: white !important;
+            border: none !important;
+            font-weight: 600 !important;
+            text-align: center !important;
+            vertical-align: middle !important;
+            padding: 0.75rem !important;
+            line-height: 1.2 !important;
+        }
+        
+        #deferralStatusModal .table thead {
+            background: #b22222 !important;
+        }
+        
+        /* Center table body content */
+        #deferralStatusModal .table tbody td {
+            text-align: center !important;
+            vertical-align: middle !important;
+        }
+        
+        /* Main Modal Width - Match Physical Examination Results Modal */
+        #deferralStatusModal .modal-dialog {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: calc(100vh - 1rem);
+            max-height: 80vh;
+            width: 90%;
+            max-width: 1000px;
+            margin: 0 auto;
+            z-index: 1060;
+        }
+        
+        /* Patient Information Header - Patient Name MASSIVE */
+        #physicalExaminationModal .patient-info-header .patient-date {
+            font-size: 0.7rem !important;
+            color: #666666 !important;
+            margin-bottom: 5px !important;
+        }
+        
+        #physicalExaminationModal .patient-info-header .patient-name {
+            font-size: 4.5rem !important;
+            font-weight: 700 !important;
+            color: #000000 !important;
+            margin-bottom: 8px !important;
+            line-height: 1.1 !important;
+        }
+        
+        #physicalExaminationModal .patient-info-header .patient-details {
+            font-size: 0.8rem !important;
+            color: #333333 !important;
+            margin-bottom: 5px !important;
+        }
+        
+        #physicalExaminationModal .patient-info-header .patient-id {
+            font-size: 0.7rem !important;
+            font-weight: 700 !important;
+            color: #333333 !important;
+            margin-bottom: 5px !important;
+        }
+        
+        #physicalExaminationModal .patient-info-header .patient-blood-type {
+            font-size: 0.8rem !important;
+            font-weight: 700 !important;
+            color: #8b0000 !important;
+        }
+        
+        /* Section Headers - SMALLER */
+        #physicalExaminationModal h6 {
+            font-size: 1.2rem !important;
+            font-weight: 700 !important;
+            color: #000000 !important;
+            margin-bottom: 1.5rem !important;
+            margin-top: 2rem !important;
+        }
+        
+        #physicalExaminationModal h6:first-child {
+            margin-top: 0 !important;
+        }
+        
+        /* Form Labels - SMALL */
+        #physicalExaminationModal .form-label {
+            font-size: 0.8rem !important;
+            font-weight: 600 !important;
+            color: #333333 !important;
+            margin-bottom: 0.5rem !important;
+        }
+        
+        /* Form Controls - SMALL */
+        #physicalExaminationModal .form-control {
+            font-size: 0.9rem !important;
+            padding: 0.75rem 1rem !important;
+            border: 1px solid #e0e0e0 !important;
+            border-radius: 6px !important;
+            background-color: #f8f9fa !important;
+            color: #333333 !important;
+        }
+        
+        /* Table Styling - Clean and Modern */
+        #physicalExaminationModal .table {
+            border: none !important;
+            margin-bottom: 0 !important;
+        }
+        
+        #physicalExaminationModal .table thead th {
+            background-color: #8b0000 !important;
+            color: #ffffff !important;
+            font-weight: 600 !important;
+            font-size: 0.9rem !important;
+            padding: 1rem 0.75rem !important;
+            border: none !important;
+            text-align: center !important;
+        }
+        
+        #physicalExaminationModal .table tbody td {
+            background-color: #ffffff !important;
+            color: #333333 !important;
+            font-size: 0.9rem !important;
+            padding: 1rem 0.75rem !important;
+            border: 1px solid #e0e0e0 !important;
+            text-align: center !important;
+            vertical-align: middle !important;
+        }
+        
+        #physicalExaminationModal .table tbody td:first-child {
+            text-align: left !important;
+        }
+        
+        /* Remove input styling from table cells */
+        #physicalExaminationModal .table .form-control {
+            border: none !important;
+            background: transparent !important;
+            padding: 0 !important;
+            font-size: 0.9rem !important;
+            text-align: center !important;
+        }
+        
+        #physicalExaminationModal .table .form-control:first-child {
+            text-align: left !important;
+        }
+        
+        /* Card Styling */
+        #physicalExaminationModal .card {
+            border: 1px solid #e0e0e0 !important;
+            border-radius: 8px !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+            margin-bottom: 1.5rem !important;
+        }
+        
+        #physicalExaminationModal .card-header {
+            background-color: #f8f9fa !important;
+            border-bottom: 1px solid #e0e0e0 !important;
+            padding: 1rem 1.5rem !important;
+        }
+        
+        #physicalExaminationModal .card-body {
+            padding: 1.5rem !important;
+        }
+        
+        /* Alert Styling */
+        #physicalExaminationModal .alert {
+            font-size: 0.9rem !important;
+            border-radius: 6px !important;
+            padding: 1rem !important;
         }
         
         #physicalExaminationModal .modal-footer {
@@ -1502,8 +1705,8 @@ $donor_history = $unique_donor_history;
             padding: 1.5rem;
         }
         
-        #physicalExaminationModal .form-control,
-        #physicalExaminationModal .form-control:read-only {
+        #physicalExaminationModal .form-control form-control-sm,
+        #physicalExaminationModal .form-control form-control-sm:read-only {
             background-color: #f8f9fa;
             border: 1px solid #e9ecef;
             border-radius: 8px;
@@ -1511,7 +1714,7 @@ $donor_history = $unique_donor_history;
             font-size: 14px;
         }
         
-        #physicalExaminationModal .form-control:read-only {
+        #physicalExaminationModal .form-control form-control-sm:read-only {
             color: #495057;
             font-weight: 500;
         }
@@ -1529,7 +1732,7 @@ $donor_history = $unique_donor_history;
             border-radius: 8px;
         }
         
-        #physicalExaminationModal textarea.form-control {
+        #physicalExaminationModal textarea.form-control form-control-sm {
             resize: none;
             min-height: 80px;
         }
@@ -1537,12 +1740,42 @@ $donor_history = $unique_donor_history;
         /* Responsive adjustments for physical examination modal */
         @media (max-width: 767.98px) {
             #physicalExaminationModal .modal-dialog {
-                margin: 0.5rem;
+                width: 95% !important;
+                max-height: 95vh !important;
+            }
+            
+            #physicalExaminationModal .modal-content {
+                max-height: 95vh;
             }
             
             #physicalExaminationModal .modal-body {
+                padding: 1.5rem !important;
+                overflow: visible;
+                max-height: none;
+            }
+            
+            /* Responsive adjustments for main modal */
+            #deferralStatusModal .modal-dialog {
+                width: 95% !important;
+                max-height: 95vh !important;
+            }
+            
+            #deferralStatusModal .modal-content {
+                max-height: 95vh;
+            }
+            
+            #deferralStatusModal .modal-body {
+                padding: 1.5rem !important;
+                overflow: visible;
+                max-height: none;
+            }
+            
+            #physicalExaminationModal .modal-header {
                 padding: 1rem;
-                max-height: 60vh;
+            }
+            
+            #physicalExaminationModal .modal-header .modal-title {
+                font-size: 1.3rem !important;
             }
             
             #physicalExaminationModal .card-body {
@@ -1552,6 +1785,45 @@ $donor_history = $unique_donor_history;
             #physicalExaminationModal .row.g-2 > .col-6,
             #physicalExaminationModal .row.g-2 > .col-md-4 {
                 margin-bottom: 1rem;
+            }
+            
+            #physicalExaminationModal .form-label {
+                font-size: 0.7rem !important;
+            }
+            
+            #physicalExaminationModal .form-control {
+                font-size: 0.8rem !important;
+            }
+            
+            #physicalExaminationModal h6 {
+                font-size: 1.1rem !important;
+            }
+            
+            #physicalExaminationModal .table thead th,
+            #physicalExaminationModal .table tbody td {
+                font-size: 0.8rem !important;
+                padding: 0.75rem 0.5rem !important;
+            }
+            
+            /* Mobile Patient Header - Patient Name STILL MASSIVE */
+            #physicalExaminationModal .patient-info-header .patient-date {
+                font-size: 0.6rem !important;
+            }
+            
+            #physicalExaminationModal .patient-info-header .patient-name {
+                font-size: 3.5rem !important;
+            }
+            
+            #physicalExaminationModal .patient-info-header .patient-details {
+                font-size: 0.7rem !important;
+            }
+            
+            #physicalExaminationModal .patient-info-header .patient-id {
+                font-size: 0.6rem !important;
+            }
+            
+            #physicalExaminationModal .patient-info-header .patient-blood-type {
+                font-size: 0.7rem !important;
             }
         }
     </style>
@@ -1580,7 +1852,6 @@ $donor_history = $unique_donor_history;
                 <div class="content-wrapper">
                     <div class="welcome-section">
                         <h2 class="welcome-title">Welcome, Interviewer!</h2>
-                        <p class="text-muted mb-0">This dashboard shows only donors in the Medical stage (New Medical and Returning Medical).</p>
                     </div>
                     
                     <!-- Status Cards -->
@@ -1599,12 +1870,11 @@ $donor_history = $unique_donor_history;
                         </a>
                     </div>
                     
-                    <h5 class="section-header">Medical Stage Donors Only</h5>
                     
                     <!-- Search Bar -->
                     <div class="search-container">
                         <input type="text" 
-                            class="form-control" 
+                            class="form-control form-control-sm" 
                             id="searchInput" 
                             placeholder="Search donors...">
                     </div>
@@ -1705,8 +1975,10 @@ $donor_history = $unique_donor_history;
     <div class="modal fade" id="deferralStatusModal" tabindex="-1" aria-labelledby="deferralStatusModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header">
-                    <h5 class="modal-title" id="deferralStatusModalLabel">Donor Status & Donation History</h5>
+             <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
+                     <h5 class="modal-title" id="deferralStatusModalLabel" style="font-weight: 700;">
+                         <i class="fas fa-user-md me-2"></i>Donor Status & Donation History
+                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -1720,10 +1992,16 @@ $donor_history = $unique_donor_history;
             
                     
                         </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" id="proceedToMedicalHistory">Proceed to Medical History</button>
-                <button type="button" class="btn btn-outline-primary" id="markReviewFromMain">Mark for Medical Review</button>
+             <div class="modal-footer" style="background-color: #f8f9fa; border-top: 1px solid #dee2e6; border-radius: 0 0 15px 15px;">
+                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                     <i class="fas fa-times me-1"></i>Close
+                 </button>
+                 <button type="button" class="btn" id="proceedToMedicalHistory" style="background-color: #b22222; color: white; border: none;">
+                     <i class="fas fa-clipboard-list me-1"></i>Review Medical History
+                 </button>
+                 <button type="button" class="btn btn-outline-warning" id="markReviewFromMain">
+                     <i class="fas fa-flag me-1"></i>Mark for Medical Review
+                 </button>
                             </div>
                             </div>
                             </div>
@@ -2252,14 +2530,29 @@ $donor_history = $unique_donor_history;
             
             // Function to fetch donor status information
             function fetchDonorStatusInfo(donorId) {
+                console.log('fetchDonorStatusInfo called with donorId:', donorId);
+                
                 // First, fetch donor information
                 fetch('../../assets/php_func/fetch_donor_info.php?donor_id=' + donorId)
-                    .then(response => response.json())
+                    .then(response => {
+                        console.log('fetch_donor_info response:', response);
+                        return response.json();
+                    })
                     .then(donorData => {
+                        console.log('fetch_donor_info data:', donorData);
+                        if (donorData.debug_info) {
+                            console.log('=== NEEDS_REVIEW DEBUG INFO ===');
+                            donorData.debug_info.forEach(info => console.log(info));
+                            console.log('=== END DEBUG INFO ===');
+                        }
                         // Next, check physical examination table for deferral status
                         fetch('../../assets/php_func/check_deferral_status.php?donor_id=' + donorId)
-                            .then(response => response.json())
+                            .then(response => {
+                                console.log('check_deferral_status response:', response);
+                                return response.json();
+                            })
                             .then(deferralData => {
+                                console.log('check_deferral_status data:', deferralData);
                                 displayDonorInfo(donorData, deferralData);
                                 
                                 // After getting deferral info, fetch screening info
@@ -2284,8 +2577,16 @@ $donor_history = $unique_donor_history;
                 let donorInfoHTML = '';
                 const safe = (v) => v || 'N/A';
                 
-                if (donorData && donorData.success) {
-                    const donor = donorData.data || {};
+                // Store donor data globally for eye button access
+                window.currentDonorData = donorData;
+                
+                // Debug logging
+                console.log('displayDonorInfo called with:', { donorData, deferralData });
+                console.log('donorData structure:', JSON.stringify(donorData, null, 2));
+                
+                // Check if we have donor data, regardless of success field
+                if (donorData && (donorData.success || donorData.data)) {
+                    const donor = donorData.data || donorData || {};
                     const fullName = `${safe(donor.surname)}, ${safe(donor.first_name)} ${safe(donor.middle_name)}`.trim();
                     const currentStatus = (() => {
                         // Get donor type from the row data
@@ -2308,193 +2609,338 @@ $donor_history = $unique_donor_history;
                         return 'Medical'; // Default fallback
                     })();
                     
-                    // Header
+                     // Donor Information Header (Clean Design - Match Physical Exam Modal)
                         donorInfoHTML += `
                         <div class="mb-3">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h5 style="color:#9c0000; font-weight:700; margin:0;">Donor Profile</h5>
-                                <div style="font-weight:700; font-size:1.1rem;"><strong>Donor ID:</strong> ${safe(donor.prc_donor_number || 'N/A')}</div>
+                             <div class="d-flex justify-content-between align-items-start">
+                                 <div class="flex-grow-1">
+                                     <div class="text-muted small mb-1">
+                                         <i class="fas fa-calendar-alt me-1"></i>
+                                         Current Status: ${currentStatus}
                             </div>
-                            <div class="d-flex justify-content-between align-items-center small text-muted">
-                                <div><strong>${fullName}</strong> &nbsp; ${safe(donor.age)}${donor.sex ? ', ' + donor.sex : ''}</div>
-                                <div><strong>Current Status:</strong> ${currentStatus}</div>
+                                     <h4 class="mb-1" style="color:#b22222; font-weight:700;">
+                                         ${fullName}
+                                     </h4>
+                                     <div class="text-muted fw-medium">
+                                         <i class="fas fa-user me-1"></i>
+                                         ${safe(donor.age)}${donor.sex ? ', ' + donor.sex : ''}
                             </div>
-                            <hr/>
+                                 </div>
+                                 <div class="text-end">
+                                     <div class="mb-1">
+                                         <div class="fw-bold text-dark mb-1">
+                                             <i class="fas fa-id-card me-1"></i>
+                                             Donor ID: ${safe(donor.prc_donor_number || 'N/A')}
+                                         </div>
+                                     </div>
+                                 </div>
+                             </div>
+                             <hr class="my-2" style="border-color: #b22222; opacity: 0.3;"/>
                             </div>`;
                         
-                    // Donor Information (from donor_form)
+                     // Donor Information Section (Match Physical Exam Modal Style)
                             donorInfoHTML += `
                         <div class="mb-3">
-                            <h6 class="mb-2">Donor Information</h6>
+                             <h6 class="mb-2" style="color:#b22222; font-weight:600; border-bottom: 2px solid #b22222; padding-bottom: 0.3rem;">Donor Information</h6>
                             <div class="row g-2">
                                 <div class="col-md-6">
-                                    <label class="form-label small mb-1">Birthdate</label>
-                                    <input class="form-control" value="${safe(donor.birthdate)}" disabled>
+                                     <label class="form-label fw-semibold">Birthdate</label>
+                                     <div class="form-control-plaintext bg-light p-2 rounded">${safe(donor.birthdate)}</div>
                                     </div>
                                 <div class="col-md-6">
-                                    <label class="form-label small mb-1">Civil Status</label>
-                                    <input class="form-control" value="${safe(donor.civil_status)}" disabled>
+                                     <label class="form-label fw-semibold">Civil Status</label>
+                                     <div class="form-control-plaintext bg-light p-2 rounded">${safe(donor.civil_status)}</div>
                                             </div>
-                                <div class="col-md-6">
-                                    <label class="form-label small mb-1">Address</label>
-                                    <input class="form-control" value="${safe(donor.permanent_address)}" disabled>
+                                 <div class="col-md-12">
+                                     <label class="form-label fw-semibold">Address</label>
+                                     <div class="form-control-plaintext bg-light p-2 rounded">${safe(donor.permanent_address)}</div>
                                         </div>
-                                            <div class="col-md-6">
-                                    <label class="form-label small mb-1">Nationality</label>
-                                    <input class="form-control" value="${safe(donor.nationality)}" disabled>
+                                 <div class="col-md-4">
+                                     <label class="form-label fw-semibold">Nationality</label>
+                                     <div class="form-control-plaintext bg-light p-2 rounded">${safe(donor.nationality)}</div>
                                             </div>
-                                            <div class="col-md-6">
-                                    <label class="form-label small mb-1">Mobile Number</label>
-                                    <input class="form-control" value="${safe(donor.mobile || donor.telephone)}" disabled>
+                                 <div class="col-md-4">
+                                     <label class="form-label fw-semibold">Mobile Number</label>
+                                     <div class="form-control-plaintext bg-light p-2 rounded">${safe(donor.mobile || donor.telephone)}</div>
                                             </div>
-                                            <div class="col-md-6">
-                                    <label class="form-label small mb-1">Occupation</label>
-                                    <input class="form-control" value="${safe(donor.occupation)}" disabled>
+                                 <div class="col-md-4">
+                                     <label class="form-label fw-semibold">Occupation</label>
+                                     <div class="form-control-plaintext bg-light p-2 rounded">${safe(donor.occupation)}</div>
                                         </div>
                                     </div>
                                 </div>`;
                     
-                    // Donation History Table
-                    let donations = Array.isArray(donor.donation_history) ? donor.donation_history : [];
-                    // If no donation history array, synthesize a single row from eligibility info
-                    if ((!donations || donations.length === 0) && donor.eligibility) {
-                        const el = donor.eligibility;
-                        donations = [{
-                            date: el.start_date || el.created_at || donor.latest_submission || null,
-                            gateway: donor.registration_channel || 'System',
-                            blood_type: el.blood_type || '-',
-                            next_eligible_date: el.end_date || null,
-                            medical_history_status: (donor.medical_history && (donor.medical_history.medical_approval || donor.medical_history.fitness_result === 'Accepted')) ? 'Successful' : 'Pending'
-                        }];
-                    }
-                    let donationRows = '';
-                    donations.forEach(d => {
-                        donationRows += `
-                            <tr>
-                                <td>${safe(formatDate(d.date))}</td>
-                                <td>${safe(d.gateway || donor.registration_channel)}</td>
-                                <td>${safe(d.blood_type)}</td>
-                                <td>${safe((donor.eligibility && donor.eligibility.end_date ? formatDate(donor.eligibility.end_date) : (d.next_eligible_date ? formatDate(d.next_eligible_date) : null)))}</td>
-                                <td>${safe(d.medical_history_status)}</td>
+                    // Physical Assessment Table (based on eligibility table - show all records) - FIRST
+                    const eligibilityRecords = Array.isArray(donor.eligibility) ? donor.eligibility : (donor.eligibility ? [donor.eligibility] : []);
+                    let assessmentRows = '';
+                    
+                    if (eligibilityRecords.length > 0) {
+                        eligibilityRecords.forEach((eligibility, index) => {
+                            // Map eligibility data to match the image format
+                            const examDate = formatDate(eligibility.start_date || eligibility.created_at || donor.latest_submission);
+                            
+                            // Vital Signs - assess actual values against normal ranges
+                            let vitalSigns = 'Normal';
+                            if (eligibility.blood_pressure && eligibility.pulse_rate && eligibility.body_temp) {
+                                // Check blood pressure (normal: 90-140/60-90)
+                                const bp = eligibility.blood_pressure;
+                                const bpMatch = bp.match(/(\d+)\/(\d+)/);
+                                if (bpMatch) {
+                                    const systolic = parseInt(bpMatch[1]);
+                                    const diastolic = parseInt(bpMatch[2]);
+                                    if (systolic < 90 || systolic > 140 || diastolic < 60 || diastolic > 90) {
+                                        vitalSigns = 'Abnormal';
+                                    }
+                                }
+                                
+                                // Check pulse rate (normal: 60-100 bpm)
+                                const pulse = parseInt(eligibility.pulse_rate);
+                                if (pulse < 60 || pulse > 100) {
+                                    vitalSigns = 'Abnormal';
+                                }
+                                
+                                // Check temperature (normal: 36.1-37.2°C or 97-99°F)
+                                const temp = parseFloat(eligibility.body_temp);
+                                if (temp < 36.1 || temp > 37.2) {
+                                    vitalSigns = 'Abnormal';
+                                }
+                            } else {
+                                vitalSigns = 'Incomplete';
+                            }
+                            
+                            // Hematology - assess based on collection success and medical reasons
+                            let hematology = 'Pass';
+                            if (eligibility.collection_successful === false) {
+                                hematology = 'Fail';
+                            } else if (eligibility.disapproval_reason) {
+                                const reason = eligibility.disapproval_reason.toLowerCase();
+                                if (reason.includes('hemoglobin') || reason.includes('hematocrit') || 
+                                    reason.includes('blood count') || reason.includes('anemia') ||
+                                    reason.includes('low iron') || reason.includes('blood disorder')) {
+                                    hematology = 'Fail';
+                                }
+                            }
+                            
+                            // Fitness Result - map from eligibility status
+                            let fitnessResult = 'Eligible';
+                            if (eligibility.status === 'deferred' || eligibility.status === 'temporary_deferred') {
+                                fitnessResult = 'Deferred';
+                            } else if (eligibility.status === 'eligible') {
+                                fitnessResult = 'Eligible';
+                            }
+                            
+                            // Remarks - based on collection_successful boolean field
+                            let remarks = '-';
+                            if (eligibility.collection_successful === true) {
+                                remarks = 'Successful';
+                            } else if (eligibility.collection_successful === false) {
+                                remarks = 'Failed';
+                            } else {
+                                // Fallback to disapproval reason if collection_successful is null/undefined
+                                if (eligibility.disapproval_reason) {
+                                    remarks = eligibility.disapproval_reason;
+                                } else if (eligibility.donor_reaction) {
+                                    remarks = eligibility.donor_reaction;
+                                }
+                            }
+                            
+                            // Get physician name from physical_examination table
+                            let physician = '-';
+                            if (eligibility.physical_examination && eligibility.physical_examination.physician) {
+                                physician = eligibility.physical_examination.physician;
+                            }
+                            
+                             assessmentRows += `
+                                 <tr>
+                                     <td class="text-center">${safe(examDate)}</td>
+                                     <td class="text-center">${safe(vitalSigns)}</td>
+                                     <td class="text-center">${safe(hematology)}</td>
+                                     <td class="text-center">${safe(physician)}</td>
+                                     <td class="text-center">${safe(fitnessResult)}</td>
+                                     <td class="text-center">${safe(remarks)}</td>
+                                     <td class="text-center">
+                                         <button type="button" class="btn btn-sm btn-outline-primary" onclick="showDonorInformationMedicalModal('${eligibility.eligibility_id}')" title="View Donor Medical Information">
+                                             <i class="fas fa-eye"></i>
+                                         </button>
+                                     </td>
                                 </tr>`;
                             });
-                    if (!donationRows) {
-                        donationRows = `<tr><td colspan="5" class="text-center text-muted">No donation history available</td></tr>`;
+                    }
+                    
+                    if (!assessmentRows) {
+                        assessmentRows = `<tr><td colspan="7" class="text-center text-muted">No physical assessment recorded</td></tr>`;
                     }
                             donorInfoHTML += `
                         <div class="mb-3">
-                            <h6 class="mb-2">Donation History</h6>
+                             <h6 class="mb-2" style="color:#b22222; font-weight:600; border-bottom: 2px solid #b22222; padding-bottom: 0.3rem;">Physical Assessment</h6>
                                         <div class="table-responsive">
-                                <table class="table table-sm table-bordered mb-0">
-                                                <thead class="table-dark">
-                                                    <tr>
-                                            <th>Date of Donation</th>
-                                            <th>Gateway</th>
-                                            <th>Blood</th>
-                                            <th>Next Eligible Date</th>
-                                            <th>Medical History</th>
+                                 <table class="table table-sm table-bordered mb-0" style="border-radius: 10px; overflow: hidden;">
+                                     <thead style="background: #b22222 !important; color: white !important;">
+                                         <tr>
+                                             <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Examination Date</th>
+                                             <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Vital Signs</th>
+                                             <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Hematology</th>
+                                             <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Physician</th>
+                                             <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Fitness Result</th>
+                                             <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Remarks</th>
+                                             <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Action</th>
                                                     </tr>
                                                 </thead>
-                                    <tbody>${donationRows}</tbody>
+                                     <tbody id="returningAssessmentRows">${assessmentRows}</tbody>
                                             </table>
                                     </div>
                                 </div>`;
                     
-                    // Medical History Table (summarized)
-                    const medHist = donor.medical_history || null;
-                    let medRows = '';
-                    if (medHist) {
-                        medRows += `
-                            <tr>
-                                <td>${safe(formatDate(medHist.date_screened || donor.latest_submission))}</td>
-                                <td>${safe(medHist.vital_signs || 'Normal')}</td>
-                                <td>${safe(medHist.hematology || 'Within Normal Range')}</td>
-                                <td>${safe(medHist.fitness_result || (medHist.medical_approval ? 'Accepted' : 'Deferred'))}</td>
-                                <td>${safe(medHist.physician || '-')}</td>
-                                <td>${safe(medHist.action || '')}</td>
+                    // Donation History Table (based on eligibility table - show all records) - SECOND
+                    const donationEligibilityRecords = Array.isArray(donor.eligibility) ? donor.eligibility : (donor.eligibility ? [donor.eligibility] : []);
+                    let donationRows = '';
+                    
+                    // Add a new empty row at the TOP if needs_review is true (for pending review)
+                    console.log('Checking needs_review:', donor.needs_review, 'Type:', typeof donor.needs_review);
+                    if (donor.needs_review === true || donor.needs_review === 'true' || donor.needs_review === 1) {
+                        console.log('Adding needs_review row');
+                         donationRows += `
+                             <tr>
+                                 <td class="text-center">-</td>
+                                 <td class="text-center">-</td>
+                                 <td class="text-center">-</td>
+                                 <td class="text-center">-</td>
+                                 <td class="text-center"><span class="text-warning">Pending</span></td>
                             </tr>`;
                     }
-                    if (!medRows) {
-                        medRows = `<tr><td colspan="6" class="text-center text-muted">No medical history recorded</td></tr>`;
+                    
+                    if (donationEligibilityRecords.length > 0) {
+                        donationEligibilityRecords.forEach((el, index) => {
+                            // Only show records that have actual donation data
+                            if (el.start_date || el.created_at) {
+                                // Determine medical history status with color coding
+                                let medicalStatus = 'Pending';
+                                let statusClass = 'text-warning';
+                                
+                                // If medical_history_id exists, show Successful
+                                if (el.medical_history_id) {
+                                    medicalStatus = 'Successful';
+                                    statusClass = 'text-success';
+                                }
+                                // Default fallback
+                                else {
+                                    medicalStatus = 'Pending';
+                                    statusClass = 'text-warning';
+                                }
+                                
+                                 donationRows += `
+                                     <tr>
+                                         <td class="text-center">${safe(formatDate(el.start_date || el.created_at))}</td>
+                                         <td class="text-center">${safe(el.registration_channel || 'System')}</td>
+                                         <td class="text-center">${safe(el.blood_type || '-')}</td>
+                                         <td class="text-center">${safe(formatDate(el.end_date) || '-')}</td>
+                                         <td class="text-center"><span class="${statusClass}">${safe(medicalStatus)}</span></td>
+                                     </tr>`;
+                            }
+                        });
+                    }
+                    
+                    if (!donationRows) {
+                        donationRows = `<tr><td colspan="5" class="text-center text-muted">No donation history available</td></tr>`;
                     }
                         donorInfoHTML += `
-                        <div class="mb-2">
-                            <h6 class="mb-2">Medical History</h6>
+                         <div class="mb-3">
+                             <h6 class="mb-2" style="color:#b22222; font-weight:600; border-bottom: 2px solid #b22222; padding-bottom: 0.3rem;">Donation History</h6>
                             <div class="table-responsive">
-                                <table class="table table-sm table-bordered mb-0">
-                                    <thead class="table-dark">
-                                        <tr>
-                                            <th>Date Screened</th>
-                                            <th>Vital Signs</th>
-                                            <th>Hematology</th>
-                                            <th>Fitness Result</th>
-                                            <th>Physician</th>
-                                            <th>Action</th>
+                                 <table class="table table-sm table-bordered mb-0" style="border-radius: 10px; overflow: hidden;">
+                                     <thead style="background: #b22222 !important; color: white !important;">
+                                         <tr>
+                                             <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Last Donation Date</th>
+                                             <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Gateway</th>
+                                             <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Blood</th>
+                                             <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Next Eligible Date</th>
+                                             <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Medical History</th>
                                         </tr>
                                     </thead>
-                                    <tbody id="returningMedRows">${medRows}</tbody>
+                                     <tbody>${donationRows}</tbody>
                                 </table>
                                 </div>
                         </div>`;
                     
-                    // If returning, enrich medical section with screening details
-                    if (modalContextType === 'returning' && donor.donor_id) {
-                        fetch('../../assets/php_func/fetch_screening_info.php?donor_id=' + donor.donor_id)
-                            .then(r => r.json())
-                            .then(scr => {
-                                if (scr && scr.success && scr.data) {
-                                    const s = scr.data;
-                                    // Build a summarized single-row view inside the table
-                                    const dateScreened = formatDate(s.interview_date) || formatDate(donor.latest_submission) || 'N/A';
-                                    const vital = s.body_weight ? 'BW: ' + s.body_weight + ' kg' : 'N/A';
-                                    const hematology = [
-                                        s.hemoglobin ? 'Hgb: ' + s.hemoglobin : null,
-                                        s.hematocrit ? 'Hct: ' + s.hematocrit : null,
-                                        s.rbc_count ? 'RBC: ' + s.rbc_count : null,
-                                        s.wbc_count ? 'WBC: ' + s.wbc_count : null,
-                                        s.platelet_count ? 'Plt: ' + s.platelet_count : null,
-                                        (s.blood_type || (donor.eligibility ? donor.eligibility.blood_type : null)) ? 'BT: ' + (s.blood_type || donor.eligibility.blood_type) : null
-                                    ].filter(Boolean).join(', ') || 'N/A';
-                                    const fitness = (donor.medical_history && (donor.medical_history.medical_approval || donor.medical_history.fitness_result === 'Accepted')) ? 'Accepted' : 'Deferred';
-                                    const physician = (donor.medical_history && donor.medical_history.physician) ? donor.medical_history.physician : '-';
-                                    const rowHtml = '<tr><td>' + dateScreened + '</td><td>' + vital + '</td><td>' + hematology + '</td><td>' + fitness + '</td><td>' + physician + '</td><td><button type="button" class="btn btn-sm btn-outline-primary" id="viewScreeningBtn"><i class="fas fa-eye"></i></button></td></tr>';
-                                    const tbody = document.getElementById('returningMedRows');
-                                    if (tbody) tbody.innerHTML = rowHtml;
-                                    // Wire action button to show full details
-                                    const btn = document.getElementById('viewScreeningBtn');
-                                    if (btn) {
-                                        btn.onclick = () => {
-                                            const modalBody = document.getElementById('screeningDetailsBody');
-                                            if (modalBody) {
-                                                // Calculate blood type separately to avoid template literal syntax issues
-                                                const bloodType = s.blood_type || (donor.eligibility && donor.eligibility.blood_type ? donor.eligibility.blood_type : 'N/A');
-                                                const modalContent = '<div class="row g-2">' +
-                                                    '<div class="col-md-4"><div class="small text-muted">Interview Date</div><div>' + (formatDate(s.interview_date) || 'N/A') + '</div></div>' +
-                                                    '<div class="col-md-4"><div class="small text-muted">Body Weight</div><div>' + (s.body_weight ? s.body_weight + ' kg' : 'N/A') + '</div></div>' +
-                                                    '<div class="col-md-4"><div class="small text-muted">Specific Gravity</div><div>' + (s.specific_gravity || 'N/A') + '</div></div>' +
-                                                    '<div class="col-md-4"><div class="small text-muted">Hemoglobin</div><div>' + (s.hemoglobin || 'N/A') + '</div></div>' +
-                                                    '<div class="col-md-4"><div class="small text-muted">Hematocrit</div><div>' + (s.hematocrit || 'N/A') + '</div></div>' +
-                                                    '<div class="col-md-4"><div class="small text-muted">RBC Count</div><div>' + (s.rbc_count || 'N/A') + '</div></div>' +
-                                                    '<div class="col-md-4"><div class="small text-muted">WBC Count</div><div>' + (s.wbc_count || 'N/A') + '</div></div>' +
-                                                    '<div class="col-md-4"><div class="small text-muted">Platelet Count</div><div>' + (s.platelet_count || 'N/A') + '</div></div>' +
-                                                    '<div class="col-md-4"><div class="small text-muted">Blood Type</div><div>' + bloodType + '</div></div>' +
-                                                    '</div>';
-                                                modalBody.innerHTML = modalContent;
-                                                const m = new bootstrap.Modal(document.getElementById('screeningDetailsModal'));
-                                                m.show();
-                                            }
-                                        };
+                    // If returning, enrich assessment section with eligibility details (all records)
+                    if (modalContextType === 'returning' && donor.donor_id && donor.eligibility) {
+                        const eligibilityRecords = Array.isArray(donor.eligibility) ? donor.eligibility : [donor.eligibility];
+                        let allRowsHtml = '';
+                        
+                        eligibilityRecords.forEach((el, index) => {
+                            // Build rows for all eligibility records
+                            const examDate = formatDate(el.start_date || el.created_at || donor.latest_submission) || 'N/A';
+                            // Vital Signs - assess actual values against normal ranges
+                            let vitalSigns = 'Normal';
+                            if (el.blood_pressure && el.pulse_rate && el.body_temp) {
+                                // Check blood pressure (normal: 90-140/60-90)
+                                const bp = el.blood_pressure;
+                                const bpMatch = bp.match(/(\d+)\/(\d+)/);
+                                if (bpMatch) {
+                                    const systolic = parseInt(bpMatch[1]);
+                                    const diastolic = parseInt(bpMatch[2]);
+                                    if (systolic < 90 || systolic > 140 || diastolic < 60 || diastolic > 90) {
+                                        vitalSigns = 'Abnormal';
                                     }
                                 }
-                            })
-                            .catch(() => {});
+                                
+                                // Check pulse rate (normal: 60-100 bpm)
+                                const pulse = parseInt(el.pulse_rate);
+                                if (pulse < 60 || pulse > 100) {
+                                    vitalSigns = 'Abnormal';
+                                }
+                                
+                                // Check temperature (normal: 36.1-37.2°C)
+                                const temp = parseFloat(el.body_temp);
+                                if (temp < 36.1 || temp > 37.2) {
+                                    vitalSigns = 'Abnormal';
+                                }
+                            } else {
+                                vitalSigns = 'Incomplete';
+                            }
+                            const hematology = el.collection_successful ? 'Pass' : (el.collection_successful === false ? 'Fail' : 'Pass');
+                            const physician = '-'; // Default as shown in image
+                            const fitnessResult = el.status === 'eligible' ? 'Eligible' : 
+                                                el.status === 'deferred' ? 'Deferred' : 
+                                                el.status === 'temporary_deferred' ? 'Temporary Deferred' : 'Eligible';
+                            // Remarks - based on collection_successful boolean field
+                            let remarks = '-';
+                            if (el.collection_successful === true) {
+                                remarks = 'Successful';
+                            } else if (el.collection_successful === false) {
+                                remarks = 'Failed';
+                            } else {
+                                // Fallback to disapproval reason if collection_successful is null/undefined
+                                remarks = el.disapproval_reason || el.donor_reaction || '-';
+                            }
+                            
+                            allRowsHtml += '<tr><td>' + examDate + '</td><td>' + vitalSigns + '</td><td>' + hematology + '</td><td>' + physician + '</td><td>' + fitnessResult + '</td><td>' + remarks + '</td><td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showPhysicalExaminationModal(\'' + el.eligibility_id + '\')"><i class="fas fa-eye"></i></button></td></tr>';
+                        });
+                        
+                        const tbody = document.getElementById('returningAssessmentRows');
+                        if (tbody) tbody.innerHTML = allRowsHtml;
                     }
+                } else {
+                    // Fallback when no donor data is available
+                    donorInfoHTML = `
+                        <div class="alert alert-warning">
+                            <h6>No Donor Data Available</h6>
+                            <p>Unable to load donor information. Please try again or contact support if the problem persists.</p>
+                            <div class="small text-muted">
+                                <strong>Debug Info:</strong><br>
+                                Donor Data: ${donorData ? 'Available' : 'Not available'}<br>
+                                Success: ${donorData ? donorData.success : 'N/A'}<br>
+                                Has Data: ${donorData && donorData.data ? 'Yes' : 'No'}<br>
+                                Error: ${donorData && donorData.error ? donorData.error : 'None'}<br>
+                                <details>
+                                    <summary>Raw Data (click to expand)</summary>
+                                    <pre>${JSON.stringify(donorData, null, 2)}</pre>
+                                </details>
+                            </div>
+                        </div>`;
                 }
                 
-                // Returning banner (suppress when in Medical stage or has needs_review)
-                if (modalContextType === 'returning' && currentStage !== 'medical_review' && !(currentDonorId && medicalByDonor[currentDonorId] && medicalByDonor[currentDonorId].needs_review)) {
-                    donorInfoHTML = '<div class="alert alert-primary mb-3"><strong>Returning donor:</strong> This donor has previous donations. Review details as needed. Processing here is for New (Medical) and donors needing review only.</div>' + donorInfoHTML;
-                }
+                // Returning banner removed as requested
                 
                 deferralStatusContent.innerHTML = donorInfoHTML;
                 // Ensure proceed button visibility reflects current stage capability
@@ -2531,53 +2977,10 @@ $donor_history = $unique_donor_history;
             function openMedicalHistoryForCurrentDonor() {
                 if (!currentDonorId) return;
                 
-                // Check if this is a returning donor with physical examination data
-                const isReturningDonor = window.currentDonorType && window.currentDonorType.toLowerCase().includes('returning');
-                
-                if (isReturningDonor) {
-                    // For returning donors, show physical examination modal first
+                // Show Physical Examination Results modal first
                     showPhysicalExaminationModal(currentDonorId);
-                } else {
-                    // For new donors, proceed directly to medical history
-                    proceedToMedicalHistoryModal();
-                }
             }
             
-            // Function to show physical examination modal
-            function showPhysicalExaminationModal(donorId) {
-                const physicalModal = new bootstrap.Modal(document.getElementById('physicalExaminationModal'));
-                const modalContent = document.getElementById('physicalExaminationModalContent');
-                
-                // Reset modal content to loading state
-                modalContent.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
-                
-                // Show the modal
-                physicalModal.show();
-                
-                // Fetch physical examination data
-                fetch('../../assets/php_func/fetch_physical_examination_info.php?donor_id=' + donorId)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success && data.data) {
-                            displayPhysicalExaminationInfo(data.data, donorId);
-                        } else {
-                            modalContent.innerHTML = `
-                                <div class="alert alert-info">
-                                    <h6>No Physical Examination Data</h6>
-                                    <p>This returning donor doesn't have physical examination records yet.</p>
-                                    <p>You can proceed directly to medical history review.</p>
-                                </div>`;
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching physical examination info:', error);
-                        modalContent.innerHTML = `
-                            <div class="alert alert-danger">
-                                <h6>Error Loading Data</h6>
-                                <p>Unable to load physical examination information. Please try again.</p>
-                            </div>`;
-                    });
-            }
             
             // Function to display physical examination information
             function displayPhysicalExaminationInfo(physicalData, donorId) {
@@ -2615,42 +3018,40 @@ $donor_history = $unique_donor_history;
                 const donorAgeGender = `${age}${physicalData.sex ? ', ' + physicalData.sex : ''}`;
                 
                 const physicalHTML = `
-                    <!-- Donor Information Header (Simple Layout like 2nd image) -->
-                    <div class="mb-3">
+                    <!-- Donor Information Header (Large and Prominent) -->
+                    <div class="patient-info-header">
                         <div class="d-flex justify-content-between align-items-start">
                             <div>
-                                <div style="color:#666; font-size:0.9rem; margin-bottom:5px;">Date Screened: ${formatDate(physicalData.created_at)}</div>
-                                <div style="color:#333; font-weight:700; font-size:1.2rem; margin-bottom:5px;">${fullName}</div>
-                                <div style="color:#333; font-size:1rem;">${donorAgeGender}</div>
+                                <div class="patient-date">Date: ${formatDate(physicalData.created_at)}</div>
+                                <div class="patient-name">${fullName}</div>
+                                <div class="patient-details">${donorAgeGender}</div>
                             </div>
                             <div style="text-align: right;">
-                                <div style="color:#666; font-size:0.9rem; margin-bottom:5px;">&nbsp;</div>
-                                <div style="color:#333; font-weight:700; font-size:1.1rem; margin-bottom:5px;">Donor ID ${safe(physicalData.prc_donor_number || 'N/A')}</div>
-                                <div style="color:#333; font-size:1rem;">${safe(physicalData.blood_type || 'N/A')}</div>
+                                <div class="patient-id">ID: ${safe(physicalData.prc_donor_number || 'N/A')}</div>
+                                <div class="patient-blood-type">${safe(physicalData.blood_type || 'N/A')}</div>
                             </div>
                         </div>
-                        <hr style="margin: 15px 0;"/>
                     </div>
                     
                     <!-- Physical Examination Results Section -->
                     <div class="mb-3">
                         <h6 class="mb-2" style="color:#b22222; font-weight:700;">Physical Examination Results</h6>
-                        <div class="row g-3">
+                        <div class="row g-1">
                             <div class="col-md-4">
-                                <label class="form-label small mb-1">Interviewer Remarks</label>
-                                <input class="form-control" value="${safe(physicalData.reason)}" readonly>
+                                <label class="form-label small" style="margin-bottom: 2px; font-size: 0.75rem;">Interviewer Remarks</label>
+                                <input class="form-control form-control-sm" value="${safe(physicalData.reason)}" readonly>
                             </div>
                             <div class="col-md-8">
-                                <label class="form-label small mb-1">Physical Exam Notes</label>
-                                <input class="form-control" value="${safe(physicalData.skin)}${physicalData.heent ? ' | HEENT: ' + physicalData.heent : ''}${physicalData.heart_and_lungs ? ' | Heart & Lungs: ' + physicalData.heart_and_lungs : ''}" readonly>
+                                <label class="form-label small" style="margin-bottom: 2px; font-size: 0.75rem;">Physical Exam Notes</label>
+                                <input class="form-control form-control-sm" value="${safe(physicalData.skin)}${physicalData.heent ? ' | HEENT: ' + physicalData.heent : ''}${physicalData.heart_and_lungs ? ' | Heart & Lungs: ' + physicalData.heart_and_lungs : ''}" readonly>
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label small mb-1">Blood Type</label>
-                                <input class="form-control" value="${safe(physicalData.blood_type)}" readonly>
+                                <label class="form-label small" style="margin-bottom: 2px; font-size: 0.75rem;">Blood Type</label>
+                                <input class="form-control form-control-sm" value="${safe(physicalData.blood_type)}" readonly>
                             </div>
                             <div class="col-md-8">
-                                <label class="form-label small mb-1">Type of Donation</label>
-                                <input class="form-control" value="${safe(physicalData.donation_type)}" readonly>
+                                <label class="form-label small" style="margin-bottom: 2px; font-size: 0.75rem;">Type of Donation</label>
+                                <input class="form-control form-control-sm" value="${safe(physicalData.donation_type)}" readonly>
                             </div>
                         </div>
                     </div>
@@ -2670,10 +3071,10 @@ $donor_history = $unique_donor_history;
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td><input class="form-control form-control-sm" value="${safe(physicalData.blood_pressure)}" readonly></td>
-                                        <td><input class="form-control form-control-sm" value="${safe(physicalData.body_weight)}" readonly></td>
-                                        <td><input class="form-control form-control-sm" value="${safe(physicalData.pulse_rate)}" readonly></td>
-                                        <td><input class="form-control form-control-sm" value="${safe(physicalData.body_temp)}" readonly></td>
+                                        <td><input class="form-control form-control-sm form-control form-control-sm-sm" value="${safe(physicalData.blood_pressure)}" readonly></td>
+                                        <td><input class="form-control form-control-sm form-control form-control-sm-sm" value="${safe(physicalData.body_weight)}" readonly></td>
+                                        <td><input class="form-control form-control-sm form-control form-control-sm-sm" value="${safe(physicalData.pulse_rate)}" readonly></td>
+                                        <td><input class="form-control form-control-sm form-control form-control-sm-sm" value="${safe(physicalData.body_temp)}" readonly></td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -2682,14 +3083,14 @@ $donor_history = $unique_donor_history;
                     
                     <!-- Final Assessment Section -->
                     <div class="mb-3">
-                        <div class="row g-3">
+                        <div class="row g-1">
                             <div class="col-md-4">
-                                <label class="form-label small mb-1">Fitness to Donate</label>
-                                <input class="form-control" value="${safe(physicalData.remarks)}" readonly>
+                                <label class="form-label small" style="margin-bottom: 2px; font-size: 0.75rem;">Fitness to Donate</label>
+                                <input class="form-control form-control-sm" value="${physicalData.disapproval_reason ? 'Deferred' : 'Accepted'}" readonly>
                             </div>
                             <div class="col-md-8">
-                                <label class="form-label small mb-1">Final Remarks</label>
-                                <input class="form-control" value="${safe(physicalData.disapproval_reason)}" readonly>
+                                <label class="form-label small" style="margin-bottom: 2px; font-size: 0.75rem;">Final Remarks</label>
+                                <input class="form-control form-control-sm" value="${safe(physicalData.remarks || 'No remarks available')}" readonly>
                             </div>
                         </div>
                     </div>
@@ -2758,13 +3159,7 @@ $donor_history = $unique_donor_history;
                 const proceedButton = getProceedButton();
                 if (proceedButton && proceedButton.addEventListener) {
                     proceedButton.addEventListener('click', function() {
-                        if (!currentDonorId) return;
-                        
-                        // Close the current deferral status modal
-                        deferralStatusModal.hide();
-                        
-                        // Open the physical examination modal
-                        showPhysicalExaminationModal(currentDonorId);
+                        openMedicalHistoryForCurrentDonor();
                     });
                 }
                 
@@ -3888,20 +4283,254 @@ $donor_history = $unique_donor_history;
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-primary" id="proceedToMedicalHistoryFromPhysical">Proceed to Medical History</button>
+                <div class="modal-footer" style="background-color: #f8f9fa; border-top: 1px solid #dee2e6; border-radius: 0 0 15px 15px;">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>Close
+                    </button>
+                    <button type="button" class="btn" id="proceedToMedicalHistoryFromPhysical" style="background-color: #b22222; color: white; border: none;">
+                        <i class="fas fa-clipboard-list me-1"></i>Proceed to Medical History
+                    </button>
                 </div>
             </div>
         </div>
     </div>
     
+    <!-- Donor Information Medical Modal -->
+    <div class="modal fade" id="donorInformationMedicalModal" tabindex="-1" aria-labelledby="donorInformationMedicalModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg" style="max-width: 900px; width: 85%;">
+            <div class="modal-content" style="border-radius: 15px; overflow: hidden;">
+                <div id="donorMedicalModalContent">
+                    <!-- Content will be dynamically loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    
     <!-- Include Defer Donor Modal JavaScript -->
     <script src="../../assets/js/initial-screening-defer-button.js"></script>
+    
+    <!-- Include Donor Information Medical Modal JavaScript -->
+    <script src="../../assets/js/donor_information_medical.js"></script>
+    
+    <style>
+        #donorInformationMedicalModal .modal-dialog {
+            max-width: 900px;
+            width: 85%;
+            margin: 1.75rem auto;
+        }
+        
+        #donorInformationMedicalModal .modal-content {
+            border-radius: 15px;
+            overflow: hidden;
+            border: none;
+        }
+        
+        #donorInformationMedicalModal .modal-header {
+            border-bottom: none;
+            padding: 1rem 1.5rem;
+        }
+        
+        #donorInformationMedicalModal .modal-footer {
+            border-top: none;
+            padding: 1rem 1.5rem;
+        }
+        
+        #donorInformationMedicalModal .modal-body {
+            padding: 1rem 1.5rem;
+        }
+    </style>
     
     <script>
         // Defer button functionality is now handled within the screening form modal
         // No additional initialization needed here
+        
+        // Global function to show physical examination modal
+        function showPhysicalExaminationModal(donorId) {
+            const physicalModal = new bootstrap.Modal(document.getElementById('physicalExaminationModal'));
+            const modalContent = document.getElementById('physicalExaminationModalContent');
+            
+            // Reset modal content to loading state
+            modalContent.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+            
+            // Show the modal
+            physicalModal.show();
+            
+            // Fetch physical examination data using donor_id
+            fetch('../../assets/php_func/fetch_physical_examination_info.php?donor_id=' + donorId)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Physical examination API response:', data);
+                    if (data.success && data.data) {
+                        console.log('Physical examination data:', data.data);
+                        console.log('Debug info:', data.debug);
+                        displayPhysicalExaminationInfo(data.data, donorId);
+                    } else {
+                        console.log('No data or error:', data);
+                        modalContent.innerHTML = `
+                            <div class="alert alert-info">
+                                <h6>No Physical Examination Data</h6>
+                                <p>This returning donor doesn't have physical examination records yet.</p>
+                                <p>You can proceed directly to medical history review.</p>
+                            </div>`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching physical examination info:', error);
+                    modalContent.innerHTML = `
+                        <div class="alert alert-danger">
+                            <h6>Error Loading Data</h6>
+                            <p>Unable to load physical examination information. Please try again.</p>
+                        </div>`;
+                });
+        }
+        
+        // Global function to display physical examination information
+        function displayPhysicalExaminationInfo(physicalData, donorId) {
+            const modalContent = document.getElementById('physicalExaminationModalContent');
+            
+            // Format date
+            const formatDate = (dateString) => {
+                if (!dateString) return 'N/A';
+                const date = new Date(dateString);
+                return date.toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            };
+            
+            // Calculate age from birthdate
+            const calculateAge = (birthdate) => {
+                if (!birthdate) return 'N/A';
+                const birth = new Date(birthdate);
+                const today = new Date();
+                let age = today.getFullYear() - birth.getFullYear();
+                const monthDiff = today.getMonth() - birth.getMonth();
+                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+                    age--;
+                }
+                return age;
+            };
+            
+            const safe = (value) => value || 'N/A';
+            const fullName = `${safe(physicalData.surname)}, ${safe(physicalData.first_name)} ${safe(physicalData.middle_name)}`.trim();
+            const age = calculateAge(physicalData.birthdate);
+            const donorAgeGender = `${age}${physicalData.sex ? ', ' + physicalData.sex : ''}`;
+            
+            const physicalHTML = `
+                <!-- Donor Information Header (Compact Design) -->
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                            <div class="text-muted small mb-1">
+                                <i class="fas fa-calendar-alt me-1"></i>
+                                Date Screened: ${formatDate(physicalData.screening_date || physicalData.created_at)}
+                            </div>
+                            <h5 class="mb-1" style="color:#b22222; font-weight:700;">
+                                ${fullName}
+                            </h5>
+                            <div class="text-muted fw-medium">
+                                <i class="fas fa-user me-1"></i>
+                                ${donorAgeGender}
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <div class="mb-1">
+                                <div class="fw-bold text-dark mb-1">
+                                    <i class="fas fa-id-card me-1"></i>
+                                    Donor ID: ${safe(physicalData.prc_donor_number || 'N/A')}
+                                </div>
+                                <div class="badge fs-6 px-2 py-1" style="background-color: #b22222; color: white;">
+                                    <i class="fas fa-tint me-1"></i>
+                                    ${safe(physicalData.blood_type || 'N/A')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <hr class="my-2" style="border-color: #b22222; opacity: 0.3;"/>
+                </div>
+                
+                    <!-- Physical Examination Results Section -->
+                    <div class="mb-3">
+                        <h6 class="mb-2" style="color:#b22222; font-weight:600; border-bottom: 2px solid #b22222; padding-bottom: 0.3rem;">Physical Examination Results</h6>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Interviewer Remarks</label>
+                                <div class="form-control-plaintext bg-light p-2 rounded">${safe(physicalData.reason || 'N/A')}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Physical Exam Notes</label>
+                                <div class="form-control-plaintext bg-light p-2 rounded">${safe(physicalData.physical_exam_notes || 'N/A')}</div>
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Blood Type</label>
+                                <div class="form-control-plaintext bg-light p-2 rounded">${safe(physicalData.blood_type || 'N/A')}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Type of Donation</label>
+                                <div class="form-control-plaintext bg-light p-2 rounded">${safe(physicalData.donation_type || 'N/A')}</div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <!-- Vital Signs Section -->
+                    <div class="mb-3">
+                        <h6 class="mb-2" style="color:#b22222; font-weight:600; border-bottom: 2px solid #b22222; padding-bottom: 0.3rem;">Vital Signs</h6>
+                        <div class="row g-2">
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold">Blood Pressure</label>
+                                <div class="form-control-plaintext bg-light p-2 rounded text-center">${safe(physicalData.blood_pressure || 'N/A')}</div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold">Weight</label>
+                                <div class="form-control-plaintext bg-light p-2 rounded text-center">${safe(physicalData.body_weight || 'N/A')}</div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold">Pulse Rate</label>
+                                <div class="form-control-plaintext bg-light p-2 rounded text-center">${safe(physicalData.pulse_rate || 'N/A')}</div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold">Temperature</label>
+                                <div class="form-control-plaintext bg-light p-2 rounded text-center">${safe(physicalData.body_temp || 'N/A')}</div>
+                            </div>
+                        </div>
+                    </div>
+                
+                <!-- Final Assessment Section -->
+                <div class="mb-3">
+                    <h6 class="mb-2" style="color:#b22222; font-weight:600; border-bottom: 2px solid #b22222; padding-bottom: 0.3rem;">Final Assessment</h6>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <div class="p-3 text-center" style="background-color:#f8f9fa; border-radius:8px; border: 2px solid ${physicalData.disapproval_reason ? '#ffc107' : '#28a745'};">
+                                <div class="fw-semibold mb-2" style="color:#b22222;">Fitness to Donate</div>
+                                <div class="fs-5 fw-bold" style="color: ${physicalData.disapproval_reason ? '#856404' : '#155724'};">
+                                    ${physicalData.disapproval_reason ? 'Deferred' : 'Accepted'}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="p-3 text-center" style="background-color:#f8f9fa; border-radius:8px; border: 2px solid #b22222;">
+                                <div class="fw-semibold mb-2" style="color:#b22222;">Final Remarks</div>
+                                <div class="fs-5 fw-bold" style="color: #721c24;">
+                                    ${safe(physicalData.remarks || 'No remarks available')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+            `;
+            
+            modalContent.innerHTML = physicalHTML;
+            
+            // Store donor ID for the proceed button
+            modalContent.setAttribute('data-donor-id', donorId);
+        }
     </script>
 </body>
 </html>
