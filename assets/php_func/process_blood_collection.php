@@ -4,16 +4,34 @@ require_once '../conn/db_conn.php';
 
 header('Content-Type: application/json');
 
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Start output buffering to catch any unexpected output
+ob_start();
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['success' => false, 'message' => 'Method not allowed']);
     exit;
 }
 
-$input = json_decode(file_get_contents('php://input'), true);
+$raw_input = file_get_contents('php://input');
+$input = json_decode($raw_input, true);
+
+// Log raw input for debugging
+error_log('Raw input: ' . $raw_input);
 
 if (!$input) {
-    echo json_encode(['success' => false, 'message' => 'Invalid JSON data']);
+    $json_error = json_last_error_msg();
+    error_log('JSON decode error: ' . $json_error);
+    echo json_encode([
+        'success' => false, 
+        'message' => 'Invalid JSON data', 
+        'error_details' => $json_error,
+        'raw_input' => substr($raw_input, 0, 100) . '...'
+    ]);
     exit;
 }
 
@@ -24,9 +42,10 @@ if (!$physical_exam_id) {
     exit;
 }
 
-// NOTE: We no longer block based on existing eligibility. History is allowed.
-
 try {
+    // Log the incoming data for debugging
+    error_log('Processing blood collection with data: ' . print_r($input, true));
+
     // Validate required fields
     $required_fields = [
         'physical_exam_id',
@@ -80,227 +99,35 @@ try {
     $session_full  = trim($session_first . ' ' . $session_last);
     $phlebotomist_name = !empty($input['phlebotomist']) ? trim($input['phlebotomist']) : $session_full;
 
-    // If still empty, try to fetch from users table using session user id
-    if ($phlebotomist_name === '' || $phlebotomist_name === null) {
-        $session_user_id = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : (isset($_SESSION['id']) ? $_SESSION['id'] : null);
-        if (!empty($session_user_id)) {
-            $u = curl_init();
-            // Try common id columns: user_id first, then id
-            $users_url = SUPABASE_URL . '/rest/v1/users?select=surname,first_name&user_id=eq.' . urlencode($session_user_id) . '&limit=1';
-            curl_setopt_array($u, [
-                CURLOPT_URL => $users_url,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER => [
-                    'apikey: ' . SUPABASE_API_KEY,
-                    'Authorization: Bearer ' . SUPABASE_API_KEY
-                ]
-            ]);
-            $u_resp = curl_exec($u);
-            $u_code = curl_getinfo($u, CURLINFO_HTTP_CODE);
-            curl_close($u);
-            $u_rows = ($u_code === 200) ? json_decode($u_resp, true) : [];
-
-            if (empty($u_rows)) {
-                // Fallback try id column
-                $u = curl_init();
-                $users_url2 = SUPABASE_URL . '/rest/v1/users?select=surname,first_name&id=eq.' . urlencode($session_user_id) . '&limit=1';
-                curl_setopt_array($u, [
-                    CURLOPT_URL => $users_url2,
-                    CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_HTTPHEADER => [
-                        'apikey: ' . SUPABASE_API_KEY,
-                        'Authorization: Bearer ' . SUPABASE_API_KEY
-                    ]
-                ]);
-                $u_resp = curl_exec($u);
-                $u_code = curl_getinfo($u, CURLINFO_HTTP_CODE);
-                curl_close($u);
-                $u_rows = ($u_code === 200) ? json_decode($u_resp, true) : [];
-            }
-
-            if (!empty($u_rows) && isset($u_rows[0])) {
-                $uf = trim(($u_rows[0]['first_name'] ?? '') . ' ' . ($u_rows[0]['surname'] ?? ''));
-                if ($uf !== '') {
-                    $phlebotomist_name = $uf;
-                }
-            }
-        }
-    }
-
-    // Convert times to proper timestamp format (needed for both UPDATE and INSERT)
+    // Convert times to proper timestamp format
     $today = date('Y-m-d');
     $start_timestamp = date('Y-m-d\TH:i:s.000\Z', strtotime("$today " . $input['start_time']));
     $end_timestamp   = date('Y-m-d\TH:i:s.000\Z', strtotime("$today " . $input['end_time']));
-    
-    // Check if blood collection already exists for this physical exam
-    $physical_exam_check_ch = curl_init();
-    curl_setopt_array($physical_exam_check_ch, [
-        CURLOPT_URL => SUPABASE_URL . '/rest/v1/blood_collection?physical_exam_id=eq.' . urlencode($input['physical_exam_id']),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => [
-            'apikey: ' . SUPABASE_API_KEY,
-            'Authorization: Bearer ' . SUPABASE_API_KEY
-        ]
-    ]);
-    $physical_exam_check_response = curl_exec($physical_exam_check_ch);
-    curl_close($physical_exam_check_ch);
 
-    $existing_collection = json_decode($physical_exam_check_response, true);
-    if (!empty($existing_collection)) {
-        // UPDATE path: increment amount_taken and update other fields
-        $existing_row = $existing_collection[0];
-        $existing_amount = intval($existing_row['amount_taken'] ?? 0);
-        $new_amount_total = $existing_amount + $amount_taken;
-
-        // If client generated a new unit_serial_number, ensure it is unique among other rows
-        if (!empty($input['unit_serial_number'])) {
-            $chk = curl_init();
-            curl_setopt_array($chk, [
-                CURLOPT_URL => SUPABASE_URL . '/rest/v1/blood_collection?unit_serial_number=eq.' . urlencode($input['unit_serial_number']) . '&select=physical_exam_id',
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER => [
-                    'apikey: ' . SUPABASE_API_KEY,
-                    'Authorization: Bearer ' . SUPABASE_API_KEY
-                ]
-            ]);
-            $chk_resp = curl_exec($chk);
-            curl_close($chk);
-            $matches = json_decode($chk_resp, true) ?: [];
-            // Allow reuse if the serial belongs to the same physical_exam_id; block if it belongs to a different one
-            $conflict = false;
-            foreach ($matches as $m) {
-                if (isset($m['physical_exam_id']) && (string)$m['physical_exam_id'] !== (string)$input['physical_exam_id']) {
-                    $conflict = true; break;
-                }
-            }
-            if ($conflict) {
-                throw new Exception('This unit serial number is already in use by a different record.');
-            }
-        }
-
-        $update_payload = [
-            'amount_taken'    => $new_amount_total,
-            'is_successful'   => $is_successful,
-            'donor_reaction'  => !empty($input['donor_reaction']) ? trim($input['donor_reaction']) : null,
-            'management_done' => !empty($input['management_done']) ? trim($input['management_done']) : null,
-            'start_time'      => $start_timestamp,
-            'end_time'        => $end_timestamp,
-            'blood_bag_type'  => $blood_bag_type,
-            'blood_bag_brand' => $blood_bag_brand,
-            'unit_serial_number' => !empty($input['unit_serial_number']) ? $input['unit_serial_number'] : null,
-            'status'          => 'pending',
-            'needs_review'    => false,
-            'phlebotomist'    => (!empty($phlebotomist_name) ? $phlebotomist_name : null),
-            'updated_at'      => date('Y-m-d H:i:s')
-        ];
-
-        // Remove null values to avoid overwriting with null
-        foreach ($update_payload as $k => $v) { if ($v === null) unset($update_payload[$k]); }
-
-        // Include primary key for upsert
-        $update_payload_with_pk = $update_payload;
-        if (!empty($existing_row['blood_collection_id'])) {
-            $update_payload_with_pk['blood_collection_id'] = $existing_row['blood_collection_id'];
-        }
-
-        $ch_up = curl_init();
-        curl_setopt_array($ch_up, [
-            // Use upsert to avoid URL filter type casting issues
-            CURLOPT_URL => SUPABASE_URL . '/rest/v1/blood_collection',
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CUSTOMREQUEST => 'POST',
-            CURLOPT_POSTFIELDS => json_encode([$update_payload_with_pk]),
-            CURLOPT_HTTPHEADER => [
-                'apikey: ' . SUPABASE_API_KEY,
-                'Authorization: Bearer ' . SUPABASE_API_KEY,
-                'Content-Type: application/json',
-                'Prefer: resolution=merge-duplicates, return=representation'
-            ]
-        ]);
-        $update_resp = curl_exec($ch_up);
-        $update_code = curl_getinfo($ch_up, CURLINFO_HTTP_CODE);
-        curl_close($ch_up);
-
-        if ($update_code >= 200 && $update_code < 300) {
-            $updated_rows = json_decode($update_resp, true);
-            $blood_collection_id = $updated_rows[0]['blood_collection_id'] ?? ($existing_row['blood_collection_id'] ?? null);
-
-            // Return success; eligibility and blood bank units are handled by DB triggers
-            echo json_encode(['success' => true, 'message' => 'Blood collection updated (amount incremented).', 'blood_collection_id' => $blood_collection_id]);
-            exit;
-        } else {
-            throw new Exception('Failed to update existing blood collection: ' . $update_resp . ' | URL: ' . SUPABASE_URL . '/rest/v1/blood_collection' . ' | Payload: ' . json_encode($update_payload_with_pk));
-        }
-    }
-
-    // (timestamps already prepared above)
-
-    // Get the latest screening_id that doesn't have a blood collection yet
-    $ch = curl_init();
+    // Check if blood collection already exists
+    $check_url = SUPABASE_URL . '/rest/v1/blood_collection?physical_exam_id=eq.' . urlencode($physical_exam_id);
+    $ch = curl_init($check_url);
     curl_setopt_array($ch, [
-        CURLOPT_URL => SUPABASE_URL . '/rest/v1/screening_form?select=screening_id&order=created_at.desc',
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
             'apikey: ' . SUPABASE_API_KEY,
             'Authorization: Bearer ' . SUPABASE_API_KEY
         ]
     ]);
-    $response = curl_exec($ch);
+    $check_response = curl_exec($ch);
+    $check_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    $screening_data = json_decode($response, true);
-    if (empty($screening_data)) {
-        throw new Exception('No screening form found');
+    error_log('Check response code: ' . $check_http_code . ', Response: ' . $check_response);
+
+    $existing = json_decode($check_response, true);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        error_log('JSON decode error for check response: ' . json_last_error_msg());
     }
 
-    // Find the first screening ID that doesn't have a blood collection
-    $screening_id = null;
-    foreach ($screening_data as $screening) {
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL => SUPABASE_URL . '/rest/v1/blood_collection?screening_id=eq.' . $screening['screening_id'],
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => [
-                'apikey: ' . SUPABASE_API_KEY,
-                'Authorization: Bearer ' . SUPABASE_API_KEY
-            ]
-        ]);
-        $response = curl_exec($ch);
-        curl_close($ch);
-
-        $existing_collection = json_decode($response, true);
-        if (empty($existing_collection)) {
-            $screening_id = $screening['screening_id'];
-            break;
-        }
-    }
-
-    if ($screening_id === null) {
-        throw new Exception('No available screening form found for blood collection');
-    }
-
-    // For INSERT: enforce unit_serial uniqueness
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL => SUPABASE_URL . '/rest/v1/blood_collection?unit_serial_number=eq.' . urlencode($input['unit_serial_number']) . '&select=blood_collection_id',
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => [
-            'apikey: ' . SUPABASE_API_KEY,
-            'Authorization: Bearer ' . SUPABASE_API_KEY
-        ]
-    ]);
-    $response = curl_exec($ch);
-    curl_close($ch);
-
-    $existing_unit = json_decode($response, true);
-    if (!empty($existing_unit)) {
-        throw new Exception('This unit serial number is already in use. Please use a unique serial number.');
-    }
-
-    // Prepare data for Supabase
+    // Prepare data for update/insert
     $data = [
-        'screening_id' => $screening_id,
-        'physical_exam_id' => $input['physical_exam_id'],
+        'physical_exam_id' => $physical_exam_id,
         'blood_bag_brand' => $blood_bag_brand,
         'blood_bag_type' => $blood_bag_type,
         'amount_taken' => $amount_taken,
@@ -311,21 +138,40 @@ try {
         'start_time' => $start_timestamp,
         'end_time' => $end_timestamp,
         'status' => 'pending',
-        'phlebotomist' => (!empty($phlebotomist_name) ? $phlebotomist_name : null)
+        'needs_review' => false,
+        'phlebotomist' => $phlebotomist_name,
+        'updated_at' => date('Y-m-d H:i:s')
     ];
 
-    // Send data to Supabase
-    $ch = curl_init();
+    // Remove null values
+    foreach ($data as $k => $v) {
+        if ($v === null) unset($data[$k]);
+    }
+
+    // If updating, include the ID
+    if (!empty($existing)) {
+        $data['blood_collection_id'] = $existing[0]['blood_collection_id'];
+    }
+
+    // Send to Supabase
+    $url = SUPABASE_URL . '/rest/v1/blood_collection';
+    $payload = !empty($existing) ? [$data] : $data;
+    $prefer_header = !empty($existing) ? 'resolution=merge-duplicates, return=representation' : 'return=representation';
+    
+    error_log('Sending request to: ' . $url);
+    error_log('Payload: ' . json_encode($payload));
+    error_log('Prefer header: ' . $prefer_header);
+
+    $ch = curl_init($url);
     curl_setopt_array($ch, [
-        CURLOPT_URL => SUPABASE_URL . '/rest/v1/blood_collection',
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CUSTOMREQUEST => 'POST',
-        CURLOPT_POSTFIELDS => json_encode($data),
+        CURLOPT_POSTFIELDS => json_encode($payload),
         CURLOPT_HTTPHEADER => [
             'apikey: ' . SUPABASE_API_KEY,
             'Authorization: Bearer ' . SUPABASE_API_KEY,
             'Content-Type: application/json',
-            'Prefer: return=representation'
+            'Prefer: ' . $prefer_header
         ]
     ]);
 
@@ -333,29 +179,37 @@ try {
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if ($http_code === 201) {
-        // Parse the response to get the blood collection ID
-        $collection_response = json_decode($response, true);
-        $blood_collection_id = $collection_response[0]['blood_collection_id'] ?? null;
-        
-        if ($blood_collection_id) {
-            // Eligibility and blood bank unit creation are handled by DB triggers
-        }
-        
+    if ($http_code >= 200 && $http_code < 300) {
+        $result = json_decode($response, true);
+        $blood_collection_id = $result[0]['blood_collection_id'] ?? null;
+
         echo json_encode([
             'success' => true,
-            'message' => 'Blood collection recorded successfully',
+            'message' => 'Blood collection ' . (!empty($existing) ? 'updated' : 'created') . ' successfully',
             'blood_collection_id' => $blood_collection_id
         ]);
     } else {
-        throw new Exception('Failed to save blood collection data: ' . $response);
+        throw new Exception('Failed to ' . (!empty($existing) ? 'update' : 'create') . ' blood collection: ' . $response);
     }
 
 } catch (Exception $e) {
+    $unexpected_output = ob_get_clean();
+    if ($unexpected_output) {
+        error_log('Unexpected output before error: ' . $unexpected_output);
+    }
+
     http_response_code(400);
     echo json_encode([
         'success' => false,
-        'error' => $e->getMessage()
+        'error' => $e->getMessage(),
+        'debug_info' => [
+            'unexpected_output' => $unexpected_output ?: null,
+            'error_trace' => $e->getTraceAsString()
+        ]
     ]);
+} finally {
+    if (ob_get_level() > 0) {
+        ob_end_clean();
+    }
 }
-?> 
+?>

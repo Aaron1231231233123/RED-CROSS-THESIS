@@ -14,10 +14,10 @@ if (!isset($_GET['physical_exam_id']) || empty($_GET['physical_exam_id'])) {
 $physical_exam_id = $_GET['physical_exam_id'];
 
 try {
-    // Fetch physical examination details
+    // Fetch physical examination details with screening form data
     $ch = curl_init();
     curl_setopt_array($ch, [
-        CURLOPT_URL => SUPABASE_URL . '/rest/v1/physical_examination?physical_exam_id=eq.' . urlencode($physical_exam_id) . '&select=*',
+        CURLOPT_URL => SUPABASE_URL . '/rest/v1/physical_examination?physical_exam_id=eq.' . urlencode($physical_exam_id) . '&select=*,screening_form!inner(*)',
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
             'apikey: ' . SUPABASE_API_KEY,

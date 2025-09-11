@@ -1769,10 +1769,7 @@ $donor_history = $unique_donor_history;
         }
         
         #physicalExaminationModal .modal-footer {
-            background-color: white;
-            border-top: 1px solid #e9ecef;
-            border-radius: 0 0 15px 15px;
-            padding: 1.5rem;
+            display: none !important;
         }
         
         #physicalExaminationModal .card {
@@ -2010,7 +2007,8 @@ $donor_history = $unique_donor_history;
                                             <td><?php echo isset($entry['first_name']) ? htmlspecialchars($entry['first_name']) : ''; ?></td>
                                             <td><?php echo isset($entry['interviewer']) ? htmlspecialchars($entry['interviewer']) : 'N/A'; ?></td>
                                             <td><span class="<?php echo stripos($entry['donor_type'],'returning')===0 ? 'type-returning' : 'type-new'; ?>"><?php echo htmlspecialchars($entry['donor_type']); ?></span></td>
-                                            <td>
+                                            <td class="text-center">
+                                                <div>
                                                 <?php 
                                                     $status = $entry['status'] ?? '-';
                                                     $lower = strtolower($status);
@@ -2023,11 +2021,12 @@ $donor_history = $unique_donor_history;
                                                         echo '<strong>' . htmlspecialchars($status) . '</strong>';
                                                     }
                                                 ?>
+                                                </div>
                                             </td>
                                             <td><span class="badge-tag badge-registered <?php echo strtolower($entry['registered_via'])==='mobile' ? 'badge-mobile' : 'badge-system'; ?>"><?php echo htmlspecialchars($entry['registered_via']); ?></span></td>
                                             <td>
                                                 <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" 
-                                                        data-donor-id="<?php echo $entry['donor_id']; ?>" 
+                                                        onclick="checkAndShowDonorStatus('<?php echo $entry['donor_id']; ?>')"
                                                         title="View Details"
                                                         style="width: 35px; height: 30px;">
                                                     <i class="fas fa-eye"></i>
@@ -2103,10 +2102,10 @@ $donor_history = $unique_donor_history;
                 </div>
                 <div class="d-flex gap-2">
                     <button type="button" class="btn" id="proceedToMedicalHistory" style="background-color: #b22222; color: white; border: none;">
-                        <i class="fas fa-clipboard-list me-1"></i>Review Medical History
+                        <i class="fas fa-clipboard-list me-1"></i>Proceed to Medical History
                     </button>
-                    <button type="button" class="btn btn-warning" id="markReviewFromMain" style="border: none; color: #8a5e00;">
-                        <i class="fas fa-flag me-1"></i>Mark for Medical Review
+                    <button type="button" class="btn" id="markReviewFromMain" style="background-color: #ffc107; border: 1px solid #ffc107; color: #212529; font-weight: 600; border-radius: 6px; padding: 0.5rem 1rem; transition: all 0.3s ease;">
+                        <i class="fas fa-flag me-2"></i>Mark for Medical Review
                     </button>
                 </div>
             </div>
@@ -2165,7 +2164,9 @@ $donor_history = $unique_donor_history;
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-primary" id="markReturningReviewBtn">Mark for Medical Review</button>
+                    <button type="button" class="btn" id="markReturningReviewBtn" style="background-color: #ffc107; border: 1px solid #ffc107; color: #212529; font-weight: 600; border-radius: 6px; padding: 0.5rem 1rem; transition: all 0.3s ease;">
+                        <i class="fas fa-flag me-2"></i>Mark for Medical Review
+                    </button>
             </div>
         </div>
     </div>
@@ -2197,9 +2198,12 @@ $donor_history = $unique_donor_history;
     <div class="modal fade" id="medicalHistoryModal" tabindex="-1" aria-labelledby="medicalHistoryModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="medicalHistoryModalLabel">Medical History Form</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;">
+                    <h5 class="modal-title" id="medicalHistoryModalLabel">
+                        <i class="fas fa-clipboard-list me-2"></i>
+                        Medical History Form
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body" id="medicalHistoryModalContent">
                     <div class="d-flex justify-content-center">
@@ -2207,6 +2211,7 @@ $donor_history = $unique_donor_history;
                             <span class="visually-hidden">Loading...</span>
                         </div>
                     </div>
+                    <input type="hidden" id="modalSelectedAction" name="modalSelectedAction" value="">
                 </div>
             </div>
         </div>
@@ -2216,9 +2221,9 @@ $donor_history = $unique_donor_history;
     <div class="modal fade" id="declarationFormModal" tabindex="-1" aria-labelledby="declarationFormModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header">
+                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;">
                     <h5 class="modal-title" id="declarationFormModalLabel">Declaration Form</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body" id="declarationFormModalContent">
                     <div class="d-flex justify-content-center">
@@ -2240,23 +2245,10 @@ $donor_history = $unique_donor_history;
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p>Please confirm the outcome of this screening.</p>
-                    <div class="form-check">
-                        <input class="form-check-input" type="radio" name="screeningOutcome" id="approveOption" value="approve" checked>
-                        <label class="form-check-label" for="approveOption">
-                            Approve for Donation
-                        </label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="radio" name="screeningOutcome" id="draftOption" value="draft">
-                        <label class="form-check-label" for="draftOption">
-                            Save as Draft
-                        </label>
-                    </div>
+                    <p>Donor approved for donation and forwarded to physician for physical examination. Proceed to print the donor declaration form and hand it to the donor.</p>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-success" id="confirmProcessingBtn">Confirm</button>
+                    <button type="button" class="btn btn-success" id="confirmProcessingBtn">Initial Screening</button>
                 </div>
             </div>
         </div>
@@ -2295,12 +2287,48 @@ $donor_history = $unique_donor_history;
         </div>
     </div>
 
+    <!-- Eligibility Alert Modal -->
+    <div class="modal fade" id="eligibilityAlertModal" tabindex="-1" aria-labelledby="eligibilityAlertLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div id="eligibilityAlertTitle" class="modal-header" style="color: white;">
+                    <h5 class="modal-title" id="eligibilityAlertLabel"></h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div id="eligibilityAlertContent" class="modal-body py-4">
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        #eligibilityAlertModal .modal-content {
+            border-radius: 15px;
+            border: none;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        #eligibilityAlertModal .modal-header {
+            border-radius: 15px 15px 0 0;
+            border: none;
+        }
+        #eligibilityAlertModal .modal-body {
+            font-size: 1.1rem;
+            line-height: 1.5;
+        }
+        #eligibilityAlertModal .btn-close-white {
+            opacity: 1;
+        }
+    </style>
+
     <!-- Review Confirmation Modal -->
     <div class="modal fade" id="reviewConfirmModal" tabindex="-1" aria-labelledby="reviewConfirmLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header" style="background:#8b0000;color:#fff;">
-                    <h5 class="modal-title" id="reviewConfirmLabel">Review Medical History</h5>
+                    <h5 class="modal-title" id="reviewConfirmLabel">Proceed to Medical History</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -2445,7 +2473,7 @@ $donor_history = $unique_donor_history;
                             const proceedButton = getProceedButton();
                             if (proceedButton && proceedButton.style) {
                                 proceedButton.style.display = 'none';
-                                proceedButton.textContent = 'Review Medical History';
+                                proceedButton.textContent = 'Proceed to Medical History';
                             }
                             deferralStatusModal.show();
                             fetchDonorStatusInfo(donorId);
@@ -2469,7 +2497,7 @@ $donor_history = $unique_donor_history;
                             const proceedButton = getProceedButton();
                             if (proceedButton && proceedButton.style) {
                                 proceedButton.style.display = 'inline-block';
-                                proceedButton.textContent = 'Review Medical History';
+                                proceedButton.textContent = 'Proceed to Medical History';
                             }
                             if (markReviewFromMain) markReviewFromMain.style.display = 'none';
                         deferralStatusModal.show();
@@ -2637,44 +2665,27 @@ $donor_history = $unique_donor_history;
             
             // Function to fetch donor status information
             function fetchDonorStatusInfo(donorId) {
-                console.log('fetchDonorStatusInfo called with donorId:', donorId);
-                
                 // First, fetch donor information
                 fetch('../../assets/php_func/fetch_donor_info.php?donor_id=' + donorId)
-                    .then(response => {
-                        console.log('fetch_donor_info response:', response);
-                        return response.json();
-                    })
+                    .then(response => response.json())
                     .then(donorData => {
-                        console.log('fetch_donor_info data:', donorData);
-                        if (donorData.debug_info) {
-                            console.log('=== NEEDS_REVIEW DEBUG INFO ===');
-                            donorData.debug_info.forEach(info => console.log(info));
-                            console.log('=== END DEBUG INFO ===');
-                        }
                         // Next, check physical examination table for deferral status
                         fetch('../../assets/php_func/check_deferral_status.php?donor_id=' + donorId)
-                            .then(response => {
-                                console.log('check_deferral_status response:', response);
-                                return response.json();
-                            })
+                            .then(response => response.json())
                             .then(deferralData => {
-                                console.log('check_deferral_status data:', deferralData);
                                 displayDonorInfo(donorData, deferralData);
                                 
                                 // After getting deferral info, fetch screening info
                                 fetch('../../assets/php_func/fetch_screening_info.php?donor_id=' + donorId)
                                     .then(response => response.json())
                                     .then(() => {})
-                                    .catch(error => { console.error("Error fetching screening info:", error); });
+                                    .catch(error => { /* Silent error handling */ });
                             })
                             .catch(error => {
-                                console.error("Error checking deferral status:", error);
                                 deferralStatusContent.innerHTML = `<div class="alert alert-danger">Error checking deferral status: ${error.message}</div>`;
                             });
                     })
                     .catch(error => {
-                        console.error("Error fetching donor info:", error);
                         deferralStatusContent.innerHTML = `<div class="alert alert-danger">Error fetching donor information: ${error.message}</div>`;
                     });
             }
@@ -2688,8 +2699,6 @@ $donor_history = $unique_donor_history;
                 window.currentDonorData = donorData;
                 
                 // Debug logging
-                console.log('displayDonorInfo called with:', { donorData, deferralData });
-                console.log('donorData structure:', JSON.stringify(donorData, null, 2));
                 
                 // Check if we have donor data, regardless of success field
                 if (donorData && (donorData.success || donorData.data)) {
@@ -2840,12 +2849,10 @@ $donor_history = $unique_donor_history;
                                 fitnessResult = 'Eligible';
                             }
                             
-                            // Remarks - use disapproval reason or donor reaction
-                            let remarks = '-';
-                            if (eligibility.disapproval_reason) {
-                                remarks = eligibility.disapproval_reason;
-                            } else if (eligibility.donor_reaction) {
-                                remarks = eligibility.donor_reaction;
+                            // Remarks - show Approved if both medical_history_id and screening_form_id exist
+                            let remarks = 'Pending';
+                            if (eligibility.medical_history_id && eligibility.screening_id) {
+                                remarks = 'Approved';
                             }
                             
                             // Get physician name from physical_examination table
@@ -2854,7 +2861,8 @@ $donor_history = $unique_donor_history;
                                 physician = eligibility.physical_examination.physician;
                             }
                             
-                             assessmentRows += `
+                             console.log('Eligibility record:', eligibility);
+                            assessmentRows += `
                                  <tr>
                                      <td class="text-center">${safe(examDate)}</td>
                                      <td class="text-center">${safe(vitalSigns)}</td>
@@ -2863,7 +2871,7 @@ $donor_history = $unique_donor_history;
                                      <td class="text-center">${safe(fitnessResult)}</td>
                                      <td class="text-center">${safe(remarks)}</td>
                                      <td class="text-center">
-                                         <button type="button" class="btn btn-sm btn-outline-primary" onclick="showDonorInformationMedicalModal('${eligibility.eligibility_id}')" title="View Donor Medical Information">
+                                         <button type="button" class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); event.preventDefault(); showPhysicalExaminationModal('${eligibility.eligibility_id}');" title="View Physical Examination Results">
                                              <i class="fas fa-eye"></i>
                                          </button>
                                      </td>
@@ -2900,9 +2908,7 @@ $donor_history = $unique_donor_history;
                     let donationRows = '';
                     
                     // Add a new empty row at the TOP if needs_review is true (for pending review)
-                    console.log('Checking needs_review:', donor.needs_review, 'Type:', typeof donor.needs_review);
                     if (donor.needs_review === true || donor.needs_review === 'true' || donor.needs_review === 1) {
-                        console.log('Adding needs_review row');
                          donationRows += `
                              <tr>
                                  <td class="text-center">-</td>
@@ -3083,14 +3089,113 @@ $donor_history = $unique_donor_history;
             // Handle proceed button click with confirmation
             function openMedicalHistoryForCurrentDonor() {
                 if (!currentDonorId) return;
-                const isNew = (window.currentDonorType || '').toLowerCase().startsWith('new');
-                if (isNew) {
-                    // Skip physical examination for New donors
-                    proceedToMedicalHistoryModal();
-                    return;
+                
+                // Show confirmation modal before proceeding
+                showProcessMedicalHistoryConfirmation();
+            }
+            
+            // Show confirmation modal for processing medical history
+            function showProcessMedicalHistoryConfirmation() {
+                const message = 'This will redirect you to the medical history the donor just submitted. Do you want to proceed?';
+                
+                // Create confirmation modal matching the Submit Medical History design
+                const modalHTML = `
+                    <div id="processMedicalHistoryModal" style="
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0,0,0,0.5);
+                        z-index: 99999;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    ">
+                        <div style="
+                            background: white;
+                            border-radius: 10px;
+                            max-width: 500px;
+                            width: 90%;
+                            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                            overflow: hidden;
+                        ">
+                            <div style="
+                                background: #9c0000;
+                                color: white;
+                                padding: 15px 20px;
+                                display: flex;
+                                justify-content: space-between;
+                                align-items: center;
+                            ">
+                                <h5 style="margin: 0; font-weight: bold;">
+                                    Process Medical History
+                                </h5>
+                                <button onclick="closeProcessMedicalHistoryModal()" style="
+                                    background: none;
+                                    border: none;
+                                    color: white;
+                                    font-size: 20px;
+                                    cursor: pointer;
+                                ">&times;</button>
+                            </div>
+                            <div style="padding: 20px;">
+                                <p style="font-size: 14px; line-height: 1.5; margin-bottom: 20px; color: #333;">${message}</p>
+                                <div style="text-align: right; display: flex; gap: 10px; justify-content: flex-end;">
+                                    <button onclick="closeProcessMedicalHistoryModal()" style="
+                                        background: #6c757d;
+                                        color: white;
+                                        border: none;
+                                        padding: 8px 20px;
+                                        border-radius: 4px;
+                                        cursor: pointer;
+                                        font-size: 14px;
+                                    ">Cancel</button>
+                                    <button onclick="confirmProcessMedicalHistory()" style="
+                                        background: #9c0000;
+                                        color: white;
+                                        border: none;
+                                        padding: 8px 20px;
+                                        border-radius: 4px;
+                                        cursor: pointer;
+                                        font-size: 14px;
+                                    ">Proceed</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Remove any existing modal
+                const existingModal = document.getElementById('processMedicalHistoryModal');
+                if (existingModal) {
+                    existingModal.remove();
                 }
-                // Show Physical Examination Results modal first for returning
-                showPhysicalExaminationModal(currentDonorId);
+                
+                // Add modal to page
+                document.body.insertAdjacentHTML('beforeend', modalHTML);
+                
+                // Set up confirmation function
+                window.confirmProcessMedicalHistory = function() {
+                    closeProcessMedicalHistoryModal();
+                    
+                    // Proceed with the original logic
+                    const isNew = (window.currentDonorType || '').toLowerCase().startsWith('new');
+                    if (isNew) {
+                        // Skip physical examination for New donors
+                        proceedToMedicalHistoryModal();
+                        return;
+                    }
+                    // Show Physical Examination Results modal first for returning
+                    showPhysicalExaminationModal(currentDonorId);
+                };
+                
+                window.closeProcessMedicalHistoryModal = function() {
+                    const modal = document.getElementById('processMedicalHistoryModal');
+                    if (modal) {
+                        modal.remove();
+                    }
+                };
             }
             
             
@@ -3219,6 +3324,10 @@ $donor_history = $unique_donor_history;
                 // Hide the deferral status modal first
                 deferralStatusModal.hide();
                 
+                // Reset initialization flags to ensure fresh initialization
+                window.editFunctionalityInitialized = false;
+                window.medicalHistoryQuestionsGenerated = false;
+                
                 // Show the medical history modal
                 const medicalHistoryModal = new bootstrap.Modal(document.getElementById('medicalHistoryModal'));
                 const modalContent = document.getElementById('medicalHistoryModalContent');
@@ -3248,15 +3357,35 @@ $donor_history = $unique_donor_history;
                                 }
                                 document.body.appendChild(newScript);
                             } catch (e) {
-                                console.log('Script execution error:', e);
+                                // Script execution error - silent
                             }
                         });
+                        
+                        // Add form submission interceptor to prevent submissions without proper action
+                        const form = document.getElementById('modalMedicalHistoryForm');
+                        if (form) {
+                            
+                            // Remove any existing submit event listeners
+                            const newForm = form.cloneNode(true);
+                            form.parentNode.replaceChild(newForm, form);
+                            
+                            // Add our controlled submit handler
+                            newForm.addEventListener('submit', function(e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                
+                                
+                                // For form submissions, always use quiet save
+                                saveFormDataQuietly();
+                                
+                                return false;
+                            });
+                        }
                         
                         // After loading content, generate the questions
                         generateMedicalHistoryQuestions();
                     })
                     .catch(error => {
-                        console.error('Error loading medical history form:', error);
                         modalContent.innerHTML = '<div class="alert alert-danger"><h6>Error Loading Form</h6><p>Unable to load the medical history form. Please try again.</p><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>';
                     });
             }
@@ -3346,12 +3475,16 @@ $donor_history = $unique_donor_history;
 
         // Function to generate medical history questions in the modal
         function generateMedicalHistoryQuestions() {
-            console.log("Starting to generate medical history questions...");
+            
+            // Prevent multiple initialization
+            if (window.medicalHistoryQuestionsGenerated) {
+                return;
+            }
+            window.medicalHistoryQuestionsGenerated = true;
             
             // Get data from the JSON script tag
             const modalDataScript = document.getElementById('modalData');
             if (!modalDataScript) {
-                console.error("Modal data script not found");
                 return;
             }
             
@@ -3359,21 +3492,15 @@ $donor_history = $unique_donor_history;
             try {
                 modalData = JSON.parse(modalDataScript.textContent);
             } catch (e) {
-                console.error("Error parsing modal data:", e);
                 return;
             }
             
-            console.log("Modal data:", modalData);
             
             const modalMedicalHistoryData = modalData.medicalHistoryData;
             const modalDonorSex = modalData.donorSex;
             const modalUserRole = modalData.userRole;
             const modalIsMale = modalDonorSex === 'male';
             
-            console.log("User role:", modalUserRole);
-            console.log("Donor sex:", modalDonorSex);
-            console.log("Is male:", modalIsMale);
-            console.log("Medical history data:", modalMedicalHistoryData);
             
             // Only make fields required for reviewers (who can edit)
             const modalIsReviewer = modalUserRole === 'reviewer';
@@ -3499,7 +3626,7 @@ $donor_history = $unique_donor_history;
                  
                  const stepContainer = document.querySelector(`[data-step-container="${step}"]`);
                  if (!stepContainer) {
-                     console.error(`Step container ${step} not found`);
+                     //console.error(`Step container ${step} not found`);
                      continue;
                  }
                  
@@ -3565,34 +3692,90 @@ $donor_history = $unique_donor_history;
                         select.setAttribute('data-originally-disabled', 'true');
                     });
                     
-                    console.log("Made form fields read-only for role:", modalUserRole);
+                    //console.log("Made form fields read-only for role:", modalUserRole);
                     
                     // Initialize edit functionality after fields are made read-only
-                    console.log('🔄 Calling initializeEditFunctionality after making fields read-only...');
-                    
-                    // Wait a bit more to ensure the modal content JavaScript has executed
-                    setTimeout(() => {
-                        if (window.initializeEditFunctionality) {
-                            console.log('✅ Found initializeEditFunctionality, calling it...');
-                            window.initializeEditFunctionality();
-                        } else {
-                            console.log('❌ window.initializeEditFunctionality is still not available');
-                            console.log('Available window functions:', Object.keys(window).filter(key => key.includes('initialize')));
-                        }
-                    }, 50);
+                    //console.log('🔄 Initializing edit functionality...');
+                    initializeEditFunctionality();
                 }, 100);
             } else {
                 // For reviewers, initialize edit functionality immediately
-                console.log('🔄 Calling initializeEditFunctionality for reviewer role...');
-                setTimeout(() => {
-                    if (window.initializeEditFunctionality) {
-                        console.log('✅ Found initializeEditFunctionality for reviewer, calling it...');
-                        window.initializeEditFunctionality();
-                    } else {
-                        console.log('❌ window.initializeEditFunctionality is not available for reviewer');
-                    }
-                }, 50);
+                //console.log('🔄 Initializing edit functionality for reviewer...');
+                initializeEditFunctionality();
             }
+        }
+        
+        // Single edit functionality function to avoid duplicates
+        function initializeEditFunctionality() {
+            //console.log('Initializing edit functionality...');
+            
+            // Remove any existing event listeners to prevent duplicates
+            if (window.editFunctionalityInitialized) {
+                //console.log('Edit functionality already initialized, skipping...');
+                return;
+            }
+            window.editFunctionalityInitialized = true;
+            
+            // Add event listener for edit buttons
+            document.addEventListener('click', function(e) {
+                if (e.target && (e.target.classList.contains('edit-button') || e.target.closest('.edit-button'))) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    //console.log('Edit button clicked - enabling form fields');
+                    
+                    // Enable all form fields
+                    const form = document.getElementById('modalMedicalHistoryForm');
+                    if (form) {
+                        // Enable radio buttons
+                        form.querySelectorAll('input[type="radio"]').forEach(radio => {
+                            radio.disabled = false;
+                            radio.removeAttribute('data-originally-disabled');
+                        });
+                        
+                        // Enable select fields
+                        form.querySelectorAll('select.remarks-input').forEach(select => {
+                            select.disabled = false;
+                            select.removeAttribute('data-originally-disabled');
+                        });
+                        
+                        // Enable text inputs
+                        form.querySelectorAll('input[type="text"]').forEach(input => {
+                            input.readOnly = false;
+                            input.removeAttribute('data-originally-readonly');
+                        });
+                        
+                        //console.log('Form fields enabled for editing');
+                        
+                        // Hide edit button and show save button if they exist
+                        const editButton = e.target.classList.contains('edit-button') ? e.target : e.target.closest('.edit-button');
+                        if (editButton) {
+                            editButton.style.display = 'none';
+                        }
+                        
+                        // Show save button if it exists
+                        const saveButton = form.querySelector('.save-button');
+                        if (saveButton) {
+                            saveButton.style.display = 'inline-block';
+                        }
+                    }
+                    
+                    return false;
+                }
+            });
+            
+            // Add event listener for save buttons
+            document.addEventListener('click', function(e) {
+                if (e.target && (e.target.classList.contains('save-button') || e.target.textContent?.trim() === 'Save')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    //console.log('Save button clicked');
+                    saveFormDataQuietly(); // Use quiet save function
+                    
+                    return false;
+                }
+            });
         }
         
         // Initialize step navigation for the modal
@@ -3662,7 +3845,12 @@ $donor_history = $unique_donor_history;
                 if (currentStep === totalSteps) {
                     if (userRole === 'reviewer') {
                         nextButton.innerHTML = 'DECLINE';
-                        nextButton.onclick = () => submitModalForm('decline');
+                        nextButton.onclick = (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            submitModalForm('decline');
+                            return false;
+                        };
                         
                         // Add approve button
                         if (!document.getElementById('modalApproveButton')) {
@@ -3670,21 +3858,34 @@ $donor_history = $unique_donor_history;
                             approveBtn.className = 'next-button';
                             approveBtn.innerHTML = 'APPROVE';
                             approveBtn.id = 'modalApproveButton';
-                            approveBtn.onclick = () => submitModalForm('approve');
+                            approveBtn.onclick = (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                submitModalForm('approve');
+                                return false;
+                            };
                             nextButton.parentNode.appendChild(approveBtn);
                         }
                     } else {
                         nextButton.innerHTML = 'NEXT';
-                        nextButton.onclick = () => submitModalForm('next');
+                        nextButton.onclick = (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            submitModalForm('next');
+                            return false;
+                        };
                     }
                 } else {
                     nextButton.innerHTML = 'Next →';
-                    nextButton.onclick = () => {
+                    nextButton.onclick = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                         if (validateCurrentModalStep()) {
                             currentStep++;
                             updateStepDisplay();
                             errorMessage.style.display = 'none';
                         }
+                        return false;
                     };
                     
                     // Remove approve button if it exists
@@ -3745,7 +3946,7 @@ $donor_history = $unique_donor_history;
             } else if (action === 'decline') {
                 message = 'Are you sure you want to decline this donor?';
             } else if (action === 'next') {
-                message = 'Do you want to proceed to the declaration form?';
+                message = 'Please confirm if the donor is ready for the next step based on the medical history interview, and proceed with Initial Screening.';
             }
             
             // Use custom confirmation instead of browser confirm
@@ -3761,13 +3962,135 @@ $donor_history = $unique_donor_history;
             }
         }
         
+        // Quiet save function - just updates the database without any UI changes
+        function saveFormDataQuietly() {
+            //console.log('Saving edited data...');
+            
+            const form = document.getElementById('modalMedicalHistoryForm');
+            if (!form) {
+                //console.error('modalMedicalHistoryForm not found');
+                return;
+            }
+            
+            const formData = new FormData(form);
+            
+            // Set action to 'next' for saving without approval changes
+            formData.set('action', 'next');
+            formData.set('modalSelectedAction', 'next');
+            
+            // Make a quiet AJAX request to save the data
+            fetch('../../src/views/forms/medical-history-process.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    //console.log('Data saved successfully');
+                    // Optionally show a small success indicator
+                    showQuietSuccessMessage();
+                } else {
+                    //console.error('Save failed:', data.message);
+                    // Show error message
+                    showQuietErrorMessage(data.message || 'Save failed');
+                }
+            })
+            .catch(error => {
+                //console.error('Save error:', error);
+                showQuietErrorMessage('Network error occurred');
+            });
+        }
+        
+        // Show a small, non-intrusive success message
+        function showQuietSuccessMessage() {
+            // Create a small toast-like message
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #28a745;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 5px;
+                font-size: 14px;
+                z-index: 10000;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            `;
+            toast.textContent = 'Changes saved';
+            document.body.appendChild(toast);
+            
+            // Show and auto-hide
+            setTimeout(() => toast.style.opacity = '1', 10);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => document.body.removeChild(toast), 300);
+            }, 2000);
+        }
+        
+        // Show a small, non-intrusive error message
+        function showQuietErrorMessage(message) {
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #dc3545;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 5px;
+                font-size: 14px;
+                z-index: 10000;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            `;
+            toast.textContent = 'Error: ' + message;
+            document.body.appendChild(toast);
+            
+            // Show and auto-hide
+            setTimeout(() => toast.style.opacity = '1', 10);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => document.body.removeChild(toast), 300);
+            }, 4000);
+        }
+
         // Separate function to handle the actual form submission
         function processFormSubmission(action) {
-                document.getElementById('modalSelectedAction').value = action;
+                // Set the action - if no action provided, default to 'next' for saving
+                const finalAction = action || 'next';
+                
+                //console.log('processFormSubmission called with action:', action, 'final action:', finalAction);
+                
+                // Try to set the modalSelectedAction if it exists
+                const modalSelectedActionInput = document.getElementById('modalSelectedAction');
+                if (modalSelectedActionInput) {
+                    modalSelectedActionInput.value = finalAction;
+                    //console.log('Set modalSelectedAction to:', finalAction);
+                } else {
+                    //console.log('modalSelectedAction input not found');
+                }
                 
                 // Submit the form via AJAX
                 const form = document.getElementById('modalMedicalHistoryForm');
+                if (!form) {
+                    //console.error('modalMedicalHistoryForm not found');
+                    return;
+                }
+                
                 const formData = new FormData(form);
+                
+                // Make sure the action is set in the form data - this is the key fix
+                formData.set('action', finalAction);
+                formData.set('modalSelectedAction', finalAction);
+                
+                //console.log('Form data being sent:');
+                for (let [key, value] of formData.entries()) {
+                    if (key.includes('action')) {
+                        //console.log(key + ':', value);
+                    }
+                }
                 
                 fetch('../../src/views/forms/medical-history-process.php', {
                     method: 'POST',
@@ -3839,7 +4162,7 @@ $donor_history = $unique_donor_history;
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
+                    //console.error('Error:', error);
                     // Use custom modal instead of browser alert
                     if (window.customConfirm) {
                         window.customConfirm('An error occurred while processing the form.', function() {
@@ -3853,14 +4176,23 @@ $donor_history = $unique_donor_history;
         
         // Function to show screening form modal
         function showScreeningFormModal(donorId) {
-            console.log('Showing screening form modal for donor ID:', donorId);
+            //console.log('Showing screening form modal for donor ID:', donorId);
             
             // Set donor data for the screening form
             window.currentDonorData = { donor_id: donorId };
             
-            // Show the screening form modal
-            const screeningModal = new bootstrap.Modal(document.getElementById('screeningFormModal'));
+            // Show the screening form modal with static backdrop
+            const screeningModalElement = document.getElementById('screeningFormModal');
+            const screeningModal = new bootstrap.Modal(screeningModalElement, {
+                backdrop: 'static',
+                keyboard: false
+            });
             screeningModal.show();
+            
+            // Prevent modal from closing when clicking on content
+            screeningModalElement.addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
             
             // Set the donor ID in the screening form
             const donorIdInput = document.querySelector('#screeningFormModal input[name="donor_id"]');
@@ -3876,7 +4208,7 @@ $donor_history = $unique_donor_history;
         
         // Function to show declaration form modal
         window.showDeclarationFormModal = function(donorId) {
-            console.log('Showing declaration form modal for donor ID:', donorId);
+            //console.log('Showing declaration form modal for donor ID:', donorId);
             
             const declarationModal = new bootstrap.Modal(document.getElementById('declarationFormModal'));
             const modalContent = document.getElementById('declarationFormModalContent');
@@ -3898,19 +4230,19 @@ $donor_history = $unique_donor_history;
             // Load the declaration form content
             fetch('../../src/views/forms/declaration-form-modal-content.php?donor_id=' + donorId)
                 .then(response => {
-                    console.log('Declaration form response status:', response.status);
+                    //console.log('Declaration form response status:', response.status);
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
                     return response.text();
                 })
                 .then(data => {
-                    console.log('Declaration form content loaded successfully');
+                    //console.log('Declaration form content loaded successfully');
                     modalContent.innerHTML = data;
                     
                     // Ensure print function is available globally
                     window.printDeclaration = function() {
-                        console.log('Print function called');
+                        //console.log('Print function called');
                         const printWindow = window.open('', '_blank');
                         const content = document.querySelector('.declaration-header').outerHTML + 
                                        document.querySelector('.donor-info').outerHTML + 
@@ -3930,13 +4262,16 @@ $donor_history = $unique_donor_history;
                                     }
                                     .declaration-header { 
                                         text-align: center; 
-                                        margin-bottom: 30px; 
-                                        border-bottom: 2px solid #9c0000;
+                                        margin-bottom: 30px;
+                                        padding: 20px;
+                                        background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+                                        color: white;
                                         padding-bottom: 20px;
                                     }
                                     .declaration-header h2, .declaration-header h3 { 
-                                        color: #9c0000; 
-                                        margin: 5px 0; 
+                                        color: white; 
+                                        margin: 5px 0;
+                                        text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
                                         font-weight: bold;
                                     }
                                     .donor-info { 
@@ -4010,22 +4345,26 @@ $donor_history = $unique_donor_history;
                     
                     // Ensure submit function is available globally
                     window.submitDeclarationForm = function() {
-                        console.log('Submit declaration form called');
-                        
                         // Close declaration form modal
                         const declarationModal = bootstrap.Modal.getInstance(document.getElementById('declarationFormModal'));
                         if (declarationModal) {
                             declarationModal.hide();
                         }
                         
-                        // Show data processing confirmation modal
-                        const dataProcessingModal = new bootstrap.Modal(document.getElementById('dataProcessingConfirmModal'));
-                        dataProcessingModal.show();
+                        // Close any other modals that might be open
+                        const screeningSuccessModal = bootstrap.Modal.getInstance(document.getElementById('screeningSuccessModal'));
+                        if (screeningSuccessModal) {
+                            screeningSuccessModal.hide();
+                        }
+                        
+                        // Reload the page after a short delay to ensure modals are closed
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 300);
                         
                         // Handle confirmation button click
                         document.getElementById('confirmProcessingBtn').onclick = function() {
-                            const selectedOutcome = document.querySelector('input[name="screeningOutcome"]:checked').value;
-                            console.log('Selected outcome:', selectedOutcome);
+                            //console.log('Proceeding to Initial Screening');
                             
                             // Close confirmation modal
                             dataProcessingModal.hide();
@@ -4056,46 +4395,17 @@ $donor_history = $unique_donor_history;
                             .then(response => response.json())
                             .then(data => {
                                 if (data.success) {
-                                    // Show success message based on outcome
-                                    if (selectedOutcome === 'approve') {
-                                        // Use custom modal instead of browser alert
-                                        if (window.customConfirm) {
-                                            // Add a longer delay to ensure the modal shows and DOM is ready
-                                            setTimeout(() => {
-                                                window.customConfirm('Donor approved for donation and forwarded to physician for physical examination. Proceed to print the donor declaration form and hand it to the donor.', function() {
-                                                    // Force complete page reload after user clicks OK
-                                                    window.location.href = window.location.href;
-                                                });
-                                            }, 500);
-                                        } else {
-                                            console.log('Custom modal not available, using fallback alert');
-                                            alert('Donor approved for donation and forwarded to physician for physical examination. Proceed to print the donor declaration form and hand it to the donor.');
+                                    // Always approve - no more draft option
+                                    //console.log('Registration complete, reloading page...');
+                                    
                                     // Force complete page reload
                                     window.location.href = window.location.href;
-                                        }
-                                    } else {
-                                        // Use custom modal instead of browser alert
-                                        if (window.customConfirm) {
-                                            window.customConfirm('Donor registration saved as draft successfully!', function() {
-                                                // Force complete page reload after user clicks OK
-                                                window.location.href = window.location.href;
-                                            });
-                                        } else {
-                                            alert('Donor registration saved as draft successfully!');
-                                            // Force complete page reload
-                                            window.location.href = window.location.href;
-                                        }
-                                    }
-                                    console.log('Registration complete, reloading page...');
-                                    
-                                    // Remove the automatic reload since we handle it in the modal callback
-                                    // window.location.href = window.location.href;
                                 } else {
                                     alert('Error: ' + (data.message || 'Unknown error occurred'));
                                 }
                             })
                             .catch(error => {
-                                console.error('Error:', error);
+                                //console.error('Error:', error);
                                 // Use custom modal instead of browser alert
                                 if (window.customConfirm) {
                                     window.customConfirm('An error occurred while processing the form.', function() {
@@ -4109,7 +4419,7 @@ $donor_history = $unique_donor_history;
                     };
                 })
                 .catch(error => {
-                    console.error('Error loading declaration form:', error);
+                    //console.error('Error loading declaration form:', error);
                     modalContent.innerHTML = `
                         <div class="alert alert-danger text-center" style="margin: 50px 20px;">
                             <h5 class="alert-heading">
@@ -4167,7 +4477,7 @@ $donor_history = $unique_donor_history;
         
         // Custom confirmation function to replace browser confirm
         function customConfirm(message, onConfirm) {
-            // Create a simple modal without Bootstrap
+            // Create a simple modal matching the Submit Medical History design
             const modalHTML = `
                 <div id="simpleCustomModal" style="
                     position: fixed;
@@ -4183,25 +4493,22 @@ $donor_history = $unique_donor_history;
                 ">
                     <div style="
                         background: white;
-                        padding: 30px;
                         border-radius: 10px;
                         max-width: 500px;
                         width: 90%;
                         box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                        overflow: hidden;
                     ">
                         <div style="
                             background: #9c0000;
                             color: white;
                             padding: 15px 20px;
-                            margin: -30px -30px 20px -30px;
-                            border-radius: 10px 10px 0 0;
                             display: flex;
                             justify-content: space-between;
                             align-items: center;
                         ">
-                            <h5 style="margin: 0;">
-                                <i class="fas fa-question-circle me-2"></i>
-                                Confirm Action
+                            <h5 style="margin: 0; font-weight: bold;">
+                                Submit Medical History
                             </h5>
                             <button onclick="closeSimpleModal()" style="
                                 background: none;
@@ -4211,25 +4518,19 @@ $donor_history = $unique_donor_history;
                                 cursor: pointer;
                             ">&times;</button>
                         </div>
-                        <p style="font-size: 16px; line-height: 1.5; margin-bottom: 25px;">${message}</p>
-                        <div style="text-align: right;">
-                            <button onclick="closeSimpleModal()" style="
-                                background: #6c757d;
-                                color: white;
-                                border: none;
-                                padding: 10px 25px;
-                                border-radius: 6px;
-                                margin-right: 10px;
-                                cursor: pointer;
-                            ">Cancel</button>
-                            <button onclick="confirmSimpleModal()" style="
-                                background: #9c0000;
-                                color: white;
-                                border: none;
-                                padding: 10px 25px;
-                                border-radius: 6px;
-                                cursor: pointer;
-                            ">Yes, Proceed</button>
+                        <div style="padding: 20px;">
+                            <p style="font-size: 14px; line-height: 1.5; margin-bottom: 20px; color: #333;">${message}</p>
+                            <div style="text-align: right;">
+                                <button onclick="confirmSimpleModal()" style="
+                                    background: #9c0000;
+                                    color: white;
+                                    border: none;
+                                    padding: 8px 20px;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                    font-size: 14px;
+                                ">Initial Screening</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -4369,6 +4670,70 @@ $donor_history = $unique_donor_history;
         #screeningDeferButton:focus {
             box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
         }
+        
+        /* Mark for Medical Review button styling */
+        #markReviewFromMain:hover,
+        #markReturningReviewBtn:hover {
+            background-color: #e0a800 !important;
+            border-color: #d39e00 !important;
+            color: #212529 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(255, 193, 7, 0.3);
+        }
+        
+        #markReviewFromMain:focus,
+        #markReturningReviewBtn:focus {
+            box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.25);
+            outline: none;
+        }
+        
+        #markReviewFromMain:active,
+        #markReturningReviewBtn:active {
+            background-color: #d39e00 !important;
+            border-color: #c69500 !important;
+            transform: translateY(0);
+        }
+        
+        /* Fix for screening form modal backdrop issues */
+        #screeningFormModal {
+            z-index: 1055 !important;
+        }
+        
+        #screeningFormModal .modal-dialog {
+            position: relative;
+            z-index: 1056 !important;
+            pointer-events: auto;
+        }
+        
+        #screeningFormModal .modal-content {
+            position: relative;
+            z-index: 1057 !important;
+            pointer-events: auto;
+            border: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        #screeningFormModal .modal-body {
+            position: relative;
+            z-index: 1058 !important;
+            pointer-events: auto;
+        }
+        
+        #screeningFormModal .modal-footer {
+            position: relative;
+            z-index: 1059 !important;
+            pointer-events: auto;
+        }
+        
+        /* Ensure all form elements are clickable */
+        #screeningFormModal input,
+        #screeningFormModal select,
+        #screeningFormModal button,
+        #screeningFormModal .form-control {
+            position: relative;
+            z-index: 1060 !important;
+            pointer-events: auto;
+        }
     </style>
 
     <!-- Include Screening Form Modal -->
@@ -4483,7 +4848,7 @@ $donor_history = $unique_donor_history;
         // No additional initialization needed here
         
         // Global function to show physical examination modal
-        function showPhysicalExaminationModal(donorId) {
+        function showPhysicalExaminationModal(eligibilityId) {
             const physicalModal = new bootstrap.Modal(document.getElementById('physicalExaminationModal'));
             const modalContent = document.getElementById('physicalExaminationModalContent');
             
@@ -4493,27 +4858,23 @@ $donor_history = $unique_donor_history;
             // Show the modal
             physicalModal.show();
             
-            // Fetch physical examination data using donor_id
-            fetch('../../assets/php_func/fetch_physical_examination_info.php?donor_id=' + donorId)
+            // Fetch physical examination data from eligibility table joined with donor_form
+            fetch('../../assets/php_func/fetch_eligibility_physical_examination.php?eligibility_id=' + eligibilityId)
                 .then(response => response.json())
                 .then(data => {
-                    console.log('Physical examination API response:', data);
                     if (data.success && data.data) {
-                        console.log('Physical examination data:', data.data);
-                        console.log('Debug info:', data.debug);
-                        displayPhysicalExaminationInfo(data.data, donorId);
+                        // Show physical examination modal
+                        displayPhysicalExaminationInfo(data.data, eligibilityId);
                     } else {
-                        console.log('No data or error:', data);
                         modalContent.innerHTML = `
                             <div class="alert alert-info">
                                 <h6>No Physical Examination Data</h6>
-                                <p>This returning donor doesn't have physical examination records yet.</p>
-                                <p>You can proceed directly to medical history review.</p>
+                                <p>Unable to load physical examination information. Please try again.</p>
                             </div>`;
                     }
                 })
                 .catch(error => {
-                    console.error('Error fetching physical examination info:', error);
+                    //console.error('Error fetching physical examination info:', error);
                     modalContent.innerHTML = `
                         <div class="alert alert-danger">
                             <h6>Error Loading Data</h6>
@@ -4523,7 +4884,7 @@ $donor_history = $unique_donor_history;
         }
         
         // Global function to display physical examination information
-        function displayPhysicalExaminationInfo(physicalData, donorId) {
+        function displayPhysicalExaminationInfo(physicalData, eligibilityId) {
             const modalContent = document.getElementById('physicalExaminationModalContent');
             
             // Format date
@@ -4596,11 +4957,13 @@ $donor_history = $unique_donor_history;
                         <div class="row g-2">
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Interviewer Remarks</label>
-                                <div class="form-control-plaintext bg-light p-2 rounded">${safe(physicalData.reason || 'N/A')}</div>
+                                <div class="form-control-plaintext bg-light p-2 rounded">
+                                    ${safe(physicalData.remarks || 'Pending')}
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Physical Exam Notes</label>
-                                <div class="form-control-plaintext bg-light p-2 rounded">${safe(physicalData.physical_exam_notes || 'N/A')}</div>
+                                <div class="form-control-plaintext bg-light p-2 rounded" style="white-space: pre-wrap;">${safe(physicalData.physical_exam_notes || 'N/A')}</div>
                             </div>
                         </div>
                         <div class="row g-3 mt-2">
@@ -4665,8 +5028,8 @@ $donor_history = $unique_donor_history;
             
             modalContent.innerHTML = physicalHTML;
             
-            // Store donor ID for the proceed button
-            modalContent.setAttribute('data-donor-id', donorId);
+            // Store eligibility ID for the proceed button
+            modalContent.setAttribute('data-eligibility-id', eligibilityId);
         }
     </script>
 
@@ -4685,6 +5048,119 @@ $donor_history = $unique_donor_history;
                 });
             }
         });
+    </script>
+
+    <script>
+        // Function to check if donor is new (no eligibility record)
+        function checkAndShowDonorStatus(donorId) {
+            // First check if donor has any eligibility records
+            fetch('../../assets/php_func/get_donor_eligibility_status.php?donor_id=' + donorId)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success || (data.data && data.data.status === 'new')) {
+                        // For new donors, just show the donor status modal
+                        showDonorStatusModal(donorId);
+                    } else {
+                        // For existing donors, show eligibility alert
+                        showDonorEligibilityAlert(donorId);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking eligibility:', error);
+                    // On error, default to showing donor status
+                    showDonorStatusModal(donorId);
+                });
+        }
+
+        // Function to show donor status modal
+        function showDonorStatusModal(donorId) {
+            // Set current donor ID
+            window.currentDonorId = donorId;
+
+            // Get the donor status modal
+            const deferralStatusModal = new bootstrap.Modal(document.getElementById('deferralStatusModal'));
+            const deferralStatusContent = document.getElementById('deferralStatusContent');
+            
+            // Show loading state
+            deferralStatusContent.innerHTML = `
+                <div class="d-flex justify-content-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>`;
+            
+            // Show modal
+            deferralStatusModal.show();
+
+            // Fetch and display donor info
+            fetch('../../assets/php_func/fetch_donor_info.php?donor_id=' + donorId)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayDonorInfo(data.data);
+                    } else {
+                        deferralStatusContent.innerHTML = `
+                            <div class="alert alert-danger">
+                                Failed to load donor information
+                            </div>`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching donor info:', error);
+                    deferralStatusContent.innerHTML = `
+                        <div class="alert alert-danger">
+                            An error occurred while loading donor information
+                        </div>`;
+                });
+        }
+
+        // Function to proceed after eligibility check
+        function proceedToDonorStatus(donorId) {
+            // Close eligibility alert modal if open
+            const eligibilityModal = bootstrap.Modal.getInstance(document.getElementById('donorEligibilityModal'));
+            if (eligibilityModal) {
+                eligibilityModal.hide();
+            }
+
+            // Show donor status modal
+            showDonorStatusModal(donorId);
+        }
+    </script>
+
+    <!-- Load eligibility alert script first -->
+    <script src="../../assets/js/donor_eligibility_alert.js"></script>
+    <script>
+        // Prevent showing donor status for deferred donors
+        function checkAndShowDonorStatus(donorId) {
+            // First check eligibility
+            fetch('../../assets/php_func/get_donor_eligibility_status.php?donor_id=' + donorId)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.data) {
+                        const eligibility = data.data;
+                        const today = new Date();
+                        const startDate = new Date(eligibility.start_date);
+                        const threeMonthsLater = new Date(startDate);
+                        threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
+                        
+                        // Check if donor has waiting days or is deferred
+                        const hasWaitingDays = (threeMonthsLater - today) > 0;
+                        const isDeferred = eligibility.status === 'deferred' || eligibility.status === 'ineligible';
+                        
+                        if (hasWaitingDays || isDeferred) {
+                            // Show eligibility alert instead
+                            showDonorEligibilityAlert(donorId);
+                            return;
+                        }
+                        
+                        // If eligible, proceed to show donor status
+                        proceedToDonorStatus(donorId);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking eligibility:', error);
+                });
+        }
     </script>
 </body>
 </html>

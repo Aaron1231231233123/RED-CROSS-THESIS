@@ -658,18 +658,15 @@ if ($http_code === 200) {
  <script>
  // Enhanced Edit Button Functionality
  function initializeEditFunctionality() {
-     console.log('=== EDIT FUNCTIONALITY INITIALIZATION START ===');
      const editButton = document.getElementById('modalEditButton');
      
      if (editButton) {
-         console.log('✅ Edit button found, initializing functionality...');
          
          // Remove any existing event listeners
          editButton.replaceWith(editButton.cloneNode(true));
          const newEditButton = document.getElementById('modalEditButton');
          
          newEditButton.addEventListener('click', function() {
-             console.log('🎯 Edit button clicked - starting to enable fields...');
              
              // Enable editing of form fields
              const form = document.getElementById('modalMedicalHistoryForm');
@@ -677,27 +674,27 @@ if ($http_code === 200) {
              const selectFields = form.querySelectorAll('select.remarks-input');
              const textInputs = form.querySelectorAll('input[type="text"], textarea');
              
-             console.log('Found radio buttons:', radioButtons.length);
-             console.log('Found select fields:', selectFields.length);
-             console.log('Found text inputs:', textInputs.length);
+             //console.log('Found radio buttons:', radioButtons.length);
+             //console.log('Found select fields:', selectFields.length);
+             //console.log('Found text inputs:', textInputs.length);
              
              // Enable all form inputs
              radioButtons.forEach(input => {
                  input.disabled = false;
                  input.readOnly = false;
-                 console.log('Enabled radio button:', input.name);
+                 //console.log('Enabled radio button:', input.name);
              });
              
              selectFields.forEach(input => {
                  input.disabled = false;
                  input.readOnly = false;
-                 console.log('Enabled select field:', input.name);
+                 //console.log('Enabled select field:', input.name);
              });
              
              textInputs.forEach(input => {
                  input.disabled = false;
                  input.readOnly = false;
-                 console.log('Enabled text input:', input.name);
+                 //console.log('Enabled text input:', input.name);
              });
              
              // Change button text to indicate editing mode
@@ -707,26 +704,26 @@ if ($http_code === 200) {
              
              // Add save functionality
              newEditButton.onclick = function() {
-                 console.log('Save button clicked');
+                 //console.log('Save button clicked');
                  showSaveConfirmationModal();
              };
          });
      } else {
-         console.log('❌ Edit button not found - checking DOM...');
-         console.log('Available buttons:', document.querySelectorAll('button').length);
-         console.log('Modal content:', document.getElementById('medicalHistoryModalContent')?.innerHTML?.substring(0, 200));
+         //console.log('❌ Edit button not found - checking DOM...');
+         //console.log('Available buttons:', document.querySelectorAll('button').length);
+         //console.log('Modal content:', document.getElementById('medicalHistoryModalContent')?.innerHTML?.substring(0, 200));
      }
-     console.log('=== EDIT FUNCTIONALITY INITIALIZATION END ===');
+     //console.log('=== EDIT FUNCTIONALITY INITIALIZATION END ===');
  }
  
  function saveEditedData() {
      const form = document.getElementById('modalMedicalHistoryForm');
      const formData = new FormData(form);
      
-     // Add action for saving
-     formData.append('action', 'save_edit');
+     // Add action for saving - use 'next' which is valid for saving without approval changes
+     formData.append('action', 'next');
      
-     console.log('Saving edited data...');
+     //console.log('Saving edited data...');
      
      // Submit the form data
      fetch('../../src/views/forms/medical-history-process.php', {
@@ -736,14 +733,10 @@ if ($http_code === 200) {
      .then(response => response.json())
      .then(data => {
          if (data.success) {
-             // Show success message using custom modal
-             if (window.customConfirm || window.mhCustomConfirm) {
-                 (window.customConfirm || window.mhCustomConfirm)('Medical history data saved successfully!', function() {
-                     // Just close the modal, no additional action needed
-                 });
-             } else {
-                 alert('Medical history data saved successfully!');
-             }
+             //console.log('Data saved successfully');
+             
+             // Show a small, quiet success toast
+             showQuietSuccessToast();
              
              // Reset button to edit mode
              const editButton = document.getElementById('modalEditButton');
@@ -774,14 +767,13 @@ if ($http_code === 200) {
                  input.readOnly = wasOriginallyDisabled;
              });
          } else {
-             // Show error modal
-             showErrorModal('Error updating data: ' + (data.message || 'Unknown error occurred'));
+             console.error('Save failed:', data.message);
+             showQuietErrorToast(data.message || 'Save failed');
          }
      })
      .catch(error => {
-         console.error('Error:', error);
-         // Show error modal
-         showErrorModal('An error occurred while saving the data. Please try again.');
+         console.error('Save error:', error);
+         showQuietErrorToast('Network error occurred');
      });
  }
  
@@ -816,7 +808,7 @@ if ($http_code === 200) {
  if (typeof window !== 'undefined') {
      window.initializeEditFunctionality = initializeEditFunctionality;
      window.mhCustomConfirm = mhCustomConfirm;
-     console.log('✅ initializeEditFunctionality and mhCustomConfirm exposed to global scope');
+     //console.log('✅ initializeEditFunctionality and mhCustomConfirm exposed to global scope');
  }
  </script>
 
@@ -910,7 +902,7 @@ function initializeSaveConfirmation() {
     const saveButton = document.getElementById('modalEditButton');
     if (saveButton && saveButton.textContent === 'Save') {
         saveButton.onclick = function() {
-            console.log('Save button clicked - showing confirmation');
+            //console.log('Save button clicked - showing confirmation');
             showSaveConfirmationModal();
         };
     }
@@ -918,4 +910,66 @@ function initializeSaveConfirmation() {
 
 // Call this after the edit functionality is initialized
 setTimeout(initializeSaveConfirmation, 100);
+
+// Show a small, quiet success toast
+function showQuietSuccessToast() {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #28a745;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        font-size: 14px;
+        z-index: 10000;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    `;
+    toast.textContent = 'Changes saved';
+    document.body.appendChild(toast);
+    
+    // Show and auto-hide
+    setTimeout(() => toast.style.opacity = '1', 10);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => {
+            if (document.body.contains(toast)) {
+                document.body.removeChild(toast);
+            }
+        }, 300);
+    }, 2000);
+}
+
+// Show a small, quiet error toast
+function showQuietErrorToast(message) {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #dc3545;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        font-size: 14px;
+        z-index: 10000;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    `;
+    toast.textContent = 'Error: ' + message;
+    document.body.appendChild(toast);
+    
+    // Show and auto-hide
+    setTimeout(() => toast.style.opacity = '1', 10);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => {
+            if (document.body.contains(toast)) {
+                document.body.removeChild(toast);
+            }
+        }, 300);
+    }, 4000);
+}
 </script> 

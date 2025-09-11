@@ -45,9 +45,35 @@ try {
         throw new Exception("Missing donor_id");
     }
     
+    // Get user's name from session
+    $user_id = $_SESSION['user_id'];
+    
+    // Fetch user's name from the users table
+    $ch = curl_init(SUPABASE_URL . '/rest/v1/users?user_id=eq.' . $user_id . '&select=first_name,surname');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ]);
+
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $interviewer_name = '';
+    if ($http_code === 200) {
+        $user_data = json_decode($response, true);
+        if (!empty($user_data)) {
+            $user = $user_data[0];
+            // Format name as "First Name Surname"
+            $interviewer_name = trim($user['first_name'] . ' ' . $user['surname']);
+        }
+    }
+
     // Initialize the update data array
     $medical_history_data = [
-        'donor_id' => $donor_id
+        'donor_id' => $donor_id,
+        'interviewer' => $interviewer_name
     ];
 
     // Check which button was clicked and set the approval status

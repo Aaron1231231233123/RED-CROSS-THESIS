@@ -1,7 +1,7 @@
 <!-- Screening Form Modal -->
-<div class="modal fade" id="screeningFormModal" tabindex="-1" aria-labelledby="screeningFormModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content screening-modal-content">
+<div class="modal fade" id="screeningFormModal" tabindex="-1" aria-labelledby="screeningFormModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg" style="max-width: 800px; margin: 1.75rem auto;">
+        <div class="modal-content screening-modal-content" style="position: relative; z-index: 1060; pointer-events: auto;">
             <div class="modal-header screening-modal-header">
                 <div class="d-flex align-items-center">
                     <div class="screening-modal-icon me-3">
@@ -36,7 +36,7 @@
                 </div>
             </div>
             
-            <div class="modal-body screening-modal-body">
+            <div class="modal-body screening-modal-body" style="max-height: 70vh; overflow-y: auto; padding: 1.5rem;">
                 <form id="screeningForm">
                     <input type="hidden" name="donor_id" value="">
                     
@@ -47,88 +47,76 @@
                             <p class="text-muted mb-4">Please select the donor's choice of donation type</p>
                         </div>
                         
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="screening-label">IN-HOUSE</label>
-                                <select name="inhouse-donation-type" id="inhouseDonationTypeSelect" class="screening-input">
-                                    <option value="">Select Donation Type</option>
-                                    <option value="walk-in">Walk-in</option>
-                                    <option value="replacement">Replacement</option>
-                                    <option value="patient-directed">Patient-Directed</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="screening-label">MOBILE</label>
-                                <select name="mobile-donation-type" id="mobileDonationTypeSelect" class="screening-input">
-                                    <option value="">Select Donation Type</option>
-                                    <option value="mobile-walk-in">Walk-in</option>
-                                    <option value="mobile-replacement">Replacement</option>
-                                    <option value="mobile-patient-directed">Patient-Directed</option>
-                                </select>
+                        <!-- IN-HOUSE Section -->
+                        <div class="screening-detail-card" style="background: #e9ecef; border: 1px solid #ddd; margin-bottom: 20px;">
+                            <div class="screening-category-title" style="background: #e9ecef; color: #b22222; font-weight: bold; text-align: center; padding: 10px; margin: -20px -20px 15px -20px;">IN-HOUSE</div>
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <select name="donation-type" id="inhouseDonationTypeSelect" class="screening-input">
+                                        <option value="">Select Donation Type</option>
+                                        <option value="Walk-in">Walk-in</option>
+                                        <option value="Replacement">Replacement</option>
+                                        <option value="Patient-Directed">Patient-Directed</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
                         
-                        <!-- Conditional Sections -->
-                        <div id="conditionalSections" style="margin-top: 20px;">
-                            <!-- Mobile Donation Details -->
-                            <div id="mobileDonationSection" class="screening-detail-card" style="display: none;">
-                                <h6 class="screening-detail-title">Mobile Donation Details</h6>
-                                <div class="row g-3">
-                                    <div class="col-md-6">
-                                        <label class="screening-label">Place</label>
-                                        <input type="text" name="mobile-place" class="screening-input" placeholder="Enter location">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="screening-label">Organizer</label>
-                                        <input type="text" name="mobile-organizer" class="screening-input" placeholder="Enter organizer">
-                                    </div>
-                                </div>
+                        <!-- Patient Information Table (shows when Patient-Directed is selected) -->
+                        <div id="patientDetailsSection" style="display: none; margin-bottom: 20px;">
+                            <h6 style="color: #b22222; font-weight: bold; margin-bottom: 15px;">Patient Information</h6>
+                            <div class="table-responsive">
+                                <table class="table table-bordered" style="margin-bottom: 0;">
+                                    <thead>
+                                        <tr style="background: #b22222; color: white;">
+                                            <th style="text-align: center; font-weight: bold;">Patient Name</th>
+                                            <th style="text-align: center; font-weight: bold;">Hospital</th>
+                                            <th style="text-align: center; font-weight: bold;">Blood Type</th>
+                                            <th style="text-align: center; font-weight: bold;">No. of Units</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>
+                                                <input type="text" name="patient-name" class="form-control form-control-sm" placeholder="Enter patient name">
+                                            </td>
+                                            <td>
+                                                <input type="text" name="hospital" class="form-control form-control-sm" placeholder="Enter hospital">
+                                            </td>
+                                            <td>
+                                                <select name="patient-blood-type" class="form-control form-control-sm">
+                                                    <option value="">Select Blood Type</option>
+                                                    <option value="A+">A+</option>
+                                                    <option value="A-">A-</option>
+                                                    <option value="B+">B+</option>
+                                                    <option value="B-">B-</option>
+                                                    <option value="AB+">AB+</option>
+                                                    <option value="AB-">AB-</option>
+                                                    <option value="O+">O+</option>
+                                                    <option value="O-">O-</option>
+                                                </select>
+                                            </td>
+                                            <td>
+                                                <input type="number" name="no-units" class="form-control form-control-sm" placeholder="1" min="1">
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
-                            
-                            <!-- Patient Information Table -->
-                            <div id="patientDetailsSection" class="screening-detail-card" style="display: none;">
-                                <h6 class="screening-detail-title">Patient Information</h6>
-                                <div class="screening-patient-table-container">
-                                    <table class="table table-bordered screening-patient-table">
-                                        <thead>
-                                            <tr class="table-danger">
-                                                <th>Patient Name</th>
-                                                <th>Hospital</th>
-                                                <th>Blood Type</th>
-                                                <th>WB/Component</th>
-                                                <th>No. of units</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr>
-                                                <td>
-                                                    <input type="text" name="patient-name" class="form-control form-control-sm" placeholder="Enter patient name">
-                                                </td>
-                                                <td>
-                                                    <input type="text" name="hospital" class="form-control form-control-sm" placeholder="Enter hospital">
-                                                </td>
-                                                <td>
-                                                    <select name="blood-type-patient" class="form-control form-control-sm">
-                                                        <option value="" disabled selected>Select Blood Type</option>
-                                                        <option value="A+">A+</option>
-                                                        <option value="A-">A-</option>
-                                                        <option value="B+">B+</option>
-                                                        <option value="B-">B-</option>
-                                                        <option value="O+">O+</option>
-                                                        <option value="O-">O-</option>
-                                                        <option value="AB+">AB+</option>
-                                                        <option value="AB-">AB-</option>
-                                                    </select>
-                                                </td>
-                                                <td>
-                                                    <input type="text" name="wb-component" class="form-control form-control-sm" placeholder="Enter component">
-                                                </td>
-                                                <td>
-                                                    <input type="number" name="no-units" class="form-control form-control-sm" placeholder="0" min="0">
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
+                        </div>
+                        
+                        <!-- MOBILE BLOOD DONATION Section (always visible) -->
+                        <div class="screening-detail-card" style="background: #e9ecef; border: 1px solid #ddd;">
+                            <div class="screening-category-title" style="background: #e9ecef; color: #b22222; font-weight: bold; text-align: center; padding: 10px; margin: -20px -20px 15px -20px;">MOBILE BLOOD DONATION</div>
+                            <h6 style="color: #b22222; font-weight: bold; margin-bottom: 15px;">Mobile Donation Details</h6>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="screening-label">Place</label>
+                                    <input type="text" name="mobile-place" id="mobilePlaceInput" class="screening-input" placeholder="Enter location">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="screening-label">Organizer</label>
+                                    <input type="text" name="mobile-organizer" id="mobileOrganizerInput" class="screening-input" placeholder="Enter organizer">
                                 </div>
                             </div>
                         </div>
@@ -215,7 +203,7 @@
                 </form>
             </div>
             
-            <div class="modal-footer screening-modal-footer" style="justify-content: space-between; align-items: center;">
+            <div class="modal-footer screening-modal-footer" style="justify-content: space-between; align-items: center; position: relative; z-index: 1061; background: white; border-top: 1px solid #dee2e6;">
                 <!-- Left side - Cancel button -->
                 <div>
                     <button type="button" class="btn btn-outline-secondary" id="screeningCancelButton">

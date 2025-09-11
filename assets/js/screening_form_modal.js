@@ -38,18 +38,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (submitButton) {
-            console.log('Submit button found, adding event listener');
             submitButton.addEventListener('click', function() {
-                console.log('Submit button clicked!');
                 handleScreeningFormSubmission();
             });
-        } else {
-            console.error('Submit button not found!');
         }
 
         if (cancelButton) {
             cancelButton.addEventListener('click', function() {
-                console.log('Cancel button clicked, closing screening modal...');
                 const modal = bootstrap.Modal.getInstance(screeningModal);
                 if (modal) {
                     modal.hide();
@@ -69,22 +64,54 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-        // Attempt prefill immediately on init
-        prefillFromExisting();
+        // Prefill blood type from existing data (donation type stays fresh)
+        setTimeout(() => {
+            prefillFromExisting();
+        }, 100);
 
-        // Add donation type change handlers
+        // Add donation type change handler for IN-HOUSE dropdown
         const inhouseDonationTypeSelect = document.getElementById('inhouseDonationTypeSelect');
-        const mobileDonationTypeSelect = document.getElementById('mobileDonationTypeSelect');
+        const mobilePlaceInput = document.getElementById('mobilePlaceInput');
+        const mobileOrganizerInput = document.getElementById('mobileOrganizerInput');
         
         if (inhouseDonationTypeSelect) {
             inhouseDonationTypeSelect.addEventListener('change', function() {
-                handleDonationTypeChange('inhouse', this.value);
+                const value = this.value;
+                
+                // When IN-HOUSE is selected, clear mobile fields
+                if (value && value !== '') {
+                    if (mobilePlaceInput) mobilePlaceInput.value = '';
+                    if (mobileOrganizerInput) mobileOrganizerInput.value = '';
+                }
+                
+                handleDonationTypeChange('inhouse', value);
             });
         }
         
-        if (mobileDonationTypeSelect) {
-            mobileDonationTypeSelect.addEventListener('change', function() {
-                handleDonationTypeChange('mobile', this.value);
+        // Add change handlers for mobile fields to clear IN-HOUSE when mobile is used
+        if (mobilePlaceInput) {
+            mobilePlaceInput.addEventListener('input', function() {
+                if (this.value.trim() !== '' && inhouseDonationTypeSelect) {
+                    inhouseDonationTypeSelect.value = '';
+                    // Hide patient details if shown
+                    const patientDetailsSection = document.getElementById('patientDetailsSection');
+                    if (patientDetailsSection) {
+                        patientDetailsSection.style.display = 'none';
+                    }
+                }
+            });
+        }
+        
+        if (mobileOrganizerInput) {
+            mobileOrganizerInput.addEventListener('input', function() {
+                if (this.value.trim() !== '' && inhouseDonationTypeSelect) {
+                    inhouseDonationTypeSelect.value = '';
+                    // Hide patient details if shown
+                    const patientDetailsSection = document.getElementById('patientDetailsSection');
+                    if (patientDetailsSection) {
+                        patientDetailsSection.style.display = 'none';
+                    }
+                }
             });
         }
 
@@ -127,7 +154,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Generate review content if going to step 3
         if (step === 3) {
-            generateReviewContent();
+            setTimeout(() => {
+                generateReviewContent();
+            }, 100);
         }
     }
 
@@ -189,37 +218,70 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function validateCurrentStep() {
-        console.log('Validating current step:', currentStep);
-        const currentContent = document.querySelector(`.screening-step-content[data-step="${currentStep}"]`);
-        if (!currentContent) {
-            console.log('No content found for step:', currentStep);
-            return false;
-        }
-
-        const requiredFields = currentContent.querySelectorAll('input[required], select[required]');
-        console.log('Found', requiredFields.length, 'required fields');
-        let isValid = true;
-
-        requiredFields.forEach(field => {
-            console.log('Validating field:', field.name, 'value:', field.value);
-            if (!field.value.trim()) {
-                console.log('Field', field.name, 'is empty');
-                field.focus();
-                field.style.borderColor = '#dc3545';
-                isValid = false;
+        
+        if (currentStep === 1) {
+            // Validate donation type selection - either IN-HOUSE dropdown OR mobile fields filled
+            const inhouseSelect = document.getElementById('inhouseDonationTypeSelect');
+            const mobilePlaceInput = document.getElementById('mobilePlaceInput');
+            const mobileOrganizerInput = document.getElementById('mobileOrganizerInput');
+            
+            const inhouseValue = inhouseSelect ? inhouseSelect.value : '';
+            const mobilePlace = mobilePlaceInput ? mobilePlaceInput.value.trim() : '';
+            const mobileOrganizer = mobileOrganizerInput ? mobileOrganizerInput.value.trim() : '';
+            
+            // Check if either IN-HOUSE is selected OR at least one mobile field is filled
+            const hasInhouseSelection = inhouseValue && inhouseValue !== '';
+            const hasMobileSelection = mobilePlace !== '' || mobileOrganizer !== '';
+            
+            if (!hasInhouseSelection && !hasMobileSelection) {
+                showAlert('Please select an IN-HOUSE donation type OR fill in mobile donation details (Place or Organizer) before proceeding.', 'warning');
                 return false;
-            } else {
-                console.log('Field', field.name, 'is valid');
-                field.style.borderColor = '#e9ecef';
             }
-        });
+            
+            // If Patient-Directed is selected, validate patient information
+            if (inhouseValue === 'Patient-Directed') {
+                const patientName = document.querySelector('input[name="patient-name"]');
+                const hospital = document.querySelector('input[name="hospital"]');
+                const patientBloodType = document.querySelector('select[name="patient-blood-type"]');
+                const noUnits = document.querySelector('input[name="no-units"]');
+                
+                if (!patientName?.value.trim() || !hospital?.value.trim() || 
+                    !patientBloodType?.value || !noUnits?.value) {
+                    showAlert('Please fill in all patient information fields for Patient-Directed donations.', 'warning');
+                    return false;
+                }
+            }
+            
+            return true;
+        } else {
+            // For other steps, use the original validation
+            const currentContent = document.querySelector(`.screening-step-content[data-step="${currentStep}"]`);
+            if (!currentContent) {
+                return false;
+            }
 
-        if (!isValid) {
-            showAlert('Please fill in all required fields before proceeding.', 'warning');
+            const requiredFields = currentContent.querySelectorAll('input[required], select[required]');
+            let isValid = true;
+
+            requiredFields.forEach(field => {
+                if (!field.value.trim()) {
+                    field.focus();
+                    field.style.borderColor = '#dc3545';
+                    isValid = false;
+                    return false;
+                } else {
+                    field.style.borderColor = '#e9ecef';
+                }
+            });
+
+            if (!isValid) {
+                showAlert('Please fill in all required fields before proceeding.', 'warning');
+            }
+
+            return isValid;
         }
-
-        return isValid;
     }
+
 
     function validateBodyWeight(value) {
         const alert = document.getElementById('bodyWeightAlert');
@@ -260,35 +322,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function handleDonationTypeChange(type, value) {
-        const inhouseSelect = document.getElementById('inhouseDonationTypeSelect');
-        const mobileSelect = document.getElementById('mobileDonationTypeSelect');
         
-        if (type === 'inhouse') {
-            // If IN-HOUSE is selected, clear and hide MOBILE dropdown
-            if (value && value !== '') {
-                mobileSelect.value = '';
-                mobileSelect.style.display = 'none';
-                mobileSelect.parentElement.style.display = 'none';
+        // Only show Patient Information table when Patient-Directed is selected
+        const patientDetailsSection = document.getElementById('patientDetailsSection');
+        
+        if (patientDetailsSection) {
+            if (value === 'Patient-Directed') {
+                patientDetailsSection.style.display = 'block';
             } else {
-                // If IN-HOUSE is cleared, show MOBILE dropdown again
-                mobileSelect.style.display = 'block';
-                mobileSelect.parentElement.style.display = 'block';
-            }
-        } else if (type === 'mobile') {
-            // If MOBILE is selected, clear and hide IN-HOUSE dropdown
-            if (value && value !== '') {
-                inhouseSelect.value = '';
-                inhouseSelect.style.display = 'none';
-                inhouseSelect.parentElement.style.display = 'none';
-            } else {
-                // If MOBILE is cleared, show IN-HOUSE dropdown again
-                inhouseSelect.style.display = 'block';
-                inhouseSelect.parentElement.style.display = 'block';
+                patientDetailsSection.style.display = 'none';
             }
         }
-        
-        // Update conditional sections based on the selected value
-        updateConditionalSections(value);
     }
 
     function updateConditionalSections(donationType) {
@@ -307,23 +351,22 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Check donation type conditions
-        const isMobile = donationType.startsWith('mobile-');
-        const isPatientDirected = donationType === 'patient-directed' || donationType === 'mobile-patient-directed';
-        const isWalkInOrReplacement = donationType === 'walk-in' || donationType === 'replacement' || 
-                                     donationType === 'mobile-walk-in' || donationType === 'mobile-replacement';
+        const isMobile = donationType === 'Mobile';
+        const isPatientDirected = donationType === 'Patient-Directed';
+        const isWalkInOrReplacement = donationType === 'Walk-in' || donationType === 'Replacement';
         
-        // Show mobile section for ANY mobile donation type
+        // Show mobile section for Mobile donation type
         if (isMobile && mobileDonationSection) {
             mobileDonationSection.style.display = 'block';
         }
         
-        // Show patient details section for ANY patient-directed donation (mobile or in-house)
+        // Show patient details section for Patient-Directed donation
         if (isPatientDirected && patientDetailsSection) {
             patientDetailsSection.style.display = 'block';
         }
         
-        // Show "no additional details" only for walk-in/replacement (non-patient-directed donations)
-        if (isWalkInOrReplacement && !isPatientDirected && noAdditionalDetails) {
+        // Show "no additional details" only for walk-in/replacement donations
+        if (isWalkInOrReplacement && noAdditionalDetails) {
             noAdditionalDetails.style.display = 'block';
         }
     }
@@ -419,19 +462,27 @@ document.addEventListener('DOMContentLoaded', function() {
         reviewHtml += '</div>';
 
         // Donation Type
-        const inhouseType = formData.get('inhouse-donation-type');
-        const mobileType = formData.get('mobile-donation-type');
-        const donationType = inhouseType || mobileType;
+        const inhouseDonationType = formData.get('donation-type');
+        const mobilePlace = formData.get('mobile-place');
+        const mobileOrganizer = formData.get('mobile-organizer');
+        
+        // Determine final donation type
+        let finalDonationType = '';
+        if (mobilePlace || mobileOrganizer) {
+            finalDonationType = 'Mobile';
+        } else if (inhouseDonationType) {
+            finalDonationType = inhouseDonationType;
+        }
         
         reviewHtml += '<div class="mb-3">';
         reviewHtml += '<h6 class="text-danger mb-2">Donation Type</h6>';
         reviewHtml += `<div class="screening-review-item">
             <span class="screening-review-label">Type:</span>
-            <span class="screening-review-value">${donationType ? donationType.replace('-', ' ').toUpperCase() : 'Not selected'}</span>
+            <span class="screening-review-value">${finalDonationType || 'Not selected'}</span>
         </div>`;
 
         // Mobile details if applicable
-        if (donationType && donationType.startsWith('mobile-')) {
+        if (finalDonationType === 'Mobile') {
             if (formData.get('mobile-place')) {
                 reviewHtml += `<div class="screening-review-item">
                     <span class="screening-review-label">Place:</span>
@@ -447,7 +498,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Patient details if applicable
-        if (donationType === 'patient-directed' || donationType === 'mobile-patient-directed') {
+        if (finalDonationType === 'Patient-Directed') {
             if (formData.get('patient-name')) {
                 reviewHtml += `<div class="screening-review-item">
                     <span class="screening-review-label">Patient Name:</span>
@@ -525,15 +576,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function handleScreeningFormSubmission() {
-        console.log('Starting form submission...');
-        
         // Final validation
         if (!validateCurrentStep()) {
-            console.log('Form validation failed, stopping submission');
             return;
         }
-        
-        console.log('Form validation passed, proceeding with submission');
 
         // Show loading state
         const submitButton = document.getElementById('screeningSubmitButton');
@@ -544,12 +590,20 @@ document.addEventListener('DOMContentLoaded', function() {
         // Get all form data
         const formData = new FormData(screeningForm);
         
-        // Combine donation type fields into a single field for backend compatibility
-        const inhouseType = formData.get('inhouse-donation-type');
-        const mobileType = formData.get('mobile-donation-type');
-        const donationType = inhouseType || mobileType;
-        if (donationType) {
-            formData.set('donation-type', donationType);
+        // Get donation type from IN-HOUSE dropdown
+        const selectedDonationType = formData.get('donation-type');
+        
+        // Check if mobile donation fields are filled (Place OR Organizer)
+        const mobilePlace = formData.get('mobile-place');
+        const mobileOrganizer = formData.get('mobile-organizer');
+        
+        if (mobilePlace || mobileOrganizer) {
+            // If either mobile field is filled, set donor_type to "Mobile" in the database
+            formData.set('donor_type', 'Mobile');
+            formData.set('donation-type', 'Mobile');
+        } else if (selectedDonationType) {
+            // Use the IN-HOUSE selection
+            formData.set('donation-type', selectedDonationType);
         }
         
         // Apply auto-increment logic for Red Cross donations before submission
@@ -557,7 +611,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (rcInput && rcInput.hasAttribute('data-incremented-value')) {
             const incrementedValue = rcInput.getAttribute('data-incremented-value');
             formData.set('red-cross', incrementedValue);
-            console.log('[Auto-Increment] Submitting incremented Red Cross value:', incrementedValue);
         }
         
         // Make sure donor_id is included
@@ -566,64 +619,134 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Submit the form data to the backend
-        console.log('Submitting screening form data...');
-        console.log('Form data entries:');
-        for (let [key, value] of formData.entries()) {
-            console.log(key + ':', value);
-        }
-        
         fetch('../../assets/php_func/process_screening_form.php', {
             method: 'POST',
             body: formData
         })
         .then(response => {
-            console.log('Response status:', response.status);
-            console.log('Response ok:', response.ok);
             if (!response.ok) {
                 throw new Error('Network response was not ok: ' + response.status);
             }
             return response.json();
         })
         .then(data => {
-            console.log('Screening form submission response:', data);
+            //console.log('Screening form submission response:', data);
             
             if (data.success) {
-                showAlert('Screening form submitted successfully!', 'success');
+                // Create and show the success modal
+                const successModalHtml = `
+                    <div class="modal fade" id="screeningSuccessModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content">
+                                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;">
+                                    <h5 class="modal-title">Screening Submitted Successfully</h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p class="mb-0">Screening submitted. Please print the declaration form and guide the donor to the next stage.</p>
+                                </div>
+                                <div class="modal-footer border-0 justify-content-end">
+                                    <button type="button" class="btn" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;" onclick="printDeclarationForm()">Print Form</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
                 
-                // Call the transition endpoint to update needs_review flags
-                console.log('Calling transition endpoint...');
-                console.log('Current donor data:', window.currentDonorData);
-                console.log('Screening ID from response:', data.screening_id);
+                // Remove existing modal if any
+                const existingModal = document.getElementById('screeningSuccessModal');
+                if (existingModal) {
+                    existingModal.remove();
+                }
                 
+                // Add the modal to the document
+                document.body.insertAdjacentHTML('beforeend', successModalHtml);
+                
+                // Show the modal
+                const successModal = new bootstrap.Modal(document.getElementById('screeningSuccessModal'));
+                successModal.show();
+                
+                // Add event listener to remove modal from DOM after it's hidden
+                document.getElementById('screeningSuccessModal').addEventListener('hidden.bs.modal', function () {
+                    this.remove();
+                });
+
+                // Function to print declaration form
+                window.printDeclarationForm = function() {
+                    // Close the success modal first
+                    const successModal = bootstrap.Modal.getInstance(document.getElementById('screeningSuccessModal'));
+                    if (successModal) {
+                        // Add event listener to show declaration form after success modal is fully hidden
+                        document.getElementById('screeningSuccessModal').addEventListener('hidden.bs.modal', function showDeclaration() {
+                            // Remove the listener to prevent memory leaks
+                            this.removeEventListener('hidden.bs.modal', showDeclaration);
+                            
+                            // Show the declaration form modal after a short delay
+                            setTimeout(() => {
+                                if (typeof window.showDeclarationFormModal === 'function') {
+                                    window.showDeclarationFormModal(window.currentDonorData.donor_id);
+                                } else {
+                                    console.error('showDeclarationFormModal function is not defined');
+                                }
+                            }, 150); // Small delay to ensure smooth transition
+                        });
+                        
+                        // Hide the success modal
+                        successModal.hide();
+                    }
+                };
+                
+                // Close any existing modals first
+                const screeningFormModal = bootstrap.Modal.getInstance(document.getElementById('screeningFormModal'));
+                if (screeningFormModal) {
+                    screeningFormModal.hide();
+                }
+                
+                // Remove any existing success modals
+                const existingSuccessModal = document.getElementById('screeningSuccessModal');
+                if (existingSuccessModal) {
+                    existingSuccessModal.remove();
+                }
+                
+                // Update physical examination record with screening_id
                 const transitionData = new FormData();
                 transitionData.append('action', 'transition_to_physical');
                 transitionData.append('donor_id', window.currentDonorData.donor_id);
                 if (data.screening_id) {
                     transitionData.append('screening_id', data.screening_id);
+                    
+                    // Send the transition data to the new handler
+                    fetch('../../assets/php_func/handle_screening_transition.php', {
+                        method: 'POST',
+                        body: transitionData
+                    })
+                    .then(response => response.json())
+                    .then(result => {
+                        if (!result.success) {
+                            console.error('Transition error:', result.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Transition error:', error);
+                    });
                 }
-                
-                console.log('Transition data being sent:');
-                for (let [key, value] of transitionData.entries()) {
-                    console.log(key + ':', value);
-                }
-                
+
                 fetch('dashboard-staff-medical-history-submissions.php', {
                     method: 'POST',
                     body: transitionData
                 })
                 .then(response => response.json())
                 .then(transitionResult => {
-                    console.log('Transition response:', transitionResult);
+                    //console.log('Transition response:', transitionResult);
                     if (transitionResult.success) {
-                        console.log('✅ Transition successful - Physical examination updated');
+                        //console.log('✅ Transition successful - Physical examination updated');
                         showAlert('Donor transitioned to physical examination review!', 'success');
                     } else {
-                        console.warn('❌ Transition failed:', transitionResult.message);
+                        //console.warn('❌ Transition failed:', transitionResult.message);
                         showAlert('Warning: Transition failed - ' + transitionResult.message, 'warning');
                     }
                 })
                 .catch(transitionError => {
-                    console.error('Transition error:', transitionError);
+                    //console.error('Transition error:', transitionError);
                 })
                 .finally(() => {
                     // Close the screening modal
@@ -632,24 +755,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         modal.hide();
                     }
                     
-                    // Show declaration form modal instead of refreshing
-                    if (window.showDeclarationFormModal && window.currentDonorData && window.currentDonorData.donor_id) {
-                        setTimeout(() => {
-                            window.showDeclarationFormModal(window.currentDonorData.donor_id);
-                        }, 500);
-                    } else {
-                        // Fallback: refresh the page
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 1500);
-                    }
+                    // Just close the screening modal and show success modal
+                    // Declaration form will only open when Print Form is clicked
                 });
             } else {
                 showAlert('Error submitting screening form: ' + (data.message || 'Unknown error'), 'danger');
             }
         })
         .catch(error => {
-            console.error('Error submitting screening form:', error);
+            //console.error('Error submitting screening form:', error);
             showAlert('Error submitting screening form. Please try again.', 'danger');
         })
         .finally(() => {
@@ -665,7 +779,7 @@ function openScreeningModal(donorData) {
     // Store donor data globally for form submission
     window.currentDonorData = donorData;
     
-    console.log('Opening screening modal for donor:', donorData.donor_id);
+    //console.log('Opening screening modal for donor:', donorData.donor_id);
     
     // Clear form
     const form = document.getElementById('screeningForm');
@@ -731,27 +845,27 @@ function openScreeningModal(donorData) {
     
     // Also try prefill after a longer delay in case of timing issues
     setTimeout(() => {
-        console.log('[Screening Modal] Delayed prefill attempt');
+        //console.log('[Screening Modal] Delayed prefill attempt');
         prefillFromExisting();
     }, 500);
     
     // Direct auto-increment for Red Cross donations
     setTimeout(() => {
-        console.log('[Direct Auto-Increment] Starting direct auto-increment...');
+        //console.log('[Direct Auto-Increment] Starting direct auto-increment...');
         
         // Get the Red Cross input field
         const rcInput = document.querySelector('input[name="red-cross"]');
         if (rcInput) {
-            console.log('[Direct Auto-Increment] Found RC input, current value:', rcInput.value);
+            //console.log('[Direct Auto-Increment] Found RC input, current value:', rcInput.value);
             
             // Get current value and increment it
             const currentValue = parseInt(rcInput.value) || 0;
             const newValue = currentValue + 1;
             rcInput.value = newValue;
             
-            console.log('[Direct Auto-Increment] Incremented RC from', currentValue, 'to', newValue);
+            //console.log('[Direct Auto-Increment] Incremented RC from', currentValue, 'to', newValue);
         } else {
-            console.log('[Direct Auto-Increment] RC input not found!');
+            //console.log('[Direct Auto-Increment] RC input not found!');
         }
     }, 200);
 } 
@@ -761,13 +875,10 @@ function prefillFromExisting() {
     try {
         if (!window.currentDonorData || !window.currentDonorData.donor_id) return;
         const donorId = window.currentDonorData.donor_id;
-        console.log('[Screening Prefill] Fetching latest screening for donor', donorId);
         fetch(`../../assets/php_func/get_latest_screening_by_donor.php?donor_id=${donorId}`)
             .then(r => r.json())
             .then(j => {
-                console.log('[Screening Prefill] Response', j);
                 if (!j.success || !j.data) {
-                    console.log('[Screening Prefill] No data found or request failed');
                     return;
                 }
                 const d = j.data;
@@ -775,102 +886,46 @@ function prefillFromExisting() {
                 const bt = document.querySelector('select[name="blood-type"]');
                 if (bt && (bt.value === '' || bt.value === null)) bt.value = d.blood_type || '';
 
-                // Trigger validation for any existing values
+                // Trigger validation for any existing values (safely)
                 const bodyWeightInput = document.getElementById('bodyWeightInput');
                 const specificGravityInput = document.getElementById('specificGravityInput');
                 
                 if (bodyWeightInput && bodyWeightInput.value) {
-                    validateBodyWeight(bodyWeightInput.value);
+                    try {
+                        validateBodyWeight(bodyWeightInput.value);
+                    } catch (e) {
+                        // Skip validation if not available yet
+                    }
                 }
                 if (specificGravityInput && specificGravityInput.value) {
-                    validateSpecificGravity(specificGravityInput.value);
-                }
-
-                // Donation type
-                const inhouseSelect = document.querySelector('select[name="inhouse-donation-type"]');
-                const mobileSelect = document.querySelector('select[name="mobile-donation-type"]');
-                
-                if (d.donation_type) {
-                    if (d.donation_type.startsWith('mobile-')) {
-                        // Mobile donation type
-                        if (mobileSelect) {
-                            mobileSelect.value = d.donation_type;
-                            // Apply the same hiding logic as handleDonationTypeChange
-                            const inhouseSelect = document.getElementById('inhouseDonationTypeSelect');
-                            if (inhouseSelect) {
-                                inhouseSelect.value = '';
-                                inhouseSelect.style.display = 'none';
-                                inhouseSelect.parentElement.style.display = 'none';
-                            }
-                            updateConditionalSections(d.donation_type);
-                        }
-                    } else {
-                        // In-house donation type
-                        if (inhouseSelect) {
-                            inhouseSelect.value = d.donation_type;
-                            // Apply the same hiding logic as handleDonationTypeChange
-                            const mobileSelect = document.getElementById('mobileDonationTypeSelect');
-                            if (mobileSelect) {
-                                mobileSelect.value = '';
-                                mobileSelect.style.display = 'none';
-                                mobileSelect.parentElement.style.display = 'none';
-                            }
-                            updateConditionalSections(d.donation_type);
-                        }
+                    try {
+                        validateSpecificGravity(specificGravityInput.value);
+                    } catch (e) {
+                        // Skip validation if not available yet
                     }
                 }
 
-                // Mobile donation details
-                if (d.mobile_place) {
-                    const mobilePlace = document.querySelector('input[name="mobile-place"]');
-                    if (mobilePlace) mobilePlace.value = d.mobile_place;
-                }
-                if (d.mobile_organizer) {
-                    const mobileOrganizer = document.querySelector('input[name="mobile-organizer"]');
-                    if (mobileOrganizer) mobileOrganizer.value = d.mobile_organizer;
-                }
-
-                // Patient details
-                if (d.patient_name) {
-                    const patientName = document.querySelector('input[name="patient-name"]');
-                    if (patientName) patientName.value = d.patient_name;
-                }
-                if (d.hospital) {
-                    const hospital = document.querySelector('input[name="hospital"]');
-                    if (hospital) hospital.value = d.hospital;
-                }
-                if (d.blood_type_patient) {
-                    const bloodTypePatient = document.querySelector('select[name="blood-type-patient"]');
-                    if (bloodTypePatient) bloodTypePatient.value = d.blood_type_patient;
-                }
-                if (d.wb_component) {
-                    const wbComponent = document.querySelector('input[name="wb-component"]');
-                    if (wbComponent) wbComponent.value = d.wb_component;
-                }
-                if (d.no_units) {
-                    const noUnits = document.querySelector('input[name="no-units"]');
-                    if (noUnits) noUnits.value = d.no_units;
-                }
+                // Don't prefill donation type, mobile details, or patient details - only blood type
             })
-            .catch((e) => { console.warn('[Screening Prefill] Fetch failed', e); });
+            .catch((e) => { /* Prefill failed silently */ });
     } catch (e) {}
 }
 
 // Handle defer donor functionality
 function handleDeferDonor() {
-    console.log('Defer donor button clicked in screening form');
+    //console.log('Defer donor button clicked in screening form');
     
     // Get donor ID from the form
     const donorIdInput = document.querySelector('input[name="donor_id"]');
     const donorId = donorIdInput ? donorIdInput.value : null;
     
     if (!donorId) {
-        console.error('No donor ID found in screening form');
+        //console.error('No donor ID found in screening form');
         alert('Error: No donor ID found. Please try again.');
         return;
     }
     
-    console.log('Opening defer modal for donor ID:', donorId);
+    //console.log('Opening defer modal for donor ID:', donorId);
     
     // Close the screening modal first
     const screeningModal = document.getElementById('screeningFormModal');
@@ -887,7 +942,7 @@ function handleDeferDonor() {
         if (typeof handleScreeningDeferDonor === 'function') {
             handleScreeningDeferDonor();
         } else {
-            console.error('handleScreeningDeferDonor function not found. Make sure initial-screening-defer-button.js is loaded.');
+            //console.error('handleScreeningDeferDonor function not found. Make sure initial-screening-defer-button.js is loaded.');
             alert('Error: Defer functionality not available. Please refresh the page and try again.');
         }
     }, 300);
