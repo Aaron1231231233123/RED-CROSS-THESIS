@@ -394,6 +394,9 @@ async function submitScreeningDeferral() {
     const deferralType = document.getElementById('deferralTypeSelect').value;
     const disapprovalReason = formData.get('disapproval_reason');
     
+    // Convert empty string to null for screening_id
+    const finalScreeningId = screeningId && screeningId.trim() !== '' ? screeningId : null;
+    
     // Calculate final duration
     let finalDuration = null;
     if (deferralType === 'Temporary Deferral') {
@@ -405,12 +408,35 @@ async function submitScreeningDeferral() {
         }
     }
 
+    // Collect screening form data from the Initial Screening Form modal
+    const screeningFormData = {
+        body_weight: document.querySelector('input[name="body-wt"]')?.value || null,
+        specific_gravity: document.querySelector('input[name="sp-gr"]')?.value || null,
+        blood_type: document.querySelector('select[name="blood-type"]')?.value || null,
+        donation_type: document.querySelector('select[name="donation-type"]')?.value || null,
+        has_previous_donation: document.querySelector('input[name="history"]:checked')?.value === 'yes' || false,
+        red_cross_donations: document.querySelector('input[name="red-cross"]')?.value || 0,
+        hospital_donations: document.querySelector('input[name="hospital-history"]')?.value || 0,
+        last_rc_donation_place: document.querySelector('input[name="last-rc-donation-place"]')?.value || null,
+        last_hosp_donation_place: document.querySelector('input[name="last-hosp-donation-place"]')?.value || null,
+        last_rc_donation_date: document.querySelector('input[name="last-rc-donation-date"]')?.value || null,
+        last_hosp_donation_date: document.querySelector('input[name="last-hosp-donation-date"]')?.value || null,
+        mobile_location: document.querySelector('input[name="mobile-location"]')?.value || null,
+        mobile_organizer: document.querySelector('input[name="mobile-organizer"]')?.value || null,
+        patient_name: document.querySelector('input[name="patient-name"]')?.value || null,
+        hospital: document.querySelector('input[name="hospital"]')?.value || null,
+        patient_blood_type: document.querySelector('select[name="patient-blood-type"]')?.value || null,
+        component_type: document.querySelector('select[name="component-type"]')?.value || null,
+        units_needed: document.querySelector('input[name="units-needed"]')?.value || null
+    };
+
     console.log('Submitting screening deferral data:', {
         donor_id: donorId,
         screening_id: screeningId,
         deferral_type: deferralType,
         disapproval_reason: disapprovalReason,
-        duration: finalDuration
+        duration: finalDuration,
+        screening_form_data: screeningFormData
     });
 
     // Show loading state
@@ -452,58 +478,31 @@ async function submitScreeningDeferral() {
             temporaryDeferredText = 'Not specified';
         }
         
-        // Prepare eligibility data
-        const eligibilityData = {
+        // Prepare deferral data for create_eligibility.php
+        const deferData = {
+            action: 'create_eligibility_defer',
             donor_id: parseInt(donorId),
-            medical_history_id: allSourceData.screeningForm?.medical_history_id || null,
-            screening_id: screeningId || allSourceData.screeningForm?.screening_id || null,
-            physical_exam_id: allSourceData.physicalExam?.physical_exam_id || null,
-            blood_collection_id: null, // Only field allowed to be null
-            blood_type: allSourceData.screeningForm?.blood_type || null,
-            donation_type: allSourceData.screeningForm?.donation_type || null,
-            blood_bag_type: allSourceData.screeningForm?.blood_bag_type || allSourceData.physicalExam?.blood_bag_type || 'Deferred',
-            blood_bag_brand: allSourceData.screeningForm?.blood_bag_brand || 'Deferred',
-            amount_collected: 0, // Default for deferred donors
-            collection_successful: false, // Default for deferred donors
-            donor_reaction: 'Deferred',
-            management_done: 'Donor marked as deferred',
-            collection_start_time: null,
-            collection_end_time: null,
-            unit_serial_number: null,
+            screening_id: finalScreeningId || allSourceData.screeningForm?.screening_id || null,
+            deferral_type: deferralType,
             disapproval_reason: disapprovalReason,
-            start_date: new Date().toISOString(),
-            end_date: deferralType === 'Temporary Deferral' && finalDuration ? 
-                new Date(Date.now() + parseInt(finalDuration) * 24 * 60 * 60 * 1000).toISOString() : null,
-            status: deferralType === 'Temporary Deferral' ? 'temporary deferred' : 
-                   deferralType === 'Permanent Deferral' ? 'permanently deferred' : 'refused',
-            registration_channel: allSourceData.donorForm?.registration_channel || 'PRC Portal',
-            blood_pressure: allSourceData.physicalExam?.blood_pressure || null,
-            pulse_rate: allSourceData.physicalExam?.pulse_rate || null,
-            body_temp: allSourceData.physicalExam?.body_temp || null,
-            gen_appearance: allSourceData.physicalExam?.gen_appearance || null,
-            skin: allSourceData.physicalExam?.skin || null,
-            heent: allSourceData.physicalExam?.heent || null,
-            heart_and_lungs: allSourceData.physicalExam?.heart_and_lungs || null,
-            body_weight: allSourceData.screeningForm?.body_weight || allSourceData.physicalExam?.body_weight || null,
-            temporary_deferred: temporaryDeferredText,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            duration: finalDuration,
+            screening_form_data: screeningFormData // Pass the screening form data
         };
         
-        console.log('Using update-eligibility with data:', eligibilityData);
+        console.log('Using create_eligibility with defer data:', deferData);
         
         // Validate required fields before sending
-        if (!eligibilityData.donor_id || !eligibilityData.status || !eligibilityData.disapproval_reason) {
-            throw new Error(`Missing required fields: donor_id=${eligibilityData.donor_id}, status=${eligibilityData.status}, disapproval_reason=${eligibilityData.disapproval_reason}`);
+        if (!deferData.donor_id || !deferData.deferral_type || !deferData.disapproval_reason) {
+            throw new Error(`Missing required fields: donor_id=${deferData.donor_id}, deferral_type=${deferData.deferral_type}, disapproval_reason=${deferData.disapproval_reason}`);
         }
         
-        // Submit to update-eligibility endpoint
-        const response = await fetch('../api/update-eligibility.php', {
+        // Submit to create_eligibility.php endpoint
+        const response = await fetch('../../assets/php_func/create_eligibility.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(eligibilityData)
+            body: JSON.stringify(deferData)
         });
         
         if (!response.ok) {
@@ -539,8 +538,8 @@ async function submitScreeningDeferral() {
                 showScreeningDeferralConfirmedModal();
             }, 300);
         } else {
-            console.error('Failed to record screening deferral:', result.error);
-            showScreeningDeferToast('Error', result.message || 'Failed to record deferral. Please try again.', 'error');
+            console.error('Failed to record screening deferral:', result.error || result.message);
+            showScreeningDeferToast('Error', result.message || result.error || 'Failed to record deferral. Please try again.', 'error');
         }
         
     } catch (error) {

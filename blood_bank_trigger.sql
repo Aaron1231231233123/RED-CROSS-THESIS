@@ -36,3 +36,5 @@ CREATE TRIGGER create_blood_bank_unit_trigger
     AFTER INSERT ON blood_collection
     FOR EACH ROW
     EXECUTE FUNCTION get_blood_type_for_collection();
+
+

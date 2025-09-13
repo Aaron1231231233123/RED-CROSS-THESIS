@@ -15,9 +15,13 @@ function showDonorEligibilityAlert(donorId) {
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     <div id="eligibilityModalBody" class="modal-body">
-                        <div class="text-center">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
+                        <div class="d-flex justify-content-center align-items-center" style="min-height: 300px;">
+                            <div class="text-center">
+                                <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="text-muted fs-5">Loading eligibility information...</p>
+                                <p class="text-muted small">Please wait while we fetch the latest data</p>
                             </div>
                         </div>
                     </div>
@@ -92,13 +96,27 @@ function showDonorEligibilityAlert(donorId) {
         }
     });
 
+    // Hide the "Mark for Medical Review" button when showing eligibility alert
+    const markReviewButton = document.getElementById('markReviewFromMain');
+    if (markReviewButton) {
+        markReviewButton.style.display = 'none !important';
+        markReviewButton.style.visibility = 'hidden';
+        markReviewButton.style.opacity = '0';
+    }
+
     // Show modal with loading state
     modal.show();
 
-    // Fetch eligibility data
-    fetch('../../assets/php_func/get_donor_eligibility_status.php?donor_id=' + donorId)
-        .then(response => response.json())
-        .then(data => {
+    // Fetch eligibility data with delay to prevent flickering
+    setTimeout(() => {
+        fetch('../../assets/php_func/get_donor_eligibility_status.php?donor_id=' + donorId)
+            .then(response => response.json())
+            .then(data => {
+            // Double-check we're still showing the correct donor
+            if (window.currentDonorId !== donorId) {
+                return; // Don't update if user clicked on a different donor
+            }
+            
             if (!data.success) {
                 throw new Error(data.message || 'Failed to fetch eligibility status');
             }
@@ -118,16 +136,16 @@ function showDonorEligibilityAlert(donorId) {
                 title: 'Waiting Period Required'
             };
 
-            // Handle different statuses
+            // Handle different statuses - check status first, then temporary_deferred
             if (eligibility.status === 'approved') {
                 // For approved status, check 3 months waiting period
                 endDate = new Date(startDate);
                 endDate.setMonth(endDate.getMonth() + 3);
                 message = 'This donor has donated recently and must complete the required waiting period.';
             } 
-            else if (eligibility.temporary_deferred) {
-                // Use temporary_deferred duration
-                const durationParts = eligibility.temporary_deferred.split(' ');
+            else if (eligibility.status === 'temporary_deferred' || eligibility.status === 'temporarily_deferred') {
+                // Temporary deferral - use temporary_deferred duration
+                const durationParts = eligibility.temporary_deferred ? eligibility.temporary_deferred.split(' ') : [];
                 endDate = new Date(startDate);
                 
                 if (durationParts.includes('month')) {
@@ -150,7 +168,20 @@ function showDonorEligibilityAlert(donorId) {
                 };
                 message = `This donor is temporarily deferred for ${eligibility.temporary_deferred}.`;
             } 
-            else if (eligibility.status === 'deferred' || eligibility.status === 'ineligible') {
+            else if (eligibility.status === 'refused') {
+                // Refused status - different design from ineligible
+                endDate = null;
+                alertStyle = {
+                    bgColor: '#f3e5f5',
+                    borderColor: '#9c27b0',
+                    iconColor: '#9c27b0',
+                    icon: 'fa-times-circle',
+                    title: 'Donation Refused'
+                };
+                message = 'This donor has refused to donate blood.';
+            }
+            else if (eligibility.status === 'permanently_deferred' || eligibility.status === 'deferred' || eligibility.status === 'ineligible' || 
+                     (eligibility.temporary_deferred && eligibility.temporary_deferred.includes('Ineligible/Indefinite'))) {
                 // Permanent deferral
                 endDate = null;
                 alertStyle = {
@@ -158,9 +189,9 @@ function showDonorEligibilityAlert(donorId) {
                     borderColor: '#d32f2f',
                     iconColor: '#d32f2f',
                     icon: 'fa-ban',
-                    title: 'Permanently Deferred'
+                    title: 'Permanently Ineligible'
                 };
-                message = 'This donor is permanently deferred from donation.';
+                message = 'This donor is permanently ineligible for donation.';
             }
 
             // Calculate remaining time if applicable
@@ -212,17 +243,33 @@ function showDonorEligibilityAlert(donorId) {
                             <div style="font-size: 0.9rem; margin-bottom: 0.5rem;">Days Until Next Eligible Donation</div>
                             <div style="font-size: 2rem; font-weight: 700;">${remainingDays} days</div>
                         </div>
-                    ` : ''}
+                    ` : `
+                        <!-- Permanent deferral/refused - no dates or countdown -->
+                        <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+                            <div style="flex: 1;">
+                                <div style="color: #666; font-size: 0.875rem; margin-bottom: 0.25rem;">${eligibility.status === 'refused' ? 'Refusal Date' : 'Deferral Date'}</div>
+                                <div style="font-size: 1rem;">${startDate.toLocaleDateString()}</div>
+                            </div>
+                            <div style="flex: 1;">
+                                <div style="color: #666; font-size: 0.875rem; margin-bottom: 0.25rem;">Status</div>
+                                <div style="font-size: 1rem; color: ${eligibility.status === 'refused' ? '#9c27b0' : '#d32f2f'}; font-weight: 600;">${eligibility.status === 'refused' ? 'Donation Refused' : 'Permanently Ineligible'}</div>
+                            </div>
+                        </div>
+                    `}
                 </div>
             `;
         })
         .catch(error => {
             console.error('Error:', error);
-            const body = modalElement.querySelector('#eligibilityModalBody');
-            body.innerHTML = `
-                <div class="alert alert-danger mb-0">
-                    Failed to load eligibility status: ${error.message}
-                </div>
-            `;
+            // Only update if we're still showing the correct donor
+            if (window.currentDonorId === donorId) {
+                const body = modalElement.querySelector('#eligibilityModalBody');
+                body.innerHTML = `
+                    <div class="alert alert-danger mb-0">
+                        Failed to load eligibility status: ${error.message}
+                    </div>
+                `;
+            }
         });
+    }, 800); // 800ms delay to prevent flickering and ensure smooth loading
 }

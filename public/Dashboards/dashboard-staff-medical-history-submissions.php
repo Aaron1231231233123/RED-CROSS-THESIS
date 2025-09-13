@@ -2580,7 +2580,7 @@ $donor_history = $unique_donor_history;
                         }
                         // Enable main modal mark button only for returning
                         if (markReviewFromMain) {
-                            markReviewFromMain.style.display = 'inline-block';
+                            // Don't force display here - let button control logic handle it
                             markReviewFromMain.onclick = () => {
                                 fetch('../../assets/php_func/update_needs_review.php', {
                                     method: 'POST',
@@ -3051,11 +3051,13 @@ $donor_history = $unique_donor_history;
                                 </details>
                             </div>
                         </div>`;
+                        
                 }
                 
                 // Returning banner removed as requested
                 
                 deferralStatusContent.innerHTML = donorInfoHTML;
+                
                 // Ensure proceed button visibility reflects current stage capability
                 try {
                     const proceedButton = getProceedButton();
@@ -5051,6 +5053,64 @@ $donor_history = $unique_donor_history;
     </script>
 
     <script>
+        // Global function to control button visibility
+        function controlMarkReviewButton(donorId) {
+            const markReviewButton = document.getElementById('markReviewFromMain');
+            if (!markReviewButton) return;
+            
+            // Get eligibility status from the API
+            fetch('../../assets/php_func/get_donor_eligibility_status.php?donor_id=' + donorId)
+                .then(response => response.json())
+                .then(data => {
+                    let shouldShowMarkButton = false;
+                    
+                    if (data.success && data.data) {
+                        const eligibility = data.data;
+                        const status = eligibility.status;
+                        const startDate = new Date(eligibility.start_date);
+                        const today = new Date();
+                        
+                        // Calculate 3 months waiting period
+                        const threeMonthsLater = new Date(startDate);
+                        threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
+                        const hasRemainingDays = (threeMonthsLater - today) > 0;
+                        
+                        // Show button ONLY for "refused" status OR when waiting period is complete
+                        if (status === 'refused') {
+                            shouldShowMarkButton = true;
+                        }
+                        // Show button if approved status and waiting period is complete (no remaining days)
+                        else if (status === 'approved' && !hasRemainingDays) {
+                            shouldShowMarkButton = true;
+                        }
+                        // Hide button for all other cases
+                        else {
+                            shouldShowMarkButton = false;
+                        }
+                    } else {
+                        // No eligibility records - show button (new donor)
+                        shouldShowMarkButton = true;
+                    }
+                    
+                    // Force hide the button if it shouldn't be shown
+                    if (!shouldShowMarkButton) {
+                        markReviewButton.style.display = 'none !important';
+                        markReviewButton.style.visibility = 'hidden';
+                        markReviewButton.style.opacity = '0';
+                    } else {
+                        markReviewButton.style.display = 'inline-block';
+                        markReviewButton.style.visibility = 'visible';
+                        markReviewButton.style.opacity = '1';
+                    }
+                })
+                .catch(error => {
+                    // On error, hide button to be safe
+                    markReviewButton.style.display = 'none !important';
+                    markReviewButton.style.visibility = 'hidden';
+                    markReviewButton.style.opacity = '0';
+                });
+        }
+
         // Function to check if donor is new (no eligibility record)
         function checkAndShowDonorStatus(donorId) {
             // First check if donor has any eligibility records
@@ -5061,8 +5121,23 @@ $donor_history = $unique_donor_history;
                         // For new donors, just show the donor status modal
                         showDonorStatusModal(donorId);
                     } else {
-                        // For existing donors, show eligibility alert
-                        showDonorEligibilityAlert(donorId);
+                        // Check if donor has remaining days
+                        const eligibility = data.data;
+                        const startDate = new Date(eligibility.start_date);
+                        const today = new Date();
+                        const threeMonthsLater = new Date(startDate);
+                        threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
+                        const hasRemainingDays = (threeMonthsLater - today) > 0;
+                        
+                        // Show eligibility alert only if there are remaining days or donor is not approved
+                        if (hasRemainingDays || (eligibility.status !== 'approved' && eligibility.status !== 'refused')) {
+                            // For existing donors with remaining days or non-approved status, show eligibility alert
+                            controlMarkReviewButton(donorId); // Hide button for donors with remaining days
+                            showDonorEligibilityAlert(donorId);
+                        } else {
+                            // For donors with completed waiting period or refused status, show donor status modal
+                            showDonorStatusModal(donorId);
+                        }
                     }
                 })
                 .catch(error => {
@@ -5081,37 +5156,51 @@ $donor_history = $unique_donor_history;
             const deferralStatusModal = new bootstrap.Modal(document.getElementById('deferralStatusModal'));
             const deferralStatusContent = document.getElementById('deferralStatusContent');
             
-            // Show loading state
+            // Clear any previous content immediately and show loading
             deferralStatusContent.innerHTML = `
-                <div class="d-flex justify-content-center">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
+                <div class="d-flex justify-content-center align-items-center" style="min-height: 300px;">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="text-muted fs-5">Loading donor information...</p>
+                        <p class="text-muted small">Please wait while we fetch the latest data</p>
                     </div>
                 </div>`;
             
-            // Show modal
+            // Show modal immediately with loading state
             deferralStatusModal.show();
+            
+            // Control "Mark for Medical Review" button visibility
+            controlMarkReviewButton(donorId);
 
-            // Fetch and display donor info
-            fetch('../../assets/php_func/fetch_donor_info.php?donor_id=' + donorId)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        displayDonorInfo(data.data);
-                    } else {
-                        deferralStatusContent.innerHTML = `
-                            <div class="alert alert-danger">
-                                Failed to load donor information
-                            </div>`;
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching donor info:', error);
-                    deferralStatusContent.innerHTML = `
-                        <div class="alert alert-danger">
-                            An error occurred while loading donor information
-                        </div>`;
-                });
+            // Fetch and display donor info with longer delay to ensure smooth loading
+            setTimeout(() => {
+                fetch('../../assets/php_func/fetch_donor_info.php?donor_id=' + donorId)
+                    .then(response => response.json())
+                    .then(data => {
+                        // Double-check we're still showing the correct donor
+                        if (window.currentDonorId === donorId) {
+                            if (data.success) {
+                                displayDonorInfo(data.data);
+                            } else {
+                                deferralStatusContent.innerHTML = `
+                                    <div class="alert alert-danger">
+                                        Failed to load donor information
+                                    </div>`;
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching donor info:', error);
+                        if (window.currentDonorId === donorId) {
+                            deferralStatusContent.innerHTML = `
+                                <div class="alert alert-danger">
+                                    An error occurred while loading donor information
+                                </div>`;
+                        }
+                    });
+            }, 800); // Increased delay to 800ms for smoother experience
         }
 
         // Function to proceed after eligibility check
@@ -5129,38 +5218,5 @@ $donor_history = $unique_donor_history;
 
     <!-- Load eligibility alert script first -->
     <script src="../../assets/js/donor_eligibility_alert.js"></script>
-    <script>
-        // Prevent showing donor status for deferred donors
-        function checkAndShowDonorStatus(donorId) {
-            // First check eligibility
-            fetch('../../assets/php_func/get_donor_eligibility_status.php?donor_id=' + donorId)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success && data.data) {
-                        const eligibility = data.data;
-                        const today = new Date();
-                        const startDate = new Date(eligibility.start_date);
-                        const threeMonthsLater = new Date(startDate);
-                        threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
-                        
-                        // Check if donor has waiting days or is deferred
-                        const hasWaitingDays = (threeMonthsLater - today) > 0;
-                        const isDeferred = eligibility.status === 'deferred' || eligibility.status === 'ineligible';
-                        
-                        if (hasWaitingDays || isDeferred) {
-                            // Show eligibility alert instead
-                            showDonorEligibilityAlert(donorId);
-                            return;
-                        }
-                        
-                        // If eligible, proceed to show donor status
-                        proceedToDonorStatus(donorId);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error checking eligibility:', error);
-                });
-        }
-    </script>
 </body>
 </html>

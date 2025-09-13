@@ -45,7 +45,7 @@ try {
     if (empty($data)) {
         // For new donors, return success but with status 'new'
         echo json_encode([
-            'success' => false, // This will make the frontend skip eligibility check
+            'success' => true, // Changed to true so frontend can handle it properly
             'data' => [
                 'status' => 'new',
                 'message' => 'New donor - no eligibility check needed'
@@ -61,6 +61,7 @@ try {
             'status' => $eligibility['status'],
             'temporary_deferred' => $eligibility['temporary_deferred'],
             'start_date' => $eligibility['start_date'],
+            'end_date' => $eligibility['end_date'],
             'disapproval_reason' => $eligibility['disapproval_reason']
         ]
     ];

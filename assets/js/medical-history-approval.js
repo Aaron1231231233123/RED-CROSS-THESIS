@@ -528,16 +528,24 @@ async function processMedicalHistoryDecline(declineReason, restrictionType, dona
         return; // Exit early since we handled the case without screening_id
     }
     
-    // Use the same defer functionality as the working defer button (when screening_id is available)
+    // For medical history modal, we don't collect screening form data
+    // The screening form data should be collected from the Initial Screening Form modal
+
+    // Use the same defer functionality as the working defer button
     const deferData = {
         action: 'create_eligibility_defer',
         donor_id: currentMedicalHistoryData.donor_id,
-        screening_id: currentMedicalHistoryData.screening_id,
         deferral_type: restrictionType === 'temporary' ? 'Temporary Deferral' : 'Permanent Deferral',
         disapproval_reason: `Medical: ${declineReason}`,
         duration: restrictionType === 'temporary' ? 
-            Math.ceil((new Date(donationRestrictionDate) - new Date()) / (1000 * 60 * 60 * 24)) : null
+            Math.ceil((new Date(donationRestrictionDate) - new Date()) / (1000 * 60 * 60 * 24)) : null,
+        // No screening form data for medical history modal
     };
+    
+    // Only include screening_id if it exists and is not null/undefined
+    if (currentMedicalHistoryData.screening_id) {
+        deferData.screening_id = currentMedicalHistoryData.screening_id;
+    }
     
     console.log('Using defer functionality with data:', deferData);
     

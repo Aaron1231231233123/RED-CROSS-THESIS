@@ -44,7 +44,7 @@ try {
     
     $result = json_decode($response, true);
     
-    if (!empty($result)) {
+    if (!empty($result) && is_array($result) && isset($result[0])) {
         $donorData = $result[0];
         echo json_encode([
             'success' => true,

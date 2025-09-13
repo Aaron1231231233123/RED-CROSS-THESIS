@@ -95,3 +95,5 @@ CREATE TRIGGER create_blood_bank_unit_trigger
     AFTER INSERT OR UPDATE ON eligibility
     FOR EACH ROW
     EXECUTE FUNCTION create_blood_bank_unit();
+
+

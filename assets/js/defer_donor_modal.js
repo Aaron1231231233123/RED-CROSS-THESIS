@@ -398,6 +398,9 @@ async function submitDeferral() {
     const deferralType = document.getElementById('deferralTypeSelect').value;
     const disapprovalReason = formData.get('disapproval_reason');
     
+    // Convert empty string to null for screening_id
+    const finalScreeningId = screeningId && screeningId.trim() !== '' ? screeningId : null;
+    
     // Calculate final duration
     let finalDuration = null;
     if (deferralType === 'Temporary Deferral') {
@@ -458,7 +461,7 @@ async function submitDeferral() {
         const eligibilityData = {
             donor_id: parseInt(donorId),
             medical_history_id: allSourceData.screeningForm?.medical_history_id || null,
-            screening_id: screeningId || allSourceData.screeningForm?.screening_id || null,
+            screening_id: finalScreeningId || allSourceData.screeningForm?.screening_id || null,
             physical_exam_id: allSourceData.physicalExam?.physical_exam_id || null,
             blood_collection_id: null, // Only field allowed to be null
             blood_type: allSourceData.screeningForm?.blood_type || null,
@@ -535,8 +538,8 @@ async function submitDeferral() {
                 showDeferralConfirmedModal();
             }, 300);
         } else {
-            console.error('Failed to record deferral:', result.error);
-            showDeferToast('Error', result.message || 'Failed to record deferral. Please try again.', 'error');
+            console.error('Failed to record deferral:', result.error || result.message);
+            showDeferToast('Error', result.message || result.error || 'Failed to record deferral. Please try again.', 'error');
         }
         
     } catch (error) {
