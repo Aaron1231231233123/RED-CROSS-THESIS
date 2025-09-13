@@ -179,43 +179,46 @@ function updateBloodRequestAndInventory($request_id) {
         $units_requested = intval($request_data['units_requested']);
         $blood_type_full = $requested_blood_type . ($requested_rh_factor === 'Positive' ? '+' : '-');
         
-        // OPTIMIZATION: Use enhanced querySQL function for blood_bank_units data
-        $bloodBankUnitsData = querySQL(
-            'blood_bank_units',
-            'unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,created_at,updated_at',
-            []
+        // OPTIMIZATION: Use enhanced querySQL function for eligibility data
+        $eligibilityData = querySQL(
+            'eligibility',
+            'eligibility_id,donor_id,blood_type,donation_type,blood_bag_type,collection_successful,unit_serial_number,collection_start_time,start_date,end_date,status,blood_collection_id',
+            ['collection_successful' => 'eq.true']
         );
         
-        if (isset($bloodBankUnitsData['error'])) {
-            throw new Exception("Failed to fetch blood bank units data: " . $bloodBankUnitsData['error']);
+        if (isset($eligibilityData['error'])) {
+            throw new Exception("Failed to fetch eligibility data: " . $eligibilityData['error']);
         }
         
         $available_bags = [];
         $today = new DateTime();
         
-        foreach ($bloodBankUnitsData as $item) {
-            // Skip if no serial number
-            if (empty($item['unit_serial_number'])) {
-                continue;
+        foreach ($eligibilityData as $item) {
+            if (!empty($item['blood_collection_id'])) {
+                // OPTIMIZATION: Use enhanced querySQL for blood collection data
+                $bloodCollectionData = querySQL('blood_collection', '*', ['blood_collection_id' => 'eq.' . $item['blood_collection_id']]);
+                if (isset($bloodCollectionData['error'])) {
+                    error_log("Failed to fetch blood collection data for ID " . $item['blood_collection_id'] . ": " . $bloodCollectionData['error']);
+                    continue;
+                }
+                $bloodCollectionData = isset($bloodCollectionData[0]) ? $bloodCollectionData[0] : null;
+            } else {
+                $bloodCollectionData = null;
             }
             
-            // Parse collection and expiration dates
-            $collectionDate = new DateTime($item['collected_at']);
-            $expirationDate = new DateTime($item['expires_at']);
+            $collectionDate = new DateTime($item['collection_start_time']);
+            $expirationDate = clone $collectionDate;
+            $expirationDate->modify('+35 days');
             $isExpired = ($today > $expirationDate);
-            $current_status = $item['status'] ?? 'available';
+            $amount_taken = $bloodCollectionData && isset($bloodCollectionData['amount_taken']) ? intval($bloodCollectionData['amount_taken']) : 0;
             
-            // Each unit represents 1 bag
-            $amount_taken = 1;
-            
-            // Only include units that are not expired and not already handed over
-            if ($amount_taken > 0 && !$isExpired && $current_status !== 'handed_over') {
+            if ($amount_taken > 0 && !$isExpired) {
                 $available_bags[] = [
-                    'unit_id' => $item['unit_id'],
-                    'unit_serial_number' => $item['unit_serial_number'],
+                    'eligibility_id' => $item['eligibility_id'],
+                    'blood_collection_id' => $item['blood_collection_id'],
                     'blood_type' => $item['blood_type'],
                     'amount_taken' => $amount_taken,
-                    'collection_start_time' => $item['collected_at'],
+                    'collection_start_time' => $item['collection_start_time'],
                     'expiration_date' => $expirationDate->format('Y-m-d'),
                 ];
             }
@@ -252,7 +255,7 @@ function updateBloodRequestAndInventory($request_id) {
                 foreach ($available_bags as $bag) {
                     if ($remaining_units <= 0) break;
                     if ($bag['blood_type'] === $compatible_blood_type &&
-                        !in_array($bag['unit_id'], array_column($collections_to_update, 'unit_id'))) {
+                        !in_array($bag['blood_collection_id'], array_column($collections_to_update, 'blood_collection_id'))) {
                         $available_units = $bag['amount_taken'];
                         if ($available_units > 0) {
                             $units_to_take = min($available_units, $remaining_units);
@@ -288,22 +291,23 @@ function updateBloodRequestAndInventory($request_id) {
         }
         
         // OPTIMIZATION: Use enhanced API function for batch updates
-        // Since we're working with individual units, we need to mark them as handed over
         foreach ($collections_to_update as $collection) {
+            $new_amount = intval($collection['amount_taken']) - intval($collection['units_to_take']);
+            if ($new_amount < 0) $new_amount = 0;
+            
             $update_data = [
-                'status' => 'handed_over',
-                'handed_over_at' => date('Y-m-d H:i:s'),
+                'amount_taken' => $new_amount,
                 'updated_at' => date('Y-m-d H:i:s')
             ];
             
             $updateResponse = supabaseRequest(
-                "blood_bank_units?unit_id=eq." . $collection['unit_id'],
+                "blood_collection?blood_collection_id=eq." . $collection['blood_collection_id'],
                 'PATCH',
                 $update_data
             );
             
             if ($updateResponse['code'] !== 200 && $updateResponse['code'] !== 204) {
-                throw new Exception("Failed to update blood bank unit {$collection['unit_id']}. HTTP Code: {$updateResponse['code']}");
+                throw new Exception("Failed to update blood collection {$collection['blood_collection_id']}. HTTP Code: {$updateResponse['code']}");
             }
         }
         
@@ -456,6 +460,32 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     border-right: 1px solid #ddd;
     padding: 15px;
     transition: width 0.3s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-main-content {
+    flex-grow: 1;
+    padding-bottom: 80px; /* Space for logout button */
+}
+
+.logout-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 20px 15px;
+    border-top: 1px solid #ddd;
+    background-color: #ffffff;
+}
+
+.logout-link {
+    color: #dc3545 !important;
+}
+
+.logout-link:hover {
+    background-color: #dc3545 !important;
+    color: white !important;
 }
 
 .dashboard-home-sidebar .nav-link {
@@ -524,18 +554,31 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     margin-bottom: 10px;
 }
 
-/* Blood Donations Section */
-#bloodDonationsCollapse {
+/* Donor Management Section */
+#donorManagementCollapse {
     margin-top: 2px;
     border: none;
 }
 
-#bloodDonationsCollapse .nav-link {
+#donorManagementCollapse .nav-link {
     color: #666;
     padding: 8px 15px 8px 40px;
 }
 
-#bloodDonationsCollapse .nav-link:hover {
+#donorManagementCollapse .nav-link:hover {
+    color: #dc3545;
+    font-weight: 600;
+    background-color: transparent;
+}
+
+/* Hospital Requests Section */
+#hospitalRequestsCollapse .nav-link {
+    color: #333;
+    padding: 8px 15px 8px 40px;
+    font-size: 0.9rem;
+}
+
+#hospitalRequestsCollapse .nav-link:hover {
     color: #dc3545;
     font-weight: 600;
     background-color: transparent;
@@ -850,55 +893,54 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         <div class="row">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">
-            <div class="position-sticky">
+                <div class="sidebar-main-content">
                     <div class="d-flex align-items-center ps-1 mb-4 mt-2">
                         <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" style="width: 65px; height: 65px; object-fit: contain;">
                         <span class="text-primary ms-1" style="font-size: 1.5rem; font-weight: 600;">Dashboard</span>
                     </div>
-                <a href="dashboard-Inventory-System.php" class="nav-link">
-                    
-                    <span><i class="fas fa-home me-2"></i>Home</span>
-                </a>
-                
-                <a class="nav-link" data-bs-toggle="collapse" href="#bloodDonationsCollapse" role="button" aria-expanded="false" aria-controls="bloodDonationsCollapse">
-                    <span><i class="fas fa-tint me-2"></i>Blood Donations</span>
-                    <i class="fas fa-chevron-down"></i>
-                </a>
-                <div class="collapse" id="bloodDonationsCollapse">
-                    <div class="collapse-menu">
-                        <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" class="nav-link">Pending</a>
-                        <a href="dashboard-Inventory-System-list-of-donations.php?status=approved" class="nav-link">Approved</a>
-                        <a href="dashboard-Inventory-System-list-of-donations.php?status=declined" class="nav-link">Declined</a>
-                    </div>
+                    <ul class="nav flex-column">
+                        <a href="dashboard-Inventory-System.php" class="nav-link">
+                            <span><i class="fas fa-home me-2"></i>Home</span>
+                        </a>
+                        
+                        <a href="dashboard-Inventory-System-list-of-donations.php" class="nav-link">
+                            <span><i class="fas fa-users me-2"></i>Donor Management</span>
+                        </a>
+                        <a href="#" class="nav-link">
+                            <span><i class="fas fa-user-check me-2"></i>Donor Status</span>
+                        </a>
+                        <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
+                            <span><i class="fas fa-tint me-2"></i>Blood Bank</span>
+                        </a>
+                        
+                        <a class="nav-link" data-bs-toggle="collapse" href="#hospitalRequestsCollapse" role="button" aria-expanded="true" aria-controls="hospitalRequestsCollapse">
+                            <span><i class="fas fa-list"></i>Hospital Requests</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </a>
+                        <div class="collapse show" id="hospitalRequestsCollapse">
+                            <div class="collapse-menu">
+                                <a href="Dashboard-Inventory-System-Hospital-Request.php?status=requests" class="nav-link<?php echo (!isset($_GET['status']) || $_GET['status'] === 'requests') ? ' active' : ''; ?>">Requests</a>
+                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=accepted" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'accepted') ? ' active' : ''; ?>">Approved</a>
+                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=handedover" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'handedover') ? ' active' : ''; ?>">Handed Over</a>
+                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=declined" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'declined') ? ' active' : ''; ?>">Declined</a>
+                            </div>
+                        </div>
+                        
+                        <a href="#" class="nav-link">
+                            <span><i class="fas fa-chart-line me-2"></i>Forecast Reports</span>
+                        </a>
+                        <a href="#" class="nav-link">
+                            <span><i class="fas fa-user-cog me-2"></i>Manage Users</span>
+                        </a>
+                    </ul>
                 </div>
-
-                <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
-                    <span><i class="fas fa-tint me-2"></i>Blood Bank</span>
-                </a>
                 
-                <a class="nav-link" data-bs-toggle="collapse" href="#hospitalRequestsCollapse" role="button" aria-expanded="true" aria-controls="hospitalRequestsCollapse">
-                    <span><i class="fas fa-list"></i>Hospital Requests</span>
-                    <i class="fas fa-chevron-down"></i>
-                </a>
-                <div class="collapse show" id="hospitalRequestsCollapse">
-                    <div class="collapse-menu">
-                        <a href="Dashboard-Inventory-System-Hospital-Request.php?status=requests" class="nav-link<?php echo (!isset($_GET['status']) || $_GET['status'] === 'requests') ? ' active' : ''; ?>">Requests</a>
-                        <a href="Dashboard-Inventory-System-Handed-Over.php?status=accepted" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'accepted') ? ' active' : ''; ?>">Approved</a>
-                        <a href="Dashboard-Inventory-System-Handed-Over.php?status=handedover" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'handedover') ? ' active' : ''; ?>">Handed Over</a>
-                        <a href="Dashboard-Inventory-System-Handed-Over.php?status=declined" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'declined') ? ' active' : ''; ?>">Declined</a>
-                    </div>
+                <div class="logout-container">
+                    <a href="../../assets/php_func/logout.php" class="nav-link logout-link">
+                        <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
+                    </a>
                 </div>
-                
-                
-                
-                
-                
-                
-                <a href="../../assets/php_func/logout.php" class="nav-link">
-                    <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
-                </a>
-            </div>
-           </nav>
+            </nav>
         </div>
            <!-- Main Content -->
            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
@@ -1131,7 +1173,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                   </div>
                 </div>
               </div>
-            </div>
+            </div>w2
             <script>
               document.addEventListener('DOMContentLoaded', function() {
                 var modal = new bootstrap.Modal(document.getElementById('insufficientInventoryModal'));

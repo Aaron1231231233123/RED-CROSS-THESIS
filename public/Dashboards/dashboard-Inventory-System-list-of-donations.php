@@ -3,10 +3,10 @@
 include_once '../../assets/conn/db_conn.php';
 
 // Get the status parameter from URL
-$status = isset($_GET['status']) ? $_GET['status'] : 'pending';
+$status = isset($_GET['status']) ? $_GET['status'] : 'all';
 $donations = [];
 $error = null;
-$pageTitle = "Loading...";
+$pageTitle = "All Donors";
 
 // Based on status, include the appropriate module
 try {
@@ -22,14 +22,48 @@ try {
             $pageTitle = "Approved Donations";
             break;
         case 'declined':
+        case 'deferred':
             include_once 'module/donation_declined.php';
             $donations = $declinedDonations ?? [];
-            $pageTitle = "Declined Donations";
+            $pageTitle = "Declined/Deferred Donations";
             break;
+        case 'all':
         default:
+            // Show all donors by combining all modules
+            $allDonations = [];
+            
+            // Get pending donors
             include_once 'module/donation_pending.php';
-            $donations = $pendingDonations ?? [];
-            $pageTitle = "Pending Donations";
+            if (isset($pendingDonations) && is_array($pendingDonations)) {
+                $allDonations = array_merge($allDonations, $pendingDonations);
+            }
+            
+            // Get approved donors
+            include_once 'module/donation_approved.php';
+            if (isset($approvedDonations) && is_array($approvedDonations)) {
+                $allDonations = array_merge($allDonations, $approvedDonations);
+            }
+            
+            // Get declined/deferred donors
+            include_once 'module/donation_declined.php';
+            if (isset($declinedDonations) && is_array($declinedDonations)) {
+                $allDonations = array_merge($allDonations, $declinedDonations);
+            }
+            
+            // Sort all donations by date (newest first)
+            usort($allDonations, function($a, $b) {
+                $dateA = $a['date_submitted'] ?? $a['rejection_date'] ?? '';
+                $dateB = $b['date_submitted'] ?? $b['rejection_date'] ?? '';
+                
+                if (empty($dateA) && empty($dateB)) return 0;
+                if (empty($dateA)) return 1;
+                if (empty($dateB)) return -1;
+                
+                return strtotime($dateB) - strtotime($dateA);
+            });
+            
+            $donations = $allDonations;
+            $pageTitle = "All Donors";
             break;
     }
 } catch (Exception $e) {
@@ -132,6 +166,32 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     border-right: 1px solid #ddd;
     padding: 15px;
     transition: width 0.3s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-main-content {
+    flex-grow: 1;
+    padding-bottom: 80px; /* Space for logout button */
+}
+
+.logout-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 20px 15px;
+    border-top: 1px solid #ddd;
+    background-color: #ffffff;
+}
+
+.logout-link {
+    color: #dc3545 !important;
+}
+
+.logout-link:hover {
+    background-color: #dc3545 !important;
+    color: white !important;
 }
 
 .dashboard-home-sidebar .nav-link {
@@ -168,7 +228,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     list-style: none;
     padding: 0;
     margin: 0;
-    background-color: transparent;
+    background-color: #f8f9fa;
     border-radius: 4px;
 }
 
@@ -210,31 +270,44 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     margin-bottom: 10px;
 }
 
-/* Blood Donations Section */
-#bloodDonationsCollapse {
+/* Donor Management Section */
+#donorManagementCollapse {
     margin-top: 2px;
     border: none;
 }
 
-#bloodDonationsCollapse .nav-link {
+#donorManagementCollapse .nav-link {
     color: #333;
     padding: 8px 15px 8px 40px;
 }
 
-#bloodDonationsCollapse .nav-link:hover {
+#donorManagementCollapse .nav-link:hover {
     background-color: #f8f9fa;
     color: #dc3545;
 }
 
 
-#bloodDonationsCollapse .nav-link.active {
+#donorManagementCollapse .nav-link.active {
     background-color: #dc3545;
     color: white;
 }
 
-.dashboard-home-sidebar .nav-link[aria-expanded="true"] {
-    background-color: transparent;
+/* Hospital Requests Section */
+#hospitalRequestsCollapse .nav-link {
     color: #333;
+    padding: 8px 15px 8px 40px;
+    font-size: 0.9rem;
+}
+
+#hospitalRequestsCollapse .nav-link:hover {
+    color: #dc3545;
+    font-weight: 600;
+    background-color: transparent;
+}
+
+.dashboard-home-sidebar .nav-link[aria-expanded="true"] {
+    background-color: #f8f9fa;
+    color: #dc3545;
 }
 
 /* Main Content Styling */
@@ -614,6 +687,94 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     transform: translateY(0);
     box-shadow: 0 2px 4px rgba(13, 110, 253, 0.4);
 }
+
+/* Status Filter Button Styles */
+.status-filter-buttons .btn {
+    transition: all 0.2s ease-in-out;
+    font-weight: 500;
+}
+
+.status-filter-buttons .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.status-filter-buttons .btn.active {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Pagination Styles */
+.pagination {
+    margin: 20px 0;
+    justify-content: center;
+    gap: 4px;
+}
+
+.pagination .page-item {
+    margin: 0;
+}
+
+.pagination .page-link {
+    border: 1px solid #d1d5db;
+    color: #374151;
+    background-color: #fff;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    min-width: 40px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pagination .page-link:hover {
+    background-color: #f3f4f6;
+    border-color: #9ca3af;
+    color: #111827;
+    text-decoration: none;
+}
+
+.pagination .page-item.active .page-link {
+    background-color: #3b82f6;
+    border-color: #3b82f6;
+    color: #fff;
+    font-weight: 600;
+}
+
+.pagination .page-item.active .page-link:hover {
+    background-color: #2563eb;
+    border-color: #2563eb;
+}
+
+.pagination .page-item.disabled .page-link {
+    background-color: #f9fafb;
+    border-color: #e5e7eb;
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+
+.pagination .page-item.disabled .page-link:hover {
+    background-color: #f9fafb;
+    border-color: #e5e7eb;
+    color: #9ca3af;
+}
+
+.pagination .page-link i {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* Entries Information */
+.entries-info {
+    text-align: center;
+    margin-top: 15px;
+    color: #6c757d;
+    font-size: 14px;
+}
     </style>
 </head>
 <body>
@@ -682,53 +843,100 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         <div class="row">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">
-            <div class="position-sticky">
+                <div class="sidebar-main-content">
                     <div class="d-flex align-items-center ps-1 mb-3 mt-2">
                         <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" style="width: 65px; height: 65px; object-fit: contain;">
                         <span class="text-primary ms-1" style="font-size: 1.5rem; font-weight: 600;">Dashboard</span>
                     </div>
-                <ul class="nav flex-column">
-                    <a href="dashboard-Inventory-System.php" class="nav-link">
-                        <span><i class="fas fa-home"></i>Home</span>
-                    </a>
-                    <a class="nav-link" data-bs-toggle="collapse" href="#bloodDonationsCollapse" role="button" aria-expanded="false" aria-controls="bloodDonationsCollapse">
-                        <span><i class="fas fa-tint"></i>Blood Donations</span>
-                        <i class="fas fa-chevron-down"></i>
-                    </a>
-                    <div class="collapse<?php echo (!isset($status) || in_array($status, ['pending', 'approved', 'declined'])) ? ' show' : ''; ?>" id="bloodDonationsCollapse">
-                        <div class="collapse-menu">
-                            <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" class="nav-link<?php echo ($status === 'pending' || !$status) ? ' active' : ''; ?>">Pending</a>
-                            <a href="dashboard-Inventory-System-list-of-donations.php?status=approved" class="nav-link<?php echo $status === 'approved' ? ' active' : ''; ?>">Approved</a>
-                            <a href="dashboard-Inventory-System-list-of-donations.php?status=declined" class="nav-link<?php echo $status === 'declined' ? ' active' : ''; ?>">Declined</a>
+                    <ul class="nav flex-column">
+                        <a href="dashboard-Inventory-System.php" class="nav-link">
+                            <span><i class="fas fa-home"></i>Home</span>
+                        </a>
+                        <a href="dashboard-Inventory-System-list-of-donations.php" class="nav-link active">
+                            <span><i class="fas fa-users"></i>Donor Management</span>
+                        </a>
+                        <a href="#" class="nav-link">
+                            <span><i class="fas fa-user-check"></i>Donor Status</span>
+                        </a>
+                        <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
+                            <span><i class="fas fa-tint"></i>Blood Bank</span>
+                        </a>
+                        <a class="nav-link" href="#" data-bs-toggle="collapse" data-bs-target="#hospitalRequestsCollapse" role="button" aria-expanded="false" aria-controls="hospitalRequestsCollapse" onclick="event.preventDefault();">
+                            <span><i class="fas fa-list"></i>Hospital Requests</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </a>
+                        <div class="collapse" id="hospitalRequestsCollapse">
+                            <div class="collapse-menu">
+                                <a href="Dashboard-Inventory-System-Hospital-Request.php?status=requests" class="nav-link">Requests</a>
+                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=accepted" class="nav-link">Approved</a>
+                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=handedover" class="nav-link">Handed Over</a>
+                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=declined" class="nav-link">Declined</a>
+                            </div>
                         </div>
-                    </div>
-                    <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
-                        <span><i class="fas fa-tint"></i>Blood Bank</span>
+                        <a href="#" class="nav-link">
+                            <span><i class="fas fa-chart-line"></i>Forecast Reports</span>
+                        </a>
+                        <a href="#" class="nav-link">
+                            <span><i class="fas fa-user-cog"></i>Manage Users</span>
+                        </a>
+                    </ul>
+                </div>
+                
+                <div class="logout-container">
+                    <a href="../../assets/php_func/logout.php" class="nav-link logout-link">
+                        <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
                     </a>
-                    <a class="nav-link" data-bs-toggle="collapse" href="#hospitalRequestsCollapse" role="button" aria-expanded="false" aria-controls="hospitalRequestsCollapse">
-                        <span><i class="fas fa-list"></i>Hospital Requests</span>
-                        <i class="fas fa-chevron-down"></i>
-                    </a>
-                    <div class="collapse" id="hospitalRequestsCollapse">
-                        <div class="collapse-menu">
-                            <a href="Dashboard-Inventory-System-Hospital-Request.php?status=requests" class="nav-link">Requests</a>
-                            <a href="Dashboard-Inventory-System-Handed-Over.php?status=accepted" class="nav-link">Approved</a>
-                            <a href="Dashboard-Inventory-System-Handed-Over.php?status=handedover" class="nav-link">Handed Over</a>
-                            <a href="Dashboard-Inventory-System-Handed-Over.php?status=declined" class="nav-link">Declined</a>
-                        </div>
-                    </div>
-                    <a href="../../assets/php_func/logout.php" class="nav-link">
-                            <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
-                    </a>
-                </ul>
-            </div>
-           </nav>
+                </div>
+            </nav>
            <!-- Main Content -->
            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
             <div class="container-fluid p-4 custom-margin">
-                        <h2 class="card-title"><?php echo $pageTitle; ?></h2>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <h2 class="card-title mb-1">Welcome, Admin!</h2>
+                                <h4 class="card-subtitle text-muted mb-0">Donor Management</h4>
+                                <?php if ($status && $status !== 'all'): ?>
+                                <p class="text-muted mb-0 mt-1">
+                                    <i class="fas fa-filter me-1"></i>
+                                    Showing: <strong><?php echo ($status === 'deferred') ? 'Declined/Deferred' : ucfirst($status); ?> Donors</strong>
+                                </p>
+                                <?php else: ?>
+                                <p class="text-muted mb-0 mt-1">
+                                    <i class="fas fa-users me-1"></i>
+                                    Showing: <strong>All Donors</strong>
+                                </p>
+                                <?php endif; ?>
+                            </div>
+                            <div class="text-end">
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar me-1"></i>
+                                    <?php echo date('l, F j, Y'); ?>
+                                </small>
+                            </div>
+                        </div>
+                        
+                        <!-- Status Filter Tabs -->
                         <div class="row mb-3">
                             <div class="col-12">
+                                <div class="d-flex flex-wrap gap-2 mb-3 status-filter-buttons">
+                                    <a href="dashboard-Inventory-System-list-of-donations.php?status=all" 
+                                       class="btn <?php echo ($status === 'all' || !$status) ? 'btn-primary' : 'btn-outline-primary'; ?> btn-sm">
+                                        <i class="fas fa-list me-1"></i>All Donors
+                                    </a>
+                                    <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" 
+                                       class="btn <?php echo $status === 'pending' ? 'btn-warning' : 'btn-outline-warning'; ?> btn-sm">
+                                        <i class="fas fa-clock me-1"></i>Pending
+                                    </a>
+                                    <a href="dashboard-Inventory-System-list-of-donations.php?status=approved" 
+                                       class="btn <?php echo $status === 'approved' ? 'btn-success' : 'btn-outline-success'; ?> btn-sm">
+                                        <i class="fas fa-check me-1"></i>Approved
+                                    </a>
+                                    <a href="dashboard-Inventory-System-list-of-donations.php?status=declined" 
+                                       class="btn <?php echo ($status === 'declined' || $status === 'deferred') ? 'btn-danger' : 'btn-outline-danger'; ?> btn-sm">
+                                        <i class="fas fa-times me-1"></i>Declined/Deferred
+                                    </a>
+                                </div>
+                                
                                 <div class="search-container">
                                     <div class="input-group">
                                         <span class="input-group-text">
@@ -737,13 +945,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         <select class="form-select category-select" id="searchCategory" style="max-width: 150px;">
                                             <option value="all">All Fields</option>
                                             <option value="donor">Donor Name</option>
+                                            <option value="donor_number">Donor Number</option>
+                                            <option value="donor_type">Donor Type</option>
+                                            <option value="registered_via">Registered Via</option>
                                             <option value="status">Status</option>
-                                            <option value="date">Date</option>
                                         </select>
                                         <input type="text" 
                                             class="form-control" 
                                             id="searchInput" 
-                                            placeholder="Search donations...">
+                                            placeholder="Search donors...">
                                     </div>
                                     <div id="searchInfo" class="mt-2 small text-muted"></div>
                                 </div>
@@ -788,180 +998,180 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
                         <!-- Divider Line -->
                 <hr class="mt-0 mb-3 border-2 border-secondary opacity-50 mb-2">
-                        <!-- Responsive Table -->
+                        
+                        <!-- Donor Management Table -->
+                        <?php if (!empty($donations)): ?>
                         <div class="table-responsive">
-                            <table class="table table-striped table-hover" id="donationsTable" data-start-index="<?php echo $startIndex; ?>" data-items-per-page="<?php echo $itemsPerPage; ?>" data-total-items="<?php echo $totalItems; ?>" data-current-page="<?php echo $currentPage; ?>" data-status="<?php echo $status; ?>">
+                            <table class="table table-striped table-hover" id="donationsTable">
                                 <thead class="table-dark">
                                     <tr>
-                                        <?php if ($status === 'approved'): ?>
+                                        <th>Donor Number</th>
                                         <th>Surname</th>
                                         <th>First Name</th>
-                                        <th>Middle Name</th>
-                                        <th>Age</th>
-                                        <th>Sex</th>
-                                        <th>Blood Type</th>
-                                        <th>Actions</th>
-                                        <?php elseif ($status === 'pending'): ?>
-                                            <th>Surname</th>
-                                            <th>First Name</th>
-                                            <th>Age</th>
-                                            <th>Sex</th>
-                                            <th>Date Submitted</th>
-                                            <th>Gateway</th>
-                                            <th>Actions</th>
-                                        <?php elseif ($status === 'declined'): ?>
-                                            <th>Surname</th>
-                                            <th>First Name</th>
-                                            <th>Remarks</th>
-                                            <th>Reason for Rejection</th>
-                                            <th>Rejection Date</th>
-                                            <th>Actions</th>
-                                        <?php else: ?>
-                                            <th>Surname</th>
-                                            <th>First Name</th>
-                                            <th>Middle Name</th>
-                                        <th>Blood Type</th>
-                                        <th>Donation Type</th>
+                                        <th>Donor Type</th>
+                                        <th>Registered Via</th>
                                         <th>Status</th>
-                                        <th>Actions</th>
-                                        <?php endif; ?>
+                                        <th>Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php if (!$error && is_array($currentPageDonations) && count($currentPageDonations) > 0): ?>
-                                        <?php foreach ($currentPageDonations as $donation): ?>
-                                            <tr class="donor-row" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>" style="cursor: pointer;">
-                                                <?php if ($status === 'approved'): ?>
-                                                    <td><?php echo htmlspecialchars($donation['surname'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['first_name'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['middle_name'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['age'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['sex'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['blood_type'] ?? 'Unknown'); ?></td>
-                                                <?php elseif ($status === 'pending'): ?>
-                                                    <td><?php echo htmlspecialchars($donation['surname'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['first_name'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['age'] ?? calculateAge($donation['birthdate'])); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['sex'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['date_submitted'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['registration_source'] ?? 'PRC System'); ?></td>
-                                                <?php elseif ($status === 'declined'): ?>
-                                                    <td><?php echo htmlspecialchars($donation['surname'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['first_name'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['rejection_source'] ?? 'Physical Examination'); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['rejection_reason'] ?? 'Unspecified'); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['rejection_date'] ?? date('M d, Y')); ?></td>
-                                                <?php else: ?>
-                                                    <td><?php echo htmlspecialchars($donation['surname'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['first_name'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['middle_name'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['blood_type'] ?? ''); ?></td>
-                                                    <td><?php echo htmlspecialchars($donation['donation_type'] ?? ''); ?></td>
-                                                    <td>
-                                                        <?php if ($status === 'pending'): ?>
-                                                        <span class="badge bg-warning">Pending</span>
-                                                        <?php elseif ($status === 'approved'): ?>
-                                                        <span class="badge bg-success">Approved</span>
-                                                        <?php elseif ($status === 'declined'): ?>
-                                                        <span class="badge bg-danger">Declined</span>
-                                                        <?php else: ?>
-                                                        <span class="badge bg-secondary"><?php echo ucfirst($status); ?></span>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <?php endif; ?>
-                                                
-                                                <td onclick="event.stopPropagation();">
-                                                    <button class="btn btn-sm btn-info view-donor" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>">
-                                                        <i class="fas fa-eye"></i>
-                                                    </button>
-                                                    <?php if ($status !== 'declined' && $status !== 'approved' && $status !== 'pending'): ?>
-                                                    <button class="btn btn-sm btn-warning edit-donor" data-donor-id="<?php echo htmlspecialchars($donation['donor_id']); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>">
-                                                        <i class="fas fa-edit"></i>
-                                                    </button>
-                                                    <?php endif; ?>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    <?php else: ?>
-                                        <tr>
-                                            <td colspan="<?php echo ($status === 'approved') ? '8' : (($status === 'pending' || $status === 'declined') ? '6' : '7'); ?>" class="text-center">
-                                                No <?php echo $status; ?> donations found
-                                            </td>
-                                        </tr>
-                                    <?php endif; ?>
+                                    <?php foreach ($currentPageDonations as $donation): ?>
+                                    <tr class="donor-row" data-donor-id="<?php echo htmlspecialchars($donation['donor_id'] ?? ''); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>">
+                                        <td><?php echo htmlspecialchars($donation['donor_id'] ?? ''); ?></td>
+                                        <td><?php echo htmlspecialchars($donation['surname'] ?? ''); ?></td>
+                                        <td><?php echo htmlspecialchars($donation['first_name'] ?? ''); ?></td>
+                                        <td>
+                                            <span class="badge bg-<?php echo ($donation['donor_type'] ?? '') === 'Returning' ? 'info' : 'primary'; ?>">
+                                                <?php echo htmlspecialchars($donation['donor_type'] ?? 'New'); ?>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <?php 
+                                            $regChannel = $donation['registration_source'] ?? $donation['registration_channel'] ?? 'PRC Portal';
+                                            echo $regChannel === 'PRC Portal' ? 'System' : htmlspecialchars($regChannel);
+                                            ?>
+                                        </td>
+                                        <td>
+                                            <?php
+                                            $status = $donation['status_text'] ?? 'Pending (Screening)';
+                                            $statusClass = '';
+                                            $displayStatus = $status;
+                                            
+                                            // Handle different status types
+                                            switch($status) {
+                                                case 'Pending (Screening)':
+                                                    $statusClass = 'bg-warning';
+                                                    break;
+                                                case 'Pending (Examination)':
+                                                case 'Pending (Physical Examination)':
+                                                    $statusClass = 'bg-info';
+                                                    break;
+                                                case 'Pending (Collection)':
+                                                    $statusClass = 'bg-primary';
+                                                    break;
+                                                case 'Approved':
+                                                    $statusClass = 'bg-success';
+                                                    break;
+                                                case 'Declined':
+                                                    $statusClass = 'bg-danger';
+                                                    break;
+                                                case 'Temporarily Deferred':
+                                                    $statusClass = 'bg-warning';
+                                                    break;
+                                                case 'Permanently Deferred':
+                                                    $statusClass = 'bg-danger';
+                                                    break;
+                                                default:
+                                                    $statusClass = 'bg-warning';
+                                            }
+                                            ?>
+                                            <span class="badge <?php echo $statusClass; ?>"><?php echo htmlspecialchars($displayStatus); ?></span>
+                                        </td>
+                                        <td>
+                                            <?php
+                                            $status = $donation['status_text'] ?? 'Pending (Screening)';
+                                            if (in_array($status, ['Pending (Screening)', 'Pending (Examination)', 'Pending (Physical Examination)', 'Pending (Collection)'])) {
+                                                // Show edit button for pending statuses
+                                                echo '<button type="button" class="btn btn-warning btn-sm edit-donor" data-donor-id="' . htmlspecialchars($donation['donor_id'] ?? '') . '" data-eligibility-id="' . htmlspecialchars($donation['eligibility_id'] ?? '') . '">';
+                                                echo '<i class="fas fa-edit"></i>';
+                                                echo '</button>';
+                                            } else {
+                                                // Show view button for completed statuses (Approved, Declined, Temporarily Deferred, Permanently Deferred)
+                                                echo '<button type="button" class="btn btn-info btn-sm view-donor" data-donor-id="' . htmlspecialchars($donation['donor_id'] ?? '') . '" data-eligibility-id="' . htmlspecialchars($donation['eligibility_id'] ?? '') . '">';
+                                                echo '<i class="fas fa-eye"></i>';
+                                                echo '</button>';
+                                            }
+                                            ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>
-            
+                        <?php else: ?>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>No donors found. New donor submissions will appear here.
+                        </div>
+                        <?php endif; ?>
+                        
                         <!-- Pagination Controls -->
-                        <?php if (!$error && $totalPages > 1): ?>
+                        <?php if ($totalPages > 1): ?>
+                        <div class="d-flex justify-content-center">
                         <nav aria-label="Page navigation">
-                            <ul class="pagination justify-content-center">
-                                <?php if ($currentPage > 1): ?>
-                                    <li class="page-item">
-                                        <a class="page-link" href="dashboard-Inventory-System-list-of-donations.php?status=<?php echo $status; ?>&page=<?php echo $currentPage - 1; ?>" aria-label="Previous">
-                                            <span aria-hidden="true">&laquo;</span>
+                                <ul class="pagination">
+                                    <!-- Previous button -->
+                                    <li class="page-item <?php echo $currentPage <= 1 ? 'disabled' : ''; ?>">
+                                        <a class="page-link" href="?status=<?php echo $status; ?>&page=<?php echo max(1, $currentPage - 1); ?>" aria-label="Previous">
+                                            <i class="fas fa-chevron-left"></i>
                                         </a>
                                     </li>
-                                <?php endif; ?>
-
-                                <?php
-                                // Display limited number of page links
-                                $maxPagesToShow = 5;
-                                $startPage = max(1, $currentPage - floor($maxPagesToShow / 2));
-                                $endPage = min($totalPages, $startPage + $maxPagesToShow - 1);
-                                
-                                // Adjust start page if we're near the end
-                                if ($endPage - $startPage + 1 < $maxPagesToShow && $startPage > 1) {
-                                    $startPage = max(1, $endPage - $maxPagesToShow + 1);
-                                }
-                                
-                                // Show first page with ellipsis if needed
-                                if ($startPage > 1) {
-                                    echo '<li class="page-item"><a class="page-link" href="dashboard-Inventory-System-list-of-donations.php?status=' . $status . '&page=1">1</a></li>';
-                                    if ($startPage > 2) {
-                                        echo '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                                    
+                                    <!-- Page numbers -->
+                                    <?php
+                                    // Show up to 4 page numbers around current page
+                                    $startPage = max(1, $currentPage - 1);
+                                    $endPage = min($totalPages, $currentPage + 2);
+                                    
+                                    // If we're near the beginning, show more pages at the end
+                                    if ($currentPage <= 2) {
+                                        $endPage = min($totalPages, 4);
                                     }
-                                }
-                                
-                                // Show page links
-                                for ($i = $startPage; $i <= $endPage; $i++): 
-                                ?>
-                                    <li class="page-item <?php echo ($i == $currentPage) ? 'active' : ''; ?>">
-                                        <a class="page-link" href="dashboard-Inventory-System-list-of-donations.php?status=<?php echo $status; ?>&page=<?php echo $i; ?>">
-                                            <?php echo $i; ?>
-                                        </a>
-                                    </li>
-                                <?php endfor; 
-                                
-                                // Show last page with ellipsis if needed
-                                if ($endPage < $totalPages) {
-                                    if ($endPage < $totalPages - 1) {
-                                        echo '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                                    
+                                    // If we're near the end, show more pages at the beginning
+                                    if ($currentPage >= $totalPages - 1) {
+                                        $startPage = max(1, $totalPages - 3);
                                     }
-                                    echo '<li class="page-item"><a class="page-link" href="dashboard-Inventory-System-list-of-donations.php?status=' . $status . '&page=' . $totalPages . '">' . $totalPages . '</a></li>';
-                                }
-                                ?>
-
-                                <?php if ($currentPage < $totalPages): ?>
+                                    
+                                    // Show first page if not in range
+                                    if ($startPage > 1): ?>
                                     <li class="page-item">
-                                        <a class="page-link" href="dashboard-Inventory-System-list-of-donations.php?status=<?php echo $status; ?>&page=<?php echo $currentPage + 1; ?>" aria-label="Next">
-                                            <span aria-hidden="true">&raquo;</span>
+                                        <a class="page-link" href="?status=<?php echo $status; ?>&page=1">1</a>
+                                    </li>
+                                    <?php if ($startPage > 2): ?>
+                                    <li class="page-item disabled">
+                                        <span class="page-link">...</span>
+                                    </li>
+                                    <?php endif; ?>
+                                    <?php endif; ?>
+                                    
+                                    <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
+                                    <li class="page-item <?php echo $i === $currentPage ? 'active' : ''; ?>">
+                                        <a class="page-link" href="?status=<?php echo $status; ?>&page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                    </li>
+                                    <?php endfor; ?>
+                                    
+                                    <!-- Show last page if not in range -->
+                                    <?php if ($endPage < $totalPages): ?>
+                                    <?php if ($endPage < $totalPages - 1): ?>
+                                    <li class="page-item disabled">
+                                        <span class="page-link">...</span>
+                                    </li>
+                                    <?php endif; ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?status=<?php echo $status; ?>&page=<?php echo $totalPages; ?>"><?php echo $totalPages; ?></a>
+                                    </li>
+                                    <?php endif; ?>
+                                    
+                                    <!-- Next button -->
+                                    <li class="page-item <?php echo $currentPage >= $totalPages ? 'disabled' : ''; ?>">
+                                        <a class="page-link" href="?status=<?php echo $status; ?>&page=<?php echo min($totalPages, $currentPage + 1); ?>" aria-label="Next">
+                                            <i class="fas fa-chevron-right"></i>
                                         </a>
                                     </li>
-                                <?php endif; ?>
                             </ul>
                         </nav>
+                        </div>
                         <?php endif; ?>
                         
                         <!-- Showing entries information -->
-                        <?php if (!$error && $totalItems > 0): ?>
-                        <div class="text-center mt-2 mb-4">
-                            <p class="text-muted">
-                                Showing <?php echo min($totalItems, $startIndex + 1); ?> to <?php echo min($totalItems, $startIndex + $itemsPerPage); ?> of <?php echo $totalItems; ?> entries
+                        <div class="entries-info">
+                            <p>
+                                Showing <?php echo count($currentPageDonations); ?> of <?php echo $totalItems; ?> entries
+                                <?php if ($totalPages > 1): ?>
+                                (Page <?php echo $currentPage; ?> of <?php echo $totalPages; ?>)
+                                <?php endif; ?>
                             </p>
                         </div>
-                        <?php endif; ?>
                     </div>
             
 <!-- Donor Details Modal -->
@@ -1144,11 +1354,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 }
                             }
                         } else if (category === 'donor') {
-                            // Search donor name (columns 0 and 1 for surname and first name)
-                            const nameColumns = [row.cells[0], row.cells[1]];
-                            if (row.cells[2] && !row.cells[2].querySelector('.badge')) {
-                                nameColumns.push(row.cells[2]); // Middle name if it exists
-                            }
+                            // Search donor name (columns 1 and 2 for surname and first name)
+                            const nameColumns = [row.cells[1], row.cells[2]];
                             
                             for (let j = 0; j < nameColumns.length; j++) {
                                 if (nameColumns[j] && nameColumns[j].textContent.toLowerCase().includes(value)) {
@@ -1156,26 +1363,34 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     break; // Early exit once found
                                 }
                             }
-                        } else if (category === 'status') {
-                            // Search for status badge or status column
-                            const statusBadge = row.querySelector('.badge');
-                            if (statusBadge && statusBadge.textContent.toLowerCase().includes(value)) {
-                                found = true;
-                            } else if (row.cells[5] && row.cells[5].textContent.toLowerCase().includes(value)) {
-                                // Assuming status is in column 5 in some views
+                        } else if (category === 'donor_number') {
+                            // Search donor number (column 0)
+                            if (row.cells[0] && row.cells[0].textContent.toLowerCase().includes(value)) {
                                 found = true;
                             }
-                        } else if (category === 'date') {
-                            // Search for date in any cell
-                            const cells = row.querySelectorAll('td');
-                            for (let j = 0; j < cells.length; j++) {
-                                if (cells[j].textContent.toLowerCase().includes(value)) {
-                                    // Simple check for date patterns
-                                    if (/\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}|\d{4}-\d{2}-\d{2}|[a-z]{3}\s\d{1,2},\s\d{4}/i.test(cells[j].textContent)) {
+                        } else if (category === 'donor_type') {
+                            // Search donor type (column 3)
+                            if (row.cells[3] && row.cells[3].textContent.toLowerCase().includes(value)) {
+                                found = true;
+                            }
+                        } else if (category === 'registered_via') {
+                            // Search registered via (column 4)
+                            if (row.cells[4] && row.cells[4].textContent.toLowerCase().includes(value)) {
                                         found = true;
-                                        break; // Early exit once found
-                                    }
-                                }
+                            }
+                        } else if (category === 'status') {
+                            // Search for status badge (column 5)
+                            if (row.cells[5] && row.cells[5].textContent.toLowerCase().includes(value)) {
+                                found = true;
+                            }
+                            // Also search for related status terms
+                            if (row.cells[5] && (
+                                (value.toLowerCase().includes('declined') && row.cells[5].textContent.toLowerCase().includes('declined')) ||
+                                (value.toLowerCase().includes('deferred') && row.cells[5].textContent.toLowerCase().includes('deferred')) ||
+                                (value.toLowerCase().includes('temporarily') && row.cells[5].textContent.toLowerCase().includes('temporarily')) ||
+                                (value.toLowerCase().includes('permanently') && row.cells[5].textContent.toLowerCase().includes('permanently'))
+                            )) {
+                                found = true;
                             }
                         }
                         
@@ -1198,7 +1413,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         noResultsRow.innerHTML = `
                             <td colspan="${colspan}" class="text-center">
                                 <div class="alert alert-info m-2">
-                                    No matching donations found
+                                    No matching donors found
                                     <button class="btn btn-outline-primary btn-sm ms-2" onclick="clearSearch()">
                                         Clear Search
                                     </button>

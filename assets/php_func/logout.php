@@ -18,9 +18,9 @@ session_destroy();
 
 // Redirect based on role
 if ($role_id === 2) {
-    header("Location: /RED-CROSS-THESIS/public/hospital-request.php");
+    header("Location: /REDCROSS/public/hospital-request.php");
 } else {
-    header("Location: /RED-CROSS-THESIS/public/login.php");
+    header("Location: /REDCROSS/public/login.php");
 }
 exit();
 ?> 

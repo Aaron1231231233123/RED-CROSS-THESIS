@@ -738,30 +738,34 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
                                 <label for="address_no" class="form-label">No.</label>
                                 <input type="text" class="form-control" id="address_no" name="address_no">
                             </div>
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-6 mb-3 position-relative">
                                 <label for="zip_code" class="form-label">ZIP Code</label>
-                                <input type="text" class="form-control" id="zip_code" name="zip_code">
+                                <input type="text" class="form-control" id="zip_code" name="zip_code" autocomplete="off">
+                                <div id="zipSuggestions" class="list-group position-absolute w-100" style="z-index: 1050; max-height: 220px; overflow-y: auto; display:none;"></div>
                             </div>
                         </div>
                         
                         <div class="mb-3">
                             <label for="street" class="form-label">Street</label>
-                            <input type="text" class="form-control" id="street" name="street">
+                            <input type="text" class="form-control" id="street" name="street" autocomplete="off">
                         </div>
                         
-                        <div class="mb-3">
+                        <div class="mb-3 position-relative">
                             <label for="barangay" class="form-label">Barangay</label>
-                            <input type="text" class="form-control" id="barangay" name="barangay" required>
+                            <input type="text" class="form-control" id="barangay" name="barangay" autocomplete="off" required>
+                            <div id="barangaySuggestions" class="list-group position-absolute w-100" style="z-index: 1050; max-height: 220px; overflow-y: auto; display:none;"></div>
                         </div>
                         
-                        <div class="mb-3">
+                        <div class="mb-3 position-relative">
                             <label for="town_municipality" class="form-label">Town/Municipality</label>
-                            <input type="text" class="form-control" id="town_municipality" name="town_municipality" required>
+                            <input type="text" class="form-control" id="town_municipality" name="town_municipality" autocomplete="off" required>
+                            <div id="townSuggestions" class="list-group position-absolute w-100" style="z-index: 1050; max-height: 220px; overflow-y: auto; display:none;"></div>
                         </div>
                         
-                        <div class="mb-3">
+                        <div class="mb-3 position-relative">
                             <label for="province_city" class="form-label">Province/City</label>
-                            <input type="text" class="form-control" id="province_city" name="province_city" required>
+                            <input type="text" class="form-control" id="province_city" name="province_city" autocomplete="off" required>
+                            <div id="provinceSuggestions" class="list-group position-absolute w-100" style="z-index: 1050; max-height: 220px; overflow-y: auto; display:none;"></div>
                         </div>
                         
                         <div class="navigation-buttons">
@@ -872,6 +876,104 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <script>
+    // Lightweight address autosuggest wired to internal Nominatim proxy
+    (function() {
+        const API = '../../../public/api/suggest-address.php';
+        const barangay = document.getElementById('barangay');
+        const town = document.getElementById('town_municipality');
+        const province = document.getElementById('province_city');
+        const zip = document.getElementById('zip_code');
+
+        const brgySug = document.getElementById('barangaySuggestions');
+        const townSug = document.getElementById('townSuggestions');
+        const provSug = document.getElementById('provinceSuggestions');
+        const zipSug = document.getElementById('zipSuggestions');
+
+        function debounce(fn, ms){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn.apply(this,args), ms); }; }
+
+        function makeItem(text, onClick){
+            const a = document.createElement('a');
+            a.href = '#';
+            a.className = 'list-group-item list-group-item-action';
+            a.textContent = text;
+            a.onclick = (e)=>{ e.preventDefault(); onClick(); hideAll(); };
+            return a;
+        }
+
+        function hideAll(){
+            [brgySug, townSug, provSug, zipSug].forEach(el=>{ if (el){ el.style.display='none'; el.innerHTML=''; }});
+        }
+
+        function suggest(inputEl, sugEl, queryBuilder, apply){
+            const q = queryBuilder();
+            if (!q || q.length < 2){ hideAll(); return; }
+            fetch(`${API}?q=${encodeURIComponent(q)}`)
+                .then(r=>r.json())
+                .then(data=>{
+                    sugEl.innerHTML='';
+                    const results = data.results || [];
+                    results.slice(0,8).forEach(r=>{
+                        const addr = r.address || {};
+                        const label = r.display_name;
+                        const item = makeItem(label, ()=>apply(addr, r));
+                        sugEl.appendChild(item);
+                    });
+                    sugEl.style.display = results.length ? 'block' : 'none';
+                }).catch(()=>{ sugEl.style.display='none'; });
+        }
+
+        const debounced = debounce((fn)=>fn(), 300);
+
+        if (barangay && brgySug){
+            barangay.addEventListener('input', ()=>debounced(()=>suggest(barangay, brgySug, ()=>{
+                const parts = [barangay.value, town.value, province.value, 'Philippines'].filter(Boolean).join(', ');
+                return parts;
+            }, (addr)=>{
+                if (addr.barangay) barangay.value = addr.barangay;
+                if ((addr.city||addr.town) && !town.value) town.value = addr.city || addr.town;
+                if ((addr.province||addr.state) && !province.value) province.value = addr.province || addr.state;
+                if ((addr.postcode) && !zip.value) zip.value = addr.postcode;
+            })));
+        }
+
+        if (town && townSug){
+            town.addEventListener('input', ()=>debounced(()=>suggest(town, townSug, ()=>{
+                const parts = [town.value, province.value, 'Philippines'].filter(Boolean).join(', ');
+                return parts;
+            }, (addr)=>{
+                if ((addr.city||addr.town)) town.value = addr.city || addr.town;
+                if ((addr.province||addr.state) && !province.value) province.value = addr.province || addr.state;
+                if ((addr.postcode) && !zip.value) zip.value = addr.postcode;
+            })));
+        }
+
+        if (province && provSug){
+            province.addEventListener('input', ()=>debounced(()=>suggest(province, provSug, ()=>{
+                const parts = [province.value, 'Philippines'].filter(Boolean).join(', ');
+                return parts;
+            }, (addr)=>{
+                if ((addr.province||addr.state)) province.value = addr.province || addr.state;
+            })));
+        }
+
+        if (zip && zipSug){
+            zip.addEventListener('input', ()=>debounced(()=>suggest(zip, zipSug, ()=>{
+                const parts = [zip.value, town.value || province.value, 'Philippines'].filter(Boolean).join(', ');
+                return parts;
+            }, (addr)=>{
+                if (addr.postcode) zip.value = addr.postcode;
+                if ((addr.city||addr.town) && !town.value) town.value = addr.city || addr.town;
+                if ((addr.province||addr.state) && !province.value) province.value = addr.province || addr.state;
+                if (addr.barangay && !barangay.value) barangay.value = addr.barangay;
+            })));
+        }
+
+        document.addEventListener('click', (e)=>{
+            if (!e.target.closest('#streetSuggestions') && !e.target.closest('#barangaySuggestions') && !e.target.closest('#townSuggestions') && !e.target.closest('#provinceSuggestions')){
+                hideAll();
+            }
+        });
+    })();
     function calculateAge() {
         const birthdateInput = document.getElementById('birthdate');
         const ageInput = document.getElementById('age');

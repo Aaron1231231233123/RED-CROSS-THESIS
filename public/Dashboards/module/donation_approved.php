@@ -221,7 +221,8 @@ try {
                         'sex' => $donor['sex'] ?? '',
                         'blood_type' => $eligibility['blood_type'] ?? '',
                         'donation_type' => $eligibility['donation_type'] ?? '',
-                        'status' => 'Approved',
+                        'status' => 'approved',
+                        'status_text' => 'Approved',
                         'date_submitted' => $createdAt
                     ];
                     
@@ -306,4 +307,3 @@ if (empty($approvedDonations) || isset($approvedDonations['error'])) {
         error_log("No data found in screening_form table");
     }
 }
-?>

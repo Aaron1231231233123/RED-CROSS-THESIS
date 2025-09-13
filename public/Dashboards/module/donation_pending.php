@@ -18,31 +18,62 @@ $pendingDonations = [];
 $error = null;
 
 try {
-    // OPTIMIZATION 1: Use enhanced API function with retry mechanism for eligibility data
-    // Get all eligibility records to filter out donors with any eligibility data
+    // OPTIMIZATION 1: Pull latest eligibility records to determine donor type (New vs Returning)
     $donorsWithEligibility = [];
-    
     $eligibilityResponse = supabaseRequest("eligibility?select=donor_id,created_at&order=created_at.desc");
-    
     if (isset($eligibilityResponse['data']) && is_array($eligibilityResponse['data'])) {
-        // Track processed donor IDs to avoid duplicates
-        $processedDonorIds = [];
-        
         foreach ($eligibilityResponse['data'] as $eligibility) {
-            if (isset($eligibility['donor_id'])) {
-                $donorId = $eligibility['donor_id'];
-                
-                // Only add donor ID if we haven't processed it yet
-                if (!in_array($donorId, $processedDonorIds)) {
-                    $donorsWithEligibility[] = $donorId;
-                    $processedDonorIds[] = $donorId;
-                }
+            if (!empty($eligibility['donor_id'])) {
+                $donorsWithEligibility[$eligibility['donor_id']] = true; // set for quick lookup
             }
         }
     }
     
-    // OPTIMIZATION 2: Use enhanced API function for donor form data
-    // Direct connection to get donor_form data with optimized settings
+    // OPTIMIZATION 2: Fetch minimal related process tables to compute current pending status
+    // Include needs_review flags from each stage to drive pending status logic
+    $screeningResponse = supabaseRequest("screening_form?select=screening_id,donor_form_id,needs_review,created_at");
+    $medicalResponse   = supabaseRequest("medical_history?select=donor_id,needs_review,updated_at");
+    $physicalResponse  = supabaseRequest("physical_examination?select=donor_id,needs_review,created_at");
+    $collectionResponse = supabaseRequest("blood_collection?select=screening_id,needs_review,start_time");
+
+    // Build lookup maps
+    $screeningByDonorId = [];
+    if (isset($screeningResponse['data']) && is_array($screeningResponse['data'])) {
+        foreach ($screeningResponse['data'] as $row) {
+            if (!empty($row['donor_form_id'])) {
+                $screeningByDonorId[$row['donor_form_id']] = [
+                    'screening_id' => $row['screening_id'] ?? null,
+                    'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null
+                ];
+            }
+        }
+    }
+    $physicalByDonorId = [];
+    $medicalNeedsByDonorId = [];
+    if (isset($medicalResponse['data']) && is_array($medicalResponse['data'])) {
+        foreach ($medicalResponse['data'] as $row) {
+            if (!empty($row['donor_id'])) {
+                $medicalNeedsByDonorId[$row['donor_id']] = isset($row['needs_review']) ? (bool)$row['needs_review'] : null;
+            }
+        }
+    }
+    if (isset($physicalResponse['data']) && is_array($physicalResponse['data'])) {
+        foreach ($physicalResponse['data'] as $row) {
+            if (!empty($row['donor_id'])) {
+                $physicalByDonorId[$row['donor_id']] = isset($row['needs_review']) ? (bool)$row['needs_review'] : null;
+            }
+        }
+    }
+    $collectionByScreeningId = [];
+    if (isset($collectionResponse['data']) && is_array($collectionResponse['data'])) {
+        foreach ($collectionResponse['data'] as $row) {
+            if (!empty($row['screening_id'])) {
+                $collectionByScreeningId[$row['screening_id']] = isset($row['needs_review']) ? (bool)$row['needs_review'] : null;
+            }
+        }
+    }
+
+    // OPTIMIZATION 3: Get donor_form data (we'll enforce FIFO after building the list)
     $donorResponse = supabaseRequest("donor_form?limit=100&order=submitted_at.desc");
     
     if (isset($donorResponse['data']) && is_array($donorResponse['data'])) {
@@ -53,11 +84,6 @@ try {
         
         // Process each donor
         foreach ($donorResponse['data'] as $donor) {
-            // Skip donors who have any eligibility record
-            if (in_array($donor['donor_id'], $donorsWithEligibility)) {
-                continue;
-            }
-            
             // Try multiple possible date fields
             $dateSubmitted = '';
             
@@ -73,18 +99,76 @@ try {
                 $dateSubmitted = date('M d, Y');
             }
             
-            // Create a simplified record with ONLY the required fields
+            // Determine donor type using presence of eligibility (aligns with staff dashboard logic)
+            $donorId = $donor['donor_id'] ?? null;
+            $donorType = isset($donorsWithEligibility[$donorId]) ? 'Returning' : 'New';
+
+            // Compute current process status
+            $statusLabel = 'Pending (Screening)';
+            if ($donorId !== null) {
+                // First, check medical history: if needs_review === true, treat as brand new entry
+                $medNeeds = $medicalNeedsByDonorId[$donorId] ?? null;
+                if ($medNeeds === true) {
+                    $statusLabel = 'Pending (New)';
+                } else {
+                $screen = $screeningByDonorId[$donorId] ?? null;
+                $screenNeeds = is_array($screen) ? ($screen['needs_review'] ?? null) : null;
+                $screeningId = is_array($screen) ? ($screen['screening_id'] ?? null) : ($screen ?? null);
+
+                if ($screen === null) {
+                    // No screening yet, still pending at screening
+                    $statusLabel = 'Pending (Screening)';
+                } else if ($screenNeeds === true) {
+                    // Screening requires review
+                    $statusLabel = 'Pending (Screening)';
+                } else {
+                    // Screening is done (needs_review === false), check Physical
+                    $physNeeds = $physicalByDonorId[$donorId] ?? null;
+                    if ($physNeeds === null) {
+                        // No physical record yet -> next step physical
+                        $statusLabel = 'Pending (Physical Examination)';
+                    } else if ($physNeeds === true) {
+                        $statusLabel = 'Pending (Physical Examination)';
+                    } else {
+                        // Physical done, check collection via screening_id
+                        $collNeeds = ($screeningId && isset($collectionByScreeningId[$screeningId])) ? $collectionByScreeningId[$screeningId] : null;
+                        if ($collNeeds === null) {
+                            $statusLabel = 'Pending (Collection)';
+                        } else if ($collNeeds === true) {
+                            $statusLabel = 'Pending (Collection)';
+                        } else {
+                            // All stages marked needs_review=false; keep as collection done
+                            $statusLabel = 'Pending (Collection)';
+                        }
+                    }
+                }
+            }
+            }
+
+            // Create a simplified record with ONLY the required fields for UI
             $pendingDonations[] = [
-                'donor_id' => $donor['donor_id'] ?? '',
+                'donor_id' => $donorId ?? '',
                 'surname' => $donor['surname'] ?? '',
                 'first_name' => $donor['first_name'] ?? '',
+                'donor_type' => $donorType,
+                'donor_number' => $donor['prc_donor_number'] ?? ($donorId ?? ''),
+                'registration_source' => $donor['registration_channel'] ?? 'PRC System',
+                'status_text' => $statusLabel,
+                // Keep existing fields used elsewhere
                 'birthdate' => $donor['birthdate'] ?? '',
                 'sex' => $donor['sex'] ?? '',
                 'date_submitted' => $dateSubmitted,
-                'eligibility_id' => 'pending_' . ($donor['donor_id'] ?? '0'),
-                'registration_source' => $donor['registration_channel'] ?? 'PRC System' // Default to PRC System if not specified
+                'eligibility_id' => 'pending_' . ($donorId ?? '0'),
+                'sort_ts' => !empty($donor['submitted_at']) ? strtotime($donor['submitted_at']) : (!empty($donor['created_at']) ? strtotime($donor['created_at']) : time())
             ];
         }
+
+        // Enforce FIFO: oldest first
+        usort($pendingDonations, function($a, $b) {
+            $ta = $a['sort_ts'] ?? 0; $tb = $b['sort_ts'] ?? 0;
+            if ($ta === $tb) return 0;
+            return ($ta < $tb) ? -1 : 1;
+        });
     } else {
         // Handle API errors
         if (isset($donorResponse['error'])) {
@@ -112,5 +196,4 @@ addPerformanceHeaders($executionTime, count($pendingDonations), "Pending Donatio
 error_log("SUPABASE_URL: " . SUPABASE_URL);
 error_log("API Key Length: " . strlen(SUPABASE_API_KEY));
 error_log("Filtered out " . count($donorsWithEligibility) . " donors with eligibility data");
-error_log("Found " . count($pendingDonations) . " pending donors");
-?> 
+error_log("Found " . count($pendingDonations) . " pending donors"); 

@@ -373,12 +373,17 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
 .sidebar-main-content {
     flex-grow: 1;
+    padding-bottom: 80px; /* Space for logout button */
 }
 
 .logout-container {
-    padding-top: 20px;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 20px 15px;
     border-top: 1px solid #ddd;
-    margin-top: auto;
+    background-color: #ffffff;
 }
 
 .logout-link {
@@ -456,19 +461,32 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     margin-bottom: 10px;
 }
 
-/* Blood Donations Section */
-#bloodDonationsCollapse {
+/* Donor Management Section */
+#donorManagementCollapse {
     margin-top: 2px;
     border: none;
 }
 
-#bloodDonationsCollapse .nav-link {
+#donorManagementCollapse .nav-link {
     color: #666;
     padding: 8px 15px 8px 40px;
 }
 
-#bloodDonationsCollapse .nav-link:hover {
+#donorManagementCollapse .nav-link:hover {
     color: #dc3545;
+    background-color: transparent;
+}
+
+/* Hospital Requests Section */
+#hospitalRequestsCollapse .nav-link {
+    color: #333;
+    padding: 8px 15px 8px 40px;
+    font-size: 0.9rem;
+}
+
+#hospitalRequestsCollapse .nav-link:hover {
+    color: #dc3545;
+    font-weight: 600;
     background-color: transparent;
 }
 
@@ -867,17 +885,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <a href="dashboard-Inventory-System.php" class="nav-link">
                             <span><i class="fas fa-home"></i>Home</span>
                         </a>
-                        <a class="nav-link" data-bs-toggle="collapse" href="#bloodDonationsCollapse" role="button" aria-expanded="false" aria-controls="bloodDonationsCollapse">
-                            <span><i class="fas fa-tint"></i>Blood Donations</span>
-                            <i class="fas fa-chevron-down"></i>
+                        <a href="dashboard-Inventory-System-list-of-donations.php" class="nav-link">
+                            <span><i class="fas fa-users"></i>Donor Management</span>
                         </a>
-                        <div class="collapse" id="bloodDonationsCollapse">
-                            <div class="collapse-menu">
-                                <a href="dashboard-Inventory-System-list-of-donations.php?status=pending" class="nav-link">Pending</a>
-                                <a href="dashboard-Inventory-System-list-of-donations.php?status=approved" class="nav-link">Approved</a>
-                                <a href="dashboard-Inventory-System-list-of-donations.php?status=declined" class="nav-link">Declined</a>
-                            </div>
-                        </div>
+                        <a href="#" class="nav-link">
+                            <span><i class="fas fa-user-check"></i>Donor Status</span>
+                        </a>
                         <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link active">
                             <span><i class="fas fa-tint"></i>Blood Bank</span>
                         </a>
@@ -893,10 +906,19 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <a href="Dashboard-Inventory-System-Handed-Over.php?status=declined" class="nav-link">Declined</a>
                             </div>
                         </div>
-                        <a href="../../assets/php_func/logout.php" class="nav-link">
-                                <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
+                        <a href="#" class="nav-link">
+                            <span><i class="fas fa-chart-line"></i>Forecast Reports</span>
+                        </a>
+                        <a href="#" class="nav-link">
+                            <span><i class="fas fa-user-cog"></i>Manage Users</span>
                         </a>
                     </ul>
+                </div>
+                
+                <div class="logout-container">
+                    <a href="../../assets/php_func/logout.php" class="nav-link logout-link">
+                        <span><i class="fas fa-sign-out-alt me-2"></i>Logout</span>
+                    </a>
                 </div>
             </nav>
 
