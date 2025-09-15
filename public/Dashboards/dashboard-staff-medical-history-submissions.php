@@ -109,7 +109,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pe_ok = $has_existing ? ($pe_http >= 200 && $pe_http < 300) : ($pe_http === 201);
 
             // 3) Set medical_history.needs_review=false
-            $mh_ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $donor_id);
+            // Update medical_history approval. Prefer targeting a specific row if provided
+            $mh_target = null;
+            if (!empty($payload['medical_history_id'])) {
+                $mh_target = SUPABASE_URL . '/rest/v1/medical_history?medical_history_id=eq.' . urlencode($payload['medical_history_id']);
+            } else {
+                $mh_target = SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $donor_id;
+            }
+            $mh_ch = curl_init($mh_target);
             curl_setopt($mh_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
             curl_setopt($mh_ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($mh_ch, CURLOPT_HTTPHEADER, [
@@ -155,6 +162,187 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             echo json_encode(['success' => true, 'message' => 'Transitioned to physical examination review - Medical history and screening form updated', 'physical_updated' => $pe_ok]);
+            exit;
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+            exit;
+        }
+    }
+    
+    // Upsert physical_examination from Screening Defer modal
+    if (is_array($payload) && isset($payload['action']) && $payload['action'] === 'upsert_physical_from_defer') {
+        header('Content-Type: application/json');
+
+        try {
+            if (!isset($_SESSION['user_id'])) {
+                echo json_encode(['success' => false, 'message' => 'Not authenticated']);
+                exit;
+            }
+            if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] != 3) {
+                echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+                exit;
+            }
+
+            $donor_id = intval($payload['donor_id'] ?? 0);
+            if ($donor_id <= 0) {
+                echo json_encode(['success' => false, 'message' => 'Invalid donor_id']);
+                exit;
+            }
+
+            // Accept either key from client payload
+            $physical_examination_id = $payload['physical_examination_id'] ?? ($payload['physical_exam_id'] ?? null); // optional
+
+            // Build body from provided payload, excluding control keys
+            $control_keys = [
+                'action', 'donor_id', 'physical_examination_id', 'physical_exam_id'
+            ];
+            $pe_body = [];
+            foreach ($payload as $k => $v) {
+                if (!in_array($k, $control_keys, true)) {
+                    $pe_body[$k] = $v;
+                }
+            }
+
+            // Ensure donor_id is present for inserts
+            $now_iso = gmdate('c');
+            $pe_body['updated_at'] = $now_iso;
+
+            $ch = null;
+            $method = 'PATCH';
+            $expected_created = false;
+
+            $attempted_patch_by_donor = false;
+            if (!empty($physical_examination_id)) {
+                // Update by explicit physical_examination_id
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?physical_exam_id=eq.' . urlencode($physical_examination_id));
+                curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            } else {
+                // Check if record exists for donor_id
+                $check_ch = curl_init();
+                curl_setopt_array($check_ch, [
+                    CURLOPT_URL => SUPABASE_URL . '/rest/v1/physical_examination?select=physical_exam_id&donor_id=eq.' . $donor_id . '&limit=1',
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_HTTPHEADER => [
+                        'apikey: ' . SUPABASE_API_KEY,
+                        'Authorization: Bearer ' . SUPABASE_API_KEY
+                    ]
+                ]);
+                $check_resp = curl_exec($check_ch);
+                $check_http = curl_getinfo($check_ch, CURLINFO_HTTP_CODE);
+                curl_close($check_ch);
+
+                // Treat 200 and 206 (partial) as success
+                $existing = (($check_http === 200 || $check_http === 206) ? (json_decode($check_resp, true) ?: []) : []);
+                $has_existing = is_array($existing) && !empty($existing);
+
+                if ($has_existing) {
+                    // Update existing by donor_id
+                    $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?donor_id=eq.' . $donor_id);
+                    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+                    $attempted_patch_by_donor = true;
+                } else {
+                    // Insert new
+                    $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination');
+                    curl_setopt($ch, CURLOPT_POST, true);
+                    $pe_body['donor_id'] = $donor_id;
+                    $method = 'POST';
+                    $expected_created = true;
+                }
+            }
+
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            $headers = [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json',
+                // Use representation to capture created/updated ids when needed
+                'Prefer: return=representation'
+            ];
+            // If posting, enable merge duplicates by primary key to force update when conflicting id sent accidentally
+            if ($method === 'POST' && !empty($physical_examination_id)) {
+                // If client sent an id in body, let PostgREST upsert by conflict key
+                $pe_body['physical_exam_id'] = $physical_examination_id;
+                $headers[] = 'Prefer: resolution=merge-duplicates';
+                // Also pass on_conflict to API query string when possible
+                $url = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+                if ($url) {
+                    $url .= (strpos($url, '?') === false ? '?' : '&') . 'on_conflict=physical_exam_id';
+                    curl_setopt($ch, CURLOPT_URL, $url);
+                }
+            }
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($pe_body));
+            $resp = curl_exec($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            // Log attempt for debugging
+            error_log("[DEFER_UPSERT] donor_id=$donor_id method=$method http=$http body=" . json_encode($pe_body) . " resp=$resp");
+
+            $ok = ($expected_created ? ($http === 201) : ($http >= 200 && $http < 300));
+            if (!$ok) {
+                echo json_encode(['success' => false, 'message' => 'Upsert failed', 'http' => $http, 'response' => $resp]);
+                exit;
+            }
+
+            $data = json_decode($resp, true);
+            $returned = is_array($data) ? (isset($data[0]) ? $data[0] : $data) : null;
+
+            // Fallback: If we PATCHed by donor_id but no rows were affected, perform an INSERT instead
+            if ($method === 'PATCH' && $attempted_patch_by_donor && (empty($data) || (is_array($data) && isset($data['hint']) && strpos(strtolower($data['hint']), 'no rows') !== false))) {
+                $ins = curl_init(SUPABASE_URL . '/rest/v1/physical_examination');
+                curl_setopt($ins, CURLOPT_POST, true);
+                $pe_body_ins = $pe_body;
+                $pe_body_ins['donor_id'] = $donor_id;
+                curl_setopt($ins, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ins, CURLOPT_HTTPHEADER, [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Content-Type: application/json',
+                    'Prefer: return=representation'
+                ]);
+                curl_setopt($ins, CURLOPT_POSTFIELDS, json_encode($pe_body_ins));
+                $ins_resp = curl_exec($ins);
+                $ins_http = curl_getinfo($ins, CURLINFO_HTTP_CODE);
+                curl_close($ins);
+                if ($ins_http === 201) {
+                    $returned = (json_decode($ins_resp, true) ?: null);
+                    if (is_array($returned) && isset($returned[0])) $returned = $returned[0];
+                }
+            }
+            
+            // After successful upsert, set medical_history.medical_approval to Not Approved
+            // Prefer updating a specific row if medical_history_id is provided
+            $mh_url = null;
+            if (!empty($payload['medical_history_id'])) {
+                $mh_url = SUPABASE_URL . '/rest/v1/medical_history?medical_history_id=eq.' . urlencode($payload['medical_history_id']);
+            } else {
+                $mh_url = SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $donor_id;
+            }
+            $mh_ch = curl_init($mh_url);
+            curl_setopt($mh_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            curl_setopt($mh_ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($mh_ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json',
+                'Prefer: return=minimal'
+            ]);
+            $mh_body = [
+                'medical_approval' => 'Not Approved',
+                'needs_review' => true
+            ];
+            curl_setopt($mh_ch, CURLOPT_POSTFIELDS, json_encode($mh_body));
+            $mh_resp = curl_exec($mh_ch);
+            $mh_http = curl_getinfo($mh_ch, CURLINFO_HTTP_CODE);
+            curl_close($mh_ch);
+
+            $mh_ok = ($mh_http >= 200 && $mh_http < 300);
+            if (!$mh_ok) {
+                error_log('[DEFER_UPSERT] medical_history update failed donor_id=' . $donor_id . ' http=' . $mh_http . ' resp=' . $mh_resp);
+            }
+
+            echo json_encode(['success' => true, 'message' => 'Upsert successful', 'data' => $returned, 'medical_updated' => $mh_ok]);
             exit;
         } catch (Exception $e) {
             echo json_encode(['success' => false, 'message' => $e->getMessage()]);
@@ -2347,6 +2535,8 @@ $donor_history = $unique_donor_history;
     <script>
         // Pass PHP data to JavaScript
         const medicalByDonor = <?php echo json_encode($medical_by_donor); ?>;
+        const eligibilityDonorIds = <?php echo json_encode(array_keys($eligibility_by_donor)); ?>;
+        const hasEligibility = (did) => Array.isArray(eligibilityDonorIds) && eligibilityDonorIds.includes(String(did)) || eligibilityDonorIds.includes(Number(did));
         
         function showConfirmationModal() {
             const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
@@ -2385,6 +2575,17 @@ $donor_history = $unique_donor_history;
             let allowProcessing = false;
             let modalContextType = 'new_medical'; // 'new_medical' | 'new_other_stage' | 'returning' | 'other'
             let currentStage = null; // 'medical_review' | 'screening_form' | 'physical_examination' | 'blood_collection'
+            
+            // Backdrop cleanup utility to prevent stuck overlays (expose globally)
+            window.cleanupModalBackdrops = function() {
+                try {
+                    document.body.classList.remove('modal-open');
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    backdrops.forEach(el => {
+                        if (el && el.parentNode) el.parentNode.removeChild(el);
+                    });
+                } catch (e) {}
+            }
             
             // Store original rows for search reset
             const originalRows = Array.from(donorTableBody.getElementsByTagName('tr'));
@@ -2690,8 +2891,8 @@ $donor_history = $unique_donor_history;
                     });
             }
             
-            // Function to display donor and deferral information
-            function displayDonorInfo(donorData, deferralData) {
+            // Function to display donor and deferral information (exposed globally)
+            window.displayDonorInfo = function(donorData, deferralData) {
                 let donorInfoHTML = '';
                 const safe = (v) => v || 'N/A';
                 
@@ -3180,16 +3381,8 @@ $donor_history = $unique_donor_history;
                 // Set up confirmation function
                 window.confirmProcessMedicalHistory = function() {
                     closeProcessMedicalHistoryModal();
-                    
-                    // Proceed with the original logic
-                    const isNew = (window.currentDonorType || '').toLowerCase().startsWith('new');
-                    if (isNew) {
-                        // Skip physical examination for New donors
-                        proceedToMedicalHistoryModal();
-                        return;
-                    }
-                    // Show Physical Examination Results modal first for returning
-                    showPhysicalExaminationModal(currentDonorId);
+                    // Always proceed directly to Medical History (skip Physical Examination preview)
+                    proceedToMedicalHistoryModal();
                 };
                 
                 window.closeProcessMedicalHistoryModal = function() {
@@ -3421,6 +3614,15 @@ $donor_history = $unique_donor_history;
                     });
                 }
             }, 100);
+
+            // Ensure backdrops are cleaned up when key modals are closed
+            ['deferralStatusModal', 'eligibilityAlertModal', 'stageNoticeModal', 'returningInfoModal']
+                .forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        el.addEventListener('hidden.bs.modal', cleanupModalBackdrops);
+                    }
+                });
             
             // Optimized search function with caching
             function performOptimizedSearch(searchTerm) {
@@ -5113,36 +5315,55 @@ $donor_history = $unique_donor_history;
 
         // Function to check if donor is new (no eligibility record)
         function checkAndShowDonorStatus(donorId) {
-            // First check if donor has any eligibility records
+            // Fast path: if we already know this donor has NO eligibility, skip remote checks
+            if (!hasEligibility(donorId)) {
+                // Render lightweight new-donor content and show proceed
+                const deferralStatusModal = new bootstrap.Modal(document.getElementById('deferralStatusModal'));
+                const deferralStatusContent = document.getElementById('deferralStatusContent');
+                window.currentDonorId = donorId;
+                deferralStatusContent.innerHTML = `
+                    <div class="alert alert-info mb-3">
+                        <h6 class="mb-1">New Donor</h6>
+                        <div>There is no donation history yet for this donor.</div>
+                    </div>
+                `;
+                const proceedButton = document.getElementById('proceedToMedicalHistory');
+                if (proceedButton && proceedButton.style) {
+                    proceedButton.style.display = 'inline-block';
+                    proceedButton.textContent = 'Review Medical History';
+                }
+                // Hide mark-for-review button in this flow
+                const markReviewFromMain = document.getElementById('markReviewFromMain');
+                if (markReviewFromMain) markReviewFromMain.style.display = 'none';
+                // Ensure no stale backdrops before showing
+                cleanupModalBackdrops();
+                deferralStatusModal.show();
+                return;
+            }
+
+            // Otherwise, do existing server-side eligibility checks
             fetch('../../assets/php_func/get_donor_eligibility_status.php?donor_id=' + donorId)
                 .then(response => response.json())
                 .then(data => {
                     if (!data.success || (data.data && data.data.status === 'new')) {
-                        // For new donors, just show the donor status modal
                         showDonorStatusModal(donorId);
                     } else {
-                        // Check if donor has remaining days
                         const eligibility = data.data;
                         const startDate = new Date(eligibility.start_date);
                         const today = new Date();
                         const threeMonthsLater = new Date(startDate);
                         threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
                         const hasRemainingDays = (threeMonthsLater - today) > 0;
-                        
-                        // Show eligibility alert only if there are remaining days or donor is not approved
                         if (hasRemainingDays || (eligibility.status !== 'approved' && eligibility.status !== 'refused')) {
-                            // For existing donors with remaining days or non-approved status, show eligibility alert
-                            controlMarkReviewButton(donorId); // Hide button for donors with remaining days
+                            controlMarkReviewButton(donorId);
                             showDonorEligibilityAlert(donorId);
                         } else {
-                            // For donors with completed waiting period or refused status, show donor status modal
                             showDonorStatusModal(donorId);
                         }
                     }
                 })
                 .catch(error => {
                     console.error('Error checking eligibility:', error);
-                    // On error, default to showing donor status
                     showDonorStatusModal(donorId);
                 });
         }

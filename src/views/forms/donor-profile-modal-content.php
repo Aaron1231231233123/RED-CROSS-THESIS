@@ -442,35 +442,37 @@ if ($donor_info && isset($donor_info['birthdate'])) {
         </div>
     </div>
 
-    <!-- Medical History Section -->
+    <!-- Interviewer Summary Table -->
     <div class="section-container">
         <h3 class="section-title">
-            <i class="fas fa-file-medical"></i>
-            Medical History
+            <i class="fas fa-user-check"></i>
+            Interviewer
         </h3>
-                 <table class="status-table medical-history">
-             <thead>
-                 <tr>
-                     <th>Medical History Result</th>
-                     <th>Interviewer Decision</th>
-                     <th>Physician Decision</th>
-                     <th>Action</th>
-                 </tr>
-             </thead>
+        <table class="status-table medical-history">
+            <thead>
+                <tr>
+                    <th>Medical History</th>
+                    <th>Initial Screening</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
             <tbody>
                 <tr>
                     <td>
-                        <?php $mhApproved = ($medical_history_info && isset($medical_history_info['medical_approval']) && strtolower(trim($medical_history_info['medical_approval'])) === 'approved'); ?>
-                        <span class="status-badge <?php echo $mhApproved ? 'status-completed' : 'status-pending'; ?>">
-                            <?php echo $mhApproved ? 'Approved' : 'Pending'; ?>
+                        <?php $mhExists = !empty($medical_history_info); $mhApproved = ($medical_history_info && isset($medical_history_info['medical_approval']) && strtolower(trim($medical_history_info['medical_approval'])) === 'approved'); ?>
+                        <span class="status-badge <?php echo $mhExists ? 'status-completed' : 'status-pending'; ?>">
+                            <?php echo $mhExists ? 'Completed' : '--'; ?>
                         </span>
                     </td>
                     <td>
-                        <span class="status-badge status-clear">Clear</span>
-                    </td>
-                    <td>
-                        <span class="status-badge <?php echo $mhApproved ? 'status-approved' : 'status-pending'; ?>">
-                            <?php echo $mhApproved ? 'Approved' : 'Pending'; ?>
+                        <?php
+                            $screenPassed = false;
+                            if (!empty($screening_info)) {
+                                $screenPassed = isset($screening_info['screening_id']) && !empty($screening_info['screening_id']);
+                            }
+                        ?>
+                        <span class="status-badge <?php echo ($screening_info ? ($screenPassed ? 'status-completed' : 'status-pending') : 'status-pending'); ?>">
+                            <?php echo ($screening_info ? ($screenPassed ? 'Passed' : 'Pending') : '--'); ?>
                         </span>
                     </td>
                     <td>
@@ -485,62 +487,61 @@ if ($donor_info && isset($donor_info['birthdate'])) {
         </table>
     </div>
 
-    <!-- Initial Screening Section -->
+    <!-- Physician Summary Table -->
     <div class="section-container">
         <h3 class="section-title">
-            <i class="fas fa-clipboard-check"></i>
-            Initial Screening
+            <i class="fas fa-user-md"></i>
+            Physician
         </h3>
-                 <table class="status-table initial-screening">
-             <thead>
-                 <tr>
-                     <th>Body Weight</th>
-                     <th>Specific Gravity</th>
-                     <th>Blood Type</th>
-                 </tr>
-             </thead>
-            <tbody>
+        <table class="status-table physical-examination">
+            <thead>
                 <tr>
-                    <td><?php echo htmlspecialchars($screening_info['body_weight'] ?? 'N/A'); ?> kg</td>
-                    <td><?php echo htmlspecialchars($screening_info['specific_gravity'] ?? 'N/A'); ?> g/dL</td>
-                    <td><?php echo htmlspecialchars($screening_info['blood_type'] ?? 'N/A'); ?></td>
+                    <th>Medical History</th>
+                    <th>Physical Examination</th>
+                    <th>Action</th>
                 </tr>
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Physical Examination Section -->
-    <div class="section-container">
-        <h3 class="section-title">
-            <i class="fas fa-stethoscope"></i>
-            Physical Examination
-        </h3>
-                 <table class="status-table physical-examination">
-             <thead>
-                 <tr>
-                     <th>Physical Examination Result</th>
-                     <th>Physician Decision</th>
-                     <th>Action</th>
-                 </tr>
-             </thead>
+            </thead>
             <tbody>
                 <tr>
                     <td>
-                        <?php $peStatus = strtolower($physical_exam_info['status'] ?? ''); ?>
-                        <span class="status-badge <?php echo ($peStatus === 'accepted') ? 'status-completed' : 'status-pending'; ?>">
-                            <?php echo ($peStatus === 'accepted') ? 'Accepted' : 'Pending'; ?>
+                        <?php 
+                            $mhLabel = isset($medical_history_info['medical_approval']) ? trim((string)$medical_history_info['medical_approval']) : '';
+                            $mhBadgeClass = $mhLabel ? ($mhLabel === 'Approved' ? 'status-approved' : 'status-pending') : 'status-pending';
+                        ?>
+                        <span class="status-badge <?php echo $mhBadgeClass; ?>">
+                            <?php echo $mhLabel !== '' ? htmlspecialchars($mhLabel) : '--'; ?>
                         </span>
                     </td>
                     <td>
-                        <span class="status-badge <?php echo ($peStatus === 'accepted') ? 'status-approved' : 'status-pending'; ?>">
-                            <?php echo ($peStatus === 'accepted') ? 'Accepted' : 'Pending'; ?>
+                        <?php 
+                            $peRemarks = isset($physical_exam_info['remarks']) ? trim((string)$physical_exam_info['remarks']) : '';
+                            $peBadgeClass = 'status-pending';
+                            if (strcasecmp($peRemarks, 'Accepted') === 0) {
+                                $peBadgeClass = 'status-completed';
+                            } elseif (strcasecmp($peRemarks, 'Pending') === 0) {
+                                $peBadgeClass = 'status-pending';
+                            } else if ($peRemarks !== '') {
+                                $peBadgeClass = 'status-pending';
+                            }
+                            $peNeedsReview = isset($physical_exam_info['needs_review']) && (
+                                $physical_exam_info['needs_review'] === true ||
+                                $physical_exam_info['needs_review'] === 1 ||
+                                $physical_exam_info['needs_review'] === '1' ||
+                                (is_string($physical_exam_info['needs_review']) && in_array(strtolower(trim($physical_exam_info['needs_review'])), ['true','t','yes','y'], true))
+                            );
+                            $peIsAccepted = (strcasecmp($peRemarks, 'Accepted') === 0);
+                        ?>
+                        <span class="status-badge <?php echo $peBadgeClass; ?>">
+                            <?php echo $peRemarks !== '' ? htmlspecialchars($peRemarks) : 'Pending'; ?>
                         </span>
                     </td>
                     <td>
-                        <?php $peViewOnly = in_array($peStatus, ['pending','accepted'], true); if ($peViewOnly): ?>
+                        <?php if ($peIsAccepted): ?>
                             <button class="btn btn-info btn-sm" id="physicalExamViewBtn" title="View Physical Examination"><i class="fas fa-eye"></i></button>
-                        <?php else: ?>
+                        <?php elseif ($peNeedsReview): ?>
                             <button class="action-button" id="physicalExamConfirmBtn">Confirm</button>
+                        <?php else: ?>
+                            <button class="btn btn-info btn-sm" id="physicalExamViewBtn" title="View Physical Examination"><i class="fas fa-eye"></i></button>
                         <?php endif; ?>
                     </td>
                 </tr>
@@ -551,6 +552,17 @@ if ($donor_info && isset($donor_info['birthdate'])) {
     <!-- Type of Donation & Eligibility Status Section -->
     <div class="eligibility-section">
         <div class="eligibility-grid">
+            <input type="hidden" id="dp-donor-id-flag" value="<?php echo htmlspecialchars($donor_id); ?>">
+            <input type="hidden" id="pe-remarks-flag" value="<?php echo htmlspecialchars(strtolower($physical_exam_info['remarks'] ?? '')); ?>">
+            <?php 
+                $peNeedsReview = isset($physical_exam_info['needs_review']) && (
+                    $physical_exam_info['needs_review'] === true ||
+                    $physical_exam_info['needs_review'] === 1 ||
+                    $physical_exam_info['needs_review'] === '1' ||
+                    (is_string($physical_exam_info['needs_review']) && in_array(strtolower(trim($physical_exam_info['needs_review'])), ['true','t','yes','y'], true))
+                );
+            ?>
+            <input type="hidden" id="pe-needs-review-flag" value="<?php echo $peNeedsReview ? '1' : '0'; ?>">
             <div class="form-group">
                 <label class="form-label">Type of Donation</label>
                 <input type="text" class="form-input" value="<?php echo htmlspecialchars($screening_info['donation_type'] ?? 'N/A'); ?>" readonly>
@@ -559,9 +571,10 @@ if ($donor_info && isset($donor_info['birthdate'])) {
                 <label class="form-label">Eligibility Status</label>
                 <?php 
                     $mhApprovedFlag = ($medical_history_info && isset($medical_history_info['medical_approval']) && strtolower(trim($medical_history_info['medical_approval'])) === 'approved');
-                    $peStatus = strtolower(trim($physical_exam_info['status'] ?? ''));
-                    $pePendingFlag = ($peStatus === 'pending');
-                    $eligibilityEnabled = ($mhApprovedFlag && $pePendingFlag);
+                    // Backend gate: dropdown enabled only when PE remarks/status is Accepted
+                    $peRemarksForGate = strtolower(trim($physical_exam_info['remarks'] ?? ''));
+                    $peAcceptedFlag = ($peRemarksForGate === 'accepted');
+                    $eligibilityEnabled = ($mhApprovedFlag && $peAcceptedFlag);
                 ?>
                 <select class="eligibility-select" id="eligibilityStatus" <?php echo $eligibilityEnabled ? '' : 'disabled'; ?> data-enabled="<?php echo $eligibilityEnabled ? '1' : '0'; ?>">
                     <option value="approve">Approve to Donate</option>
@@ -619,7 +632,7 @@ if ($donor_info && isset($donor_info['birthdate'])) {
             const select = document.getElementById('eligibilityStatus');
             const proceedBtn = document.getElementById('proceedToPhysicalBtn');
             const mhApproved = <?php echo $mhApprovedFlag ? 'true' : 'false'; ?>;
-            const pePending = <?php echo $pePendingFlag ? 'true' : 'false'; ?>;
+            const peAccepted = <?php echo $peAcceptedFlag ? 'true' : 'false'; ?>;
 
             function showRequirementAlert() {
                 const message = 'Eligibility Status can be set only when:\n\n' +
@@ -632,15 +645,29 @@ if ($donor_info && isset($donor_info['birthdate'])) {
                 }
             }
 
-            if (select && select.disabled) {
-                select.title = 'Enabled only when Medical is Approved and Physical status is Pending';
+            if (select) {
+                // Disable unless MH Approved and PE Accepted
+                if (!peAccepted || !mhApproved) {
+                    select.disabled = true;
+                }
+                select.title = 'Enabled only when Medical is Approved and Physical Examination is Accepted';
             }
             if (proceedBtn) {
+                // Only allow Confirm when PE is Accepted (backend rule)
+                if (!peAccepted) {
+                    try {
+                        // Hide the actual Confirm button and also its container if present
+                        proceedBtn.style.display = 'none';
+                        proceedBtn.classList.add('d-none');
+                        const footer = proceedBtn.closest('.modal-footer');
+                        if (footer) { footer.style.display = 'none'; footer.classList.add('d-none'); }
+                    } catch(_) {}
+                }
                 proceedBtn.addEventListener('click', function(e){
                     if (e && e.stopImmediatePropagation) e.stopImmediatePropagation();
                     const selected = select ? select.value : '';
                     // If requirements not met OR not approving, just show message (no state advance)
-                    if (!(mhApproved && pePending)) {
+                    if (!(mhApproved && peAccepted)) {
                         e.stopPropagation();
                         e.preventDefault();
                         showRequirementAlert();
@@ -649,11 +676,24 @@ if ($donor_info && isset($donor_info['birthdate'])) {
                     if (selected === 'approve') {
                         e.preventDefault();
                         e.stopPropagation();
+                        
+                        // Clear any conflicting success states before proceeding
+                        try {
+                            window.__mhSuccessActive = false;
+                            window.__peSuccessActive = false;
+                        } catch(_) {}
+                        
                         // Move to collection stage: PE.needs_review=false; BC.needs_review=true; update timestamps
                         const donorIdEl = document.querySelector('[name="donor_id"], [data-donor-id]');
                         const donorIdAttr = document.querySelector('[data-donor-id]');
                         const donorId = (window.currentDonorId) || (donorIdEl && donorIdEl.value) || (donorIdAttr && donorIdAttr.getAttribute('data-donor-id'));
                         if (!donorId) { return; }
+                        
+                        // Store context for potential reopening
+                        try {
+                            window.lastDonorProfileContext = { donorId: String(donorId), screeningData: { donor_form_id: String(donorId) } };
+                        } catch(_) {}
+                        
                         fetch('../../assets/php_func/advance_to_collection.php', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -665,9 +705,21 @@ if ($donor_info && isset($donor_info['birthdate'])) {
                             }
                             // Reopen donor profile to reflect state
                             if (window.openDonorProfileModal) {
-                                try { openDonorProfileModal({ donor_form_id: donorId }); } catch(e) { window.location.reload(); }
-                            } else { window.location.reload(); }
-                        }).catch(()=>{ if (window.customInfo) window.customInfo('Failed to advance to collection.'); else alert('Failed to advance to collection.'); });
+                                try { 
+                                    // Small delay to ensure any modal transitions complete
+                                    setTimeout(() => {
+                                        openDonorProfileModal({ donor_form_id: donorId }); 
+                                    }, 100);
+                                } catch(e) { 
+                                    console.warn('Error reopening donor profile:', e);
+                                    window.location.reload(); 
+                                }
+                            } else { 
+                                window.location.reload(); 
+                            }
+                        }).catch(()=>{ 
+                            if (window.customInfo) window.customInfo('Failed to advance to collection.'); else alert('Failed to advance to collection.'); 
+                        });
                     }
                 });
             }

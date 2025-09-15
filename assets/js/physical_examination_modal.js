@@ -67,12 +67,15 @@ class PhysicalExaminationModal {
             document.getElementById('physical-donor-id').value = screeningData.donor_form_id || '';
             document.getElementById('physical-screening-id').value = screeningData.screening_id || '';
             
-            // Populate initial screening summary
-            this.populateInitialScreeningSummary(screeningData);
-
-            // If a physical examination exists with status pending, fetch and hydrate form
-            if (screeningData.donor_form_id) {
-                this.fetchExistingPhysicalExamination(screeningData.donor_form_id);
+            // By default, DO NOT prefill from database. Enable only if explicitly requested.
+            const prefillEnabled = (window.PE_PREFILL === true);
+            if (prefillEnabled) {
+                // Populate initial screening summary
+                this.populateInitialScreeningSummary(screeningData);
+                // If a physical examination exists with status pending, fetch and hydrate form
+                if (screeningData.donor_form_id) {
+                    this.fetchExistingPhysicalExamination(screeningData.donor_form_id);
+                }
             }
         }
         
@@ -468,71 +471,203 @@ class PhysicalExaminationModal {
         if (!this.validateCurrentStep()) {
             return;
         }
-        
-        // Show loading state
-        const submitBtn = document.querySelector('.physical-submit-btn');
-        const originalText = submitBtn.textContent;
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
-        
+        // Show confirmation modal first, then proceed
+        this.confirmAndSubmit();
+    }
+
+    confirmAndSubmit() {
+        const donorId = (this.screeningData && (this.screeningData.donor_form_id || this.screeningData.donor_id)) || null;
+        if (donorId) {
+            try {
+                window.lastDonorProfileContext = { donorId: String(donorId), screeningData: this.screeningData };
+                window.__peLastDonorId = String(donorId);
+            } catch(_) {}
+        }
+        const confirmEl = document.getElementById('physicalExamApproveConfirmModal');
+        if (!confirmEl) {
+            this.doSubmit();
+            return;
+        }
+        const modal = new bootstrap.Modal(confirmEl);
         try {
-            // Collect all form data
+            confirmEl.style.zIndex = '20010';
+            const dlg = confirmEl.querySelector('.modal-dialog');
+            if (dlg) dlg.style.zIndex = '20011';
+            setTimeout(() => {
+                const backs = document.querySelectorAll('.modal-backdrop');
+                if (backs.length) backs[backs.length - 1].style.zIndex = '20005';
+            }, 10);
+        } catch(_) {}
+        const approveBtn = document.getElementById('confirmApprovePhysicalExamBtn');
+        if (approveBtn) {
+            approveBtn.onclick = null;
+            approveBtn.onclick = () => { try { modal.hide(); } catch(_) {} this.doSubmit(); };
+        }
+        modal.show();
+    }
+
+    async doSubmit() {
+        const submitBtn = document.querySelector('.physical-submit-btn');
+        const originalText = submitBtn ? submitBtn.textContent : '';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+        }
+        try {
             const formData = new FormData(document.getElementById('physicalExaminationForm'));
             const data = {};
-            
-            for (let [key, value] of formData.entries()) {
-                data[key] = value;
-            }
-            
-            // Add screening data
+            for (let [key, value] of formData.entries()) { data[key] = value; }
             if (this.screeningData) {
                 data.donor_id = this.screeningData.donor_form_id;
                 data.screening_id = this.screeningData.screening_id;
             }
-            
-            // Always submit status as Pending (finalization happens later)
-            // Provide a placeholder remarks value to satisfy required validation
             data.status = 'Pending';
-            data.remarks = 'Pending';
-            
-            // Flag to indicate this is an accepted examination (don't update eligibility table)
+            // Set remarks to Accepted upon physician approval/submit
+            data.remarks = 'Accepted';
             data.is_accepted_examination = true;
-            
-            // Submit to server
             const response = await fetch('../../assets/php_func/process_physical_examination.php', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
-            
             const result = await response.json();
-            
-            if (result.success) {
-                this.showToast('Physical examination saved!', 'success');
-                // Add interviewer name to summary if available
-                if (result.interviewer_name) {
-                    const el = document.getElementById('summary-interviewer');
-                    if (el) el.textContent = result.interviewer_name;
-                }
-                // Close only; donor profile will reopen (managed by parent logic)
-                setTimeout(() => {
-                    this.closeModal();
-                    try { if (window.tryReopenDonorProfile) window.tryReopenDonorProfile(); } catch (e) {}
-                }, 800);
+            if (result && result.success) {
+                const donorId = (this.screeningData && (this.screeningData.donor_form_id || this.screeningData.donor_id)) || window.__peLastDonorId || null;
+                this.showAcceptedThenReturn(donorId, this.screeningData);
             } else {
-                throw new Error(result.message || 'Submission failed');
+                throw new Error((result && result.message) || 'Submission failed');
             }
-            
         } catch (error) {
             console.error('Submission error:', error);
             this.showToast('Error: ' + error.message, 'error');
         } finally {
-            // Reset button state
-            submitBtn.disabled = false;
-            submitBtn.textContent = originalText;
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
         }
+    }
+
+    showAcceptedThenReturn(donorId, screeningData) {
+        console.log('[PE] showAcceptedThenReturn called with donorId:', donorId);
+        try { 
+            window.__peSuccessActive = true; 
+            window.__mhSuccessActive = false; // Clear medical history success state
+        } catch(_) {}
+        try {
+            const modal = document.getElementById('physicalExaminationModal');
+            if (modal) {
+                modal.classList.remove('show');
+                setTimeout(() => { modal.style.display = 'none'; }, 250);
+            }
+        } catch(_) {}
+        if (donorId) {
+            try { 
+                window.lastDonorProfileContext = { donorId: String(donorId), screeningData: screeningData }; 
+                window.__peLastDonorId = String(donorId);
+            } catch(_) {}
+        }
+        const successEl = document.getElementById('physicalExamAcceptedModal');
+        if (!successEl) { this.reopenDonorProfileAfterSuccess(donorId, screeningData); return; }
+        const m = new bootstrap.Modal(successEl);
+        try {
+            successEl.style.zIndex = '20010';
+            const dlg = successEl.querySelector('.modal-dialog');
+            if (dlg) dlg.style.zIndex = '20011';
+            setTimeout(() => {
+                const backs = document.querySelectorAll('.modal-backdrop');
+                if (backs.length) backs[backs.length - 1].style.zIndex = '20005';
+            }, 10);
+        } catch(_) {}
+        const finalize = () => { try { m.hide(); } catch(_) {} this.reopenDonorProfileAfterSuccess(donorId, screeningData); };
+        successEl.addEventListener('hidden.bs.modal', finalize, { once: true });
+        setTimeout(finalize, 3000);
+        m.show();
+    }
+
+    reopenDonorProfileAfterSuccess(donorId, screeningData) {
+        console.log('[PE] reopenDonorProfileAfterSuccess called with donorId:', donorId);
+        try { 
+            window.__peSuccessActive = false; 
+            window.__mhSuccessActive = false; // Clear medical history success state
+        } catch(_) {}
+        try {
+            document.querySelectorAll('.modal.show').forEach(el => {
+                try { (bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el)).hide(); } catch(_) {}
+                el.classList.remove('show');
+                el.style.display = 'none';
+                el.setAttribute('aria-hidden', 'true');
+            });
+            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+        } catch(_) {}
+        
+        // Use the same robust reopening logic as medical history
+        let attempts = 0;
+        const ctxArg = screeningData || (donorId ? { donor_form_id: donorId } : null);
+        const tryOpen = () => {
+            attempts++;
+            const ctx = ctxArg || (window.lastDonorProfileContext && (window.lastDonorProfileContext.screeningData || { donor_form_id: window.lastDonorProfileContext.donorId }));
+            if (!ctx) { 
+                console.log('[PE] No context available, attempt:', attempts);
+                if (attempts < 20) return setTimeout(tryOpen, 150); 
+                else return; 
+            }
+            console.log('[PE] Reopen attempt', attempts, 'ctx:', ctx);
+            
+            // Try multiple methods to reopen donor profile
+            if (typeof window.openDonorProfileModal === 'function') { 
+                try { 
+                    window.openDonorProfileModal(ctx); 
+                    console.log('[PE] Successfully reopened via openDonorProfileModal');
+                    return; 
+                } catch(err) { 
+                    console.warn('[PE] openDonorProfileModal error', err); 
+                } 
+            }
+            if (typeof window.__origOpenDonorProfile === 'function') { 
+                try { 
+                    window.__origOpenDonorProfile(ctx); 
+                    console.log('[PE] Successfully reopened via __origOpenDonorProfile');
+                    return; 
+                } catch(err) { 
+                    console.warn('[PE] __origOpenDonorProfile error', err); 
+                } 
+            }
+            if (this.forceShowDonorProfileElement()) { 
+                console.log('[PE] Forced Donor Profile element visible'); 
+                return; 
+            }
+            if (attempts < 20) setTimeout(tryOpen, 150);
+        };
+        setTimeout(tryOpen, 80);
+    }
+    
+    forceShowDonorProfileElement() {
+        try {
+            const dpEl = document.getElementById('donorProfileModal');
+            if (!dpEl) return false;
+            // Force visible if not already
+            dpEl.style.display = 'block';
+            dpEl.classList.add('show');
+            dpEl.removeAttribute('aria-hidden');
+            dpEl.setAttribute('aria-modal', 'true');
+            dpEl.setAttribute('role', 'dialog');
+            // Ensure a backdrop exists
+            let backdrop = document.querySelector('.modal-backdrop');
+            if (!backdrop) {
+                backdrop = document.createElement('div');
+                backdrop.className = 'modal-backdrop fade show';
+                backdrop.style.zIndex = '20000';
+                document.body.appendChild(backdrop);
+            }
+            // Body modal-open state (but you suppress padding shifts elsewhere)
+            document.body.classList.add('modal-open');
+            document.body.style.overflow = 'hidden';
+            return true;
+        } catch (_) { return false; }
     }
     
     showToast(message, type = 'info') {

@@ -676,27 +676,7 @@ if ($http_code === 200) {
     <div class="error-message" id="modalValidationError">Please answer all questions before proceeding to the next step.</div>
 </form>
  
-<!-- Custom Confirmation Modal (namespaced) -->
-<div class="modal fade" id="mhCustomConfirmModal" tabindex="-1" aria-labelledby="mhCustomConfirmModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header" style="background: #9c0000; color: white;">
-                <h5 class="modal-title" id="mhCustomConfirmModalLabel">
-                    <i class="fas fa-question-circle me-2"></i>
-                    Confirm Action
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p id="mhCustomConfirmMessage">Are you sure you want to proceed?</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="mhCustomConfirmYes">Yes, Proceed</button>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- mhCustomConfirm modal removed to prevent duplicate confirmations; use red approval modal only -->
 
 <div class="modal-footer">
     <div class="footer-left"></div>
@@ -880,9 +860,9 @@ function saveEditedData() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Show success message using custom modal
-            if (window.customConfirm || window.mhCustomConfirm) {
-                (window.customConfirm || window.mhCustomConfirm)('Medical history data saved successfully!', function() {
+            // Show success message using unified custom modal
+            if (window.customConfirm) {
+                window.customConfirm('Medical history data saved successfully!', function() {
                     // Just close the modal, no additional action needed
                 });
             } else {
@@ -936,31 +916,9 @@ if (document.readyState === 'loading') {
     initializeEditFunctionality();
 }
 
-// Custom confirmation function (namespaced) to replace browser confirm
-function mhCustomConfirm(message, onConfirm) {
-    const modal = new bootstrap.Modal(document.getElementById('mhCustomConfirmModal'));
-    const messageElement = document.getElementById('mhCustomConfirmMessage');
-    const confirmButton = document.getElementById('mhCustomConfirmYes');
-    
-    messageElement.textContent = message;
-    
-    // Remove any existing event listeners
-    const newConfirmButton = confirmButton.cloneNode(true);
-    confirmButton.parentNode.replaceChild(newConfirmButton, confirmButton);
-    
-    newConfirmButton.addEventListener('click', function() {
-        modal.hide();
-        if (onConfirm) onConfirm();
-    });
-    
-    modal.show();
-}
-
-// Also initialize when the modal content is dynamically loaded
+// Initialize when the modal content is dynamically loaded
 if (typeof window !== 'undefined') {
     window.initializeEditFunctionality = initializeEditFunctionality;
-    window.mhCustomConfirm = mhCustomConfirm;
-    console.log('✅ initializeEditFunctionality and mhCustomConfirm exposed to global scope');
 }
 </script>
 

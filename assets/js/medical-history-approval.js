@@ -1,8 +1,14 @@
 // Medical History Approval JavaScript Functions
 // This file handles all medical history approval and decline functionality
 
-// Global variables
-let currentMedicalHistoryData = null;
+// Global variables (avoid redeclaration if script is loaded more than once)
+if (typeof window.currentMedicalHistoryData === 'undefined') {
+    window.currentMedicalHistoryData = null;
+}
+// Ensure identifier exists in this scope even if file is included multiple times
+if (typeof currentMedicalHistoryData === 'undefined') {
+    var currentMedicalHistoryData = window.currentMedicalHistoryData;
+}
 
 // Initialize medical history approval functionality
 function initializeMedicalHistoryApproval() {
@@ -53,6 +59,96 @@ function initializeMedicalHistoryApproval() {
     console.log('Medical history approval functionality initialized successfully');
 }
 
+// Intercept any Approve button inside the MH modal to force: Approve -> Confirm -> Process
+function bindApproveInterceptors() {
+    try {
+        const container = document.getElementById('medicalHistoryModal') || document;
+        const tryBind = (btn) => {
+            if (!btn || btn.__mhApproveIntercepted) return;
+            btn.__mhApproveIntercepted = true;
+            // Remove inline onclick if present
+            try { btn.onclick = null; } catch(_) {}
+            btn.addEventListener('click', function(ev){
+                try { ev.preventDefault(); ev.stopPropagation(); if (ev.stopImmediatePropagation) ev.stopImmediatePropagation(); } catch(_) {}
+                try { window.__mhApproveFromPrimary = true; } catch(_) {}
+                // Always show our confirmation first
+                // Always show MH confirmation; only proceed on Yes
+                if (typeof showConfirmApproveModal === 'function') {
+                    showConfirmApproveModal(function(){
+                        try { window.__mhApproveConfirmed = true; } catch(_) {}
+                        if (typeof window.processFormSubmission === 'function') {
+                            window.processFormSubmission('approve');
+                        } else if (typeof window.submitModalForm === 'function') {
+                            window.submitModalForm('approve');
+                        }
+                    });
+                }
+                return false;
+            }, true); // capture to beat any existing handlers
+        };
+        // Primary approve button id
+        tryBind(container.querySelector('#modalApproveButton'));
+        // Intercept the Next button when it turns into Approve: block any processing
+        const nextBtn = container.querySelector('#modalNextButton');
+        if (nextBtn && !nextBtn.__mhApproveBlockBound) {
+            nextBtn.__mhApproveBlockBound = true;
+            nextBtn.addEventListener('click', function(ev){
+                const text = (nextBtn.textContent || '').trim().toLowerCase();
+                if (text === 'approve') {
+                    try { ev.preventDefault(); ev.stopPropagation(); if (ev.stopImmediatePropagation) ev.stopImmediatePropagation(); } catch(_) {}
+                    // Do nothing here; user must click the primary Approve button
+                    return false;
+                }
+            }, true);
+        }
+    } catch(_) {}
+}
+
+// Hard gate: wrap any direct calls to processFormSubmission('approve') to force confirmation first
+(function hookProcessFormSubmission(){
+    try {
+        if (typeof window.processFormSubmission === 'function' && !window.__mhProcHooked) {
+            window.__mhProcHooked = true;
+            const orig = window.processFormSubmission;
+            window.processFormSubmission = function(action){
+                const a = String(action || '').toLowerCase();
+                if (a === 'approve' && !window.__mhApproveConfirmed) return; // block unsolicited submits
+                const result = orig.apply(window, arguments);
+                try { window.__mhApproveFromPrimary = false; } catch(_) {}
+                return result;
+            };
+        }
+    } catch(_) {}
+})();
+
+// Block raw form submit of the MH modal until user confirms
+(function guardFormSubmit(){
+    try {
+        document.addEventListener('submit', function(e){
+            try {
+                const form = e.target;
+                if (!form) return;
+                const isMH = form.id === 'modalMedicalHistoryForm' || form.closest && form.closest('#medicalHistoryModal');
+                if (isMH && window.__mhApproveFromPrimary && !window.__mhApproveConfirmed) {
+                    // If submit originates before confirm, block it
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                    return false;
+                }
+            } catch(_) {}
+        }, true);
+    } catch(_) {}
+})();
+
+// Click handler for Decline buttons (opens the dedicated decline modal)
+function handleDeclineClick(e) {
+    try { if (e && typeof e.preventDefault === 'function') e.preventDefault(); } catch(_) {}
+    try { if (e && typeof e.stopPropagation === 'function') e.stopPropagation(); } catch(_) {}
+    showDeclineModal();
+    return false;
+}
+
 // Handle restriction type change
 function handleRestrictionTypeChange() {
     const restrictionType = document.getElementById('restrictionType').value;
@@ -75,74 +171,6 @@ function handleRestrictionTypeChange() {
         donationRestrictionDate.required = false;
         donationRestrictionDate.value = '';
     }
-}
-
-// Handle approve button click
-function handleApproveClick(e) {
-    e.preventDefault();
-    console.log('Approve button clicked');
-    
-    // Get current medical history data from the button itself
-    const button = e.target.closest('.approve-medical-history-btn');
-    const donorId = button?.getAttribute('data-donor-id');
-    const screeningId = button?.getAttribute('data-screening-id');
-    const medicalHistoryId = button?.getAttribute('data-medical-history-id');
-    const physicalExamId = button?.getAttribute('data-physical-exam-id');
-    
-    if (!donorId) {
-        showMedicalHistoryToast('Error', 'Unable to get donor information. Please try again.', 'error');
-        return;
-    }
-    
-    currentMedicalHistoryData = {
-        donor_id: donorId,
-        screening_id: screeningId || null,
-        medical_history_id: medicalHistoryId || null,
-        physical_exam_id: physicalExamId || null
-    };
-    
-    // Show approval confirmation modal
-    showApprovalModal();
-}
-
-// Handle decline button click
-function handleDeclineClick(e) {
-    e.preventDefault();
-    console.log('Decline button clicked');
-    
-    // Get current medical history data from the button itself
-    const button = e.target.closest('.decline-medical-history-btn');
-    console.log('Decline button found:', button);
-    
-    const donorId = button?.getAttribute('data-donor-id');
-    const screeningId = button?.getAttribute('data-screening-id');
-    const medicalHistoryId = button?.getAttribute('data-medical-history-id');
-    const physicalExamId = button?.getAttribute('data-physical-exam-id');
-    
-    console.log('Donor ID:', donorId, 'Screening ID:', screeningId, 'Medical History ID:', medicalHistoryId, 'Physical Exam ID:', physicalExamId);
-    
-    // Check if donor ID is valid
-    if (!donorId || donorId === '') {
-        showMedicalHistoryToast('Error', 'Donor ID is missing. Please refresh the page and try again.', 'error');
-        return;
-    }
-    
-    // Allow screening ID to be missing (it might not be required for all workflows)
-    if (screeningId === 'no-screening-id' || screeningId === '') {
-        console.log('Screening ID is missing, proceeding with donor ID only');
-    }
-    
-    currentMedicalHistoryData = {
-        donor_id: donorId,
-        screening_id: screeningId || null,
-        medical_history_id: medicalHistoryId || null,
-        physical_exam_id: physicalExamId || null
-    };
-    
-    console.log('Current medical history data set:', currentMedicalHistoryData);
-    
-    // Show decline confirmation modal
-    showDeclineModal();
 }
 
 // Show approval confirmation modal
@@ -182,6 +210,8 @@ function showDeclineModal() {
     }
     
     try {
+        // Ensure we have minimal donor context before opening
+        ensureMedicalHistoryContextFromPage();
         // Store current scroll position
         const currentScrollPos = window.pageYOffset || document.documentElement.scrollTop;
         
@@ -249,6 +279,8 @@ function showDeclineModal() {
 // Handle decline form submission
 function handleDeclineSubmit(e) {
     e.preventDefault();
+    // Make sure we have donor_id/screening_id context even if globals were cleared
+    ensureMedicalHistoryContextFromPage();
     
     const declineReason = document.getElementById('declineReason').value.trim();
     const restrictionType = document.getElementById('restrictionType').value;
@@ -289,35 +321,51 @@ function handleDeclineSubmit(e) {
         cleanupModalCompletely();
 }
 
-// Process medical history approval
-function processMedicalHistoryApproval() {
+// Populate currentMedicalHistoryData from the currently loaded Medical History modal if missing
+function ensureMedicalHistoryContextFromPage() {
+    try {
+        if (!window.currentMedicalHistoryData) window.currentMedicalHistoryData = {};
+        const ctx = window.currentMedicalHistoryData || {};
+        // Try to pull IDs from the medical history modal form
+        const donorIdEl = document.querySelector('#modalMedicalHistoryForm input[name="donor_id"], #medicalHistoryModal input[name="donor_id"]');
+        const screeningIdEl = document.querySelector('#modalMedicalHistoryForm input[name="screening_id"], #medicalHistoryModal input[name="screening_id"]');
+        const mhIdEl = document.querySelector('#modalMedicalHistoryForm input[name="medical_history_id"], #medicalHistoryModal input[name="medical_history_id"]');
+        const peIdEl = document.querySelector('#modalMedicalHistoryForm input[name="physical_exam_id"], #medicalHistoryModal input[name="physical_exam_id"]');
+        const donorId = (ctx.donor_id) || (donorIdEl && donorIdEl.value) || window.currentDonorId || null;
+        const screening_id = ctx.screening_id || (screeningIdEl && screeningIdEl.value) || null;
+        const medical_history_id = ctx.medical_history_id || (mhIdEl && mhIdEl.value) || null;
+        const physical_exam_id = ctx.physical_exam_id || (peIdEl && peIdEl.value) || null;
+        window.currentMedicalHistoryData = {
+            donor_id: donorId,
+            screening_id: screening_id || ctx.screening_id || null,
+            medical_history_id: medical_history_id || ctx.medical_history_id || null,
+            physical_exam_id: physical_exam_id || ctx.physical_exam_id || null
+        };
+        return window.currentMedicalHistoryData;
+    } catch (err) {
+        // Do not block; fallback logic later can fetch by donor
+        return window.currentMedicalHistoryData || null;
+    }
+}
+
+// Process medical history approval (kept for external triggers; no reloads)
+function processMedicalHistoryApproval(returnToDonorProfile = false) {
     if (!currentMedicalHistoryData) {
         showMedicalHistoryToast('Error', 'No medical history data available.', 'error');
         return;
     }
-    
-    // Show loading state
     showMedicalHistoryToast('Processing', 'Approving medical history...', 'info');
-    
-    // Prepare data for submission
     const submitData = {
         donor_id: currentMedicalHistoryData.donor_id,
         screening_id: currentMedicalHistoryData.screening_id,
         action: 'approve_medical_history'
     };
-    
-    // Submit to backend (placeholder - you'll implement this later)
     console.log('Submitting approval:', submitData);
-    
-    // Simulate API call
     setTimeout(() => {
-        showMedicalHistoryToast('Success', 'Medical history has been approved successfully.', 'success');
-        
-        // Refresh the page after a short delay
-        setTimeout(() => {
-            window.location.reload();
-        }, 1500);
-    }, 1000);
+        // Only show banner; do not reload. Caller is expected to reopen donor profile.
+        const donorId = currentMedicalHistoryData && currentMedicalHistoryData.donor_id;
+        showApprovedThenReturn(donorId, { donor_form_id: donorId });
+    }, 800);
 }
 
 // Process medical history decline
@@ -494,7 +542,7 @@ async function processMedicalHistoryDecline(declineReason, restrictionType, dona
                            }
                        });
                    })
-                   .then(result => {
+            .then(result => {
                        if (result.success) {
                            console.log('Decline recorded successfully:', result);
                            
@@ -528,24 +576,16 @@ async function processMedicalHistoryDecline(declineReason, restrictionType, dona
         return; // Exit early since we handled the case without screening_id
     }
     
-    // For medical history modal, we don't collect screening form data
-    // The screening form data should be collected from the Initial Screening Form modal
-
-    // Use the same defer functionality as the working defer button
+    // Use the same defer functionality as the working defer button (when screening_id is available)
     const deferData = {
         action: 'create_eligibility_defer',
         donor_id: currentMedicalHistoryData.donor_id,
+        screening_id: currentMedicalHistoryData.screening_id,
         deferral_type: restrictionType === 'temporary' ? 'Temporary Deferral' : 'Permanent Deferral',
         disapproval_reason: `Medical: ${declineReason}`,
         duration: restrictionType === 'temporary' ? 
-            Math.ceil((new Date(donationRestrictionDate) - new Date()) / (1000 * 60 * 60 * 24)) : null,
-        // No screening form data for medical history modal
+            Math.ceil((new Date(donationRestrictionDate) - new Date()) / (1000 * 60 * 60 * 24)) : null
     };
-    
-    // Only include screening_id if it exists and is not null/undefined
-    if (currentMedicalHistoryData.screening_id) {
-        deferData.screening_id = currentMedicalHistoryData.screening_id;
-    }
     
     console.log('Using defer functionality with data:', deferData);
     
@@ -1367,12 +1407,481 @@ function initializeDeclineFormValidation() {
     console.log('Decline form validation initialized');
 }
 
+// Show confirm approve modal
+function showConfirmApproveModal(onConfirm) {
+    const confirmEl = document.getElementById('medicalHistoryApproveConfirmModal');
+    if (!confirmEl) return false;
+    const m = new bootstrap.Modal(confirmEl);
+    m.show();
+    // Raise z-index above the custom medical history modal (which uses ~10080)
+    try {
+        confirmEl.style.zIndex = '10110';
+        const dlg = confirmEl.querySelector('.modal-dialog');
+        if (dlg) dlg.style.zIndex = '10111';
+        setTimeout(() => {
+            // Pick the top-most backdrop and raise it just below the dialog
+            const backs = document.querySelectorAll('.modal-backdrop');
+            if (backs && backs.length) {
+                backs[backs.length - 1].style.zIndex = '10105';
+            }
+        }, 10);
+    } catch (_) {}
+    const confirmBtn = document.getElementById('confirmApproveMedicalHistoryBtn');
+    if (confirmBtn) {
+        confirmBtn.onclick = null;
+        confirmBtn.onclick = () => {
+            try { m.hide(); } catch(_) {}
+            // Close the main Medical History modal before showing success
+            try {
+                const mhEl = document.getElementById('medicalHistoryModal');
+                if (mhEl) {
+                    const mh = bootstrap.Modal.getInstance(mhEl) || new bootstrap.Modal(mhEl);
+                    // Remove any guard observers that might re-show it
+                    try { (mhEl.__observer || window.__mhObserver)?.disconnect?.(); } catch(_) {}
+                    try { mh.hide(); } catch(_) {}
+                    // Hard cleanup to ensure it's fully closed
+                    setTimeout(() => {
+                        try { mhEl.classList.remove('show'); mhEl.style.display = 'none'; mhEl.setAttribute('aria-hidden','true'); } catch(_) {}
+                        try { document.querySelectorAll('.modal-backdrop').forEach(b => b.remove()); } catch(_) {}
+                        try { document.body.classList.remove('modal-open'); document.body.style.overflow = ''; document.body.style.paddingRight = ''; } catch(_) {}
+                    }, 40);
+                }
+            } catch(_) {}
+            if (typeof onConfirm === 'function') onConfirm();
+        };
+    }
+    return true;
+}
+
+// Attach handler for Approve button inside the loaded Medical History modal content
+function attachInnerModalApproveHandler() {
+    try {
+        const container = document.getElementById('medicalHistoryModalContent') || document;
+        const bind = (btn) => {
+            if (!btn || btn.__mhBound) return;
+            btn.__mhBound = true;
+            btn.addEventListener('click', function(e){
+                e.preventDefault();
+                e.stopPropagation();
+                // Use the single Confirm Action modal defined as mhCustomConfirm
+                const message = "Are you sure you want to approve this donor's medical history?";
+                if (typeof window.mhCustomConfirm === 'function') {
+                    window.mhCustomConfirm(message, function(){
+                        // Submit directly without triggering another confirm
+                        try { window.__mhApprovePending = true; } catch(_) {}
+                        if (typeof window.processFormSubmission === 'function') {
+                            window.processFormSubmission('approve');
+                        } else if (typeof window.submitModalForm === 'function') {
+                            // Fallback if direct submission isn't available
+                            window.__mhApprovePending = true;
+                            window.submitModalForm('approve');
+                        }
+                    });
+                } else {
+                    // Ultimate fallback
+                    try { window.__mhApprovePending = true; } catch(_) {}
+                    if (typeof window.processFormSubmission === 'function') {
+                        window.processFormSubmission('approve');
+                    } else if (typeof window.submitModalForm === 'function') {
+                        window.submitModalForm('approve');
+                    }
+                }
+                return false;
+            });
+        };
+        // Primary approve button if present
+        bind(container.querySelector('#modalApproveButton'));
+        // Or when Next button is turned into Approve
+        const nextBtn = container.querySelector('#modalNextButton');
+        if (nextBtn && !nextBtn.__mhApproveCheckBound) {
+            nextBtn.__mhApproveCheckBound = true;
+            nextBtn.addEventListener('click', function(e){
+                const text = (nextBtn.textContent || '').trim().toLowerCase();
+                if (text === 'approve') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const message = "Are you sure you want to approve this donor's medical history?";
+                    if (typeof window.mhCustomConfirm === 'function') {
+                        window.mhCustomConfirm(message, function(){
+                            try { window.__mhApprovePending = true; } catch(_) {}
+                            if (typeof window.processFormSubmission === 'function') {
+                                window.processFormSubmission('approve');
+                            } else if (typeof window.submitModalForm === 'function') {
+                                window.submitModalForm('approve');
+                            }
+                        });
+                    } else {
+                        try { window.__mhApprovePending = true; } catch(_) {}
+                        if (typeof window.processFormSubmission === 'function') {
+                            window.processFormSubmission('approve');
+                        } else if (typeof window.submitModalForm === 'function') {
+                            window.submitModalForm('approve');
+                        }
+                    }
+                    return false;
+                }
+            });
+        }
+    } catch (e) { console.warn('attachInnerModalApproveHandler error', e); }
+}
+
+// Observe dynamic content injection for the medical history modal
+(function observeMedicalHistoryModal() {
+    try {
+        const target = document.getElementById('medicalHistoryModal') || document.body;
+        const observer = new MutationObserver(() => {
+            attachInnerModalApproveHandler();
+        });
+        observer.observe(target, { childList: true, subtree: true });
+        // Initial attempt
+        attachInnerModalApproveHandler();
+    } catch (e) { /* noop */ }
+})();
+
+// Override submitModalForm to route Approve -> confirm modal -> approved banner -> original submit
+(function hookSubmitModalForm() {
+    function applyHook() {
+        if (typeof window.submitModalForm !== 'function') return false;
+        if (window.__origSubmitMH) return true; // already hooked
+        window.__origSubmitMH = window.submitModalForm;
+        window.submitModalForm = function(action) {
+            // Set flag when approving so fetch hook can react on success
+            if (String(action).toLowerCase() === 'approve') {
+                window.__mhApprovePending = true;
+            }
+            return window.__origSubmitMH.apply(this, arguments);
+        };
+        return true;
+    }
+    if (!applyHook()) {
+        let tries = 0;
+        const id = setInterval(() => {
+            tries++;
+            if (applyHook() || tries > 10) clearInterval(id);
+        }, 200);
+    }
+})();
+
+// Hook fetch to detect successful approve submission
+(function hookFetchForApproveSuccess(){
+    try {
+        const orig = window.fetch;
+        if (!orig || window.__mhFetchHooked) return;
+        window.__mhFetchHooked = true;
+        window.fetch = function(input, init) {
+            const url = (typeof input === 'string') ? input : (input && input.url) ? input.url : '';
+            const isMHProc = url.includes('medical-history-process.php');
+            return orig.apply(this, arguments).then(async (resp) => {
+                try {
+                    if (isMHProc && window.__mhApprovePending) {
+                        const clone = resp.clone();
+                        let data = null;
+                        try { data = await clone.json(); } catch(_) { data = null; }
+                        if (data && data.success) {
+                            window.__mhApprovePending = false;
+                            const donorId = window.lastDonorProfileContext && window.lastDonorProfileContext.donorId;
+                            showApprovedThenReturn(donorId, window.lastDonorProfileContext && window.lastDonorProfileContext.screeningData);
+                        }
+                    }
+                } catch(_) {}
+                return resp;
+            });
+        };
+    } catch(_) {}
+})();
+
+// Queue donor profile reopen while success modal is visible
+(function hookOpenDonorProfile(){
+    try {
+        if (window.__mhOpenHooked) return;
+        window.__mhOpenHooked = true;
+        const origOpen = window.openDonorProfileModal;
+        if (typeof origOpen === 'function') {
+            window.__origOpenDonorProfile = origOpen;
+            window.openDonorProfileModal = function(screeningData){
+                if (window.__mhSuccessActive) {
+                    // Queue context until success modal is done
+                    const donorId = (screeningData && (screeningData.donor_form_id || screeningData.donor_id)) || (window.currentMedicalHistoryData && window.currentMedicalHistoryData.donor_id);
+                    window.lastDonorProfileContext = { donorId: donorId, screeningData: screeningData };
+                    window.__mhQueuedReopen = true;
+                    return; // swallow during success phase
+                }
+                return window.__origOpenDonorProfile.apply(this, arguments);
+            };
+        }
+    } catch(_) {}
+})();
+
+// Prevent any other modal from opening while success modal is active
+(function preventOtherModalsDuringSuccess(){
+    try {
+        if (window.__mhModalGuard) return; window.__mhModalGuard = true;
+        document.addEventListener('show.bs.modal', function(ev){
+            try {
+                // Check for both medical history and physical examination success states
+                const successActive = window.__mhSuccessActive || window.__peSuccessActive;
+                if (successActive) {
+                    const target = ev.target;
+                    if (target && target.id !== 'medicalHistoryApprovalModal' && target.id !== 'physicalExamAcceptedModal') {
+                        // Stop any modal from showing while success is active
+                        if (typeof ev.preventDefault === 'function') ev.preventDefault();
+                        // Ensure it's hidden in case it already started
+                        try {
+                            const inst = bootstrap.Modal.getInstance(target) || new bootstrap.Modal(target);
+                            inst.hide();
+                        } catch(_) {}
+                        // Queue donor profile if that's the one
+                        if (target.id === 'donorProfileModal') {
+                            const ctx = window.lastDonorProfileContext || null;
+                            if (ctx) {
+                                window.__mhQueuedReopen = true;
+                                console.log('[MH] Queued donor profile reopen due to modal guard');
+                            }
+                        }
+                    }
+                }
+            } catch(_) {}
+        }, true);
+    } catch(_) {}
+})();
+
+// Listen for central approval event and run the success flow
+(function listenForApprovalEvent(){
+    try {
+        window.addEventListener('mh-approved', function(ev){
+            try {
+                const donorId = ev && ev.detail && ev.detail.donorId ? ev.detail.donorId : (currentMedicalHistoryData && currentMedicalHistoryData.donor_id);
+                if (donorId) {
+                    window.__mhLastDonorId = String(donorId);
+                    window.lastDonorProfileContext = { donorId: String(donorId), screeningData: { donor_form_id: String(donorId) } };
+                }
+            } catch(_) {}
+            const donorId = ev && ev.detail && ev.detail.donorId ? ev.detail.donorId : (currentMedicalHistoryData && currentMedicalHistoryData.donor_id);
+            showApprovedThenReturn(donorId, { donor_form_id: donorId });
+        });
+    } catch(_) {}
+})();
+
+function showApprovedThenReturn(donorId, screeningData) {
+    console.log('[MH] showApprovedThenReturn called with:', { donorId, screeningData });
+    const approvedEl = document.getElementById('medicalHistoryApprovalModal');
+    if (!approvedEl) {
+        console.error('[MH] medicalHistoryApprovalModal not found!');
+        return false;
+    }
+    
+    // Ensure last donor context is set
+    try {
+        // Use provided parameters or fallback to existing logic
+        if (donorId) {
+            window.__mhLastDonorId = String(donorId);
+            window.lastDonorProfileContext = { donorId: String(donorId), screeningData: screeningData || { donor_form_id: String(donorId) } };
+        } else {
+            let resolvedDonorId = (window.lastDonorProfileContext && window.lastDonorProfileContext.donorId) || null;
+            if (!resolvedDonorId) {
+                const formDonor = document.querySelector('#modalMedicalHistoryForm input[name="donor_id"]');
+                if (formDonor && formDonor.value) resolvedDonorId = formDonor.value;
+            }
+            if (!resolvedDonorId && window.currentDonorId) resolvedDonorId = window.currentDonorId;
+            if (!resolvedDonorId && window.currentMedicalHistoryData && window.currentMedicalHistoryData.donor_id) resolvedDonorId = window.currentMedicalHistoryData.donor_id;
+            console.log('[MH] Resolved donorId for success flow:', resolvedDonorId);
+            if (resolvedDonorId) {
+                window.__mhLastDonorId = String(resolvedDonorId);
+                window.lastDonorProfileContext = { donorId: String(resolvedDonorId), screeningData: screeningData || { donor_form_id: String(resolvedDonorId) } };
+            }
+        }
+    } catch(e) { console.warn('[MH] donorId resolve error', e); }
+    
+    // Mark success phase active and clear any conflicting states
+    window.__mhSuccessActive = true;
+    window.__peSuccessActive = false; // Clear physical examination success state
+
+    // If Donor Profile modal is currently visible, hide it temporarily and remember to restore
+    let donorProfileWasOpen = false;
+    try {
+        const dpEl = document.getElementById('donorProfileModal');
+        if (dpEl && dpEl.classList.contains('show')) {
+            donorProfileWasOpen = true;
+            const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
+            dp.hide();
+        }
+    } catch(_) {}
+
+    // Ensure any other modals are fully closed, then place success modal on top
+    try {
+        // Close every visible modal except the success modal
+        document.querySelectorAll('.modal.show').forEach(el => {
+            if (el !== approvedEl) {
+                try {
+                    const inst = bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el);
+                    inst.hide();
+                } catch(_) {}
+                el.classList.remove('show');
+                el.style.display = 'none';
+                el.setAttribute('aria-hidden', 'true');
+            }
+        });
+        // Remove all backdrops so success gets a fresh, topmost one
+        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+        // Make sure body is ready for one active modal
+        document.body.classList.add('modal-open');
+        document.body.style.overflow = 'hidden';
+        // Bring success modal to the very top
+        approvedEl.style.zIndex = '20010';
+        const dlg = approvedEl.querySelector('.modal-dialog');
+        if (dlg) dlg.style.zIndex = '20011';
+        setTimeout(() => {
+            const backs = document.querySelectorAll('.modal-backdrop');
+            const backdrop = backs && backs.length ? backs[backs.length - 1] : null;
+            if (backdrop) backdrop.style.zIndex = '20005';
+        }, 10);
+    } catch(_) {}
+
+    const a = new bootstrap.Modal(approvedEl);
+    let returned = false;
+    function returnToProfile() {
+        if (returned) return; returned = true;
+        window.__mhSuccessActive = false;
+        const ctx = window.lastDonorProfileContext;
+        
+        // Full cleanup so the page logic won't think another modal is still open
+        try {
+            // Hide any .modal.show except Donor Profile
+            document.querySelectorAll('.modal.show').forEach(el => {
+                if (el.id !== 'donorProfileModal') {
+                    try {
+                        const inst = bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el);
+                        inst.hide();
+                    } catch(_) {}
+                    el.classList.remove('show');
+                    el.style.display = 'none';
+                    el.setAttribute('aria-hidden', 'true');
+                }
+            });
+            // Remove all backdrops
+            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+            console.log('[MH] Modal environment cleaned');
+        } catch(e) { console.warn('[MH] Cleanup error', e); }
+        
+        try { if (typeof closeMedicalHistoryModal === 'function') closeMedicalHistoryModal(); } catch(_) {}
+        try { window.isOpeningDonorProfile = false; } catch(_) {}
+        try { window.skipDonorProfileCleanup = false; } catch(_) {}
+        
+        // Robust reopen with retries
+        let attempts = 0;
+        const tryOpen = () => {
+            attempts++;
+            const donorId = (ctx && (ctx.donorId || (ctx.screeningData && (ctx.screeningData.donor_form_id || ctx.screeningData.donor_id))))
+                             || window.__mhLastDonorId
+                             || (currentMedicalHistoryData && currentMedicalHistoryData.donor_id);
+            console.log('[MH] Reopen attempt', attempts, 'donorId=', donorId);
+            if (!donorId) return;
+            const dataArg = (ctx && ctx.screeningData) ? ctx.screeningData : { donor_form_id: donorId };
+            if (typeof window.openDonorProfileModal === 'function') { try { window.openDonorProfileModal(dataArg); } catch(err) { console.warn('[MH] openDonorProfileModal error', err); } return; }
+            if (typeof window.__origOpenDonorProfile === 'function') { try { window.__origOpenDonorProfile(dataArg); } catch(err) { console.warn('[MH] __origOpenDonorProfile error', err); } return; }
+            if (forceShowDonorProfileElement()) { console.log('[MH] Forced Donor Profile element visible'); return; }
+            if (attempts < 20) setTimeout(tryOpen, 150);
+        };
+        setTimeout(tryOpen, 80);
+    }
+    
+    // Show success modal after a short tick to ensure others have closed
+    try { setTimeout(() => { try { a.show(); } catch(_) {} }, 50); } catch(_) {}
+    
+    // Bind continue button inside success modal to ensure it closes -> reopen
+    setTimeout(() => {
+        try {
+            const btn = approvedEl.querySelector('button[data-bs-dismiss], .btn, .modal-footer .btn-primary');
+            if (btn && !btn.__mhBound) {
+                btn.__mhBound = true;
+                btn.addEventListener('click', () => { try { a.hide(); } catch(_) {} });
+            }
+        } catch(_) {}
+    }, 20);
+    
+    approvedEl.addEventListener('hidden.bs.modal', returnToProfile, { once: true });
+    setTimeout(() => {
+        const backs = document.querySelectorAll('.modal-backdrop');
+        const backdrop = backs && backs.length ? backs[backs.length - 1] : null;
+        if (backdrop && !backdrop.__mhSuccessBound) {
+            backdrop.__mhSuccessBound = true;
+            backdrop.addEventListener('click', () => { try { a.hide(); } catch(_) {} }, { once: true });
+        }
+    }, 20);
+    // Keep success visible for 3 seconds, then auto-close (this triggers donor profile reopen)
+    setTimeout(() => { try { a.hide(); } catch(_) {} }, 3000);
+    return true;
+}
+
+function forceShowDonorProfileElement() {
+    try {
+        const dpEl = document.getElementById('donorProfileModal');
+        if (!dpEl) return false;
+        // Force visible if not already
+        dpEl.style.display = 'block';
+        dpEl.classList.add('show');
+        dpEl.removeAttribute('aria-hidden');
+        dpEl.setAttribute('aria-modal', 'true');
+        dpEl.setAttribute('role', 'dialog');
+        // Ensure a backdrop exists
+        let backdrop = document.querySelector('.modal-backdrop');
+        if (!backdrop) {
+            backdrop = document.createElement('div');
+            backdrop.className = 'modal-backdrop fade show';
+            backdrop.style.zIndex = '20000';
+            document.body.appendChild(backdrop);
+        }
+        // Body modal-open state (but you suppress padding shifts elsewhere)
+        document.body.classList.add('modal-open');
+        document.body.style.overflow = 'hidden';
+        return true;
+    } catch (_) { return false; }
+}
+
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Medical history approval system initialized');
     
     // Initialize decline form validation
     initializeDeclineFormValidation();
+    // Bind interceptors for Approve flow ordering
+    bindApproveInterceptors();
+    // Global capture: block any non-primary Approve inside MH modal
+    try {
+        const root = document.getElementById('medicalHistoryModal') || document;
+        root.addEventListener('click', function(e){
+            try {
+                const target = e.target.closest('button');
+                if (!target) return;
+                // Only within MH modal
+                if (!target.closest('#medicalHistoryModal')) return;
+                const label = (target.textContent || '').trim().toLowerCase();
+                const isPrimary = target.id === 'modalApproveButton';
+                if (label === 'approve' && !isPrimary) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                    return false;
+                }
+            } catch(_) {}
+        }, true);
+        // Block Enter key implicit submits in MH modal unless confirmed
+        root.addEventListener('keydown', function(e){
+            try {
+                if (e.key === 'Enter' && e.target && e.target.closest && e.target.closest('#medicalHistoryModal')) {
+                    if (!window.__mhApproveConfirmed) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                        return false;
+                    }
+                }
+            } catch(_) {}
+        }, true);
+    } catch(_) {}
 });
 
 // Export functions for use in other files

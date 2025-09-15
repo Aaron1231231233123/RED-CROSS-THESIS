@@ -38,3 +38,5 @@ CREATE TRIGGER create_blood_bank_unit_trigger
     EXECUTE FUNCTION get_blood_type_for_collection();
 
 
+
+

@@ -140,3 +140,25 @@
         </div>
     </div>
 </div>
+
+<!-- Approve Confirmation Modal -->
+<div class="modal fade" id="medicalHistoryApproveConfirmModal" tabindex="-1" aria-labelledby="medicalHistoryApproveConfirmLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 15px; border: none;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
+                <h5 class="modal-title" id="medicalHistoryApproveConfirmLabel">
+                    <i class="fas fa-check me-2"></i>
+                    Approve Medical History?
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <p class="mb-0">Are you sure you want to approve this donor's medical history?</p>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="confirmApproveMedicalHistoryBtn" class="btn btn-danger px-4">Approve</button>
+            </div>
+        </div>
+    </div>
+</div>

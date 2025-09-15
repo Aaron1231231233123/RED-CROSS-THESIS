@@ -459,7 +459,7 @@ function createDeferEligibilityRecord($data) {
         
         // Medical history ID already retrieved above
         
-        // Create physical examination record for ALL deferral types
+        // Create or update physical examination record for ALL deferral types
         $physical_exam_id = null;
         
         // Set appropriate remarks based on deferral type
@@ -489,31 +489,100 @@ function createDeferEligibilityRecord($data) {
             'updated_at' => date('Y-m-d H:i:s')
         ];
         
-        // Insert physical examination record
-        $ch_physical = curl_init(SUPABASE_URL . '/rest/v1/physical_examination');
-        curl_setopt($ch_physical, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch_physical, CURLOPT_POST, true);
-        curl_setopt($ch_physical, CURLOPT_POSTFIELDS, json_encode($physical_exam_data));
-        curl_setopt($ch_physical, CURLOPT_HTTPHEADER, [
-            'apikey: ' . SUPABASE_API_KEY,
-            'Authorization: Bearer ' . SUPABASE_API_KEY,
-            'Content-Type: application/json',
-            'Prefer: return=representation'
-        ]);
-        
-        $physical_response = curl_exec($ch_physical);
-        $physical_http_code = curl_getinfo($ch_physical, CURLINFO_HTTP_CODE);
-        curl_close($ch_physical);
-        
-        if ($physical_http_code === 201) {
-            $created_physical = json_decode($physical_response, true);
-            if (!empty($created_physical)) {
-                $physical_exam_id = $created_physical[0]['physical_exam_id'] ?? null;
-                error_log("Created physical examination record with ID: $physical_exam_id for deferral type: $deferral_type");
+        // Determine if we should update or insert
+        $incoming_exam_id = $data['physical_exam_id'] ?? null;
+        if ($incoming_exam_id) {
+            // PATCH by physical_exam_id
+            $ph_patch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?physical_exam_id=eq.' . urlencode($incoming_exam_id));
+            curl_setopt($ph_patch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ph_patch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            curl_setopt($ph_patch, CURLOPT_POSTFIELDS, json_encode($physical_exam_data));
+            curl_setopt($ph_patch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json',
+                'Prefer: return=representation'
+            ]);
+            $ph_resp = curl_exec($ph_patch);
+            $ph_http = curl_getinfo($ph_patch, CURLINFO_HTTP_CODE);
+            curl_close($ph_patch);
+            if ($ph_http >= 200 && $ph_http < 300) {
+                $updated = json_decode($ph_resp, true) ?: [];
+                if (!empty($updated)) {
+                    $physical_exam_id = $updated[0]['physical_exam_id'] ?? $incoming_exam_id;
+                } else {
+                    $physical_exam_id = $incoming_exam_id;
+                }
+                error_log("Updated physical examination record ID: $physical_exam_id for deferral");
+            } else {
+                error_log("Physical exam PATCH failed (id provided): HTTP $ph_http - $ph_resp. Falling back to insert.");
             }
-        } else {
-            error_log("Failed to create physical examination record: HTTP $physical_http_code - $physical_response");
         }
+
+        if (!$physical_exam_id) {
+            // If no id provided or update failed, try update-by-donor; else insert
+            $check_ph = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=physical_exam_id&donor_id=eq.' . $donor_id . '&limit=1');
+            curl_setopt($check_ph, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($check_ph, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY
+            ]);
+            $check_ph_resp = curl_exec($check_ph);
+            $check_ph_http = curl_getinfo($check_ph, CURLINFO_HTTP_CODE);
+            curl_close($check_ph);
+            $existing_ph = ($check_ph_http === 200) ? (json_decode($check_ph_resp, true) ?: []) : [];
+            if (!empty($existing_ph)) {
+                $existing_id = $existing_ph[0]['physical_exam_id'];
+                $ph_patch2 = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?physical_exam_id=eq.' . urlencode($existing_id));
+                curl_setopt($ph_patch2, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ph_patch2, CURLOPT_CUSTOMREQUEST, 'PATCH');
+                curl_setopt($ph_patch2, CURLOPT_POSTFIELDS, json_encode($physical_exam_data));
+                curl_setopt($ph_patch2, CURLOPT_HTTPHEADER, [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Content-Type: application/json',
+                    'Prefer: return=representation'
+                ]);
+                $ph_resp2 = curl_exec($ph_patch2);
+                $ph_http2 = curl_getinfo($ph_patch2, CURLINFO_HTTP_CODE);
+                curl_close($ph_patch2);
+                if ($ph_http2 >= 200 && $ph_http2 < 300) {
+                    $upd2 = json_decode($ph_resp2, true) ?: [];
+                    $physical_exam_id = !empty($upd2) ? ($upd2[0]['physical_exam_id'] ?? $existing_id) : $existing_id;
+                    error_log("Updated physical examination (by donor) ID: $physical_exam_id");
+                }
+            }
+        }
+
+        if (!$physical_exam_id) {
+            // Insert physical examination record
+            $ch_physical = curl_init(SUPABASE_URL . '/rest/v1/physical_examination');
+            curl_setopt($ch_physical, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch_physical, CURLOPT_POST, true);
+            curl_setopt($ch_physical, CURLOPT_POSTFIELDS, json_encode($physical_exam_data));
+            curl_setopt($ch_physical, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json',
+                'Prefer: return=representation'
+            ]);
+            
+            $physical_response = curl_exec($ch_physical);
+            $physical_http_code = curl_getinfo($ch_physical, CURLINFO_HTTP_CODE);
+            curl_close($ch_physical);
+            
+            if ($physical_http_code === 201) {
+                $created_physical = json_decode($physical_response, true);
+                if (!empty($created_physical)) {
+                    $physical_exam_id = $created_physical[0]['physical_exam_id'] ?? null;
+                    error_log("Created physical examination record with ID: $physical_exam_id for deferral type: $deferral_type");
+                }
+            } else {
+                error_log("Failed to create physical examination record: HTTP $physical_http_code - $physical_response");
+            }
+        }
+
+        // Ensure we have physical_exam_id for downstream linking
 
         // Check if eligibility record already exists for this donor
         $eligibility_check_ch = curl_init(SUPABASE_URL . '/rest/v1/eligibility?donor_id=eq.' . $donor_id . '&select=eligibility_id,status');
@@ -592,31 +661,56 @@ function createDeferEligibilityRecord($data) {
         
         $created_eligibility = json_decode($insert_response, true);
         
-        // Update medical_history table to set needs_review to false
-        if ($medical_history_id) {
-            $update_medical_data = [
-                'needs_review' => false
+        // Update medical_history for a defer action: set medical_approval to 'Not Approve' and needs_review=true
+        try {
+            // Ensure we have the medical_history_id; if not, fetch by donor_id
+            if (!$medical_history_id) {
+                $mh_check = curl_init(SUPABASE_URL . '/rest/v1/medical_history?select=medical_history_id&donor_id=eq.' . $donor_id . '&limit=1');
+                curl_setopt($mh_check, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($mh_check, CURLOPT_HTTPHEADER, [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY
+                ]);
+                $mh_resp = curl_exec($mh_check);
+                $mh_http = curl_getinfo($mh_check, CURLINFO_HTTP_CODE);
+                curl_close($mh_check);
+                if ($mh_http === 200) {
+                    $mh_data = json_decode($mh_resp, true) ?: [];
+                    if (!empty($mh_data)) {
+                        $medical_history_id = $mh_data[0]['medical_history_id'] ?? null;
+                    }
+                }
+            }
+
+            $mh_target = $medical_history_id
+                ? SUPABASE_URL . '/rest/v1/medical_history?medical_history_id=eq.' . $medical_history_id
+                : SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $donor_id;
+
+            $mh_body = [
+                'medical_approval' => 'Not Approve',
+                'needs_review' => true
             ];
-            
-            $ch_update_medical = curl_init(SUPABASE_URL . '/rest/v1/medical_history?medical_history_id=eq.' . $medical_history_id);
-            curl_setopt($ch_update_medical, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch_update_medical, CURLOPT_CUSTOMREQUEST, 'PATCH');
-            curl_setopt($ch_update_medical, CURLOPT_POSTFIELDS, json_encode($update_medical_data));
-            curl_setopt($ch_update_medical, CURLOPT_HTTPHEADER, [
+
+            $mh_ch = curl_init($mh_target);
+            curl_setopt($mh_ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($mh_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            curl_setopt($mh_ch, CURLOPT_POSTFIELDS, json_encode($mh_body));
+            curl_setopt($mh_ch, CURLOPT_HTTPHEADER, [
                 'apikey: ' . SUPABASE_API_KEY,
                 'Authorization: Bearer ' . SUPABASE_API_KEY,
-                'Content-Type: application/json'
+                'Content-Type: application/json',
+                'Prefer: return=minimal'
             ]);
-            
-            $update_medical_response = curl_exec($ch_update_medical);
-            $update_medical_http_code = curl_getinfo($ch_update_medical, CURLINFO_HTTP_CODE);
-            curl_close($ch_update_medical);
-            
-            if ($update_medical_http_code === 204) {
-                error_log("Successfully updated medical_history needs_review to false for medical_history_id: $medical_history_id");
+            $mh_patch_resp = curl_exec($mh_ch);
+            $mh_patch_http = curl_getinfo($mh_ch, CURLINFO_HTTP_CODE);
+            curl_close($mh_ch);
+            if (!($mh_patch_http >= 200 && $mh_patch_http < 300)) {
+                error_log("Defer: medical_history update failed for donor_id=$donor_id http=$mh_patch_http resp=$mh_patch_resp");
             } else {
-                error_log("Failed to update medical_history needs_review: HTTP $update_medical_http_code - $update_medical_response");
+                error_log("Defer: medical_history updated to Not Approve for donor_id=$donor_id");
             }
+        } catch (Exception $e) {
+            error_log('Defer: Exception updating medical_history: ' . $e->getMessage());
         }
         
         // Update screening form with disapproval reason, deferral details, and screening form data
