@@ -173,17 +173,7 @@ function handleRestrictionTypeChange() {
     }
 }
 
-// Show approval confirmation modal
-function showApprovalModal() {
-    const approvalModal = new bootstrap.Modal(document.getElementById('medicalHistoryApprovalModal'));
-    approvalModal.show();
-    
-    // Auto-close after 3 seconds and proceed with approval
-    setTimeout(() => {
-        approvalModal.hide();
-        processMedicalHistoryApproval();
-    }, 3000);
-}
+// Removed showApprovalModal - unused function
 
 // Show decline confirmation modal
 function showDeclineModal() {
@@ -348,25 +338,7 @@ function ensureMedicalHistoryContextFromPage() {
     }
 }
 
-// Process medical history approval (kept for external triggers; no reloads)
-function processMedicalHistoryApproval(returnToDonorProfile = false) {
-    if (!currentMedicalHistoryData) {
-        showMedicalHistoryToast('Error', 'No medical history data available.', 'error');
-        return;
-    }
-    showMedicalHistoryToast('Processing', 'Approving medical history...', 'info');
-    const submitData = {
-        donor_id: currentMedicalHistoryData.donor_id,
-        screening_id: currentMedicalHistoryData.screening_id,
-        action: 'approve_medical_history'
-    };
-    console.log('Submitting approval:', submitData);
-    setTimeout(() => {
-        // Only show banner; do not reload. Caller is expected to reopen donor profile.
-        const donorId = currentMedicalHistoryData && currentMedicalHistoryData.donor_id;
-        showApprovedThenReturn(donorId, { donor_form_id: donorId });
-    }, 800);
-}
+// Removed processMedicalHistoryApproval - unused function
 
 // Process medical history decline
 async function processMedicalHistoryDecline(declineReason, restrictionType, donationRestrictionDate) {
@@ -1600,10 +1572,11 @@ function attachInnerModalApproveHandler() {
             window.__origOpenDonorProfile = origOpen;
             window.openDonorProfileModal = function(screeningData){
                 if (window.__mhSuccessActive) {
-                    // Queue context until success modal is done
+                    // Queue context until medical history success modal is done
                     const donorId = (screeningData && (screeningData.donor_form_id || screeningData.donor_id)) || (window.currentMedicalHistoryData && window.currentMedicalHistoryData.donor_id);
                     window.lastDonorProfileContext = { donorId: donorId, screeningData: screeningData };
                     window.__mhQueuedReopen = true;
+                    console.log('[MH] Queued donor profile reopen due to medical history success state');
                     return; // swallow during success phase
                 }
                 return window.__origOpenDonorProfile.apply(this, arguments);
@@ -1618,8 +1591,8 @@ function attachInnerModalApproveHandler() {
         if (window.__mhModalGuard) return; window.__mhModalGuard = true;
         document.addEventListener('show.bs.modal', function(ev){
             try {
-                // Check for both medical history and physical examination success states
-                const successActive = window.__mhSuccessActive || window.__peSuccessActive;
+                // Check for medical history success state only
+                const successActive = window.__mhSuccessActive;
                 if (successActive) {
                     const target = ev.target;
                     if (target && target.id !== 'medicalHistoryApprovalModal' && target.id !== 'physicalExamAcceptedModal') {
@@ -1884,15 +1857,117 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch(_) {}
 });
 
+// Footer confirmation functions
+function showFooterConfirmModal(onConfirm) {
+    console.log('[MH] showFooterConfirmModal called');
+    try {
+        const modal = document.getElementById('footerConfirmModal');
+        if (!modal) {
+            console.warn('[MH] Footer confirm modal not found');
+            if (onConfirm) onConfirm();
+            return;
+        }
+        
+        const m = new bootstrap.Modal(modal);
+        
+        // Ensure this confirmation modal stacks above donor profile
+        try {
+            modal.style.zIndex = '20020';
+            const dlg = modal.querySelector('.modal-dialog');
+            if (dlg) dlg.style.zIndex = '20021';
+            // Nudge the newest backdrop just under the dialog
+            setTimeout(() => {
+                const backs = document.querySelectorAll('.modal-backdrop');
+                if (backs && backs.length) {
+                    backs[backs.length - 1].style.zIndex = '20015';
+                }
+            }, 10);
+        } catch (_) {}
+        
+        // Clear any existing handlers
+        const confirmBtn = document.getElementById('confirmFooterActionBtn');
+        if (confirmBtn) {
+            confirmBtn.onclick = null;
+        }
+        
+        // Bind new handler
+        if (confirmBtn && onConfirm) {
+            confirmBtn.onclick = function() {
+                console.log('[MH] Footer confirm button clicked');
+                m.hide();
+                setTimeout(() => {
+                    if (onConfirm) onConfirm();
+                }, 100);
+            };
+        }
+        
+        m.show();
+    } catch(e) {
+        console.warn('[MH] Error showing footer confirm modal:', e);
+        if (onConfirm) onConfirm();
+    }
+}
+
+function showFooterActionSuccessModal() {
+    console.log('[MH] showFooterActionSuccessModal called');
+    try {
+        const modal = document.getElementById('footerActionSuccessModal');
+        if (!modal) {
+            console.warn('[MH] Footer success modal not found');
+            return;
+        }
+        
+        const m = new bootstrap.Modal(modal);
+        m.show();
+        
+        // Auto-close after 3 seconds
+        setTimeout(() => {
+            try { m.hide(); } catch(_) {}
+        }, 3000);
+    } catch(e) {
+        console.warn('[MH] Error showing footer success modal:', e);
+    }
+}
+
+function showFooterActionFailureModal(message = 'Unable to process the eligibility decision. Please try again.') {
+    console.log('[MH] showFooterActionFailureModal called with message:', message);
+    try {
+        const modal = document.getElementById('footerActionFailureModal');
+        if (!modal) {
+            console.warn('[MH] Footer failure modal not found');
+            return;
+        }
+        
+        // Update message if provided
+        const messageEl = document.getElementById('footerActionFailureMessage');
+        if (messageEl) {
+            messageEl.textContent = message;
+        }
+        
+        const m = new bootstrap.Modal(modal);
+        m.show();
+        
+        // Auto-close after 5 seconds
+        setTimeout(() => {
+            try { m.hide(); } catch(_) {}
+        }, 5000);
+    } catch(e) {
+        console.warn('[MH] Error showing footer failure modal:', e);
+    }
+}
+
+// Make footer functions globally available
+window.showFooterConfirmModal = showFooterConfirmModal;
+window.showFooterActionSuccessModal = showFooterActionSuccessModal;
+window.showFooterActionFailureModal = showFooterActionFailureModal;
+
 // Export functions for use in other files
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         initializeMedicalHistoryApproval,
         handleApproveClick,
         handleDeclineClick,
-        showApprovalModal,
         showDeclineModal,
-        processMedicalHistoryApproval,
         processMedicalHistoryDecline,
         showDeclinedModal,
         showMedicalHistoryToast,
@@ -1902,6 +1977,9 @@ if (typeof module !== 'undefined' && module.exports) {
         fetchScreeningFormData,
         fetchPhysicalExamData,
         fetchDonorFormData,
-        initializeDeclineFormValidation
+        initializeDeclineFormValidation,
+        showFooterConfirmModal,
+        showFooterActionSuccessModal,
+        showFooterActionFailureModal
     };
 }

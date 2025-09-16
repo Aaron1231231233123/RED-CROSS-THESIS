@@ -157,7 +157,87 @@
             </div>
             <div class="modal-footer border-0">
                 <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" id="confirmApproveMedicalHistoryBtn" class="btn btn-danger px-4">Approve</button>
+                <button type="button" id="confirmApproveMedicalHistoryBtn" class="btn btn-danger px-4">Yes, Proceed</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Footer Confirm Confirmation Modal -->
+<div class="modal fade" id="footerConfirmModal" tabindex="-1" aria-labelledby="footerConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 15px; border: none;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
+                <h5 class="modal-title" id="footerConfirmModalLabel">
+                    <i class="fas fa-check-circle me-2"></i>
+                    Confirm Eligibility Decision
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <p class="mb-0">Are you sure you want to proceed with this eligibility decision? This action will advance the donor to blood collection.</p>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="confirmFooterActionBtn" class="btn btn-danger px-4">Yes, Proceed</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Footer Action Success Modal -->
+<div class="modal fade" id="footerActionSuccessModal" tabindex="-1" aria-labelledby="footerActionSuccessModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 15px; border: none;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border-radius: 15px 15px 0 0;">
+                <h5 class="modal-title" id="footerActionSuccessModalLabel">
+                    <i class="fas fa-check-circle me-2"></i>
+                    Action Successful
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <div class="text-center">
+                    <div class="mb-3">
+                        <i class="fas fa-check-circle text-success" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="text-success mb-3">Eligibility Decision Recorded!</h5>
+                    <p class="text-muted mb-0">The donor has been successfully advanced to blood collection.</p>
+                </div>
+            </div>
+            <div class="modal-footer border-0 justify-content-center">
+                <button type="button" class="btn btn-primary px-4" data-bs-dismiss="modal">
+                    <i class="fas fa-check me-2"></i>Continue
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Footer Action Failure Modal -->
+<div class="modal fade" id="footerActionFailureModal" tabindex="-1" aria-labelledby="footerActionFailureModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 15px; border: none;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
+                <h5 class="modal-title" id="footerActionFailureModalLabel">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    Action Failed
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <div class="text-center">
+                    <div class="mb-3">
+                        <i class="fas fa-exclamation-circle text-danger" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="text-danger mb-3">Action Failed!</h5>
+                    <p class="text-muted mb-0" id="footerActionFailureMessage">Unable to process the eligibility decision. Please try again.</p>
+                </div>
+            </div>
+            <div class="modal-footer border-0 justify-content-center">
+                <button type="button" class="btn btn-primary px-4" data-bs-dismiss="modal">
+                    <i class="fas fa-check me-2"></i>Continue
+                </button>
             </div>
         </div>
     </div>

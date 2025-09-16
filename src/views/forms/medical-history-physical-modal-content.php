@@ -1093,5 +1093,4 @@ if (file_exists($modalPath)) {
 <!-- Include Medical History Approval CSS -->
 <link rel="stylesheet" href="../../assets/css/medical-history-approval-modals.css">
 
-<!-- Include Medical History Approval JavaScript -->
-<script src="../../assets/js/medical-history-approval.js"></script>
+<!-- Medical History Approval JavaScript is included in the main dashboard -->

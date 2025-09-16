@@ -3469,6 +3469,18 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         }
 
         async function advanceToCollection(donorId) {
+            // Show confirmation modal first
+            if (typeof showFooterConfirmModal === 'function') {
+                showFooterConfirmModal(async function() {
+                    await performAdvanceToCollection(donorId);
+                });
+            } else {
+                // Fallback to direct execution if modal function not available
+                await performAdvanceToCollection(donorId);
+            }
+        }
+        
+        async function performAdvanceToCollection(donorId) {
             try {
                 const res = await fetch('../../assets/php_func/advance_to_collection.php', {
                     method: 'POST',
@@ -3476,16 +3488,37 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     body: 'donor_id=' + encodeURIComponent(donorId)
                 });
                 const json = await res.json();
+                
                 if (!json || !json.success) {
-                    if (window.customInfo) window.customInfo('Failed to advance to blood collection.'); else alert('Failed to advance to blood collection.');
+                    // Show failure modal
+                    if (typeof showFooterActionFailureModal === 'function') {
+                        const errorMessage = json && json.message ? json.message : 'Failed to advance to blood collection.';
+                        showFooterActionFailureModal(errorMessage);
+                    } else {
+                        if (window.customInfo) window.customInfo('Failed to advance to blood collection.'); else alert('Failed to advance to blood collection.');
+                    }
                     return;
                 }
-                // Close modal and reload to reflect Accepted
-                const donorProfileModal = bootstrap.Modal.getInstance(document.getElementById('donorProfileModal'));
-                if (donorProfileModal) donorProfileModal.hide();
-                window.location.reload();
+                
+                // Show success modal
+                if (typeof showFooterActionSuccessModal === 'function') {
+                    showFooterActionSuccessModal();
+                }
+                
+                // Close donor profile modal and reload after success modal
+                setTimeout(() => {
+                    const donorProfileModal = bootstrap.Modal.getInstance(document.getElementById('donorProfileModal'));
+                    if (donorProfileModal) donorProfileModal.hide();
+                    window.location.reload();
+                }, 3500); // Wait for success modal to show
+                
             } catch (err) {
-                if (window.customInfo) window.customInfo('Network error while advancing to blood collection.'); else alert('Network error while advancing to blood collection.');
+                // Show failure modal for network errors
+                if (typeof showFooterActionFailureModal === 'function') {
+                    showFooterActionFailureModal('Network error while advancing to blood collection.');
+                } else {
+                    if (window.customInfo) window.customInfo('Network error while advancing to blood collection.'); else alert('Network error while advancing to blood collection.');
+                }
             }
         }
         
@@ -3516,19 +3549,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 if (screeningData?.donor_form_id) {
                     window.lastDonorProfileContext = { donorId: screeningData.donor_form_id, screeningData: screeningData };
                 }
-                setTimeout(() => {
-                    if (window.physicalExaminationModal && !window.physicalExaminationModal._reopenPatched) {
-                        const origClose = window.physicalExaminationModal.closeModal.bind(window.physicalExaminationModal);
-                        window.physicalExaminationModal.closeModal = function() {
-                            origClose();
-                            // Only reopen if we have a valid context and the modal was actually closed by user
-                            if (window.lastDonorProfileContext && !window.isReopeningDonorProfile) {
-                                tryReopenDonorProfile();
-                            }
-                        };
-                        window.physicalExaminationModal._reopenPatched = true;
-                    }
-                }, 0);
+                // Removed conflicting closeModal patch - physical examination modal handles its own reopening
             } else {
                 console.error("Physical examination modal not initialized");
                 alert("Error: Modal not properly initialized. Please refresh the page.");
@@ -3564,8 +3585,8 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             setTimeout(() => {
                 try {
                     // Check if any modals are still open
-                    // Ignore the success banner modal so we don't block reopening
-                    const anyOpenModals = document.querySelector('.modal.show:not(#medicalHistoryApprovalModal), .medical-history-modal.show');
+                    // Ignore the success banner modals so we don't block reopening
+                    const anyOpenModals = document.querySelector('.modal.show:not(#medicalHistoryApprovalModal):not(#physicalExamAcceptedModal), .medical-history-modal.show');
                     if (anyOpenModals) {
                         console.log('Other modals still open, waiting...');
                         setTimeout(() => tryReopenDonorProfile(), 200);
@@ -4396,7 +4417,18 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         }
                     }
                     approveBtn.style.display = '';
-                    approveBtn.onclick = function() { submitModalForm('approve'); };
+                    // Use the medical history approval system instead of dashboard's submitModalForm
+                    approveBtn.onclick = function() { 
+                        if (typeof showConfirmApproveModal === 'function') {
+                            showConfirmApproveModal(function(){
+                                try { window.__mhApproveConfirmed = true; } catch(_) {}
+                                processFormSubmission('approve');
+                            });
+                        } else {
+                            // Fallback to dashboard's system if medical history approval system not available
+                            submitModalForm('approve');
+                        }
+                    };
                 } else {
                     nextButton.innerHTML = 'Next →';
                     nextButton.onclick = () => {

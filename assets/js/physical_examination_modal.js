@@ -557,8 +557,14 @@ class PhysicalExaminationModal {
         try {
             const modal = document.getElementById('physicalExaminationModal');
             if (modal) {
-                modal.classList.remove('show');
-                setTimeout(() => { modal.style.display = 'none'; }, 250);
+                const modalInstance = bootstrap.Modal.getInstance(modal);
+                if (modalInstance) {
+                    modalInstance.hide();
+                } else {
+                    // Fallback to manual closing
+                    modal.classList.remove('show');
+                    setTimeout(() => { modal.style.display = 'none'; }, 250);
+                }
             }
         } catch(_) {}
         if (donorId) {
@@ -568,7 +574,10 @@ class PhysicalExaminationModal {
             } catch(_) {}
         }
         const successEl = document.getElementById('physicalExamAcceptedModal');
-        if (!successEl) { this.reopenDonorProfileAfterSuccess(donorId, screeningData); return; }
+        if (!successEl) { 
+            this.reopenDonorProfileAfterSuccess(donorId, screeningData); 
+            return; 
+        }
         const m = new bootstrap.Modal(successEl);
         try {
             successEl.style.zIndex = '20010';
@@ -579,9 +588,34 @@ class PhysicalExaminationModal {
                 if (backs.length) backs[backs.length - 1].style.zIndex = '20005';
             }, 10);
         } catch(_) {}
-        const finalize = () => { try { m.hide(); } catch(_) {} this.reopenDonorProfileAfterSuccess(donorId, screeningData); };
-        successEl.addEventListener('hidden.bs.modal', finalize, { once: true });
-        setTimeout(finalize, 3000);
+        
+        // Set up single finalize function to prevent duplicate calls
+        let finalized = false;
+        const finalize = () => { 
+            if (finalized) {
+                console.log('[PE] Finalize already called, skipping');
+                return;
+            }
+            finalized = true;
+            console.log('[PE] Finalizing success modal');
+            try { m.hide(); } catch(e) { console.warn('[PE] Error hiding modal:', e); } 
+            this.reopenDonorProfileAfterSuccess(donorId, screeningData); 
+        };
+        
+        // Listen for modal hidden event (user closes with X or outside click)
+        successEl.addEventListener('hidden.bs.modal', () => {
+            console.log('[PE] Success modal hidden event triggered');
+            finalize();
+        }, { once: true });
+        
+        // Auto-close after 3 seconds (only if not already finalized)
+        setTimeout(() => {
+            if (!finalized) {
+                console.log('[PE] Auto-closing success modal after 3 seconds');
+                finalize(); // Call finalize directly instead of m.hide()
+            }
+        }, 3000);
+        
         m.show();
     }
 
@@ -591,37 +625,49 @@ class PhysicalExaminationModal {
             window.__peSuccessActive = false; 
             window.__mhSuccessActive = false; // Clear medical history success state
         } catch(_) {}
+        
+        // Clean up all modals properly
         try {
             document.querySelectorAll('.modal.show').forEach(el => {
-                try { (bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el)).hide(); } catch(_) {}
-                el.classList.remove('show');
-                el.style.display = 'none';
-                el.setAttribute('aria-hidden', 'true');
+                try { 
+                    const modalInstance = bootstrap.Modal.getInstance(el);
+                    if (modalInstance) modalInstance.hide();
+                } catch(_) {}
             });
+            // Remove all backdrops
             document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+            // Reset body state
             document.body.classList.remove('modal-open');
             document.body.style.overflow = '';
             document.body.style.paddingRight = '';
         } catch(_) {}
         
-        // Use the same robust reopening logic as medical history
+        // Store context for reopening
+        const ctx = { donorId: String(donorId), screeningData: screeningData };
+        if (donorId) {
+            try { 
+                window.lastDonorProfileContext = ctx; 
+                window.__peLastDonorId = String(donorId);
+            } catch(_) {}
+        }
+        
+        // Use the same robust reopening system as medical history modal
+        console.log('[PE] Using robust reopening system like medical history modal');
+        
+        // Robust reopen with retries (same as medical history)
         let attempts = 0;
-        const ctxArg = screeningData || (donorId ? { donor_form_id: donorId } : null);
         const tryOpen = () => {
             attempts++;
-            const ctx = ctxArg || (window.lastDonorProfileContext && (window.lastDonorProfileContext.screeningData || { donor_form_id: window.lastDonorProfileContext.donorId }));
-            if (!ctx) { 
-                console.log('[PE] No context available, attempt:', attempts);
-                if (attempts < 20) return setTimeout(tryOpen, 150); 
-                else return; 
-            }
-            console.log('[PE] Reopen attempt', attempts, 'ctx:', ctx);
-            
-            // Try multiple methods to reopen donor profile
+            const donorId = (ctx && (ctx.donorId || (ctx.screeningData && (ctx.screeningData.donor_form_id || ctx.screeningData.donor_id))))
+                             || window.__peLastDonorId
+                             || (window.currentPhysicalExaminationData && window.currentPhysicalExaminationData.donor_id);
+            console.log('[PE] Reopen attempt', attempts, 'donorId=', donorId);
+            if (!donorId) return;
+            const dataArg = (ctx && ctx.screeningData) ? ctx.screeningData : { donor_form_id: donorId };
             if (typeof window.openDonorProfileModal === 'function') { 
                 try { 
-                    window.openDonorProfileModal(ctx); 
-                    console.log('[PE] Successfully reopened via openDonorProfileModal');
+                    window.openDonorProfileModal(dataArg); 
+                    console.log('[PE] Successfully reopened donor profile via openDonorProfileModal');
                     return; 
                 } catch(err) { 
                     console.warn('[PE] openDonorProfileModal error', err); 
@@ -629,8 +675,8 @@ class PhysicalExaminationModal {
             }
             if (typeof window.__origOpenDonorProfile === 'function') { 
                 try { 
-                    window.__origOpenDonorProfile(ctx); 
-                    console.log('[PE] Successfully reopened via __origOpenDonorProfile');
+                    window.__origOpenDonorProfile(dataArg); 
+                    console.log('[PE] Successfully reopened donor profile via __origOpenDonorProfile');
                     return; 
                 } catch(err) { 
                     console.warn('[PE] __origOpenDonorProfile error', err); 
@@ -647,27 +693,22 @@ class PhysicalExaminationModal {
     
     forceShowDonorProfileElement() {
         try {
-            const dpEl = document.getElementById('donorProfileModal');
-            if (!dpEl) return false;
-            // Force visible if not already
-            dpEl.style.display = 'block';
-            dpEl.classList.add('show');
-            dpEl.removeAttribute('aria-hidden');
-            dpEl.setAttribute('aria-modal', 'true');
-            dpEl.setAttribute('role', 'dialog');
-            // Ensure a backdrop exists
-            let backdrop = document.querySelector('.modal-backdrop');
-            if (!backdrop) {
-                backdrop = document.createElement('div');
-                backdrop.className = 'modal-backdrop fade show';
-                backdrop.style.zIndex = '20000';
-                document.body.appendChild(backdrop);
-            }
-            // Body modal-open state (but you suppress padding shifts elsewhere)
+            const el = document.getElementById('donorProfileModal');
+            if (!el) return false;
+            el.classList.add('show');
+            el.style.display = 'block';
+            el.setAttribute('aria-hidden', 'false');
+            el.setAttribute('aria-modal', 'true');
+            el.setAttribute('role', 'dialog');
             document.body.classList.add('modal-open');
-            document.body.style.overflow = 'hidden';
+            const backdrop = document.createElement('div');
+            backdrop.className = 'modal-backdrop fade show';
+            backdrop.style.zIndex = '1040';
+            document.body.appendChild(backdrop);
             return true;
-        } catch (_) { return false; }
+        } catch(_) {
+            return false;
+        }
     }
     
     showToast(message, type = 'info') {

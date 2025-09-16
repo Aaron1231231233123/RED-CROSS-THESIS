@@ -663,66 +663,13 @@ if ($donor_info && isset($donor_info['birthdate'])) {
                         if (footer) { footer.style.display = 'none'; footer.classList.add('d-none'); }
                     } catch(_) {}
                 }
-                proceedBtn.addEventListener('click', function(e){
-                    if (e && e.stopImmediatePropagation) e.stopImmediatePropagation();
-                    const selected = select ? select.value : '';
-                    // If requirements not met OR not approving, just show message (no state advance)
-                    if (!(mhApproved && peAccepted)) {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        showRequirementAlert();
-                        return;
-                    }
-                    if (selected === 'approve') {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        
-                        // Clear any conflicting success states before proceeding
-                        try {
-                            window.__mhSuccessActive = false;
-                            window.__peSuccessActive = false;
-                        } catch(_) {}
-                        
-                        // Move to collection stage: PE.needs_review=false; BC.needs_review=true; update timestamps
-                        const donorIdEl = document.querySelector('[name="donor_id"], [data-donor-id]');
-                        const donorIdAttr = document.querySelector('[data-donor-id]');
-                        const donorId = (window.currentDonorId) || (donorIdEl && donorIdEl.value) || (donorIdAttr && donorIdAttr.getAttribute('data-donor-id'));
-                        if (!donorId) { return; }
-                        
-                        // Store context for potential reopening
-                        try {
-                            window.lastDonorProfileContext = { donorId: String(donorId), screeningData: { donor_form_id: String(donorId) } };
-                        } catch(_) {}
-                        
-                        fetch('../../assets/php_func/advance_to_collection.php', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                            body: 'donor_id=' + encodeURIComponent(donorId)
-                        }).then(r=>r.json()).then(j=>{
-                            if (!j || !j.success) {
-                                if (window.customInfo) window.customInfo('Failed to advance to collection.'); else alert('Failed to advance to collection.');
-                                return;
-                            }
-                            // Reopen donor profile to reflect state
-                            if (window.openDonorProfileModal) {
-                                try { 
-                                    // Small delay to ensure any modal transitions complete
-                                    setTimeout(() => {
-                                        openDonorProfileModal({ donor_form_id: donorId }); 
-                                    }, 100);
-                                } catch(e) { 
-                                    console.warn('Error reopening donor profile:', e);
-                                    window.location.reload(); 
-                                }
-                            } else { 
-                                window.location.reload(); 
-                            }
-                        }).catch(()=>{ 
-                            if (window.customInfo) window.customInfo('Failed to advance to collection.'); else alert('Failed to advance to collection.'); 
-                        });
-                    }
-                });
+                // Note: Footer confirm button click handling is managed by the dashboard's bindProceedToPhysicalButton function
+                // This ensures consistent behavior and prevents duplicate event handlers
             }
         } catch (err) { /* noop */ }
     })();
+    
+    // Note: Footer confirm button functionality is handled by the dashboard's advanceToCollection function
 </script>
+
+<!-- Footer confirmation modals are included in the main dashboard -->
