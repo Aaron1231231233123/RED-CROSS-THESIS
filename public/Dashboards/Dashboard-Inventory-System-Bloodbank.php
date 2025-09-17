@@ -888,9 +888,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <a href="dashboard-Inventory-System-list-of-donations.php" class="nav-link">
                             <span><i class="fas fa-users"></i>Donor Management</span>
                         </a>
-                        <a href="#" class="nav-link">
-                            <span><i class="fas fa-user-check"></i>Donor Status</span>
-                        </a>
                         <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link active">
                             <span><i class="fas fa-tint"></i>Blood Bank</span>
                         </a>
