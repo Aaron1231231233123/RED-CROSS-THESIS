@@ -10,7 +10,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize form functionality when modal is shown
     screeningModal.addEventListener('shown.bs.modal', function() {
-        initializeScreeningForm();
+        // Idempotent init to avoid duplicate listeners on reopen
+        if (!screeningModal.__screeningInit) {
+            initializeScreeningForm();
+            screeningModal.__screeningInit = true;
+        }
         resetToStep(1);
     });
 
@@ -130,6 +134,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 validateSpecificGravity(this.value);
             });
         }
+    }
+
+    // Expose initializer globally so callers can trigger if needed (no-op after first time)
+    if (typeof window !== 'undefined') {
+        window.initializeScreeningForm = function() {
+            if (!screeningModal.__screeningInit) {
+                initializeScreeningForm();
+                screeningModal.__screeningInit = true;
+            }
+        };
     }
 
     function resetToStep(step) {
@@ -335,78 +349,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    function updateConditionalSections(donationType) {
-        const mobileDonationSection = document.getElementById('mobileDonationSection');
-        const patientDetailsSection = document.getElementById('patientDetailsSection');
-        const noAdditionalDetails = document.getElementById('noAdditionalDetails');
-        
-        // Hide all sections first
-        if (mobileDonationSection) mobileDonationSection.style.display = 'none';
-        if (patientDetailsSection) patientDetailsSection.style.display = 'none';
-        if (noAdditionalDetails) noAdditionalDetails.style.display = 'none';
-
-        // If no donation type is selected, show nothing
-        if (!donationType) {
-            return;
-        }
-
-        // Check donation type conditions
-        const isMobile = donationType === 'Mobile';
-        const isPatientDirected = donationType === 'Patient-Directed';
-        const isWalkInOrReplacement = donationType === 'Walk-in' || donationType === 'Replacement';
-        
-        // Show mobile section for Mobile donation type
-        if (isMobile && mobileDonationSection) {
-            mobileDonationSection.style.display = 'block';
-        }
-        
-        // Show patient details section for Patient-Directed donation
-        if (isPatientDirected && patientDetailsSection) {
-            patientDetailsSection.style.display = 'block';
-        }
-        
-        // Show "no additional details" only for walk-in/replacement donations
-        if (isWalkInOrReplacement && noAdditionalDetails) {
-            noAdditionalDetails.style.display = 'block';
-        }
-    }
-
-    function updateStep3Content(donationType) {
-        const mobileDonationSection = document.getElementById('mobileDonationSection');
-        const patientDetailsSection = document.getElementById('patientDetailsSection');
-        const noAdditionalDetails = document.getElementById('noAdditionalDetails');
-        
-        // Hide all sections first
-        if (mobileDonationSection) mobileDonationSection.style.display = 'none';
-        if (patientDetailsSection) patientDetailsSection.style.display = 'none';
-        if (noAdditionalDetails) noAdditionalDetails.style.display = 'none';
-
-        // If no donation type is selected, show default "no additional details"
-        if (!donationType) {
-            if (noAdditionalDetails) noAdditionalDetails.style.display = 'block';
-            return;
-        }
-
-        // Check donation type conditions
-        const isMobile = donationType.startsWith('mobile-');
-        const isPatientDirected = donationType === 'patient-directed' || donationType === 'mobile-patient-directed';
-        const isWalkInOrReplacement = donationType === 'walk-in' || donationType === 'replacement';
-        
-        // Show mobile section for ANY mobile donation type
-        if (isMobile && mobileDonationSection) {
-            mobileDonationSection.style.display = 'block';
-        }
-        
-        // Show patient details section for ANY patient-directed donation (mobile or in-house)
-        if (isPatientDirected && patientDetailsSection) {
-            patientDetailsSection.style.display = 'block';
-        }
-        
-        // Show "no additional details" only for walk-in/replacement (non-patient-directed in-house donations)
-        if (isWalkInOrReplacement && noAdditionalDetails) {
-            noAdditionalDetails.style.display = 'block';
-        }
-    }
+    // Removed unused updateConditionalSections and updateStep3Content to avoid confusion
 
     function updateHistoryDetails(historyValue) {
         const historyDetails = document.getElementById('historyDetails');

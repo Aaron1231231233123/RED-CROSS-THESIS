@@ -656,8 +656,9 @@ if ($http_code === 200) {
  </script>
  
  <script>
- // Enhanced Edit Button Functionality
- function initializeEditFunctionality() {
+ // Enhanced Edit Button Functionality (namespaced + idempotent)
+ function mhInitializeEditFunctionality() {
+     if (window.__mhEditInit) return; window.__mhEditInit = true;
      const editButton = document.getElementById('modalEditButton');
      
      if (editButton) {
@@ -705,7 +706,7 @@ if ($http_code === 200) {
              // Add save functionality
              newEditButton.onclick = function() {
                  //console.log('Save button clicked');
-                 showSaveConfirmationModal();
+                 mhShowSaveConfirmationModal();
              };
          });
      } else {
@@ -736,7 +737,7 @@ if ($http_code === 200) {
              //console.log('Data saved successfully');
              
              // Show a small, quiet success toast
-             showQuietSuccessToast();
+             mhShowQuietSuccessToast();
              
              // Reset button to edit mode
              const editButton = document.getElementById('modalEditButton');
@@ -768,22 +769,18 @@ if ($http_code === 200) {
              });
          } else {
              console.error('Save failed:', data.message);
-             showQuietErrorToast(data.message || 'Save failed');
+             mhShowQuietErrorToast(data.message || 'Save failed');
          }
      })
      .catch(error => {
          console.error('Save error:', error);
-         showQuietErrorToast('Network error occurred');
+         mhShowQuietErrorToast('Network error occurred');
      });
  }
  
- // Initialize when DOM is ready
- if (document.readyState === 'loading') {
-     document.addEventListener('DOMContentLoaded', initializeEditFunctionality);
- } else {
-     initializeEditFunctionality();
- }
- 
+ // Initialize immediately when content is injected
+ mhInitializeEditFunctionality();
+
  // Custom confirmation function (namespaced) to replace browser confirm
  function mhCustomConfirm(message, onConfirm) {
      const modal = new bootstrap.Modal(document.getElementById('mhCustomConfirmModal'));
@@ -804,11 +801,10 @@ if ($http_code === 200) {
      modal.show();
  }
  
- // Also initialize when the modal content is dynamically loaded
+ // Also expose namespaced initializer
  if (typeof window !== 'undefined') {
-     window.initializeEditFunctionality = initializeEditFunctionality;
+     window.mhInitializeEditFunctionality = mhInitializeEditFunctionality;
      window.mhCustomConfirm = mhCustomConfirm;
-     //console.log('✅ initializeEditFunctionality and mhCustomConfirm exposed to global scope');
  }
  </script>
 
@@ -857,13 +853,13 @@ if ($http_code === 200) {
 
 <script>
 // Function to show save confirmation modal
-function showSaveConfirmationModal() {
+function mhShowSaveConfirmationModal() {
     const saveConfirmationModal = new bootstrap.Modal(document.getElementById('saveConfirmationModal'));
     saveConfirmationModal.show();
 }
 
 // Function to show error modal
-function showErrorModal(message) {
+function mhShowErrorModal(message) {
     const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
     const errorMessage = document.getElementById('errorMessage');
     if (errorMessage) {
@@ -873,7 +869,7 @@ function showErrorModal(message) {
 }
 
 // Update the save button click handler to show confirmation first
-function bindConfirmSaveHandler() {
+function mhBindConfirmSaveHandler() {
     const confirmSaveBtn = document.getElementById('confirmSaveBtn');
     if (!confirmSaveBtn) return;
     // Replace existing handlers to avoid duplicates
@@ -889,30 +885,32 @@ function bindConfirmSaveHandler() {
 }
 
 // Bind immediately (content is already in DOM when this script runs)
-bindConfirmSaveHandler();
+mhBindConfirmSaveHandler();
 
-// Also re-bind whenever the modal is shown (in case the DOM was re-rendered)
-const saveConfirmEl = document.getElementById('saveConfirmationModal');
-if (saveConfirmEl) {
-    saveConfirmEl.addEventListener('shown.bs.modal', bindConfirmSaveHandler);
-}
+// Also re-bind whenever the modal is shown (scoped to avoid redeclare errors)
+(function(){
+    const el = document.getElementById('saveConfirmationModal');
+    if (el) {
+        el.addEventListener('shown.bs.modal', mhBindConfirmSaveHandler);
+    }
+})();
 
 // Override the save button click to show confirmation first
-function initializeSaveConfirmation() {
+function mhInitializeSaveConfirmation() {
     const saveButton = document.getElementById('modalEditButton');
     if (saveButton && saveButton.textContent === 'Save') {
         saveButton.onclick = function() {
             //console.log('Save button clicked - showing confirmation');
-            showSaveConfirmationModal();
+            mhShowSaveConfirmationModal();
         };
     }
 }
 
 // Call this after the edit functionality is initialized
-setTimeout(initializeSaveConfirmation, 100);
+setTimeout(mhInitializeSaveConfirmation, 100);
 
 // Show a small, quiet success toast
-function showQuietSuccessToast() {
+function mhShowQuietSuccessToast() {
     const toast = document.createElement('div');
     toast.style.cssText = `
         position: fixed;
@@ -943,7 +941,7 @@ function showQuietSuccessToast() {
 }
 
 // Show a small, quiet error toast
-function showQuietErrorToast(message) {
+function mhShowQuietErrorToast(message) {
     const toast = document.createElement('div');
     toast.style.cssText = `
         position: fixed;

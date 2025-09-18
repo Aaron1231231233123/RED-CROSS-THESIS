@@ -649,7 +649,8 @@ async function updateScreeningPhysicalExaminationAfterDeferral(physicalExamId, d
                     },
                     body: JSON.stringify({
                         medical_history_id: medicalHistoryId,
-                        needs_review: false
+                        needs_review: false,
+                        medical_approval: 'Not Approved'
                     })
                 });
                 

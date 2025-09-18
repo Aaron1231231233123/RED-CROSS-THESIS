@@ -18,6 +18,7 @@ if (!$input) {
 
 $medicalHistoryId = $input['medical_history_id'] ?? null;
 $needsReview = $input['needs_review'] ?? null;
+$medicalApproval = $input['medical_approval'] ?? null; // optional
 
 // Log the received data for debugging
 error_log('Medical history update request received: ' . json_encode($input));
@@ -40,6 +41,9 @@ try {
         'needs_review' => (bool)$needsReview,
         'updated_at' => date('c')
     ];
+    if ($medicalApproval !== null) {
+        $updateData['medical_approval'] = $medicalApproval;
+    }
     
     // Log the data being updated
     error_log('Updating medical history record with data: ' . json_encode($updateData));

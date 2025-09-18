@@ -2892,18 +2892,19 @@ $donor_history = $unique_donor_history;
             }
             
             // Function to display donor and deferral information (exposed globally)
+            // Accepts either a full API response { success, data } or the donor object directly
             window.displayDonorInfo = function(donorData, deferralData) {
                 let donorInfoHTML = '';
                 const safe = (v) => v || 'N/A';
                 
                 // Store donor data globally for eye button access
-                window.currentDonorData = donorData;
+                window.currentDonorData = donorData && donorData.data ? donorData.data : donorData;
                 
                 // Debug logging
                 
                 // Check if we have donor data, regardless of success field
-                if (donorData && (donorData.success || donorData.data)) {
-                    const donor = donorData.data || donorData || {};
+                const donor = (donorData && donorData.data) ? donorData.data : donorData;
+                if (donor && (typeof donor === 'object')) {
                     const fullName = `${safe(donor.surname)}, ${safe(donor.first_name)} ${safe(donor.middle_name)}`.trim();
                     const currentStatus = (() => {
                         // Get donor type from the row data
@@ -3243,7 +3244,7 @@ $donor_history = $unique_donor_history;
                             <div class="small text-muted">
                                 <strong>Debug Info:</strong><br>
                                 Donor Data: ${donorData ? 'Available' : 'Not available'}<br>
-                                Success: ${donorData ? donorData.success : 'N/A'}<br>
+                                Success: ${donorData && typeof donorData === 'object' && 'success' in donorData ? donorData.success : 'N/A'}<br>
                                 Has Data: ${donorData && donorData.data ? 'Yes' : 'No'}<br>
                                 Error: ${donorData && donorData.error ? donorData.error : 'None'}<br>
                                 <details>
@@ -3394,125 +3395,7 @@ $donor_history = $unique_donor_history;
             }
             
             
-            // Function to display physical examination information
-            function displayPhysicalExaminationInfo(physicalData, donorId) {
-                const modalContent = document.getElementById('physicalExaminationModalContent');
-                
-                // Format date
-                const formatDate = (dateString) => {
-                    if (!dateString) return 'N/A';
-                    const date = new Date(dateString);
-                    return date.toLocaleDateString('en-US', { 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    });
-                };
-                
-                // Calculate age from birthdate
-                const calculateAge = (birthdate) => {
-                    if (!birthdate) return 'N/A';
-                    const birth = new Date(birthdate);
-                    const today = new Date();
-                    let age = today.getFullYear() - birth.getFullYear();
-                    const monthDiff = today.getMonth() - birth.getMonth();
-                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-                        age--;
-                    }
-                    return age;
-                };
-                
-                const safe = (value) => value || 'N/A';
-                const fullName = `${safe(physicalData.surname)}, ${safe(physicalData.first_name)} ${safe(physicalData.middle_name)}`.trim();
-                const age = calculateAge(physicalData.birthdate);
-                const donorAgeGender = `${age}${physicalData.sex ? ', ' + physicalData.sex : ''}`;
-                
-                const physicalHTML = `
-                    <!-- Donor Information Header (Large and Prominent) -->
-                    <div class="patient-info-header">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <div class="patient-date">Date: ${formatDate(physicalData.created_at)}</div>
-                                <div class="patient-name">${fullName}</div>
-                                <div class="patient-details">${donorAgeGender}</div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div class="patient-id">ID: ${safe(physicalData.prc_donor_number || 'N/A')}</div>
-                                <div class="patient-blood-type">${safe(physicalData.blood_type || 'N/A')}</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Physical Examination Results Section -->
-                    <div class="mb-3">
-                        <h6 class="mb-2" style="color:#b22222; font-weight:700;">Physical Examination Results</h6>
-                        <div class="row g-1">
-                            <div class="col-md-4">
-                                <label class="form-label small" style="margin-bottom: 2px; font-size: 0.75rem;">Interviewer Remarks</label>
-                                <input class="form-control form-control-sm" value="${safe(physicalData.reason)}" readonly>
-                            </div>
-                            <div class="col-md-8">
-                                <label class="form-label small" style="margin-bottom: 2px; font-size: 0.75rem;">Physical Exam Notes</label>
-                                <input class="form-control form-control-sm" value="${safe(physicalData.skin)}${physicalData.heent ? ' | HEENT: ' + physicalData.heent : ''}${physicalData.heart_and_lungs ? ' | Heart & Lungs: ' + physicalData.heart_and_lungs : ''}" readonly>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label small" style="margin-bottom: 2px; font-size: 0.75rem;">Blood Type</label>
-                                <input class="form-control form-control-sm" value="${safe(physicalData.blood_type)}" readonly>
-                            </div>
-                            <div class="col-md-8">
-                                <label class="form-label small" style="margin-bottom: 2px; font-size: 0.75rem;">Type of Donation</label>
-                                <input class="form-control form-control-sm" value="${safe(physicalData.donation_type)}" readonly>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Vital Signs Section -->
-                    <div class="mb-3">
-                        <h6 class="mb-2" style="color:#b22222; font-weight:700;">Vital Signs</h6>
-                        <div class="table-responsive">
-                            <table class="table table-sm table-bordered mb-0">
-                                <thead class="table-danger">
-                                    <tr>
-                                        <th>Blood Pressure (BP)</th>
-                                        <th>Weight</th>
-                                        <th>Pulse</th>
-                                        <th>Temperature</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td><input class="form-control form-control-sm form-control form-control-sm-sm" value="${safe(physicalData.blood_pressure)}" readonly></td>
-                                        <td><input class="form-control form-control-sm form-control form-control-sm-sm" value="${safe(physicalData.body_weight)}" readonly></td>
-                                        <td><input class="form-control form-control-sm form-control form-control-sm-sm" value="${safe(physicalData.pulse_rate)}" readonly></td>
-                                        <td><input class="form-control form-control-sm form-control form-control-sm-sm" value="${safe(physicalData.body_temp)}" readonly></td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                    
-                    <!-- Final Assessment Section -->
-                    <div class="mb-3">
-                        <div class="row g-1">
-                            <div class="col-md-4">
-                                <label class="form-label small" style="margin-bottom: 2px; font-size: 0.75rem;">Fitness to Donate</label>
-                                <input class="form-control form-control-sm" value="${physicalData.disapproval_reason ? 'Deferred' : 'Accepted'}" readonly>
-                            </div>
-                            <div class="col-md-8">
-                                <label class="form-label small" style="margin-bottom: 2px; font-size: 0.75rem;">Final Remarks</label>
-                                <input class="form-control form-control-sm" value="${safe(physicalData.remarks || 'No remarks available')}" readonly>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                
-                modalContent.innerHTML = physicalHTML;
-                
-                // Store donor ID for the proceed button
-                modalContent.setAttribute('data-donor-id', donorId);
-            }
+            // Deprecated duplicate renderer removed. Use the unified renderer defined later in the file.
             
             // Function to proceed to medical history modal
             function proceedToMedicalHistoryModal() {
@@ -3522,6 +3405,8 @@ $donor_history = $unique_donor_history;
                 // Reset initialization flags to ensure fresh initialization
                 window.editFunctionalityInitialized = false;
                 window.medicalHistoryQuestionsGenerated = false;
+                // Allow MH modal script to re-initialize cleanly on reopen
+                try { window.__mhEditInit = false; } catch (e) {}
                 
                 // Show the medical history modal
                 const medicalHistoryModal = new bootstrap.Modal(document.getElementById('medicalHistoryModal'));
@@ -3873,7 +3758,7 @@ $donor_history = $unique_donor_history;
              }
             
             // Initialize step navigation
-            initializeModalStepNavigation(modalUserRole, modalIsMale);
+            dashboardInitializeModalStepNavigation(modalUserRole, modalIsMale);
             
             // Make form fields read-only for interviewers and physicians (but allow Edit button to override)
             // Don't make readonly for donors with needs_review=true or current status "Medical"
@@ -3900,17 +3785,17 @@ $donor_history = $unique_donor_history;
                     
                     // Initialize edit functionality after fields are made read-only
                     //console.log('🔄 Initializing edit functionality...');
-                    initializeEditFunctionality();
+                    dashboardInitializeEditFunctionality();
                 }, 100);
             } else {
                 // For reviewers, initialize edit functionality immediately
                 //console.log('🔄 Initializing edit functionality for reviewer...');
-                initializeEditFunctionality();
+                dashboardInitializeEditFunctionality();
             }
         }
         
         // Single edit functionality function to avoid duplicates
-        function initializeEditFunctionality() {
+        function dashboardInitializeEditFunctionality() {
             //console.log('Initializing edit functionality...');
             
             // Remove any existing event listeners to prevent duplicates
@@ -3968,22 +3853,34 @@ $donor_history = $unique_donor_history;
                 }
             });
             
-            // Add event listener for save buttons
+            // Add event listener for save buttons (route through confirmation, do NOT autosave)
             document.addEventListener('click', function(e) {
-                if (e.target && (e.target.classList.contains('save-button') || e.target.textContent?.trim() === 'Save')) {
+                if (e.target && (e.target.classList.contains('save-button') || (typeof e.target.textContent === 'string' && e.target.textContent.trim() === 'Save'))) {
                     e.preventDefault();
                     e.stopPropagation();
-                    
-                    //console.log('Save button clicked');
-                    saveFormDataQuietly(); // Use quiet save function
-                    
+                    try {
+                        // Use MH modal's confirmation if available
+                        if (typeof window.mhShowSaveConfirmationModal === 'function') {
+                            window.mhShowSaveConfirmationModal();
+                        } else {
+                            // Fallback: use existing customConfirm as a confirm gate
+                            const confirmMessage = 'Are you sure you want to save the medical history data?';
+                            if (typeof window.customConfirm === 'function') {
+                                window.customConfirm(confirmMessage, function(){
+                                    saveFormDataQuietly();
+                                });
+                            } else if (window.confirm && window.confirm(confirmMessage)) {
+                                saveFormDataQuietly();
+                            }
+                        }
+                    } catch(_) {}
                     return false;
                 }
             });
         }
         
         // Initialize step navigation for the modal
-        function initializeModalStepNavigation(userRole, isMale) {
+        function dashboardInitializeModalStepNavigation(userRole, isMale) {
             let currentStep = 1;
             const totalSteps = isMale ? 5 : 6;
             
@@ -4667,17 +4564,7 @@ $donor_history = $unique_donor_history;
             }
         });
         
-        // Show loading for medical history AJAX calls
-        const originalFetch = window.fetch;
-        window.fetch = function(...args) {
-            const url = args[0];
-            if (typeof url === 'string' && (url.includes('medical') || url.includes('approval'))) {
-                showProcessingModal('Processing medical data...');
-            }
-            return originalFetch.apply(this, args).finally(() => {
-                setTimeout(hideProcessingModal, 500);
-            });
-        };
+        // Removed risky global fetch override that caused duplicate loaders and race conditions
         
         // Custom confirmation function to replace browser confirm
         function customConfirm(message, onConfirm) {
@@ -5296,7 +5183,7 @@ $donor_history = $unique_donor_history;
                     
                     // Force hide the button if it shouldn't be shown
                     if (!shouldShowMarkButton) {
-                        markReviewButton.style.display = 'none !important';
+                        markReviewButton.style.display = 'none';
                         markReviewButton.style.visibility = 'hidden';
                         markReviewButton.style.opacity = '0';
                     } else {
@@ -5307,7 +5194,7 @@ $donor_history = $unique_donor_history;
                 })
                 .catch(error => {
                     // On error, hide button to be safe
-                    markReviewButton.style.display = 'none !important';
+                    markReviewButton.style.display = 'none';
                     markReviewButton.style.visibility = 'hidden';
                     markReviewButton.style.opacity = '0';
                 });
