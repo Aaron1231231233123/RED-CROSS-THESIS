@@ -855,9 +855,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <a href="dashboard-Inventory-System-list-of-donations.php" class="nav-link active">
                             <span><i class="fas fa-users"></i>Donor Management</span>
                         </a>
-                        <a href="#" class="nav-link">
-                            <span><i class="fas fa-user-check"></i>Donor Status</span>
-                        </a>
                         <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
                             <span><i class="fas fa-tint"></i>Blood Bank</span>
                         </a>
@@ -1176,11 +1173,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             
 <!-- Donor Details Modal -->
 <div class="modal fade" id="donorModal" tabindex="-1" aria-labelledby="donorModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
             <!-- Modal Header -->
-            <div class="modal-header bg-dark text-white">
-                <h4 class="modal-title w-100"><i class="fas fa-user me-2"></i> Donor Details</h4>
+            <div class="modal-header bg-danger text-white">
+                <h4 class="modal-title w-100"><i class="fas fa-user me-2"></i> Donor Information</h4>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="font-size: 1.5rem;"></button>
             </div>
 
@@ -1635,7 +1632,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     return response.json();
                 })
                 .then(data => {
-                    // Populate modal with donor details
+                    // Track current donor/eligibility shown in the modal for refreshes
+                    try {
+                        window.currentDetailsDonorId = donorId;
+                        window.currentDetailsEligibilityId = eligibilityId;
+                    } catch (e) {}
+                    // Populate modal with compact staged layout (Interviewer, Physician, Phlebotomist)
                     const donorDetailsContainer = document.getElementById('donorDetails');
                     
                     if (data.error) {
@@ -1643,114 +1645,306 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         return;
                     }
                     
-                    const donor = data.donor;
-                    const eligibility = data.eligibility;
-                    
-                    // Check if the donor is approved
-                    const isApproved = eligibility.status === 'approved';
-                    
-                    // Format the details in the compact style from the image
-                    let html = `
-                    <div class="donor-details-container">
-                        <div><strong>Surname:</strong> ${donor.surname || 'N/A'}</div>
-                        <div><strong>Age:</strong> ${donor.age || 'N/A'}</div>
-                        
-                        <div><strong>First Name:</strong> ${donor.first_name || 'N/A'}</div>
-                        <div><strong>Sex:</strong> ${donor.sex || 'N/A'}</div>
-                        
-                        <div><strong>Middle Name:</strong> ${donor.middle_name || 'N/A'}</div>
-                        <div><strong>Civil Status:</strong> ${donor.civil_status || 'Single'}</div>
-                        
-                        <div><strong>Birthdate:</strong> ${donor.birthdate || 'N/A'}</div>
-                        <div><strong>Donation Date:</strong> ${eligibility.start_date ? new Date(eligibility.start_date).toLocaleDateString() : '4/1/2025'}</div>
-                        
-                        <div><strong>Permanent Address:</strong> ${donor.permanent_address || 'N/A'}</div>
-                        ${isApproved ? `<div><strong>Eligibility End Date:</strong> ${eligibility.end_date ? new Date(eligibility.end_date).toLocaleDateString() : 'N/A'}</div>` : ''}
-                        
-                        ${isApproved ? `<div><strong>Donor Reaction:</strong> ${eligibility.donor_reaction || 'None'}</div>` : ''}
-                        ${isApproved ? `<div><strong>Management Done:</strong> ${eligibility.management_done || 'None'}</div>` : ''}
-                        
-                        ${isApproved ? `<div><strong>Office Address:</strong> ${donor.office_address || 'Not specified'}</div>` : ''}
-                        ${isApproved ? `<div><strong>Donation Type:</strong> ${eligibility.donation_type || 'Unknown'}</div>` : ''}
+                    const donor = data.donor || {};
+                    const eligibility = data.eligibility || {};
+
+                    const safe = (v, fb = '-') => (v === null || v === undefined || v === '' ? fb : v);
+                    const badge = (text) => {
+                        const t = String(text || '').toLowerCase();
+                        let cls = 'bg-secondary';
+                        if (t.includes('pending')) cls = 'bg-warning text-dark';
+                        else if (t.includes('approved') || t.includes('eligible') || t.includes('success')) cls = 'bg-success';
+                        else if (t.includes('declined') || t.includes('defer') || t.includes('fail') || t.includes('ineligible')) cls = 'bg-danger';
+                        else if (t.includes('review') || t.includes('medical') || t.includes('physical')) cls = 'bg-info text-dark';
+                        return `<span class="badge ${cls}">${safe(text)}</span>`;
+                    };
+
+                    const interviewerMedical = safe(eligibility.medical_history_status);
+                    const interviewerScreening = safe(eligibility.screening_status);
+                    const physicianMedical = safe(eligibility.review_status);
+                    const physicianPhysical = safe(eligibility.physical_status);
+                    const phlebStatus = safe(eligibility.collection_status);
+                    const eligibilityStatus = String(safe(eligibility.status, '')).toLowerCase();
+                    const isFullyApproved = eligibilityStatus === 'approved' || eligibilityStatus === 'eligible';
+
+                    const header = `
+                        <div class="donor-header-section mb-4">
+                            <div class="donor-header-card">
+                                <div class="donor-header-content">
+                                    <div class="donor-name-section">
+                                        <h3 class="donor-name">${safe(donor.surname)}, ${safe(donor.first_name)} ${safe(donor.middle_name)}</h3>
+                                        <div class="donor-badges">
+                                            <span class="donor-badge age-badge">${safe(donor.age)} years</span>
+                                            <span class="donor-badge gender-badge">${safe(donor.sex)}</span>
+                                            <span class="donor-badge blood-badge">${safe(donor.blood_type)}</span>
+                                        </div>
+                                    </div>
+                                    <div class="donor-id-section">
+                                        <div class="donor-id-label">Donor ID: ${safe(donor.donor_id)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+
+                    const section = (title, rows) => `
+                        <div class="card mb-3 shadow-sm" style="border:none">
+                            <div class="card-header bg-light py-2 px-3" style="border:none">
+                                <h6 class="mb-0" style="font-weight:600;">${title}</h6>
+                            </div>
+                            <div class="card-body py-2 px-3">
+                                ${rows}
+                            </div>
+                        </div>`;
+
+                    const interviewerRows = (() => {
+                        const baseUrl = '../../src/views/forms/';
+                        const donorId = encodeURIComponent(safe(donor.donor_id, ''));
+                        const medHistoryUrl = `${baseUrl}medical-history.php?donor_id=${donorId}`;
+                        return `
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr class="bg-danger text-white">
+                                    <th class="text-start">Medical History</th>
+                                    <th class="text-center">Initial Screening</th>
+                                    <th class="text-center" style="width:90px">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="text-center">Completed</td>
+                                    <td class="text-center">Passed</td>
+                                    <td class="text-center">
+                                        ${isFullyApproved
+                                            ? `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"View Medical History\" onclick=\"openAdminMedicalHistory({ donor_id: '${safe(donor.donor_id,'')}' })\"><i class=\"fas fa-eye\"></i></button>`
+                                            : `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"Process Medical History\" onclick=\"confirmOpenAdminMedicalHistory('${safe(donor.donor_id,'')}')\"><i class=\"fas fa-pen\"></i></button>`}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>`;
+                    })();
+
+                    const physicianRows = (() => {
+                        const baseUrl = '../../src/views/forms/';
+                        const donorId = encodeURIComponent(safe(donor.donor_id, ''));
+                        const medReviewUrl = `${baseUrl}medical-history.php?donor_id=${donorId}`;
+                        return `
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr class="bg-danger text-white">
+                                    <th class="text-start">Medical History</th>
+                                    <th class="text-center">Physical Examination</th>
+                                    <th class="text-center" style="width:90px">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="text-center">${safe(physicianMedical, '-')}</td>
+                                    <td class="text-center">${safe(physicianPhysical, '-')}</td>
+                                    <td class="text-center">
+                                        ${isFullyApproved
+                                            ? `<button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="View Medical Review" onclick="openPhysicianMedicalReview({ donor_id: '${donor.donor_id || ''}' })"><i class=\"fas fa-eye\"></i></button>`
+                                            : `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"Process Medical Review / Physical Exam\" onclick=\"openPhysicianMedicalReview({ donor_id: '${donor.donor_id || ''}' })\"><i class=\"fas fa-pen\"></i></button>`}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>`;
+                    })();
+
+                    const phlebRows = (() => {
+                        return `
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr class="bg-danger text-white">
+                                    <th class="text-start">Blood Collection Status</th>
+                                    <th class="text-center" style="width:90px">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="text-center">${safe(phlebStatus, '-')}</td>
+                                    <td class="text-center">
+                                        ${isFullyApproved
+                                            ? `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"View Blood Collection\" onclick=\"openPhlebotomistCollection({ donor_id: '${donor.donor_id || ''}' })\"><i class=\"fas fa-eye\"></i></button>`
+                                            : `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"Process Blood Collection\" onclick=\"openPhlebotomistCollection({ donor_id: '${donor.donor_id || ''}' })\"><i class=\"fas fa-pen\"></i></button>`}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>`;
+                    })();
+
+                    const cta = '';
+
+                    const donorInfoSection = `
+                        <div class="card mb-3" style="border:none">
+                            <div class="card-body" style="padding: 8px 12px;">
+                                <h6 class="mb-3" style="font-weight:700; color:#212529;">Donor Information</h6>
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <div class="mb-2">
+                                            <small class="text-muted d-block">Birthdate</small>
+                                            <input type="text" class="form-control form-control-sm" value="${safe(donor.birthdate)}" disabled>
+                                        </div>
+                                        <div class="mb-2">
+                                            <small class="text-muted d-block">Address</small>
+                                            <input type="text" class="form-control form-control-sm" value="${safe(donor.permanent_address || donor.office_address)}" disabled>
+                                        </div>
+                                        <div class="mb-2">
+                                            <small class="text-muted d-block">Mobile Number</small>
+                                            <input type="text" class="form-control form-control-sm" value="${safe(donor.mobile || donor.mobile_number || donor.contact_number)}" disabled>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-2">
+                                            <small class="text-muted d-block">Civil Status</small>
+                                            <input type="text" class="form-control form-control-sm" value="${safe(donor.civil_status)}" disabled>
+                                        </div>
+                                        <div class="mb-2">
+                                            <small class="text-muted d-block">Nationality</small>
+                                            <input type="text" class="form-control form-control-sm" value="${safe(donor.nationality)}" disabled>
+                                        </div>
+                                        <div class="mb-2">
+                                            <small class="text-muted d-block">Occupation</small>
+                                            <input type="text" class="form-control form-control-sm" value="${safe(donor.occupation)}" disabled>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    
-                    <div class="d-flex justify-content-center gap-3 mt-4">
-                        ${eligibility.status === 'pending' ? `
-                        <button type="button" class="btn btn-primary" id="processThisDonorBtn" data-donor-id="${donor.donor_id}">
-                            <i class="fas fa-list-check me-2"></i> Process This Donor
-                        </button>
-                        ` : eligibility.status === 'declined' ? `
-                        ` : eligibility.status === 'approved' ? `
-                        ` : `
-                        <button type="button" class="btn btn-primary" id="processThisDonorBtn" data-donor-id="${donor.donor_id}">
-                            <i class="fas fa-list-check me-2"></i> Process This Donor
-                        </button>
-                        `}
-                    </div>`;
+                        <hr class="my-3" />
+                    `;
+
+                    const html = `
+                        ${header}
+                        ${donorInfoSection}
+                        ${section('Interviewer', interviewerRows)}
+                        ${section('Physician', physicianRows)}
+                        ${section('Phlebotomist', phlebRows)}
+                        ${cta}
+                    `;
                     
                     donorDetailsContainer.innerHTML = html;
+                    // Hide approve CTA in footer when fully approved (view-only state)
+                    try {
+                        const approveBtn = document.getElementById('Approve');
+                        if (approveBtn) approveBtn.style.display = isFullyApproved ? 'none' : '';
+                    } catch (_) {}
                     
-                    // Add some styling to match the compact format in the image
-                    const styleElement = document.createElement('style');
-                    styleElement.textContent = `
-                        .donor-details-container {
-                            display: grid;
-                            grid-template-columns: 1fr 1fr;
-                            gap: 8px 16px;
+                    // Wireframe-aligned styles
+                    const styleEl = document.createElement('style');
+                    styleEl.textContent = `
+                        #donorModal .modal-dialog { max-width: 1000px; }
+                        #donorModal .modal-body { padding: 20px; }
+                        #donorModal .card-header { padding: 8px 12px !important; }
+                        #donorModal .card-body { padding: 12px !important; }
+                        #donorModal .table td { padding: 8px 12px; }
+                        
+                        .donor-header-section {
+                            background: linear-gradient(135deg, #dc3545, #c82333);
+                            border-radius: 8px;
+                            padding: 20px;
+                            color: white;
                             margin-bottom: 20px;
                         }
-                        .donor-details-container > div {
-                            padding: 8px 0;
-                            border-bottom: 1px solid #eee;
+                        
+                        .donor-header-card {
+                            background: transparent;
                         }
-                        /* Ensure the grid maintains even columns */
-                        .donor-details-container > div:nth-child(odd) {
-                            grid-column: 1;
+                        
+                        .donor-header-content {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: flex-start;
                         }
-                        .donor-details-container > div:nth-child(even) {
-                            grid-column: 2;
+                        
+                        .donor-name-section {
+                            flex: 1;
                         }
-                        /* Fix for approved donors with extra fields */
-                        .donor-details-container > div:only-child {
-                            grid-column: 1 / span 2;
+                        
+                        .donor-name {
+                            font-size: 1.4rem;
+                            font-weight: 600;
+                            margin: 0 0 8px 0;
+                            color: white;
                         }
-                        .modal-body {
-                            padding: 20px 25px;
+                        
+                        .donor-badges {
+                            display: flex;
+                            gap: 6px;
+                            flex-wrap: wrap;
                         }
-                        #processThisDonorBtn, #viewEditDonorFormBtn {
-                            padding: 8px 16px;
-                            font-size: 14px;
+                        
+                        .donor-badge {
+                            background: rgba(255, 255, 255, 0.25);
+                            padding: 3px 8px;
+                            border-radius: 10px;
+                            font-size: 0.75rem;
+                            font-weight: 500;
+                            color: white;
+                        }
+                        
+                        .donor-id-section {
+                            text-align: right;
+                            margin-top: 5px;
+                        }
+                        
+                        .donor-id-label {
+                            font-size: 0.9rem;
+                            font-weight: 500;
+                            color: white;
+                        }
+                        
+                        .card {
+                            border: 1px solid #e9ecef;
+                            border-radius: 8px;
+                        }
+                        
+                        .card-header {
+                            background-color: #f8f9fa;
+                            border-bottom: 1px solid #e9ecef;
+                        }
+                        
+                        .table thead th {
+                            background-color: #dc3545;
+                            color: white;
+                            font-weight: 600;
+                            border: none;
+                        }
+                        
+                        .btn-outline-primary {
+                            border-color: #007bff;
+                            color: #007bff;
+                        }
+                        
+                        .btn-outline-primary:hover {
+                            background-color: #007bff;
+                            border-color: #007bff;
+                            color: white;
+                        }
+                        
+                        .circular-btn {
+                            width: 32px;
+                            height: 32px;
+                            border-radius: 50%;
+                            padding: 0;
+                            display: inline-flex;
+                            align-items: center;
+                            justify-content: center;
+                            border: 2px solid #007bff;
+                            background-color: #e3f2fd;
+                        }
+                        
+                        .circular-btn:hover {
+                            background-color: #007bff;
+                            color: white;
+                        }
+                        
+                        .circular-btn i {
+                            font-size: 12px;
                         }
                     `;
-                    donorDetailsContainer.appendChild(styleElement);
-                    
-                    // Add click handlers for the newly created buttons
-                    if (eligibility.status !== 'declined' && eligibility.status !== 'approved') {
-                        // Only add event listeners for buttons that exist for eligible donors
-                        document.getElementById('processThisDonorBtn').addEventListener('click', function() {
-                            const donorId = this.getAttribute('data-donor-id');
-                            
-                            if (!donorId) {
-                                console.error('No donor ID found for process button');
-                                alert('Error: Donor ID not found. Please try again.');
-                                return;
-                            }
-                            
-                            console.log('Processing donor ID:', donorId);
-                            
-                            // Set global variable
-                            window.currentDonorId = donorId;
-                            
-                            // Close donor details modal and show process confirmation modal
-                            const donorModal = bootstrap.Modal.getInstance(document.getElementById('donorModal'));
-                            const processDonorConfirmationModal = new bootstrap.Modal(document.getElementById('processDonorConfirmationModal'));
-                            
-                            if (donorModal) donorModal.hide();
-                            if (processDonorConfirmationModal) processDonorConfirmationModal.show();
-                        });
-                    } else if (eligibility.status === 'approved') {
-                        // For approved donors, no buttons to handle
-                    }
+                    document.head.appendChild(styleEl);
+
+                    // Admin modal does not include a process action
                 })
                 .catch(error => {
                     console.error('Error fetching donor details:', error);
@@ -1865,5 +2059,202 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 });
         }
     </script>
+    <?php
+    // Include shared staff modals so admin can launch them
+    // Medical History approval/decline modals
+    include_once '../../src/views/modals/medical-history-approval-modals.php';
+    // Screening modal (staff compact modal)
+    if (file_exists('../../src/views/forms/staff_donor_initial_screening_form_modal.php')) {
+        include_once '../../src/views/forms/staff_donor_initial_screening_form_modal.php';
+    }
+    // Defer donor modal (shared with staff)
+    if (file_exists('../../src/views/modals/defer-donor-modal.php')) {
+        include_once '../../src/views/modals/defer-donor-modal.php';
+    }
+    // Physical Examination modal
+    if (file_exists('../../src/views/modals/physical-examination-modal.php')) {
+        include_once '../../src/views/modals/physical-examination-modal.php';
+    }
+    ?>
+
+    <!-- Staff modal styles/scripts for admin context -->
+    <link rel="stylesheet" href="../../assets/css/medical-history-approval-modals.css">
+    <script src="../../assets/js/medical-history-approval.js"></script>
+    <script src="../../assets/js/screening_form_modal.js"></script>
+    <script src="../../assets/js/initial-screening-defer-button.js"></script>
+    <script src="../../assets/js/defer_donor_modal.js"></script>
+    <script src="../../assets/js/physical_examination_modal.js"></script>
+    <script src="../../assets/js/blood_collection_modal.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            try { if (typeof initializeMedicalHistoryApproval === 'function') initializeMedicalHistoryApproval(); } catch (e) {}
+        });
+
+        window.openInterviewerScreening = function(donor) {
+            if (!donor) return;
+            try {
+                window.openScreeningModal({ donor_id: donor.donor_id });
+            } catch (e) {
+                window.location.href = `../../src/views/forms/screening-form.php?donor_id=${encodeURIComponent(donor.donor_id)}`;
+            }
+        };
+
+        window.openPhysicianMedicalReview = function(donor) {
+            try {
+                // Seed global context for approval/decline handlers
+                window.currentMedicalHistoryData = {
+                    donor_id: donor?.donor_id || null,
+                    screening_id: null,
+                    medical_history_id: null,
+                    physical_exam_id: null
+                };
+                if (typeof showApprovalModal === 'function') {
+                    showApprovalModal();
+                } else {
+                    const el = document.getElementById('medicalHistoryApprovalModal');
+                    if (el) new bootstrap.Modal(el).show();
+                }
+            } catch (e) { console.warn('Medical review modal open failed', e); }
+        };
+
+        window.openPhysicianPhysicalExam = function(context) {
+            try {
+                if (window.physicalExaminationModal && typeof window.physicalExaminationModal.openModal === 'function') {
+                    window.physicalExaminationModal.openModal({
+                        screening_id: context?.screening_id || null,
+                        donor_form_id: context?.donor_id || null
+                    });
+                } else {
+                    window.location.href = `../../src/views/forms/physical-examination-form.php?donor_id=${encodeURIComponent(context?.donor_id || '')}`;
+                }
+            } catch (e) {
+                window.location.href = `../../src/views/forms/physical-examination-form.php?donor_id=${encodeURIComponent(context?.donor_id || '')}`;
+            }
+        };
+
+        window.openPhlebotomistCollection = function(context) {
+            try {
+                if (window.bloodCollectionModal && typeof window.bloodCollectionModal.openModal === 'function') {
+                    window.bloodCollectionModal.openModal({
+                        donor_id: context?.donor_id || '',
+                        physical_exam_id: context?.physical_exam_id || ''
+                    });
+                } else {
+                    window.location.href = `dashboard-staff-blood-collection-submission.php?donor_id=${encodeURIComponent(context?.donor_id || '')}`;
+                }
+            } catch (e) {
+                window.location.href = `dashboard-staff-blood-collection-submission.php?donor_id=${encodeURIComponent(context?.donor_id || '')}`;
+            }
+        };
+
+        // Ensure admin context can open the step-based screening modal reused from staff
+        window.openScreeningModal = function(context) {
+            try {
+                const donorId = context?.donor_id ? String(context.donor_id) : '';
+                const modalEl = document.getElementById('screeningFormModal');
+                if (!modalEl) return;
+                const donorHidden = modalEl.querySelector('input[name="donor_id"]');
+                if (donorHidden) donorHidden.value = donorId;
+                const bsModal = new bootstrap.Modal(modalEl);
+                bsModal.show();
+            } catch (_) {}
+        };
+
+        // Admin Medical History step-based modal opener (loads staff modal content)
+        window.openAdminMedicalHistory = function(context) {
+            const donorId = context?.donor_id ? String(context.donor_id) : '';
+            const modalEl = document.getElementById('medicalHistoryModalAdmin');
+            const contentEl = document.getElementById('medicalHistoryModalAdminContent');
+            if (!modalEl || !contentEl) return;
+            contentEl.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+            const bsModal = new bootstrap.Modal(modalEl);
+            bsModal.show();
+            fetch(`../../src/views/forms/medical-history-modal-content.php?donor_id=${encodeURIComponent(donorId)}`)
+                .then(r => r.text())
+                .then(html => { contentEl.innerHTML = html; bindAdminMedicalHistoryRefresh(); })
+                .catch(() => { contentEl.innerHTML = '<div class="alert alert-danger">Failed to load Medical History form.</div>'; });
+        };
+
+        // Confirmation before processing Medical History (admin)
+        window.confirmOpenAdminMedicalHistory = function(donorId) {
+            const existing = document.getElementById('processMedicalHistoryConfirm');
+            if (existing) existing.remove();
+            const div = document.createElement('div');
+            div.id = 'processMedicalHistoryConfirm';
+            div.innerHTML = `
+                <div class="modal fade" tabindex="-1">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header" style="background:#8b0000;color:#fff;">
+                                <h5 class="modal-title">Process Medical History</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>Proceed to process this donor's Medical History? You can review and save changes in the step-based form.</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-danger" id="confirmProcessMH">Proceed</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(div);
+            const modal = new bootstrap.Modal(div.querySelector('.modal'));
+            modal.show();
+            div.querySelector('#confirmProcessMH').addEventListener('click', function() {
+                modal.hide();
+                setTimeout(() => openAdminMedicalHistory({ donor_id: donorId }), 150);
+            }, { once: true });
+            div.querySelector('.modal').addEventListener('hidden.bs.modal', () => div.remove(), { once: true });
+        };
+
+        function bindAdminMedicalHistoryRefresh() {
+            try {
+                const mhModalEl = document.getElementById('medicalHistoryModalAdmin');
+                if (!mhModalEl) return;
+                mhModalEl.addEventListener('hidden.bs.modal', function() {
+                    if (window.currentDetailsDonorId && window.currentDetailsEligibilityId) {
+                        fetchDonorDetails(window.currentDetailsDonorId, window.currentDetailsEligibilityId);
+                    }
+                }, { once: true });
+            } catch (e) {}
+        }
+    </script>
+
+    <!-- Admin Medical History Modal Container (content fetched from staff modal content) -->
+    <div class="modal fade" id="medicalHistoryModalAdmin" tabindex="-1" aria-labelledby="medicalHistoryModalAdminLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;">
+                    <h5 class="modal-title" id="medicalHistoryModalAdminLabel"><i class="fas fa-clipboard-list me-2"></i>Medical History Form</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="medicalHistoryModalAdminContent">
+                    <div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <style>
+        /* Minimal styles to ensure screening modal layout in admin */
+        .screening-modal-header { background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: #fff; }
+        .screening-detail-card { background: #ffffff; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; }
+        .screening-label { font-weight: 600; color: #343a40; margin-bottom: 6px; display: block; }
+        .screening-input { width: 100%; border: 1px solid #dee2e6; border-radius: 6px; padding: 8px 10px; }
+        .screening-input-group { position: relative; }
+        .screening-input-suffix { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #6c757d; }
+        .screening-progress-container { padding: 10px 16px; background: #fff; border-bottom: 1px solid #eee; }
+        .screening-progress-steps { display: flex; gap: 16px; align-items: center; }
+        .screening-step { display: flex; flex-direction: column; align-items: center; opacity: .6; }
+        .screening-step.active, .screening-step.completed { opacity: 1; }
+        .screening-step-number { width: 28px; height: 28px; border-radius: 50%; background: #dc3545; color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; }
+        .screening-step-label { font-size: 0.8rem; color: #b22222; margin-top: 6px; }
+        .screening-progress-line { height: 4px; background: #f1f3f5; border-radius: 2px; margin-top: 6px; position: relative; }
+        .screening-progress-fill { height: 4px; background: #dc3545; border-radius: 2px; width: 0; transition: width .3s ease; }
+        .screening-step-title h6 { margin-bottom: 4px; font-weight: 700; color: #b22222; }
+        .screening-review-card { border: 1px solid #eee; border-radius: 8px; padding: 12px; background: #fff; }
+    </style>
 </body>
 </html>
