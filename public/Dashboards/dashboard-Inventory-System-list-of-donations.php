@@ -2428,10 +2428,53 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             contentEl.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
             const bsModal = new bootstrap.Modal(modalEl);
             bsModal.show();
+            console.log(`🔄 Loading medical history content for donor: ${donorId}`);
             fetch(`../../src/views/forms/medical-history-modal-content.php?donor_id=${encodeURIComponent(donorId)}`)
-                .then(r => r.text())
-                .then(html => { contentEl.innerHTML = html; bindAdminMedicalHistoryRefresh(); })
-                .catch(() => { contentEl.innerHTML = '<div class="alert alert-danger">Failed to load Medical History form.</div>'; });
+                .then(r => {
+                    console.log(`📡 Medical history response status: ${r.status}`);
+                    if (!r.ok) {
+                        throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+                    }
+                    return r.text();
+                })
+                .then(html => { 
+                    console.log(`✅ Medical history content loaded, length: ${html.length}`);
+                    contentEl.innerHTML = html; 
+                    
+                    // Execute any script tags in the loaded content (like staff modal does)
+                    const scripts = contentEl.querySelectorAll('script');
+                    scripts.forEach(script => {
+                        try {
+                            const newScript = document.createElement('script');
+                            if (script.type) newScript.type = script.type;
+                            if (script.src) {
+                                newScript.src = script.src;
+                            } else {
+                                newScript.text = script.textContent || '';
+                            }
+                            document.body.appendChild(newScript);
+                        } catch (e) {
+                            console.log('Script execution error:', e);
+                        }
+                    });
+                    
+                    // Call the question generation function after content is loaded
+                    setTimeout(() => {
+                        console.log('🔍 Checking for generateAdminMedicalHistoryQuestions function...');
+                        if (typeof window.generateAdminMedicalHistoryQuestions === 'function') {
+                            console.log('✅ Function found, calling it...');
+                            window.generateAdminMedicalHistoryQuestions();
+                        } else {
+                            console.error('❌ generateAdminMedicalHistoryQuestions function not found');
+                        }
+                    }, 100);
+                    
+                    bindAdminMedicalHistoryRefresh(); 
+                })
+                .catch(error => { 
+                    console.error('❌ Failed to load Medical History form:', error);
+                    contentEl.innerHTML = `<div class="alert alert-danger">Failed to load Medical History form: ${error.message}</div>`; 
+                });
         };
 
         // Confirmation before processing Medical History (admin)

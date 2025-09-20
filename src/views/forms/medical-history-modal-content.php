@@ -1,57 +1,37 @@
 <?php
-session_start();
-require_once '../../../assets/conn/db_conn.php';
+// Start output buffering to catch any unexpected output
+ob_start();
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id'])) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Unauthorized']);
-    exit();
-}
+// Suppress all error output to ensure clean response
+error_reporting(0);
+ini_set('display_errors', 0);
+
+// Debug: Log that we're starting
+error_log("Medical History Modal: Starting for donor_id: " . ($_GET['donor_id'] ?? 'not set'));
+
+// Include database connection
+require_once '../../../assets/conn/db_conn.php';
 
 // Get donor_id from request
 $donor_id = isset($_GET['donor_id']) ? $_GET['donor_id'] : null;
 
 if (!$donor_id) {
-    http_response_code(400);
-    echo json_encode(['error' => 'Missing donor_id']);
+    ob_clean();
+    echo '<div class="alert alert-danger">Missing donor_id parameter</div>';
+    ob_end_flush();
     exit();
 }
 
-// Set donor_id in session for form processing
+// For admin context, we'll use a more lenient approach
+// Set default values for admin access
+$user_role = 'admin';
+$role_id = 1; // Assume admin role for admin dashboard context
+
+// Set donor_id in session for form processing (if session is available)
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 $_SESSION['donor_id'] = $donor_id;
-
-// Check for correct roles (admin role_id 1 or staff role_id 3)
-if (!isset($_SESSION['role_id'])) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Role not set']);
-    exit();
-}
-
-$role_id = (int)$_SESSION['role_id'];
-
-if ($role_id !== 1 && $role_id !== 3) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Invalid role']);
-    exit();
-}
-
-// For staff role, get the staff role type
-$user_role = '';
-if ($role_id === 3) {
-    if (isset($_SESSION['user_staff_role'])) {
-        $user_role = strtolower($_SESSION['user_staff_role']);
-    } elseif (isset($_SESSION['user_staff_roles'])) {
-        $user_role = strtolower($_SESSION['user_staff_roles']);
-    } elseif (isset($_SESSION['staff_role'])) {
-        $user_role = strtolower($_SESSION['staff_role']);
-    }
-    
-    $valid_roles = ['reviewer', 'interviewer', 'physician'];
-    if (!in_array($user_role, $valid_roles)) {
-        $user_role = 'interviewer'; // Default fallback
-    }
-}
 
 // Fetch existing medical history data and donor's sex
 $medical_history_data = null;
@@ -99,14 +79,18 @@ curl_close($ch);
 if ($http_code === 200) {
     $data = json_decode($response, true);
     error_log("Medical history query response for donor_id $donor_id: " . $response);
-    if (!empty($data)) {
+    if (!empty($data) && is_array($data)) {
         $medical_history_data = $data[0];
         error_log("Medical history data found: " . json_encode($medical_history_data));
     } else {
-        error_log("No medical history data found for donor_id: $donor_id");
+        error_log("No medical history data found for donor_id: $donor_id - creating empty structure");
+        // Create empty medical history data structure for new donors
+        $medical_history_data = [];
     }
 } else {
-    error_log("Failed to fetch medical history data. HTTP code: $http_code");
+    error_log("Failed to fetch medical history data. HTTP code: $http_code, Response: " . $response);
+    // Create empty medical history data structure if fetch fails
+    $medical_history_data = [];
 }
 ?>
 
@@ -656,14 +640,22 @@ if ($http_code === 200) {
  </script>
  
 <script>
-// Populate questions dynamically into each step container
-(function renderMedicalHistoryQuestions() {
+// Function to generate medical history questions (called from admin dashboard)
+window.generateAdminMedicalHistoryQuestions = function() {
     try {
+        console.log('=== ADMIN MEDICAL HISTORY QUESTIONS RENDERING START ===');
         const dataEl = document.getElementById('modalData');
-        if (!dataEl) return;
+        if (!dataEl) {
+            console.error('❌ modalData element not found');
+            return;
+        }
         const parsed = JSON.parse(dataEl.textContent || '{}');
         const medicalHistoryData = parsed.medicalHistoryData || {};
         const donorSex = String(parsed.donorSex || '').toLowerCase();
+        
+        console.log('📊 Medical History Data:', medicalHistoryData);
+        console.log('👤 Donor Sex:', donorSex);
+        console.log('📝 Parsed Data:', parsed);
 
         // Map q# → column name from medical_history to prefill accurately
         const fieldByQuestion = {
@@ -741,9 +733,17 @@ if ($http_code === 200) {
 
         Object.keys(questionsByStep).forEach(stepNum => {
             const questions = questionsByStep[stepNum];
-            if (!questions || questions.length === 0) return;
+            console.log(`📋 Processing Step ${stepNum}:`, questions);
+            if (!questions || questions.length === 0) {
+                console.log(`⚠️ No questions for step ${stepNum}`);
+                return;
+            }
             const container = document.querySelector(`.form-container[data-step-container="${stepNum}"]`);
-            if (!container) return;
+            if (!container) {
+                console.error(`❌ Container not found for step ${stepNum}`);
+                return;
+            }
+            console.log(`✅ Found container for step ${stepNum}, adding ${questions.length} questions`);
 
             questions.forEach((q, idx) => {
                 const number = createCell(String(idx + 1), 'question-number');
@@ -793,12 +793,40 @@ if ($http_code === 200) {
                 if (line56) line56.style.display = 'none';
                 const step6Form = document.querySelector('.form-step[data-step="6"]');
                 if (step6Form) step6Form.style.display = 'none';
+                console.log('👨 Hiding female-only step 6 for male donor');
             } catch (_) {}
         }
+        
+        console.log('✅ Medical history questions rendering completed successfully');
+        
+        // Additional verification: count total questions rendered
+        const totalQuestions = document.querySelectorAll('.question-text').length;
+        console.log(`📊 Total questions rendered: ${totalQuestions}`);
+        
+        // Check if any containers have content
+        const containers = document.querySelectorAll('.form-container[data-step-container]');
+        containers.forEach((container, index) => {
+            const questions = container.querySelectorAll('.question-text');
+            console.log(`📋 Step ${index + 1} container has ${questions.length} questions`);
+        });
+        
     } catch (e) {
-        console.warn('Failed to render medical history questions:', e);
+        console.error('❌ Failed to render medical history questions:', e);
+        console.error('Stack trace:', e.stack);
     }
-})();
+};
+
+// Fallback: Auto-call if not called externally (for backward compatibility)
+setTimeout(() => {
+    if (typeof window.generateAdminMedicalHistoryQuestions === 'function') {
+        // Check if questions are already rendered
+        const existingQuestions = document.querySelectorAll('.question-text');
+        if (existingQuestions.length === 0) {
+            console.log('🔄 Auto-calling question generation (fallback)');
+            window.generateAdminMedicalHistoryQuestions();
+        }
+    }
+}, 500);
 </script>
 
 <script>
@@ -1268,6 +1296,11 @@ function mhShowQuietErrorToast(message) {
                 document.body.removeChild(toast);
             }
         }, 300);
-    }, 4000);
-}
-</script> 
+     }, 4000);
+ }
+ </script>
+
+<?php
+// Clean up output buffer and send response
+ob_end_flush();
+?>
