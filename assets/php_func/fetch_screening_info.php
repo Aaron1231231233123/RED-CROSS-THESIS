@@ -20,7 +20,7 @@ $donor_id = intval($_GET['donor_id']);
 
 try {
     // Fetch screening information from screening_form table
-    $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=screening_id,interview_date,body_weight,created_at&donor_form_id=eq.' . $donor_id . '&order=created_at.desc');
+    $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=screening_id,interview_date,body_weight,specific_gravity,blood_type,created_at&donor_form_id=eq.' . $donor_id . '&order=created_at.desc');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'apikey: ' . SUPABASE_API_KEY,
@@ -44,7 +44,9 @@ try {
                 'data' => [
                     'screening_id' => $latest_screening['screening_id'] ?? null,
                     'interview_date' => $latest_screening['interview_date'] ?? $latest_screening['created_at'] ?? null,
-                    'body_weight' => $latest_screening['body_weight'] ?? null
+                    'body_weight' => $latest_screening['body_weight'] ?? null,
+                    'specific_gravity' => $latest_screening['specific_gravity'] ?? null,
+                    'blood_type' => $latest_screening['blood_type'] ?? null
                 ]
             ]);
             exit();

@@ -655,6 +655,306 @@ if ($http_code === 200) {
  }
  </script>
  
+<script>
+// Populate questions dynamically into each step container
+(function renderMedicalHistoryQuestions() {
+    try {
+        const dataEl = document.getElementById('modalData');
+        if (!dataEl) return;
+        const parsed = JSON.parse(dataEl.textContent || '{}');
+        const medicalHistoryData = parsed.medicalHistoryData || {};
+        const donorSex = String(parsed.donorSex || '').toLowerCase();
+
+        // Map q# → column name from medical_history to prefill accurately
+        const fieldByQuestion = {
+            1: 'feels_well', 2: 'previously_refused', 3: 'testing_purpose_only', 4: 'understands_transmission_risk',
+            5: 'recent_alcohol_consumption', 6: 'recent_aspirin', 7: 'recent_medication', 8: 'recent_donation',
+            9: 'zika_travel', 10: 'zika_contact', 11: 'zika_sexual_contact', 12: 'blood_transfusion',
+            13: 'surgery_dental', 14: 'tattoo_piercing', 15: 'risky_sexual_contact', 16: 'unsafe_sex',
+            17: 'hepatitis_contact', 18: 'imprisonment', 19: 'uk_europe_stay', 20: 'foreign_travel',
+            21: 'drug_use', 22: 'clotting_factor', 23: 'positive_disease_test', 24: 'malaria_history',
+            25: 'std_history', 26: 'cancer_blood_disease', 27: 'heart_disease', 28: 'lung_disease',
+            29: 'kidney_disease', 30: 'chicken_pox', 31: 'chronic_illness', 32: 'recent_fever',
+            33: 'pregnancy_history', 34: 'last_childbirth', 35: 'recent_miscarriage', 36: 'breastfeeding',
+            37: 'last_menstruation'
+        };
+
+        // Full question set mirroring staff modal
+        const questionsByStep = {
+            1: [
+                { q: 1, text: 'Do you feel well and healthy today?' },
+                { q: 2, text: 'Have you ever been refused as a blood donor or told not to donate blood for any reasons?' },
+                { q: 3, text: 'Are you giving blood only because you want to be tested for HIV or the AIDS virus or Hepatitis virus?' },
+                { q: 4, text: 'Are you aware that an HIV/Hepatitis infected person can still transmit the virus despite a negative HIV/Hepatitis test?' },
+                { q: 5, text: 'Have you within the last 12 HOURS had taken liquor, beer or any drinks with alcohol?' },
+                { q: 6, text: 'In the last 3 DAYS have you taken aspirin?' },
+                { q: 7, text: 'In the past 4 WEEKS have you taken any medications and/or vaccinations?' },
+                { q: 8, text: 'In the past 3 MONTHS have you donated whole blood, platelets or plasma?' }
+            ],
+            2: [
+                { q: 9, text: 'Been to any places in the Philippines or countries infected with ZIKA Virus?' },
+                { q: 10, text: 'Had sexual contact with a person who was confirmed to have ZIKA Virus Infection?' },
+                { q: 11, text: 'Had sexual contact with a person who has been to any places in the Philippines or countries infected with ZIKA Virus?' }
+            ],
+            3: [
+                { q: 12, text: 'Received blood, blood products and/or had tissue/organ transplant or graft?' },
+                { q: 13, text: 'Had surgical operation or dental extraction?' },
+                { q: 14, text: 'Had a tattoo applied, ear and body piercing, acupuncture, needle stick Injury or accidental contact with blood?' },
+                { q: 15, text: 'Had sexual contact with high risks individuals or in exchange for material or monetary gain?' },
+                { q: 16, text: 'Engaged in unprotected, unsafe or casual sex?' },
+                { q: 17, text: 'Had jaundice/hepatitis/personal contact with person who had hepatitis?' },
+                { q: 18, text: 'Been incarcerated, Jailed or imprisoned?' },
+                { q: 19, text: 'Spent time or have relatives in the United Kingdom or Europe?' }
+            ],
+            4: [
+                { q: 20, text: 'Travelled or lived outside of your place of residence or outside the Philippines?' },
+                { q: 21, text: 'Taken prohibited drugs (orally, by nose, or by injection)?' },
+                { q: 22, text: 'Used clotting factor concentrates?' },
+                { q: 23, text: 'Had a positive test for the HIV virus, Hepatitis virus, Syphilis or Malaria?' },
+                { q: 24, text: 'Had Malaria or Hepatitis in the past?' },
+                { q: 25, text: 'Had or was treated for genital wart, syphilis, gonorrhea or other sexually transmitted diseases?' }
+            ],
+            5: [
+                { q: 26, text: 'Cancer, blood disease or bleeding disorder (haemophilia)?' },
+                { q: 27, text: 'Heart disease/surgery, rheumatic fever or chest pains?' },
+                { q: 28, text: 'Lung disease, tuberculosis or asthma?' },
+                { q: 29, text: 'Kidney disease, thyroid disease, diabetes, epilepsy?' },
+                { q: 30, text: 'Chicken pox and/or cold sores?' },
+                { q: 31, text: 'Any other chronic medical condition or surgical operations?' },
+                { q: 32, text: 'Have you recently had rash and/or fever? Was/were this/these also associated with arthralgia or arthritis or conjunctivitis?' }
+            ],
+            6: donorSex === 'female' ? [
+                { q: 33, text: 'Are you currently pregnant or have you ever been pregnant?' },
+                { q: 34, text: 'When was your last childbirth?' },
+                { q: 35, text: 'In the past 1 YEAR, did you have a miscarriage or abortion?' },
+                { q: 36, text: 'Are you currently breastfeeding?' },
+                { q: 37, text: 'When was your last menstrual period?' }
+            ] : []
+        };
+
+        function createCell(html, className) {
+            const div = document.createElement('div');
+            div.className = className;
+            div.innerHTML = html;
+            return div;
+        }
+
+        Object.keys(questionsByStep).forEach(stepNum => {
+            const questions = questionsByStep[stepNum];
+            if (!questions || questions.length === 0) return;
+            const container = document.querySelector(`.form-container[data-step-container="${stepNum}"]`);
+            if (!container) return;
+
+            questions.forEach((q, idx) => {
+                const number = createCell(String(idx + 1), 'question-number');
+                const text = createCell(q.text, 'question-text');
+                // Prefer mapped DB field; fallback to q-key
+                const qNum = q.q;
+                const fieldName = fieldByQuestion[qNum];
+                let saved = undefined;
+                if (fieldName && Object.prototype.hasOwnProperty.call(medicalHistoryData, fieldName)) {
+                    saved = medicalHistoryData[fieldName];
+                } else {
+                    saved = medicalHistoryData['q' + qNum];
+                }
+                const yesChecked = (saved === true || saved === 'yes' || saved === 'Yes') ? 'checked' : '';
+                const noChecked = (saved === false || saved === 'no' || saved === 'No') ? 'checked' : '';
+
+                const yes = createCell(
+                    `<label class=\"radio-container\">\n                        <input type=\"radio\" name=\"q${qNum}\" value=\"Yes\" ${yesChecked}>\n                        <span class=\"checkmark\"></span>\n                    </label>`,
+                    'radio-cell'
+                );
+                const no = createCell(
+                    `<label class=\"radio-container\">\n                        <input type=\"radio\" name=\"q${qNum}\" value=\"No\" ${noChecked}>\n                        <span class=\"checkmark\"></span>\n                    </label>`,
+                    'radio-cell'
+                );
+                const remarksKey = `q${qNum}_remarks`;
+                const mappedRemarksKey = fieldName ? `${fieldName}_remarks` : remarksKey;
+                const remarksVal = medicalHistoryData[mappedRemarksKey] ? String(medicalHistoryData[mappedRemarksKey]) : (medicalHistoryData[remarksKey] ? String(medicalHistoryData[remarksKey]) : '');
+                const remarks = createCell(
+                    `<input type=\"text\" class=\"remarks-input\" name=\"${remarksKey}\" value=\"${remarksVal.replace(/\"/g,'&quot;')}\">`,
+                    'remarks-cell'
+                );
+
+                container.appendChild(number);
+                container.appendChild(text);
+                container.appendChild(yes);
+                container.appendChild(no);
+                container.appendChild(remarks);
+            });
+        });
+
+        // Hide female-only step 6 when donor is male
+        if (donorSex === 'male') {
+            try {
+                const step6 = document.getElementById('modalStep6');
+                const line56 = document.getElementById('modalLine5-6');
+                if (step6) step6.style.display = 'none';
+                if (line56) line56.style.display = 'none';
+                const step6Form = document.querySelector('.form-step[data-step="6"]');
+                if (step6Form) step6Form.style.display = 'none';
+            } catch (_) {}
+        }
+    } catch (e) {
+        console.warn('Failed to render medical history questions:', e);
+    }
+})();
+</script>
+
+<script>
+// Step navigation for the modal (admin side) – mirrors staff behavior in a lightweight way
+(function initModalStepNavigation(){
+    try {
+        const dataEl = document.getElementById('modalData');
+        if (!dataEl) return;
+        const parsed = JSON.parse(dataEl.textContent || '{}');
+        const donorSex = String(parsed.donorSex || '').toLowerCase();
+        const totalSteps = donorSex === 'male' ? 5 : 6;
+
+        let currentStep = 1;
+        const form = document.getElementById('modalMedicalHistoryForm');
+        const prevButton = document.getElementById('modalPrevButton');
+        const nextButton = document.getElementById('modalNextButton');
+        const errorMessage = document.getElementById('modalValidationError');
+        const stepIndicators = document.querySelectorAll('#modalStepIndicators .step');
+        const stepConnectors = document.querySelectorAll('#modalStepIndicators .step-connector');
+
+        function updateStepDisplay() {
+            // Show only current step
+            const steps = form ? form.querySelectorAll('.form-step') : [];
+            steps.forEach(s => s.classList.remove('active'));
+            const active = form ? form.querySelector(`.form-step[data-step="${currentStep}"]`) : null;
+            if (active) active.classList.add('active');
+
+            // Indicators
+            stepIndicators.forEach(i => {
+                const step = parseInt(i.getAttribute('data-step'));
+                if (step < currentStep) { i.classList.add('completed','active'); }
+                else if (step === currentStep) { i.classList.add('active'); i.classList.remove('completed'); }
+                else { i.classList.remove('active','completed'); }
+            });
+            stepConnectors.forEach((c, idx) => {
+                if (idx + 1 < currentStep) c.classList.add('active');
+                else c.classList.remove('active');
+            });
+
+            // Buttons
+            if (prevButton) prevButton.style.display = currentStep === 1 ? 'none' : 'inline-block';
+            if (nextButton) nextButton.textContent = currentStep === totalSteps ? 'Submit' : 'Next →';
+
+            if (errorMessage) errorMessage.style.display = 'none';
+        }
+
+        function validateCurrentStep() {
+            const stepEl = form ? form.querySelector(`.form-step[data-step="${currentStep}"]`) : null;
+            if (!stepEl) return true; // nothing to validate
+            const radios = Array.from(stepEl.querySelectorAll('input[type="radio"]'));
+            if (radios.length === 0) return true;
+            const names = Array.from(new Set(radios.map(r => r.name)));
+            const allAnswered = names.every(n => stepEl.querySelector(`input[name="${n}"]:checked`));
+            if (!allAnswered && errorMessage) {
+                errorMessage.textContent = 'Please answer all questions before proceeding to the next step.';
+                errorMessage.style.display = 'block';
+            }
+            return allAnswered;
+        }
+
+        if (nextButton) {
+            nextButton.addEventListener('click', function(e){
+                e.preventDefault();
+                if (currentStep < totalSteps) {
+                    if (!validateCurrentStep()) return;
+                    currentStep++;
+                    updateStepDisplay();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                } else {
+                    // Final step – simple quiet save to persist changes
+                    try {
+                        const evt = new Event('submit', { bubbles: true, cancelable: true });
+                        form && form.dispatchEvent(evt);
+                    } catch (_) {}
+                }
+            });
+        }
+        if (prevButton) {
+            prevButton.addEventListener('click', function(e){
+                e.preventDefault();
+                if (currentStep > 1) {
+                    currentStep--;
+                    updateStepDisplay();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+            });
+        }
+
+        updateStepDisplay();
+    } catch (_) { /* noop */ }
+})();
+</script>
+
+<script>
+// AJAX submit for admin: save MH and proceed to screening
+(function initAdminAjaxSubmit(){
+    try {
+        const form = document.getElementById('modalMedicalHistoryForm');
+        if (!form) return;
+
+        function submitAjax(finalAction) {
+            const fd = new FormData(form);
+            fd.set('action', finalAction || 'next');
+            // Fallback: ensure donor_id present
+            if (!fd.get('donor_id')) {
+                const di = form.querySelector('input[name="donor_id"]');
+                if (di && di.value) fd.set('donor_id', di.value);
+            }
+            return fetch('../../src/views/forms/medical-history-process.php', {
+                method: 'POST',
+                body: fd
+            }).then(r => r.json());
+        }
+
+        form.addEventListener('submit', function(e){
+            // Intercept default submission so admin stays on page
+            e.preventDefault();
+            e.stopPropagation();
+            submitAjax('next').then(res => {
+                if (res && res.success) {
+                    // Close admin MH modal if present
+                    try {
+                        const adminModalEl = document.getElementById('medicalHistoryModalAdmin');
+                        if (adminModalEl && window.bootstrap) {
+                            const m = window.bootstrap.Modal.getInstance(adminModalEl) || new window.bootstrap.Modal(adminModalEl);
+                            m.hide();
+                        }
+                    } catch(_) {}
+                    // Proceed to screening modal in admin context
+                    try {
+                        const donorIdInput = form.querySelector('input[name="donor_id"]');
+                        const donorId = donorIdInput ? donorIdInput.value : null;
+                        if (donorId && typeof window.openScreeningModal === 'function') {
+                            window.openScreeningModal({ donor_id: donorId });
+                        }
+                    } catch(_) {}
+                } else {
+                    // Show basic error inline
+                    const em = document.getElementById('modalValidationError');
+                    if (em) {
+                        em.textContent = (res && res.message) ? res.message : 'Failed to save medical history.';
+                        em.style.display = 'block';
+                    }
+                }
+            }).catch(() => {
+                const em = document.getElementById('modalValidationError');
+                if (em) {
+                    em.textContent = 'Network error occurred while saving.';
+                    em.style.display = 'block';
+                }
+            });
+        });
+    } catch(_) { /* noop */ }
+})();
+</script>
+
  <script>
  // Enhanced Edit Button Functionality (namespaced + idempotent)
  function mhInitializeEditFunctionality() {

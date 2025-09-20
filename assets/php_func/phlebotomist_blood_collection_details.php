@@ -78,6 +78,36 @@ try {
         }
     }
 
+    // Fallback: if no collection by physical_exam_id, try by latest screening_id
+    if ($blood_collection === null) {
+        $screening_url = SUPABASE_URL . '/rest/v1/screening_form?select=screening_id&donor_form_id=eq.' . $donor_id . '&order=created_at.desc&limit=1';
+        $ch = curl_init($screening_url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        $screening_response = curl_exec($ch);
+        $screening_http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($screening_http === 200) {
+            $screening_data = json_decode($screening_response, true);
+            if (!empty($screening_data)) {
+                $screening_id = $screening_data[0]['screening_id'];
+                $collection_url = SUPABASE_URL . '/rest/v1/blood_collection?select=blood_collection_id,screening_id,is_successful,donor_reaction,blood_bag_type,blood_bag_brand,amount_taken,start_time,end_time,unit_serial_number,phlebotomist,created_at,blood_expiration&screening_id=eq.' . $screening_id . '&order=created_at.desc&limit=1';
+                $ch = curl_init($collection_url);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+                $collection_response = curl_exec($ch);
+                $collection_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if ($collection_http_code === 200) {
+                    $collection_data = json_decode($collection_response, true);
+                    if (!empty($collection_data)) {
+                        $blood_collection = $collection_data[0];
+                    }
+                }
+            }
+        }
+    }
+
     // Calculate age if not present
     if (empty($donor['age']) && !empty($donor['birthdate'])) {
         $birthDate = new DateTime($donor['birthdate']);

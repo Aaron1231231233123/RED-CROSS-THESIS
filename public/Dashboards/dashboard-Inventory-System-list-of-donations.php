@@ -1715,7 +1715,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     <td class="text-center">Passed</td>
                                     <td class="text-center">
                                         ${isFullyApproved
-                                            ? `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"View Medical History\" onclick=\"openAdminMedicalHistory({ donor_id: '${safe(donor.donor_id,'')}' })\"><i class=\"fas fa-eye\"></i></button>`
+                                            ? `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"View Donor Details\" onclick=\"openDonorDetails({ donor_id: '${safe(donor.donor_id,'')}' })\"><i class=\"fas fa-eye\"></i></button>`
                                             : `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"Process Medical History\" onclick=\"confirmOpenAdminMedicalHistory('${safe(donor.donor_id,'')}')\"><i class=\"fas fa-pen\"></i></button>`}
                                     </td>
                                 </tr>
@@ -2161,6 +2161,264 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             } catch (_) {}
         };
 
+        // Donor Details modal opener - shows comprehensive donor information
+        window.openDonorDetails = function(context) {
+            const donorId = context?.donor_id ? String(context.donor_id) : '';
+            const modalEl = document.getElementById('donorDetailsModal');
+            const contentEl = document.getElementById('donorDetailsModalContent');
+            if (!modalEl || !contentEl) return;
+            
+            contentEl.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+            const bsModal = new bootstrap.Modal(modalEl);
+            bsModal.show();
+            
+            // Fetch comprehensive donor details from specific tables
+            console.log(`Fetching donor details for ID: ${donorId}, eligibility: ${context?.eligibility_id || ''}`);
+            
+            // Try comprehensive API first, fallback to original if it fails
+            const apiUrl = `../../assets/php_func/comprehensive_donor_details_api.php?donor_id=${encodeURIComponent(donorId)}&eligibility_id=${encodeURIComponent(context?.eligibility_id || '')}`;
+            const fallbackUrl = `../../assets/php_func/donor_details_api.php?donor_id=${encodeURIComponent(donorId)}&eligibility_id=${encodeURIComponent(context?.eligibility_id || '')}`;
+            
+            fetch(apiUrl)
+                .then(response => {
+                    console.log(`API Response status: ${response.status}`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('API Response data:', data);
+                    if (data.error) {
+                        console.error('Comprehensive API Error:', data.error);
+                        console.log('Trying fallback API...');
+                        // Try fallback API
+                        return fetch(fallbackUrl)
+                            .then(response => {
+                                if (!response.ok) {
+                                    throw new Error(`Fallback HTTP error! Status: ${response.status}`);
+                                }
+                                return response.json();
+                            })
+                            .then(fallbackData => {
+                                console.log('Fallback API Response:', fallbackData);
+                                if (fallbackData.error) {
+                                    throw new Error(fallbackData.error);
+                                }
+                                // Convert fallback data to comprehensive format
+                                return {
+                                    donor_form: fallbackData.donor || {},
+                                    screening_form: {},
+                                    medical_history: {},
+                                    physical_examination: {},
+                                    eligibility: fallbackData.eligibility || {},
+                                    blood_collection: {},
+                                    completion_status: {
+                                        donor_form: !!(fallbackData.donor && Object.keys(fallbackData.donor).length > 0),
+                                        screening_form: false,
+                                        medical_history: false,
+                                        physical_examination: false,
+                                        eligibility: !!(fallbackData.eligibility && Object.keys(fallbackData.eligibility).length > 0),
+                                        blood_collection: false
+                                    }
+                                };
+                            });
+                    }
+                    return data;
+                })
+                .then(data => {
+                    if (data.error) {
+                        console.error('API Error:', data.error);
+                        contentEl.innerHTML = `<div class="alert alert-danger">
+                            <h6>Error Loading Donor Details</h6>
+                            <p>${data.error}</p>
+                            <small>Donor ID: ${donorId}</small>
+                        </div>`;
+                        return;
+                    }
+                    
+                    const donorForm = data.donor_form || {};
+                    const screeningForm = data.screening_form || {};
+                    const medicalHistory = data.medical_history || {};
+                    const physicalExamination = data.physical_examination || {};
+                    const eligibility = data.eligibility || {};
+                    const bloodCollection = data.blood_collection || {};
+                    const completionStatus = data.completion_status || {};
+                    
+                    const safe = (v, fb = '-') => (v === null || v === undefined || v === '' ? fb : v);
+                    
+                    // Determine if donor is fully approved
+                    const isFullyApproved = eligibility.status === 'approved' || eligibility.status === 'eligible';
+                    
+                    // Create wireframe-matching donor details HTML
+                    const html = `
+                        <div class="donor-details-wireframe">
+                            <!-- Donor Header - matches wireframe exactly -->
+                            <div class="donor-header-wireframe">
+                                <div class="donor-header-left">
+                                    <h3 class="donor-name-wireframe">${safe(donorForm.surname)}, ${safe(donorForm.first_name)} ${safe(donorForm.middle_name)}</h3>
+                                    <div class="donor-age-gender">${safe(donorForm.age)}, ${safe(donorForm.sex)}</div>
+                                </div>
+                                <div class="donor-header-right">
+                                    <div class="donor-id-wireframe">Donor ID ${safe(donorForm.donor_id)}</div>
+                                    <div class="donor-blood-type">${safe(screeningForm.blood_type || donorForm.blood_type)}</div>
+                                </div>
+                            </div>
+
+                            <!-- Donor Information Section -->
+                            <div class="section-wireframe">
+                                <h6 class="section-title">Donor Information:</h6>
+                                <div class="form-fields-grid">
+                                    <div class="form-field">
+                                        <label>Birthdate</label>
+                                        <input type="text" class="form-control form-control-sm" value="${safe(donorForm.birthdate)}" disabled>
+                                    </div>
+                                    <div class="form-field">
+                                        <label>Address</label>
+                                        <input type="text" class="form-control form-control-sm" value="${safe(donorForm.permanent_address || donorForm.office_address)}" disabled>
+                                    </div>
+                                    <div class="form-field">
+                                        <label>Mobile Number</label>
+                                        <input type="text" class="form-control form-control-sm" value="${safe(donorForm.mobile || donorForm.mobile_number || donorForm.contact_number)}" disabled>
+                                    </div>
+                                    <div class="form-field">
+                                        <label>Civil Status</label>
+                                        <input type="text" class="form-control form-control-sm" value="${safe(donorForm.civil_status)}" disabled>
+                                    </div>
+                                    <div class="form-field">
+                                        <label>Nationality</label>
+                                        <input type="text" class="form-control form-control-sm" value="${safe(donorForm.nationality)}" disabled>
+                                    </div>
+                                    <div class="form-field">
+                                        <label>Occupation</label>
+                                        <input type="text" class="form-control form-control-sm" value="${safe(donorForm.occupation)}" disabled>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Medical History Section -->
+                            <div class="section-wireframe">
+                                <h6 class="section-title">Medical History:</h6>
+                                <table class="table-wireframe">
+                                    <thead>
+                                        <tr>
+                                            <th>Medical History Result</th>
+                                            <th>Interviewer Decision</th>
+                                            <th>Physician Decision</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>${safe(medicalHistory.status || screeningForm.medical_history_status, 'Approved')}</td>
+                                            <td>-</td>
+                                            <td>${safe(physicalExamination.medical_approval || medicalHistory.physician_decision, 'Approved')}</td>
+                                            <td>
+                                                <button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="View Medical History" onclick="openAdminMedicalHistory({ donor_id: '${safe(donorForm.donor_id,'')}' })">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Initial Screening Section -->
+                            <div class="section-wireframe">
+                                <h6 class="section-title">Initial Screening:</h6>
+                                <table class="table-wireframe">
+                                    <thead>
+                                        <tr>
+                                            <th>Body Weight</th>
+                                            <th>Specific Gravity</th>
+                                            <th>Blood Type</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>${safe(screeningForm.body_weight)}</td>
+                                            <td>${safe(screeningForm.specific_gravity)}</td>
+                                            <td>${safe(screeningForm.blood_type)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Physical Examination Section -->
+                            <div class="section-wireframe">
+                                <h6 class="section-title">Physical Examination:</h6>
+                                <table class="table-wireframe">
+                                    <thead>
+                                        <tr>
+                                            <th>Physical Examination Result</th>
+                                            <th>Physician Decision</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>${safe(physicalExamination.physical_exam_status || physicalExamination.status, 'Approved')}</td>
+                                            <td>${safe(physicalExamination.physical_approval || physicalExamination.physician_decision, 'Approved')}</td>
+                                            <td>
+                                                <button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="View Physical Examination">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <div class="donation-type-section">
+                                    <div class="form-field">
+                                        <label>Type of Donation</label>
+                                        <div class="field-value">${safe(eligibility.donation_type, 'Walk-In')}</div>
+                                    </div>
+                                    <div class="eligibility-status">
+                                        <label>Eligibility Status</label>
+                                        <div class="field-value">${safe(eligibility.status, 'Eligible')}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Blood Collection Section -->
+                            <div class="section-wireframe">
+                                <h6 class="section-title">Blood Collection:</h6>
+                                <table class="table-wireframe">
+                                    <thead>
+                                        <tr>
+                                            <th>Blood Collection Status</th>
+                                            <th>Phlebotomist Note</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>${safe(bloodCollection.is_successful ? 'TRUE' : 'Successful', 'Unsuccessful')}</td>
+                                            <td>${safe(bloodCollection.phlebotomist_note, 'Successful')}</td>
+                                            <td>
+                                                <button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="View Blood Collection">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                    
+                    contentEl.innerHTML = html;
+                })
+                .catch(error => {
+                    console.error('Error fetching donor details:', error);
+                    contentEl.innerHTML = `<div class="alert alert-danger">
+                        <h6>Network Error</h6>
+                        <p>Failed to load donor details. Please check your connection and try again.</p>
+                        <small>Error: ${error.message}</small>
+                        <small>Donor ID: ${donorId}</small>
+                    </div>`;
+                });
+        };
+
         // Admin Medical History step-based modal opener (loads staff modal content)
         window.openAdminMedicalHistory = function(context) {
             const donorId = context?.donor_id ? String(context.donor_id) : '';
@@ -2223,6 +2481,21 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         }
     </script>
 
+    <!-- Donor Details Modal -->
+    <div class="modal fade" id="donorDetailsModal" tabindex="-1" aria-labelledby="donorDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;">
+                    <h5 class="modal-title" id="donorDetailsModalLabel"><i class="fas fa-user me-2"></i>Donor Details</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="donorDetailsModalContent">
+                    <div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Admin Medical History Modal Container (content fetched from staff modal content) -->
     <div class="modal fade" id="medicalHistoryModalAdmin" tabindex="-1" aria-labelledby="medicalHistoryModalAdminLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl">
@@ -2238,6 +2511,213 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         </div>
     </div>
     <style>
+        /* Wireframe-matching Donor Details Modal Styles */
+        #donorDetailsModal .modal-dialog { 
+            max-width: 1000px; 
+        }
+        #donorDetailsModal .modal-body { 
+            padding: 20px; 
+        }
+        
+        /* Wireframe Header Styles */
+        .donor-header-wireframe {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            padding: 0;
+        }
+        
+        .donor-header-left {
+            flex: 1;
+        }
+        
+        .donor-name-wireframe {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 0 0 5px 0;
+            color: #333;
+        }
+        
+        .donor-age-gender {
+            font-size: 1rem;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        .donor-header-right {
+            text-align: right;
+        }
+        
+        .donor-id-wireframe {
+            font-size: 1rem;
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .donor-blood-type {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #dc3545;
+        }
+        
+        /* Section Styles */
+        .section-wireframe {
+            margin-bottom: 25px;
+        }
+        
+        .section-title {
+            font-weight: 700;
+            color: #212529;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+        
+        /* Form Fields Grid */
+        .form-fields-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .form-field {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .form-field label {
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .form-field input {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-size: 0.9rem;
+        }
+        
+        /* Table Styles */
+        .table-wireframe {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+        
+        .table-wireframe th {
+            background-color: #dc3545;
+            color: white;
+            font-weight: 600;
+            padding: 12px 15px;
+            text-align: left;
+            border: none;
+            font-size: 0.9rem;
+        }
+        
+        .table-wireframe th:first-child {
+            text-align: left;
+        }
+        
+        .table-wireframe th:not(:first-child) {
+            text-align: center;
+        }
+        
+        .table-wireframe td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e9ecef;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        
+        .table-wireframe td:first-child {
+            text-align: left;
+        }
+        
+        .table-wireframe tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        /* Donation Type Section */
+        .donation-type-section {
+            display: flex;
+            gap: 20px;
+            align-items: end;
+            margin-top: 15px;
+        }
+        
+        .donation-type-section .form-field {
+            flex: 1;
+        }
+        
+        .eligibility-status {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+        
+        .eligibility-status label {
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .eligibility-status .btn {
+            min-width: 140px;
+        }
+        
+        /* Field Value Styling */
+        .field-value {
+            font-weight: 700;
+            color: #000;
+            font-size: 1rem;
+            margin-top: 5px;
+            padding: 8px 0;
+        }
+        
+        /* Button Styles */
+        .circular-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #007bff;
+            background-color: #e3f2fd;
+            color: #007bff;
+        }
+        
+        .circular-btn:hover {
+            background-color: #007bff;
+            color: white;
+        }
+        
+        .circular-btn i {
+            font-size: 12px;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .form-fields-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .donation-type-section {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .eligibility-status {
+                align-items: flex-start;
+            }
+        }
+        
         /* Minimal styles to ensure screening modal layout in admin */
         .screening-modal-header { background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: #fff; }
         .screening-detail-card { background: #ffffff; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; }

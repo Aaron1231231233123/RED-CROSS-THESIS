@@ -333,10 +333,87 @@ try {
         error_log("Successfully fetched eligibility record: " . json_encode(['status' => $eligibilityInfo['status'] ?? 'unknown']));
     }
     
+    // Derive interviewer/physician status fields for UI if missing
+    $derived = $eligibilityInfo;
+    $screeningLatest = null;
+    // Try to determine screening status using donor_id if possible
+    try {
+        $screeningLatest = fetchScreeningDataByDonorId($donor_id);
+    } catch (Exception $e) {
+        $screeningLatest = null;
+    }
+
+    $statusLower = strtolower($eligibilityInfo['status'] ?? '');
+    $hasScreening = !empty($eligibilityInfo['screening_id']) || !empty($screeningLatest);
+
+    // Interviewer statuses
+    if (!isset($derived['medical_history_status'])) {
+        // Assume medical history completed if donor reached or passed screening/physical phases
+        $derived['medical_history_status'] = ($statusLower === 'approved' || $statusLower === 'eligible' || $statusLower === 'declined' || $hasScreening)
+            ? 'Completed' : 'Pending';
+    }
+    if (!isset($derived['screening_status'])) {
+        $derived['screening_status'] = $hasScreening ? 'Passed' : 'Pending';
+    }
+
+    // Physician statuses
+    if (!isset($derived['review_status'])) {
+        // If at least reached physician stage
+        $derived['review_status'] = ($statusLower === 'approved' || $statusLower === 'eligible' || $statusLower === 'declined')
+            ? 'Completed' : 'Pending';
+    }
+    if (!isset($derived['physical_status'])) {
+        // Physical exam considered completed if final decision exists (approved/eligible/declined)
+        $derived['physical_status'] = ($statusLower === 'approved' || $statusLower === 'eligible' || $statusLower === 'declined')
+            ? 'Completed' : 'Pending';
+    }
+
+    // Phlebotomist status: attempt to compute from blood_collection
+    if (!isset($derived['collection_status']) || $derived['collection_status'] === '-' || empty($derived['collection_status'])) {
+        $collection_status = '-';
+        $blood_collection_id = $derived['blood_collection_id'] ?? null;
+        $screening_id = $derived['screening_id'] ?? null;
+        try {
+            $headers = [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Accept: application/json'
+            ];
+            if ($blood_collection_id) {
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=is_successful&blood_collection_id=eq.' . urlencode($blood_collection_id) . '&limit=1');
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+                $resp = curl_exec($ch);
+                $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if ($http === 200) {
+                    $arr = json_decode($resp, true);
+                    if (!empty($arr)) {
+                        $collection_status = !empty($arr[0]['is_successful']) ? 'Successful' : 'Unsuccessful';
+                    }
+                }
+            } elseif ($screening_id) {
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=is_successful&screening_id=eq.' . urlencode($screening_id) . '&order=created_at.desc&limit=1');
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+                $resp = curl_exec($ch);
+                $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if ($http === 200) {
+                    $arr = json_decode($resp, true);
+                    if (!empty($arr)) {
+                        $collection_status = !empty($arr[0]['is_successful']) ? 'Successful' : 'Unsuccessful';
+                    }
+                }
+            }
+        } catch (Exception $e) {}
+        $derived['collection_status'] = $collection_status;
+    }
+
     // Return data as JSON
     echo json_encode([
         'donor' => $donorInfo,
-        'eligibility' => $eligibilityInfo
+        'eligibility' => $derived
     ]);
 
 } catch (Exception $e) {

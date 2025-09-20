@@ -2,7 +2,7 @@
 // This file handles all defer donor functionality for the physical examination dashboard
 
 // Global variables for defer modal state
-let currentDeferData = null;
+let deferModalData = null;
 
 // Import fetchAllSourceData from medical history approval (if not already available)
 if (typeof fetchAllSourceData === 'undefined') {
