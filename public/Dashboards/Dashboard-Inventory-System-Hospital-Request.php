@@ -1140,7 +1140,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <a href="#" class="nav-link">
                             <span><i class="fas fa-chart-line"></i>Forecast Reports</span>
                         </a>
-                        <a href="#" class="nav-link">
+                        <a href="Dashboard-Inventory-System-Users.php" class="nav-link">
                             <span><i class="fas fa-user-cog"></i>Manage Users</span>
                         </a>
                     </ul>
@@ -1162,27 +1162,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             </div>
             <?php endif; ?>
 
-            <?php if (isset($success_message)): ?>
-            <div class="alert alert-success alert-dismissible fade show mt-2" role="alert">
-                <strong>Success!</strong> <?php echo $success_message; ?>
-                <a href="Dashboard-Inventory-System-Handed-Over.php" class="btn btn-sm btn-primary ms-2">View in Handover</a>
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-            <?php endif; ?>
             
-            <?php if (isset($_GET['decline_success'])): ?>
-            <div class="alert alert-success alert-dismissible fade show mt-2" role="alert">
-                <strong>Success!</strong> The blood request has been declined.
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-            <?php endif; ?>
-            
-            <?php if (isset($_GET['handover_success'])): ?>
-            <div class="alert alert-success alert-dismissible fade show mt-2" role="alert">
-                <strong>Success!</strong> The blood request has been marked as completed (handed over).
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-            <?php endif; ?>
             
             <div class="container-fluid p-3 email-container">
                 <h2 class="text-left">
@@ -1429,12 +1409,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <div class="mb-3">
                                     <label class="form-label fw-bold">When Needed:</label>
                                     <div class="d-flex align-items-center gap-4" style="border:1px solid #ddd; border-radius:6px; padding:10px 12px;">
-                                        <div class="form-check d-flex align-items-center gap-2 me-3">
-                                            <input class="form-check-input" type="radio" name="whenNeededOption" id="asapRadio" value="asap">
+                                            <div class="form-check d-flex align-items-center gap-2 me-3">
+                                                <input class="form-check-input" type="radio" name="whenNeededOption" id="asapRadio" value="asap" disabled>
                                             <label class="form-check-label fw-bold" for="asapRadio">ASAP</label>
                                         </div>
-                                        <div class="form-check d-flex align-items-center gap-2">
-                                            <input class="form-check-input" type="radio" name="whenNeededOption" id="scheduledRadio" value="scheduled">
+                                            <div class="form-check d-flex align-items-center gap-2">
+                                                <input class="form-check-input" type="radio" name="whenNeededOption" id="scheduledRadio" value="scheduled" disabled>
                                             <label class="form-check-label fw-bold" for="scheduledRadio">Scheduled</label>
                                             <input type="text" class="form-control" id="modalScheduledDisplay" style="width: 240px; margin-left: 10px;" readonly>
                                         </div>
@@ -1478,12 +1458,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     <div class="modal-footer" style="padding: 20px 30px; border-top: 1px solid #ddd; background: #f8f9fa; border-radius: 0 0 10px 10px;">
                         <div class="d-flex gap-2 w-100 justify-content-end">
                             <!-- Decline Button -->
-                            <button type="button" class="btn btn-danger" id="declineRequest" style="padding: 10px 20px; font-weight: bold; border-radius: 5px;">
+                            <button type="button" class="btn btn-danger" id="declineRequest" style="padding: 10px 20px; font-weight: bold; border-radius: 5px; display: none;">
                                 <i class="fas fa-times-circle me-2"></i>Decline Request
                                 </button>
                             
                             <!-- Approve Button -->
-                            <button type="button" class="btn btn-success" id="modalAcceptButton" style="padding: 10px 20px; font-weight: bold; border-radius: 5px;">
+                            <button type="button" class="btn btn-success" id="modalAcceptButton" style="padding: 10px 20px; font-weight: bold; border-radius: 5px; display: none;">
                                 <i class="fas fa-check-circle me-2"></i>Approve Request
                                 </button>
                             

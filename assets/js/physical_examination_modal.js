@@ -34,7 +34,7 @@ class PhysicalExaminationModal {
         
         // Form field changes
         document.addEventListener('change', (e) => {
-            if (e.target.closest('.physical-examination-modal')) {
+            if (e.target.closest('#physicalExaminationModal')) {
                 this.handleFieldChange(e.target);
             }
         });
@@ -79,9 +79,9 @@ class PhysicalExaminationModal {
             }
         }
         
-        const modal = document.getElementById('physicalExaminationModal');
-        modal.style.display = 'flex';
-        setTimeout(() => modal.classList.add('show'), 10);
+        const modalEl = document.getElementById('physicalExaminationModal');
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
         
         this.currentStep = 1;
         this.updateProgressIndicator();
@@ -89,12 +89,10 @@ class PhysicalExaminationModal {
     }
     
     closeModal() {
-        const modal = document.getElementById('physicalExaminationModal');
-        modal.classList.remove('show');
-        setTimeout(() => {
-            modal.style.display = 'none';
-            this.resetForm();
-        }, 300);
+        const modalEl = document.getElementById('physicalExaminationModal');
+        const modal = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+        try { modal.hide(); } catch(_) {}
+        this.resetForm();
     }
 
     async fetchExistingPhysicalExamination(donorId) {

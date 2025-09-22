@@ -7,17 +7,16 @@
 ?>
 
 <!-- Physical Examination Modal -->
-<div class="physical-examination-modal" id="physicalExaminationModal">
-    <div class="physical-modal-content">
-        <div class="physical-modal-header">
-            <h3><i class="fas fa-stethoscope me-2"></i>Physical Examination Form</h3>
-            <button type="button" class="physical-close-btn" onclick="physicalExaminationModal.closeModal()">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
+<div class="modal fade" id="physicalExaminationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content" style="border: none; border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-bottom: none;">
+                <h5 class="modal-title"><i class="fas fa-stethoscope me-2"></i>Physical Examination Form</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
 
-        <!-- Progress Indicator -->
-        <div class="physical-progress-container">
+            <!-- Progress Indicator -->
+            <div class="physical-progress-container">
             <div class="physical-progress-steps">
                 <div class="physical-step active" data-step="1">
                     <div class="physical-step-number">1</div>
@@ -36,17 +35,17 @@
                     <div class="physical-step-label">Review</div>
                 </div>
             </div>
-            <div class="physical-progress-line">
-                <div class="physical-progress-fill"></div>
+                <div class="physical-progress-line">
+                    <div class="physical-progress-fill"></div>
+                </div>
             </div>
-        </div>
 
-        <form id="physicalExaminationForm" class="physical-modal-form">
+            <form id="physicalExaminationForm" class="physical-modal-form">
             <input type="hidden" id="physical-donor-id" name="donor_id">
             <input type="hidden" id="physical-screening-id" name="screening_id">
 
             <!-- Step 1: Vital Signs -->
-            <div class="physical-step-content active" id="physical-step-1">
+            <div class="modal-body physical-step-content active" id="physical-step-1">
                 <div class="physical-step-inner">
                     <h4>Step 1: Vital Signs</h4>
                     <p class="text-muted">Please enter the patient's vital signs</p>
@@ -91,7 +90,7 @@
             </div>
 
             <!-- Step 2: Physical Examination -->
-            <div class="physical-step-content" id="physical-step-2">
+            <div class="modal-body physical-step-content" id="physical-step-2">
                 <div class="physical-step-inner">
                     <h4>Step 2: Physical Examination</h4>
                     <p class="text-muted">Please enter examination findings</p>
@@ -138,7 +137,7 @@
             </div>
 
             <!-- Step 3: Blood Bag Selection -->
-            <div class="physical-step-content" id="physical-step-3">
+            <div class="modal-body physical-step-content" id="physical-step-3">
                 <div class="physical-step-inner">
                     <h4>Step 4: Blood Bag Selection</h4>
                     <p class="text-muted">Please select the appropriate blood bag type</p>
@@ -172,7 +171,7 @@
             </div>
 
             <!-- Step 4: Review and Submit -->
-            <div class="physical-step-content" id="physical-step-4">
+            <div class="modal-body physical-step-content" id="physical-step-4">
                 <div class="physical-step-inner">
                     <h4>Step 5: Review & Submit</h4>
                     <p class="text-muted">Please review all information before submitting</p>
@@ -326,9 +325,9 @@
             </div>
 
             <!-- Modal Navigation -->
-            <div class="physical-modal-footer">
-                <div class="physical-nav-buttons">
-                    <button type="button" class="btn btn-outline-secondary physical-cancel-btn">
+            <div class="modal-footer">
+                <div class="physical-nav-buttons w-100 d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-outline-secondary physical-cancel-btn" data-bs-dismiss="modal">
                         <i class="fas fa-times me-2"></i>Cancel
                     </button>
                     <button type="button" class="btn btn-outline-danger physical-defer-btn">
@@ -345,7 +344,8 @@
                     </button>
                 </div>
             </div>
-        </form>
+            </form>
+        </div>
     </div>
 </div>
 

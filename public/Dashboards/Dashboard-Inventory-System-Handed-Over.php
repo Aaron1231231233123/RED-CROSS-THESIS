@@ -917,7 +917,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <a href="#" class="nav-link">
                             <span><i class="fas fa-chart-line me-2"></i>Forecast Reports</span>
                         </a>
-                        <a href="#" class="nav-link">
+                        <a href="Dashboard-Inventory-System-Users.php" class="nav-link">
                             <span><i class="fas fa-user-cog me-2"></i>Manage Users</span>
                         </a>
                     </ul>

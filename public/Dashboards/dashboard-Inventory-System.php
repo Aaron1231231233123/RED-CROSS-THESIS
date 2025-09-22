@@ -1299,7 +1299,7 @@ h6 {
                         <a href="#" class="nav-link">
                             <span><i class="fas fa-chart-line"></i>Forecast Reports</span>
                         </a>
-                        <a href="#" class="nav-link">
+                        <a href="Dashboard-Inventory-System-Users.php" class="nav-link">
                             <span><i class="fas fa-user-cog"></i>Manage Users</span>
                         </a>
                     </ul>
