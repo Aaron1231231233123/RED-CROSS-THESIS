@@ -2,15 +2,36 @@
 // Include database connection
 include_once '../../assets/conn/db_conn.php';
 
+// Light HTTP caching to improve TTFB on slow links (HTML only, app data still fresh)
+header('Cache-Control: public, max-age=180');
+header('Vary: Accept-Encoding');
+
 // Get the status parameter from URL
 $status = isset($_GET['status']) ? $_GET['status'] : 'all';
 $donations = [];
 $error = null;
 $pageTitle = "All Donors";
 
-// Based on status, include the appropriate module
+// File cache (short TTL) to avoid recomputing merged arrays repeatedly while keeping data complete
+$cacheTtlSeconds = 90; // very short; guarantees frequent refresh but smoother navigation
+$cacheKey = 'donations_list_' . ($status ?: 'all');
+$cacheFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . $cacheKey . '.json';
+$useCache = false;
+if (file_exists($cacheFile)) {
+    $age = time() - filemtime($cacheFile);
+    if ($age < $cacheTtlSeconds) {
+        $cached = json_decode(@file_get_contents($cacheFile), true);
+        if (is_array($cached)) {
+            $donations = $cached;
+            $useCache = true;
+        }
+    }
+}
+
+// Based on status, include the appropriate module (refresh cache when stale)
 try {
-    switch ($status) {
+    if (!$useCache) {
+        switch ($status) {
         case 'pending':
             include_once 'module/donation_pending.php';
             $donations = $pendingDonations ?? [];
@@ -65,6 +86,9 @@ try {
             $donations = $allDonations;
             $pageTitle = "All Donors";
             break;
+        }
+        // Write short-lived cache
+        @file_put_contents($cacheFile, json_encode($donations));
     }
 } catch (Exception $e) {
     $error = "Error loading module: " . $e->getMessage();
@@ -90,7 +114,7 @@ if (!is_array($donations)) {
 $startTime = microtime(true);
 
 // Pagination settings
-$itemsPerPage = 10;
+$itemsPerPage = 50; // show more per page to reduce traversals
 $totalItems = count($donations);
 $totalPages = ceil($totalItems / $itemsPerPage);
 $currentPage = isset($_GET['page']) ? intval($_GET['page']) : 1;
@@ -105,7 +129,12 @@ if ($currentPage < 1) {
 // Calculate the starting index for the current page
 $startIndex = ($currentPage - 1) * $itemsPerPage;
 
-// Get the subset of donations for the current page
+// Wire limit/offset for included modules (server-side pagination)
+$GLOBALS['DONATION_LIMIT'] = $itemsPerPage;
+$GLOBALS['DONATION_OFFSET'] = $startIndex;
+
+// When status is not 'all', the included module already produced a limited list
+// For 'all', we merged and sorted in-memory; still slice for current page
 $currentPageDonations = array_slice($donations, $startIndex, $itemsPerPage);
 
 // OPTIMIZATION: Performance logging

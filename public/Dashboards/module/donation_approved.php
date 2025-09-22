@@ -17,10 +17,14 @@ try {
     
     // FIX: Query for all approved donations - includes status='approved', 'eligible', and collection_successful=true
     // Use Supabase's built-in join capabilities to fetch all data in one request
+    $limit = isset($GLOBALS['DONATION_LIMIT']) ? intval($GLOBALS['DONATION_LIMIT']) : 100;
+    $offset = isset($GLOBALS['DONATION_OFFSET']) ? intval($GLOBALS['DONATION_OFFSET']) : 0;
     $queryUrl = SUPABASE_URL . "/rest/v1/eligibility?" . http_build_query([
         'select' => 'eligibility_id,donor_id,blood_type,donation_type,created_at,status,collection_successful',
         'or' => '(status.eq.approved,status.eq.eligible,collection_successful.eq.true)',
-        'order' => 'created_at.desc'
+        'order' => 'created_at.desc',
+        'limit' => $limit,
+        'offset' => $offset
     ]);
     
     // OPTIMIZATION FOR SLOW INTERNET: Enhanced timeout and retry settings

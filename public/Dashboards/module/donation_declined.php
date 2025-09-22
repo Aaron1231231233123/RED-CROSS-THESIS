@@ -34,7 +34,9 @@ try {
     $declinedDonations = [];
     
     // STEP 1: Get declined donors from screening_form table (disapproval_reason is not null)
-    $screeningResponse = supabaseRequest("screening_form?disapproval_reason=not.is.null&select=screening_id,donor_form_id,disapproval_reason,created_at&order=created_at.desc");
+    $limit = isset($GLOBALS['DONATION_LIMIT']) ? intval($GLOBALS['DONATION_LIMIT']) : 100;
+    $offset = isset($GLOBALS['DONATION_OFFSET']) ? intval($GLOBALS['DONATION_OFFSET']) : 0;
+    $screeningResponse = supabaseRequest("screening_form?disapproval_reason=not.is.null&select=screening_id,donor_form_id,disapproval_reason,created_at&order=created_at.desc&limit={$limit}&offset={$offset}");
     
     if (isset($screeningResponse['data']) && is_array($screeningResponse['data'])) {
         debug_log("Found " . count($screeningResponse['data']) . " declined screening records");
@@ -95,7 +97,7 @@ try {
     }
     
     // STEP 2: Get deferred donors from physical_examination table (Temporarily Deferred/Permanently Deferred)
-    $physicalExamResponse = supabaseRequest("physical_examination?or=(remarks.eq.Temporarily%20Deferred,remarks.eq.Permanently%20Deferred)&select=physical_exam_id,donor_id,remarks,reason,created_at&order=created_at.desc");
+    $physicalExamResponse = supabaseRequest("physical_examination?or=(remarks.eq.Temporarily%20Deferred,remarks.eq.Permanently%20Deferred)&select=physical_exam_id,donor_id,remarks,reason,created_at&order=created_at.desc&limit={$limit}&offset={$offset}");
     
     if (isset($physicalExamResponse['data']) && is_array($physicalExamResponse['data'])) {
         debug_log("Found " . count($physicalExamResponse['data']) . " deferred physical examination records");

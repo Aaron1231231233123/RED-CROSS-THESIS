@@ -73,8 +73,10 @@ try {
         }
     }
 
-    // OPTIMIZATION 3: Get donor_form data (we'll enforce FIFO after building the list)
-    $donorResponse = supabaseRequest("donor_form?limit=100&order=submitted_at.desc");
+    // OPTIMIZATION 3: Get donor_form data with limit/offset for pagination
+    $limit = isset($GLOBALS['DONATION_LIMIT']) ? intval($GLOBALS['DONATION_LIMIT']) : 100;
+    $offset = isset($GLOBALS['DONATION_OFFSET']) ? intval($GLOBALS['DONATION_OFFSET']) : 0;
+    $donorResponse = supabaseRequest("donor_form?order=submitted_at.desc&limit={$limit}&offset={$offset}");
     
     if (isset($donorResponse['data']) && is_array($donorResponse['data'])) {
         // Log the first donor record to see all available fields
