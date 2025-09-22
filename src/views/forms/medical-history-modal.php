@@ -122,13 +122,6 @@ if (isset($_SESSION['role_id']) && $_SESSION['role_id'] === 3 && !isset($_SESSIO
     exit();
 }
 
-// Use the shared staff-side modal content for Medical History and bypass legacy inline UI
-if (!isset($_GET['donor_id']) && isset($_SESSION['donor_id'])) {
-    $_GET['donor_id'] = $_SESSION['donor_id'];
-}
-require __DIR__ . '/medical-history-modal-content.php';
-exit;
-
 // Check if we need to insert donor data from the session (redirect from declaration form)
 if (isset($_GET['insert_donor']) && $_GET['insert_donor'] === 'true' && isset($_SESSION['donor_form_data'])) {
     error_log("=== START DONOR INSERTION DEBUG ===");

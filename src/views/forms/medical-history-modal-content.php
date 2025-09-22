@@ -335,12 +335,13 @@ if ($http_code === 200) {
         flex: 1;
     }
     
-    .footer-right {
-        display: flex;
-        gap: 10px;
-    }
+        .footer-right {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
     
-         .prev-button,
+        .prev-button,
      .next-button,
      .submit-button,
      .edit-button {
@@ -351,6 +352,13 @@ if ($http_code === 200) {
          font-size: 15px;
          z-index: 10;
          transition: background-color 0.3s ease;
+         box-sizing: border-box;
+         min-width: 110px; /* keep stable width */
+         display: inline-flex;
+         align-items: center;
+         justify-content: center;
+         line-height: 1.2;
+         min-height: 44px; /* stabilize height */
      }
      
            .edit-button {
@@ -1068,6 +1076,11 @@ setTimeout(() => {
         const form = document.getElementById('modalMedicalHistoryForm');
         if (!form) return;
 
+        // Gate this handler to ADMIN context only. Staff dashboards reuse this file
+        // but must not auto-open Initial Screening on submit.
+        const isAdminContext = !!document.getElementById('medicalHistoryModalAdmin');
+        if (!isAdminContext) return;
+
         function submitAjax(finalAction) {
             const fd = new FormData(form);
             fd.set('action', finalAction || 'next');
@@ -1136,7 +1149,7 @@ setTimeout(() => {
          editButton.replaceWith(editButton.cloneNode(true));
          const newEditButton = document.getElementById('modalEditButton');
          
-         newEditButton.addEventListener('click', function() {
+            newEditButton.addEventListener('click', function() {
              
              // Enable editing of form fields
              const form = document.getElementById('modalMedicalHistoryForm');
@@ -1168,15 +1181,8 @@ setTimeout(() => {
              });
              
              // Change button text to indicate editing mode
-             newEditButton.textContent = 'Save';
-             newEditButton.classList.remove('edit-button');
-             newEditButton.classList.add('save-button');
-             
-             // Add save functionality
-             newEditButton.onclick = function() {
-                 //console.log('Save button clicked');
-                 mhShowSaveConfirmationModal();
-             };
+            // Keep button hidden after enabling edit; saving is disabled in MH modal
+            newEditButton.style.display = 'none';
          });
      } else {
          //console.log('❌ Edit button not found - checking DOM...');
@@ -1277,27 +1283,7 @@ setTimeout(() => {
  }
  </script>
 
-<!-- Save Confirmation Modal -->
-<div class="modal fade" id="saveConfirmationModal" tabindex="-1" aria-labelledby="saveConfirmationModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
-                <h5 class="modal-title" id="saveConfirmationModalLabel">
-                    <i class="fas fa-save me-2"></i>
-                    Confirm Save
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body py-4">
-                <p class="mb-0" style="font-size: 1.1rem;">Are you sure you want to save the medical history data?</p>
-            </div>
-            <div class="modal-footer border-0">
-                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn px-4" style="background-color: #b22222; border-color: #b22222; color: white;" id="confirmSaveBtn">Yes, Save</button>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- Save Confirmation Modal removed for staff context -->
 
 <!-- Error Modal -->
 <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
@@ -1321,11 +1307,8 @@ setTimeout(() => {
 </div>
 
 <script>
-// Function to show save confirmation modal
-function mhShowSaveConfirmationModal() {
-    const saveConfirmationModal = new bootstrap.Modal(document.getElementById('saveConfirmationModal'));
-    saveConfirmationModal.show();
-}
+// Save confirmation disabled in this modal
+function mhShowSaveConfirmationModal() { return; }
 
 // Function to show error modal
 function mhShowErrorModal(message) {
@@ -1339,18 +1322,9 @@ function mhShowErrorModal(message) {
 
 // Update the save button click handler to show confirmation first
 function mhBindConfirmSaveHandler() {
+    // No-op in staff context
     const confirmSaveBtn = document.getElementById('confirmSaveBtn');
-    if (!confirmSaveBtn) return;
-    // Replace existing handlers to avoid duplicates
-    const newBtn = confirmSaveBtn.cloneNode(true);
-    confirmSaveBtn.parentNode.replaceChild(newBtn, confirmSaveBtn);
-    newBtn.addEventListener('click', function() {
-        const saveConfirmationModal = bootstrap.Modal.getInstance(document.getElementById('saveConfirmationModal'));
-        if (saveConfirmationModal) {
-            saveConfirmationModal.hide();
-        }
-        saveEditedData();
-    });
+    if (confirmSaveBtn) { try { confirmSaveBtn.style.display = 'none'; } catch(_) {} }
 }
 
 // Bind immediately (content is already in DOM when this script runs)
@@ -1358,10 +1332,7 @@ mhBindConfirmSaveHandler();
 
 // Also re-bind whenever the modal is shown (scoped to avoid redeclare errors)
 (function(){
-    const el = document.getElementById('saveConfirmationModal');
-    if (el) {
-        el.addEventListener('shown.bs.modal', mhBindConfirmSaveHandler);
-    }
+    // No-op
 })();
 
 // Override the save button click to show confirmation first

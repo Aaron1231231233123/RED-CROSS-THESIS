@@ -96,14 +96,6 @@ function showDonorEligibilityAlert(donorId) {
         }
     });
 
-    // Hide the "Mark for Medical Review" button when showing eligibility alert
-    const markReviewButton = document.getElementById('markReviewFromMain');
-    if (markReviewButton) {
-        markReviewButton.style.display = 'none !important';
-        markReviewButton.style.visibility = 'hidden';
-        markReviewButton.style.opacity = '0';
-    }
-
     // Show modal with loading state
     modal.show();
 
@@ -124,6 +116,8 @@ function showDonorEligibilityAlert(donorId) {
             const eligibility = data.data;
             const today = new Date();
             const startDate = new Date(eligibility.start_date);
+            const status = String(eligibility.status || '').toLowerCase();
+            const endDateFromApi = eligibility.end_date ? new Date(eligibility.end_date) : null;
             let endDate, message;
             let alertStyle;
 
@@ -136,27 +130,37 @@ function showDonorEligibilityAlert(donorId) {
                 title: 'Waiting Period Required'
             };
 
-            // Handle different statuses - check status first, then temporary_deferred
-            if (eligibility.status === 'approved') {
+            // Handle different statuses - prefer explicit status and end_date from API
+            if (status === 'approved') {
                 // For approved status, check 3 months waiting period
                 endDate = new Date(startDate);
                 endDate.setMonth(endDate.getMonth() + 3);
                 message = 'This donor has donated recently and must complete the required waiting period.';
             } 
-            else if (eligibility.status === 'temporary_deferred' || eligibility.status === 'temporarily_deferred') {
-                // Temporary deferral - use temporary_deferred duration
-                const durationParts = eligibility.temporary_deferred ? eligibility.temporary_deferred.split(' ') : [];
-                endDate = new Date(startDate);
-                
-                if (durationParts.includes('month')) {
-                    const monthIndex = durationParts.indexOf('month');
-                    const months = parseInt(durationParts[monthIndex - 1]);
-                    endDate.setMonth(endDate.getMonth() + months);
-                }
-                if (durationParts.includes('days')) {
-                    const daysIndex = durationParts.indexOf('days');
-                    const days = parseInt(durationParts[daysIndex - 1]);
-                    endDate.setDate(endDate.getDate() + days);
+            else if (
+                status.includes('temporary') ||
+                status.includes('temporarily') ||
+                status === 'temporary_deferred' ||
+                (status === 'deferred' && endDateFromApi)
+            ) {
+                // Temporary deferral - prefer end_date from API; fallback to parsing text
+                if (endDateFromApi) {
+                    endDate = endDateFromApi;
+                } else {
+                    const text = String(eligibility.temporary_deferred || '');
+                    endDate = new Date(startDate);
+                    // Match "3 month", "3 months", "1 month"
+                    const monthMatch = text.match(/(\d+)\s*month/i);
+                    if (monthMatch) {
+                        const months = parseInt(monthMatch[1]);
+                        if (!Number.isNaN(months)) endDate.setMonth(endDate.getMonth() + months);
+                    }
+                    // Match "10 day" or "10 days"
+                    const dayMatch = text.match(/(\d+)\s*day/i);
+                    if (dayMatch) {
+                        const days = parseInt(dayMatch[1]);
+                        if (!Number.isNaN(days)) endDate.setDate(endDate.getDate() + days);
+                    }
                 }
 
                 alertStyle = {
@@ -166,16 +170,25 @@ function showDonorEligibilityAlert(donorId) {
                     icon: 'fa-ban',
                     title: 'Temporarily Deferred'
                 };
-                message = `This donor is temporarily deferred for ${eligibility.temporary_deferred}.`;
+                message = `This donor is temporarily deferred${eligibility.temporary_deferred ? ` for ${eligibility.temporary_deferred}` : ''}.`;
             } 
-            else if (eligibility.status === 'refused') {
-                // Refused status - treated as deferred, no modal should show
-                // Close the modal immediately for refused status
+            else if (status === 'refused') {
+                // Do not show modal for refused; reveal mark for review button
                 modal.hide();
+                const btn = document.getElementById('markReviewFromMain');
+                if (btn) {
+                    btn.style.display = 'inline-block';
+                    btn.style.visibility = 'visible';
+                    btn.style.opacity = '1';
+                }
                 return;
             }
-            else if (eligibility.status === 'permanently_deferred' || eligibility.status === 'deferred' || eligibility.status === 'ineligible' || 
-                     (eligibility.temporary_deferred && eligibility.temporary_deferred.includes('Ineligible/Indefinite'))) {
+            else if (
+                status.includes('permanent') ||
+                (status === 'deferred' && !endDateFromApi && !(eligibility.temporary_deferred && /(\d+)\s*(day|month)/i.test(eligibility.temporary_deferred))) ||
+                status === 'ineligible' ||
+                (eligibility.temporary_deferred && /ineligible|indefinite/i.test(eligibility.temporary_deferred))
+            ) {
                 // Permanent deferral
                 endDate = null;
                 alertStyle = {
@@ -188,8 +201,33 @@ function showDonorEligibilityAlert(donorId) {
                 message = 'This donor is permanently ineligible for donation.';
             }
 
-            // Calculate remaining time if applicable
-            const remainingDays = endDate ? Math.ceil((endDate - today) / (1000 * 60 * 60 * 24)) : null;
+            // Calculate remaining time if applicable (inclusive to end of endDate local day)
+            let remainingDays = null;
+            if (endDate) {
+                const endOfDay = new Date(endDate);
+                endOfDay.setHours(23, 59, 59, 999);
+                remainingDays = Math.ceil((endOfDay - today) / (1000 * 60 * 60 * 24));
+            }
+
+            // If waiting period is over, do not show modal and re-enable mark review button
+            if (remainingDays !== null && remainingDays <= 0) {
+                modal.hide();
+                const markReviewButton2 = document.getElementById('markReviewFromMain');
+                if (markReviewButton2) {
+                    markReviewButton2.style.display = 'inline-block';
+                    markReviewButton2.style.visibility = 'visible';
+                    markReviewButton2.style.opacity = '1';
+                }
+                return;
+            }
+
+            // Hide the Mark for Medical Review button only when we will actually show the alert
+            const mrBtn = document.getElementById('markReviewFromMain');
+            if (mrBtn) {
+                mrBtn.style.display = 'none';
+                mrBtn.style.visibility = 'hidden';
+                mrBtn.style.opacity = '0';
+            }
 
             // Add disapproval reason if exists
             if (eligibility.disapproval_reason) {

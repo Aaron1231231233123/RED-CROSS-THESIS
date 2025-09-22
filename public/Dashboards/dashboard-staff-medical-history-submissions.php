@@ -3738,38 +3738,19 @@ $donor_history = $unique_donor_history;
             // Initialize step navigation
             dashboardInitializeModalStepNavigation(modalUserRole, modalIsMale);
             
-            // Make form fields read-only for interviewers and physicians (but allow Edit button to override)
-            // Don't make readonly for donors with needs_review=true or current status "Medical"
-            const currentDonorStatus = window.currentDonorStage || 'Medical';
-            const currentDonorId = window.currentDonorId;
-            const hasNeedsReview = currentDonorId && medicalByDonor[currentDonorId] && medicalByDonor[currentDonorId].needs_review;
-            
-            if ((modalUserRole === 'interviewer' || modalUserRole === 'physician') && currentDonorStatus !== 'Medical' && !hasNeedsReview) {
-                setTimeout(() => {
-                    const radioButtons = document.querySelectorAll('#modalMedicalHistoryForm input[type="radio"]');
-                    const selectFields = document.querySelectorAll('#modalMedicalHistoryForm select.remarks-input');
-                    
-                    radioButtons.forEach(radio => {
-                        radio.disabled = true;
-                        radio.setAttribute('data-originally-disabled', 'true');
-                    });
-                    
-                    selectFields.forEach(select => {
-                        select.disabled = true;
-                        select.setAttribute('data-originally-disabled', 'true');
-                    });
-                    
-                    //console.log("Made form fields read-only for role:", modalUserRole);
-                    
-                    // Initialize edit functionality after fields are made read-only
-                    //console.log('🔄 Initializing edit functionality...');
-                    dashboardInitializeEditFunctionality();
-                }, 100);
-            } else {
-                // For reviewers, initialize edit functionality immediately
-                //console.log('🔄 Initializing edit functionality for reviewer...');
+            // Default behavior: make all fields read-only until Edit is pressed (for all roles)
+            setTimeout(() => {
+                const radioButtons = document.querySelectorAll('#modalMedicalHistoryForm input[type="radio"]');
+                const selectFields = document.querySelectorAll('#modalMedicalHistoryForm select.remarks-input');
+                const textFields = document.querySelectorAll('#modalMedicalHistoryForm input[type="text"], #modalMedicalHistoryForm textarea');
+
+                radioButtons.forEach(el => { el.disabled = true; el.setAttribute('data-originally-disabled', 'true'); });
+                selectFields.forEach(el => { el.disabled = true; el.setAttribute('data-originally-disabled', 'true'); });
+                textFields.forEach(el => { el.disabled = true; el.setAttribute('data-originally-disabled', 'true'); });
+
+                // Initialize edit functionality after locking inputs
                 dashboardInitializeEditFunctionality();
-            }
+            }, 100);
         }
         
         // Single edit functionality function to avoid duplicates
@@ -3814,16 +3795,20 @@ $donor_history = $unique_donor_history;
                         
                         //console.log('Form fields enabled for editing');
                         
-                        // Hide edit button and show save button if they exist
+                        // Hide edit button; do not expose Save in MH modal
                         const editButton = e.target.classList.contains('edit-button') ? e.target : e.target.closest('.edit-button');
                         if (editButton) {
-                            editButton.style.display = 'none';
+                            // Keep layout space and dimensions to avoid shifting Next button
+                            const rect = editButton.getBoundingClientRect();
+                            editButton.style.width = rect.width + 'px';
+                            editButton.style.height = rect.height + 'px';
+                            editButton.style.visibility = 'hidden';
+                            editButton.style.pointerEvents = 'none';
                         }
-                        
-                        // Show save button if it exists
+                        // Explicitly hide any legacy save button if present
                         const saveButton = form.querySelector('.save-button');
                         if (saveButton) {
-                            saveButton.style.display = 'inline-block';
+                            saveButton.style.display = 'none';
                         }
                     }
                     
@@ -3831,27 +3816,11 @@ $donor_history = $unique_donor_history;
                 }
             });
             
-            // Add event listener for save buttons (route through confirmation, do NOT autosave)
+            // Remove save behavior in MH modal: swallow any Save button clicks if they exist
             document.addEventListener('click', function(e) {
                 if (e.target && (e.target.classList.contains('save-button') || (typeof e.target.textContent === 'string' && e.target.textContent.trim() === 'Save'))) {
                     e.preventDefault();
                     e.stopPropagation();
-                    try {
-                        // Use MH modal's confirmation if available
-                        if (typeof window.mhShowSaveConfirmationModal === 'function') {
-                            window.mhShowSaveConfirmationModal();
-                        } else {
-                            // Fallback: use existing customConfirm as a confirm gate
-                            const confirmMessage = 'Are you sure you want to save the medical history data?';
-                            if (typeof window.customConfirm === 'function') {
-                                window.customConfirm(confirmMessage, function(){
-                                    saveFormDataQuietly();
-                                });
-                            } else if (window.confirm && window.confirm(confirmMessage)) {
-                                saveFormDataQuietly();
-                            }
-                        }
-                    } catch(_) {}
                     return false;
                 }
             });
@@ -4031,11 +4000,14 @@ $donor_history = $unique_donor_history;
             // Use custom confirmation instead of browser confirm
             if (window.customConfirm) {
                 window.customConfirm(message, function() {
+                    // Mark that user already confirmed to avoid double confirmation later
+                    try { window.__mhConfirmed = true; } catch (_) {}
                     processFormSubmission(action);
                 });
             } else {
                 // Fallback to browser confirm if custom confirm is not available
                 if (confirm(message)) {
+                    try { window.__mhConfirmed = true; } catch (_) {}
                     processFormSubmission(action);
                 }
             }
@@ -4179,11 +4151,11 @@ $donor_history = $unique_donor_history;
                 .then(data => {
                     if (data.success) {
                         if (action === 'next' || action === 'approve') {
-                            // Close medical history modal and open screening form modal
+                            // Close medical history modal first
                             const medicalModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModal'));
                             medicalModal.hide();
                             
-                            // Get the current donor_id
+                            // Resolve donor_id from the form
                             const donorIdInput = document.querySelector('#modalMedicalHistoryForm input[name="donor_id"]');
                             const donorId = donorIdInput ? donorIdInput.value : null;
                             
@@ -4203,9 +4175,37 @@ $donor_history = $unique_donor_history;
                                 }
                             } catch (e) {}
                             
+                            // After saving MH, require explicit confirmation before opening Initial Screening
                             if (donorId) {
-                                // Show screening form modal instead of declaration form
-                                showScreeningFormModal(donorId);
+                                try {
+                                    const confirmModalEl = document.getElementById('dataProcessingConfirmModal');
+                                    const confirmBtn = document.getElementById('confirmProcessingBtn');
+                                    // If the action already went through a confirmation, skip this second confirmation
+                                    const alreadyConfirmed = !!window.__mhConfirmed;
+                                    if (alreadyConfirmed) {
+                                        // Reset the flag and open screening immediately
+                                        try { window.__mhConfirmed = false; } catch (_) {}
+                                        showScreeningFormModal(donorId);
+                                    } else if (confirmModalEl && confirmBtn && window.bootstrap) {
+                                        // Rebind click to avoid duplicate handlers
+                                        const newBtn = confirmBtn.cloneNode(true);
+                                        confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
+                                        newBtn.addEventListener('click', function() {
+                                            const cm = window.bootstrap.Modal.getInstance(confirmModalEl) || new window.bootstrap.Modal(confirmModalEl);
+                                            cm.hide();
+                                            // Only now open the Initial Screening modal
+                                            showScreeningFormModal(donorId);
+                                        });
+                                        const cm = window.bootstrap.Modal.getInstance(confirmModalEl) || new window.bootstrap.Modal(confirmModalEl);
+                                        cm.show();
+                                    } else {
+                                        // Fallback directly to screening when modal not available
+                                        showScreeningFormModal(donorId);
+                                    }
+                                } catch (_) {
+                                    // Fallback on any error
+                                    showScreeningFormModal(donorId);
+                                }
                             } else {
                                 // Use custom modal instead of browser alert
                                 if (window.customConfirm) {
@@ -5293,21 +5293,56 @@ $donor_history = $unique_donor_history;
                     if (!data.success || (data.data && data.data.status === 'new')) {
                         showDonorStatusModal(donorId);
                     } else {
-                        const eligibility = data.data;
-                        const startDate = new Date(eligibility.start_date);
+                        const eligibility = data.data || {};
+                        const status = String(eligibility.status || '').toLowerCase();
+                        const startDate = eligibility.start_date ? new Date(eligibility.start_date) : null;
+                        const endDateApi = eligibility.end_date ? new Date(eligibility.end_date) : null;
                         const today = new Date();
-                        const threeMonthsLater = new Date(startDate);
-                        threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
-                        const hasRemainingDays = (threeMonthsLater - today) > 0;
-                        if (hasRemainingDays || (eligibility.status !== 'approved' && eligibility.status !== 'refused')) {
-                            controlMarkReviewButton(donorId);
-                            // Don't show eligibility alert for "refused" status - it's treated as deferred
-                            if (eligibility.status !== 'refused') {
-                                showDonorEligibilityAlert(donorId);
-                            }
-                        } else {
-                            showDonorStatusModal(donorId);
+
+                        // Compute remaining days without opening the modal
+                        function daysRemaining(toDate) {
+                            if (!toDate) return null;
+                            const endOfDay = new Date(toDate);
+                            endOfDay.setHours(23, 59, 59, 999);
+                            return Math.ceil((endOfDay - today) / (1000 * 60 * 60 * 24));
                         }
+
+                        let remainingDays = null;
+                        if (status === 'approved' && startDate) {
+                            const threeMonthsLater = new Date(startDate);
+                            threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
+                            remainingDays = daysRemaining(threeMonthsLater);
+                        } else if (endDateApi) {
+                            remainingDays = daysRemaining(endDateApi);
+                        }
+
+                        // If refused: no alert; show mark-for-review button
+                        if (status === 'refused') {
+                            const btn = document.getElementById('markReviewFromMain');
+                            if (btn) {
+                                btn.style.display = 'inline-block';
+                                btn.style.visibility = 'visible';
+                                btn.style.opacity = '1';
+                            }
+                            // No modal at all when refused
+                            return;
+                        }
+
+                        // If we have a countdown and it's 0 or less, skip alert and show mark-for-review
+                        if (remainingDays !== null && remainingDays <= 0) {
+                            const btn = document.getElementById('markReviewFromMain');
+                            if (btn) {
+                                btn.style.display = 'inline-block';
+                                btn.style.visibility = 'visible';
+                                btn.style.opacity = '1';
+                            }
+                            // No modal at 0 days
+                            return;
+                        }
+
+                        // Otherwise, show the eligibility alert
+                        controlMarkReviewButton(donorId);
+                        showDonorEligibilityAlert(donorId);
                     }
                 })
                 .catch(error => {

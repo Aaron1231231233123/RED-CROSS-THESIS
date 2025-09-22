@@ -688,7 +688,9 @@ function createDeferEligibilityRecord($data) {
 
             $mh_body = [
                 'medical_approval' => 'Not Approve',
-                'needs_review' => true
+                // Per request: mark as reviewed (boolean false) and stamp updated_at
+                'needs_review' => false,
+                'updated_at' => date('Y-m-d H:i:s')
             ];
 
             $mh_ch = curl_init($mh_target);
