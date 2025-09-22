@@ -100,8 +100,7 @@ class PhysicalExaminationModal {
     async fetchExistingPhysicalExamination(donorId) {
         try {
             // Fetch the latest physical examination record for this donor (includes status)
-            const resp = await fetch(`../../assets/php_func/fetch_physical_examination_info.php?donor_id=${donorId}`);
-            const json = await resp.json();
+            const json = await makeApiCall(`../../assets/php_func/fetch_physical_examination_info.php?donor_id=${donorId}`);
             if (!json || !json.success || !json.data) return;
             const exam = json.data;
             const status = (exam.status || '').toString().toLowerCase();
@@ -379,12 +378,10 @@ class PhysicalExaminationModal {
     async fetchScreeningDetails(screeningId, donorId) {
         try {
             // Fetch screening form data
-            const screeningResponse = await fetch(`../../assets/php_func/get_screening_details.php?screening_id=${screeningId}`);
-            const screeningData = await screeningResponse.json();
+            const screeningData = await makeApiCall(`../../assets/php_func/get_screening_details.php?screening_id=${screeningId}`);
             
             // Fetch donor form data  
-            const donorResponse = await fetch(`../../assets/php_func/get_donor_details.php?donor_id=${donorId}`);
-            const donorData = await donorResponse.json();
+            const donorData = await makeApiCall(`../../assets/php_func/get_donor_details.php?donor_id=${donorId}`);
             
             if (screeningData.success && donorData.success) {
                 this.populateScreeningFields(screeningData.data, donorData.data);
@@ -525,12 +522,11 @@ class PhysicalExaminationModal {
             // Set remarks to Accepted upon physician approval/submit
             data.remarks = 'Accepted';
             data.is_accepted_examination = true;
-            const response = await fetch('../../assets/php_func/process_physical_examination.php', {
+            const result = await makeApiCall('../../assets/php_func/process_physical_examination.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
-            const result = await response.json();
             if (result && result.success) {
                 const donorId = (this.screeningData && (this.screeningData.donor_form_id || this.screeningData.donor_id)) || window.__peLastDonorId || null;
                 this.showAcceptedThenReturn(donorId, this.screeningData);

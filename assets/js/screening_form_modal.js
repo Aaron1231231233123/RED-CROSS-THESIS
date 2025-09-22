@@ -8,6 +8,39 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentStep = 1;
     const totalSteps = 3;
 
+    // Centralized modal cleanup function
+    function cleanupModalBackdrops() {
+        // Remove all modal backdrops
+        const backdrops = document.querySelectorAll('.modal-backdrop');
+        backdrops.forEach(backdrop => backdrop.remove());
+        
+        // Remove modal-open class and restore body styles
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+        
+        console.log('Modal backdrops cleaned up');
+    }
+
+    // Centralized modal close function
+    function closeModalSafely(modalElement) {
+        if (!modalElement) return;
+        
+        const modal = bootstrap.Modal.getInstance(modalElement);
+        if (modal) {
+            modal.hide();
+        } else {
+            // Fallback: force close the modal
+            modalElement.style.display = 'none';
+            modalElement.classList.remove('show');
+            modalElement.setAttribute('aria-hidden', 'true');
+            modalElement.removeAttribute('aria-modal');
+        }
+        
+        // Clean up backdrops after a short delay
+        setTimeout(cleanupModalBackdrops, 100);
+    }
+
     // Initialize form functionality when modal is shown
     screeningModal.addEventListener('shown.bs.modal', function() {
         // Idempotent init to avoid duplicate listeners on reopen
@@ -49,16 +82,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (cancelButton) {
             cancelButton.addEventListener('click', function() {
-                const modal = bootstrap.Modal.getInstance(screeningModal);
-                if (modal) {
-                    modal.hide();
-                } else {
-                    // Fallback: force close the modal
-                    screeningModal.style.display = 'none';
-                    const backdrops = document.querySelectorAll('.modal-backdrop');
-                    backdrops.forEach(backdrop => backdrop.remove());
-                    document.body.classList.remove('modal-open');
-                }
+                closeModalSafely(screeningModal);
             });
         }
 
@@ -82,27 +106,51 @@ document.addEventListener('DOMContentLoaded', function() {
             inhouseDonationTypeSelect.addEventListener('change', function() {
                 const value = this.value;
                 
-                // When IN-HOUSE is selected, clear mobile fields
+                // When IN-HOUSE is selected, clear and disable mobile fields
                 if (value && value !== '') {
-                    if (mobilePlaceInput) mobilePlaceInput.value = '';
-                    if (mobileOrganizerInput) mobileOrganizerInput.value = '';
+                    if (mobilePlaceInput) {
+                        mobilePlaceInput.value = '';
+                        mobilePlaceInput.disabled = true;
+                        mobilePlaceInput.placeholder = 'Disabled - In-House selected';
+                    }
+                    if (mobileOrganizerInput) {
+                        mobileOrganizerInput.value = '';
+                        mobileOrganizerInput.disabled = true;
+                        mobileOrganizerInput.placeholder = 'Disabled - In-House selected';
+                    }
+                } else {
+                    // When IN-HOUSE is cleared, re-enable mobile fields
+                    if (mobilePlaceInput) {
+                        mobilePlaceInput.disabled = false;
+                        mobilePlaceInput.placeholder = 'Enter location.';
+                    }
+                    if (mobileOrganizerInput) {
+                        mobileOrganizerInput.disabled = false;
+                        mobileOrganizerInput.placeholder = 'Enter organizer.';
+                    }
                 }
                 
                 handleDonationTypeChange('inhouse', value);
+                checkMutualExclusivity();
             });
         }
         
-        // Add change handlers for mobile fields to clear IN-HOUSE when mobile is used
+        // Add change handlers for mobile fields to clear and disable IN-HOUSE when mobile is used
         if (mobilePlaceInput) {
             mobilePlaceInput.addEventListener('input', function() {
                 if (this.value.trim() !== '' && inhouseDonationTypeSelect) {
                     inhouseDonationTypeSelect.value = '';
+                    inhouseDonationTypeSelect.disabled = true;
                     // Hide patient details if shown
                     const patientDetailsSection = document.getElementById('patientDetailsSection');
                     if (patientDetailsSection) {
                         patientDetailsSection.style.display = 'none';
                     }
+                } else if (this.value.trim() === '' && inhouseDonationTypeSelect) {
+                    // Re-enable IN-HOUSE dropdown if mobile field is cleared
+                    inhouseDonationTypeSelect.disabled = false;
                 }
+                checkMutualExclusivity();
             });
         }
         
@@ -110,13 +158,60 @@ document.addEventListener('DOMContentLoaded', function() {
             mobileOrganizerInput.addEventListener('input', function() {
                 if (this.value.trim() !== '' && inhouseDonationTypeSelect) {
                     inhouseDonationTypeSelect.value = '';
+                    inhouseDonationTypeSelect.disabled = true;
                     // Hide patient details if shown
                     const patientDetailsSection = document.getElementById('patientDetailsSection');
                     if (patientDetailsSection) {
                         patientDetailsSection.style.display = 'none';
                     }
+                } else if (this.value.trim() === '' && inhouseDonationTypeSelect) {
+                    // Re-enable IN-HOUSE dropdown if mobile field is cleared
+                    inhouseDonationTypeSelect.disabled = false;
                 }
+                checkMutualExclusivity();
             });
+        }
+
+        // Add mutual exclusivity check function
+        function checkMutualExclusivity() {
+            const inhouseValue = inhouseDonationTypeSelect ? inhouseDonationTypeSelect.value : '';
+            const mobilePlace = mobilePlaceInput ? mobilePlaceInput.value.trim() : '';
+            const mobileOrganizer = mobileOrganizerInput ? mobileOrganizerInput.value.trim() : '';
+            
+            const hasInhouseSelection = inhouseValue && inhouseValue !== '';
+            const hasMobileSelection = mobilePlace !== '' || mobileOrganizer !== '';
+            
+            // If both are selected, show warning
+            if (hasInhouseSelection && hasMobileSelection) {
+                showMutualExclusivityWarning();
+            } else {
+                hideMutualExclusivityWarning();
+            }
+        }
+        
+        function showMutualExclusivityWarning() {
+            // Create or show warning message
+            let warningDiv = document.getElementById('donationTypeWarning');
+            if (!warningDiv) {
+                warningDiv = document.createElement('div');
+                warningDiv.id = 'donationTypeWarning';
+                warningDiv.className = 'alert alert-warning mt-2';
+                warningDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Please select either In-House donation type OR fill mobile donation details, not both.';
+                
+                // Insert after the mobile donation section
+                const mobileSection = document.querySelector('.mobile-donation-section');
+                if (mobileSection) {
+                    mobileSection.parentNode.insertBefore(warningDiv, mobileSection.nextSibling);
+                }
+            }
+            warningDiv.style.display = 'block';
+        }
+        
+        function hideMutualExclusivityWarning() {
+            const warningDiv = document.getElementById('donationTypeWarning');
+            if (warningDiv) {
+                warningDiv.style.display = 'none';
+            }
         }
 
         // Add real-time validation for basic screening fields
@@ -152,6 +247,11 @@ document.addEventListener('DOMContentLoaded', function() {
         updateProgressBar();
         updateButtons();
     }
+    
+    // Make functions globally accessible
+    window.resetToStep = resetToStep;
+    window.cleanupModalBackdrops = cleanupModalBackdrops;
+    window.closeModalSafely = closeModalSafely;
 
     function goToStep(step) {
         if (step < 1 || step > totalSteps) return;
@@ -216,9 +316,9 @@ document.addEventListener('DOMContentLoaded', function() {
             prevButton.style.display = currentStep > 1 ? 'inline-block' : 'none';
         }
 
-        // Show/hide defer button (show on all steps)
+        // Show/hide defer button (ONLY on step 2 - Basic Info)
         if (deferButton) {
-            deferButton.style.display = 'inline-block';
+            deferButton.style.display = currentStep === 2 ? 'inline-block' : 'none';
         }
 
         // Show/hide next vs submit button
@@ -232,6 +332,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function validateCurrentStep() {
+        console.log('validateCurrentStep called for step:', currentStep);
         
         if (currentStep === 1) {
             // Validate donation type selection - either IN-HOUSE dropdown OR mobile fields filled
@@ -264,6 +365,40 @@ document.addEventListener('DOMContentLoaded', function() {
                     showAlert('Please fill in all patient information fields for Patient-Directed donations.', 'warning');
                     return false;
                 }
+            }
+            
+            return true;
+        } else if (currentStep === 2) {
+            // Validate step 2 - Basic Info with specific validation for weight and specific gravity
+            const bodyWeightInput = document.getElementById('bodyWeightInput');
+            const specificGravityInput = document.getElementById('specificGravityInput');
+            const bloodTypeSelect = document.querySelector('select[name="blood-type"]');
+            
+            // Check required fields first
+            if (!bodyWeightInput?.value.trim() || !specificGravityInput?.value.trim() || !bloodTypeSelect?.value) {
+                showAlert('Please fill in all required fields (Body Weight, Specific Gravity, and Blood Type) before proceeding.', 'warning');
+                return false;
+            }
+            
+            // Check for validation errors (even if fields are filled)
+            const weight = parseFloat(bodyWeightInput.value);
+            const gravity = parseFloat(specificGravityInput.value);
+            
+            const hasWeightError = weight < 50 && weight > 0;
+            const hasGravityError = (gravity < 12.5 || gravity > 18.0) && gravity > 0;
+            
+            // Debug logging
+            console.log('Step 2 Validation:', {
+                weight: weight,
+                gravity: gravity,
+                hasWeightError: hasWeightError,
+                hasGravityError: hasGravityError
+            });
+            
+            if (hasWeightError || hasGravityError) {
+                console.log('Showing validation error modal');
+                window.showValidationErrorModal(hasWeightError, hasGravityError);
+                return false;
             }
             
             return true;
@@ -325,7 +460,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const gravity = parseFloat(value);
         
         if (gravity < 12.5 && gravity > 0) {
-            // Show warning alert
+            // Show warning alert with range information
+            alert.style.display = 'block';
+            input.style.borderColor = '#dc3545';
+        } else if (gravity > 18.0 && gravity > 0) {
+            // Show warning for high specific gravity
             alert.style.display = 'block';
             input.style.borderColor = '#dc3545';
         } else {
@@ -334,6 +473,116 @@ document.addEventListener('DOMContentLoaded', function() {
             input.style.borderColor = gravity > 0 ? '#28a745' : '#e9ecef';
         }
     }
+
+    // Make showValidationErrorModal globally accessible
+    window.showValidationErrorModal = function(hasWeightError, hasGravityError) {
+        console.log('showValidationErrorModal called with:', { hasWeightError, hasGravityError });
+        
+        // Create modal HTML
+        const modalHtml = `
+            <div class="modal fade" id="validationErrorModal" tabindex="-1" aria-labelledby="validationErrorModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header bg-danger text-white">
+                            <h5 class="modal-title" id="validationErrorModalLabel">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                Donor Safety Alert
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-danger mb-3">
+                                <i class="fas fa-heartbeat me-2"></i>
+                                <strong>Donor Safety Concern Detected</strong>
+                            </div>
+                            
+                            <p class="mb-3">The following screening measurements indicate potential safety concerns:</p>
+                            
+                            <ul class="list-unstyled">
+                                ${hasWeightError ? '<li><i class="fas fa-times-circle text-danger me-2"></i><strong>Body Weight:</strong> Below minimum requirement (50 kg)</li>' : ''}
+                                ${hasGravityError ? '<li><i class="fas fa-times-circle text-danger me-2"></i><strong>Specific Gravity:</strong> Outside acceptable range (12.5-18.0 g/dL)</li>' : ''}
+                            </ul>
+                            
+                            <div class="alert alert-warning">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Recommendation:</strong> For donor safety, we recommend deferring this donor at this time. 
+                                The donor may be eligible for future donations once their health parameters improve.
+                            </div>
+                            
+                            <p class="text-muted small">
+                                <i class="fas fa-shield-alt me-1"></i>
+                                This is a safety measure to protect both the donor and potential recipients.
+                            </p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                <i class="fas fa-arrow-left me-1"></i>
+                                Go Back & Adjust
+                            </button>
+                            <button type="button" class="btn btn-danger" id="deferFromModal">
+                                <i class="fas fa-ban me-1"></i>
+                                Defer Donor
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remove existing modal if present
+        const existingModal = document.getElementById('validationErrorModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Add modal to body
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+        // Show modal with proper z-index management
+        const modalElement = document.getElementById('validationErrorModal');
+        const modal = new bootstrap.Modal(modalElement, {
+            backdrop: 'static',
+            keyboard: false
+        });
+        
+        // Set z-index before showing
+        modalElement.style.zIndex = '10560';
+        modal.show();
+        
+        // Ensure backdrop has proper z-index
+        setTimeout(() => {
+            const backdrop = document.querySelector('.modal-backdrop');
+            if (backdrop) {
+                backdrop.style.zIndex = '10550';
+                console.log('Validation modal and backdrop z-index set');
+            }
+        }, 50);
+        
+        // Handle defer button click
+        document.getElementById('deferFromModal').addEventListener('click', function() {
+            // Clean up validation modal properly
+            modal.hide();
+            setTimeout(() => {
+                modalElement.remove();
+                cleanupModalBackdrops();
+            }, 150);
+            
+            // Store the screening form modal state so we can restore it if defer modal is closed
+            window.pendingScreeningModal = {
+                hasWeightError: hasWeightError,
+                hasGravityError: hasGravityError,
+                currentStep: 2 // We want to return to step 2 (Basic Info)
+            };
+            // Trigger defer donor functionality
+            handleDeferDonor();
+        });
+        
+        // Clean up modal when hidden
+        modalElement.addEventListener('hidden.bs.modal', function() {
+            this.remove();
+            cleanupModalBackdrops();
+        });
+    };
 
     function handleDonationTypeChange(type, value) {
         
@@ -561,159 +810,32 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('donor_id', window.currentDonorData.donor_id);
         }
 
-        // Submit the form data to the backend
-        fetch('../../assets/php_func/process_screening_form.php', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok: ' + response.status);
-            }
-            return response.json();
-        })
-        .then(data => {
-            //console.log('Screening form submission response:', data);
-            
-            if (data.success) {
-                // Create and show the success modal
-                const successModalHtml = `
-                    <div class="modal fade" id="screeningSuccessModal" tabindex="-1" aria-hidden="true">
-                        <div class="modal-dialog modal-dialog-centered">
-                            <div class="modal-content">
-                                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;">
-                                    <h5 class="modal-title">Screening Submitted Successfully</h5>
-                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <p class="mb-0">Screening submitted. Please print the declaration form and guide the donor to the next stage.</p>
-                                </div>
-                                <div class="modal-footer border-0 justify-content-end">
-                                    <button type="button" class="btn" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;" onclick="printDeclarationForm()">Print Form</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>`;
-                
-                // Remove existing modal if any
-                const existingModal = document.getElementById('screeningSuccessModal');
-                if (existingModal) {
-                    existingModal.remove();
-                }
-                
-                // Add the modal to the document
-                document.body.insertAdjacentHTML('beforeend', successModalHtml);
-                
-                // Show the modal
-                const successModal = new bootstrap.Modal(document.getElementById('screeningSuccessModal'));
-                successModal.show();
-                
-                // Add event listener to remove modal from DOM after it's hidden
-                document.getElementById('screeningSuccessModal').addEventListener('hidden.bs.modal', function () {
-                    this.remove();
-                });
-
-                // Function to print declaration form
-                window.printDeclarationForm = function() {
-                    // Close the success modal first
-                    const successModal = bootstrap.Modal.getInstance(document.getElementById('screeningSuccessModal'));
-                    if (successModal) {
-                        // Add event listener to show declaration form after success modal is fully hidden
-                        document.getElementById('screeningSuccessModal').addEventListener('hidden.bs.modal', function showDeclaration() {
-                            // Remove the listener to prevent memory leaks
-                            this.removeEventListener('hidden.bs.modal', showDeclaration);
-                            
-                            // Show the declaration form modal after a short delay
-                            setTimeout(() => {
-                                if (typeof window.showDeclarationFormModal === 'function') {
-                                    window.showDeclarationFormModal(window.currentDonorData.donor_id);
-                                } else {
-                                    console.error('showDeclarationFormModal function is not defined');
-                                }
-                            }, 150); // Small delay to ensure smooth transition
-                        });
-                        
-                        // Hide the success modal
-                        successModal.hide();
-                    }
-                };
-                
-                // Close any existing modals first
-                const screeningFormModal = bootstrap.Modal.getInstance(document.getElementById('screeningFormModal'));
-                if (screeningFormModal) {
-                    screeningFormModal.hide();
-                }
-                
-                // Remove any existing success modals
-                const existingSuccessModal = document.getElementById('screeningSuccessModal');
-                if (existingSuccessModal) {
-                    existingSuccessModal.remove();
-                }
-                
-                // Update physical examination record with screening_id
-                const transitionData = new FormData();
-                transitionData.append('action', 'transition_to_physical');
-                transitionData.append('donor_id', window.currentDonorData.donor_id);
-                if (data.screening_id) {
-                    transitionData.append('screening_id', data.screening_id);
-                    
-                    // Send the transition data to the new handler
-                    fetch('../../assets/php_func/handle_screening_transition.php', {
-                        method: 'POST',
-                        body: transitionData
-                    })
-                    .then(response => response.json())
-                    .then(result => {
-                        if (!result.success) {
-                            console.error('Transition error:', result.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Transition error:', error);
-                    });
-                }
-
-                fetch('dashboard-staff-medical-history-submissions.php', {
-                    method: 'POST',
-                    body: transitionData
-                })
-                .then(response => response.json())
-                .then(transitionResult => {
-                    //console.log('Transition response:', transitionResult);
-                    if (transitionResult.success) {
-                        //console.log('✅ Transition successful - Physical examination updated');
-                        showAlert('Donor transitioned to physical examination review!', 'success');
-                    } else {
-                        //console.warn('❌ Transition failed:', transitionResult.message);
-                        showAlert('Warning: Transition failed - ' + transitionResult.message, 'warning');
-                    }
-                })
-                .catch(transitionError => {
-                    //console.error('Transition error:', transitionError);
-                })
-                .finally(() => {
-                    // Close the screening modal
-                    const modal = bootstrap.Modal.getInstance(screeningModal);
-                    if (modal) {
-                        modal.hide();
-                    }
-                    
-                    // Just close the screening modal and show success modal
-                    // Declaration form will only open when Print Form is clicked
-                });
-            } else {
-                showAlert('Error submitting screening form: ' + (data.message || 'Unknown error'), 'danger');
-            }
-        })
-        .catch(error => {
-            //console.error('Error submitting screening form:', error);
-            showAlert('Error submitting screening form. Please try again.', 'danger');
-        })
-        .finally(() => {
-            // Reset button state
-            submitButton.innerHTML = originalText;
-            submitButton.disabled = false;
-        });
+        // Store form data in session/localStorage for later submission
+        const formDataObj = {};
+        for (let [key, value] of formData.entries()) {
+            formDataObj[key] = value;
+        }
+        
+        // Store screening data globally for declaration form
+        window.currentScreeningData = formDataObj;
+        
+        // Close the screening modal
+        const screeningModalInstance = bootstrap.Modal.getInstance(document.getElementById('screeningFormModal'));
+        if (screeningModalInstance) {
+            screeningModalInstance.hide();
+        }
+        
+        // Show declaration form modal with confirmation (no data submission yet)
+        if (window.showDeclarationFormModal) {
+            window.showDeclarationFormModal(window.currentDonorData.donor_id);
+        } else {
+            // Fallback: show success message
+            showAlert('Screening data saved! Please proceed to declaration form.', 'success');
+        }
+        
+        // Reset button state
+        submitButton.innerHTML = originalText;
+        submitButton.disabled = false;
     }
 });
 
@@ -873,23 +995,69 @@ function handleDeferDonor() {
     // Close the screening modal first
     const screeningModal = document.getElementById('screeningFormModal');
     if (screeningModal) {
-        const modal = bootstrap.Modal.getInstance(screeningModal);
-        if (modal) {
-            modal.hide();
-        }
+        closeModalSafely(screeningModal);
     }
     
     // Wait a moment for modal to close, then open defer modal
     setTimeout(() => {
+        // Clean up any remaining backdrops before opening defer modal
+        cleanupModalBackdrops();
+        
         // Check if screening defer modal functions are available
         if (typeof handleScreeningDeferDonor === 'function') {
             handleScreeningDeferDonor();
+            
+            // Add listener to defer modal to restore screening form modal if closed
+            setTimeout(() => {
+                const deferModal = document.getElementById('deferDonorModal');
+                console.log('Looking for defer modal:', deferModal);
+                console.log('Pending screening modal state:', window.pendingScreeningModal);
+                
+                if (deferModal && window.pendingScreeningModal) {
+                    console.log('Adding listener to defer modal for screening form restoration');
+                    deferModal.addEventListener('hidden.bs.modal', function() {
+                        console.log('Defer modal closed, checking if screening form modal should be restored');
+                        // If defer modal is closed and we have pending screening modal, restore it
+                        if (window.pendingScreeningModal) {
+                            console.log('Restoring screening form modal with state:', window.pendingScreeningModal);
+                            setTimeout(() => {
+                                console.log('About to reopen screening form modal');
+                                // Clean up any remaining backdrops first
+                                cleanupModalBackdrops();
+                                
+                                // Reopen the screening form modal
+                                const screeningModal = document.getElementById('screeningFormModal');
+                                if (screeningModal) {
+                                    const modal = new bootstrap.Modal(screeningModal);
+                                    modal.show();
+                                    
+                                    // Set the form back to step 2 (Basic Info)
+                                    setTimeout(() => {
+                                        if (window.resetToStep) {
+                                            window.resetToStep(2);
+                                        }
+                                        console.log('Screening form modal restored to step 2');
+                                    }, 100);
+                                }
+                                // Clear the pending modal state
+                                window.pendingScreeningModal = null;
+                                console.log('Screening form modal restoration completed');
+                            }, 300);
+                        }
+                    }, { once: true }); // Use once: true to only listen once
+                }
+            }, 100);
         } else {
             //console.error('handleScreeningDeferDonor function not found. Make sure initial-screening-defer-button.js is loaded.');
             alert('Error: Defer functionality not available. Please refresh the page and try again.');
         }
     }, 300);
 }
+
+// Function to clear pending screening modal (call this when deferral is completed successfully)
+window.clearPendingScreeningModal = function() {
+    window.pendingScreeningModal = null;
+};
 
 // Make openScreeningModal function globally available
 window.openScreeningModal = openScreeningModal;

@@ -169,16 +169,10 @@ function showDonorEligibilityAlert(donorId) {
                 message = `This donor is temporarily deferred for ${eligibility.temporary_deferred}.`;
             } 
             else if (eligibility.status === 'refused') {
-                // Refused status - different design from ineligible
-                endDate = null;
-                alertStyle = {
-                    bgColor: '#f3e5f5',
-                    borderColor: '#9c27b0',
-                    iconColor: '#9c27b0',
-                    icon: 'fa-times-circle',
-                    title: 'Donation Refused'
-                };
-                message = 'This donor has refused to donate blood.';
+                // Refused status - treated as deferred, no modal should show
+                // Close the modal immediately for refused status
+                modal.hide();
+                return;
             }
             else if (eligibility.status === 'permanently_deferred' || eligibility.status === 'deferred' || eligibility.status === 'ineligible' || 
                      (eligibility.temporary_deferred && eligibility.temporary_deferred.includes('Ineligible/Indefinite'))) {

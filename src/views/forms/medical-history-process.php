@@ -38,35 +38,52 @@ try {
     error_log("=== START OF MODAL FORM SUBMISSION ===");
     error_log("Raw POST data: " . print_r($_POST, true));
     
-    // Get donor_id from POST data
-    $donor_id = isset($_POST['donor_id']) ? $_POST['donor_id'] : null;
+    // Get donor_id from POST data first, then fallback to session
+    $donor_id = isset($_POST['donor_id']) ? $_POST['donor_id'] : (isset($_SESSION['donor_id']) ? $_SESSION['donor_id'] : null);
     
     if (!$donor_id) {
+        error_log("Missing donor_id - POST data: " . print_r($_POST, true));
+        error_log("Session data: " . print_r($_SESSION, true));
         throw new Exception("Missing donor_id");
     }
     
     // Get user's name from session
     $user_id = $_SESSION['user_id'];
     
-    // Fetch user's name from the users table
-    $ch = curl_init(SUPABASE_URL . '/rest/v1/users?user_id=eq.' . $user_id . '&select=first_name,surname');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY
-    ]);
-
-    $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
+    // Fetch user's name from the users table using unified API function
     $interviewer_name = '';
-    if ($http_code === 200) {
-        $user_data = json_decode($response, true);
-        if (!empty($user_data)) {
+    if (function_exists('makeSupabaseApiCall')) {
+        $user_data = makeSupabaseApiCall(
+            'users',
+            ['first_name', 'surname'],
+            ['user_id' => 'eq.' . $user_id]
+        );
+        
+        if (!empty($user_data) && is_array($user_data)) {
             $user = $user_data[0];
             // Format name as "First Name Surname"
             $interviewer_name = trim($user['first_name'] . ' ' . $user['surname']);
+        }
+    } else {
+        // Fallback to direct CURL if unified function not available
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/users?user_id=eq.' . $user_id . '&select=first_name,surname');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY
+        ]);
+
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($http_code === 200) {
+            $user_data = json_decode($response, true);
+            if (!empty($user_data)) {
+                $user = $user_data[0];
+                // Format name as "First Name Surname"
+                $interviewer_name = trim($user['first_name'] . ' ' . $user['surname']);
+            }
         }
     }
 
@@ -79,40 +96,34 @@ try {
     // Check which button was clicked and set the approval status
     $action = isset($_POST['action']) ? $_POST['action'] : null;
     
+    // Debug: Log the action value
+    error_log("Action received: " . ($action ? $action : 'NULL'));
+    error_log("All POST keys: " . implode(', ', array_keys($_POST)));
+    
     if ($action === 'approve') {
         $medical_history_data['medical_approval'] = 'Approved';
         $medical_history_data['needs_review'] = false;
+        error_log("Processing approve action");
     } elseif ($action === 'decline') {
         $medical_history_data['medical_approval'] = 'Declined';
         $medical_history_data['needs_review'] = false;
+        error_log("Processing decline action");
     } elseif ($action === 'next') {
         // For 'next' action, just save the data without setting approval status
         // This allows for draft saving
+        error_log("Processing next action");
     } else {
-        throw new Exception("Invalid action specified");
+        error_log("Invalid action specified: " . ($action ? $action : 'NULL'));
+        throw new Exception("Invalid action specified: " . ($action ? $action : 'NULL'));
     }
 
-    // Helper function to get field name based on question number
-    function getFieldName($count) {
-        $fields = [
-            1 => 'feels_well', 2 => 'previously_refused', 3 => 'testing_purpose_only', 4 => 'understands_transmission_risk',
-            5 => 'recent_alcohol_consumption', 6 => 'recent_aspirin', 7 => 'recent_medication', 8 => 'recent_donation',
-            9 => 'zika_travel', 10 => 'zika_contact', 11 => 'zika_sexual_contact', 12 => 'blood_transfusion',
-            13 => 'surgery_dental', 14 => 'tattoo_piercing', 15 => 'risky_sexual_contact', 16 => 'unsafe_sex',
-            17 => 'hepatitis_contact', 18 => 'imprisonment', 19 => 'uk_europe_stay', 20 => 'foreign_travel',
-            21 => 'drug_use', 22 => 'clotting_factor', 23 => 'positive_disease_test', 24 => 'malaria_history',
-            25 => 'std_history', 26 => 'cancer_blood_disease', 27 => 'heart_disease', 28 => 'lung_disease',
-            29 => 'kidney_disease', 30 => 'chicken_pox', 31 => 'chronic_illness', 32 => 'recent_fever',
-            33 => 'pregnancy_history', 34 => 'last_childbirth', 35 => 'recent_miscarriage', 36 => 'breastfeeding',
-            37 => 'last_menstruation'
-        ];
-        return $fields[$count] ?? null;
-    }
+    // Include shared utility functions
+    require_once '../../../assets/php_func/medical_history_utils.php';
 
     // Process all question responses
     for ($i = 1; $i <= 37; $i++) {
         if (isset($_POST["q$i"])) {
-            $fieldName = getFieldName($i);
+            $fieldName = getMedicalHistoryFieldName($i);
             if ($fieldName) {
                 $medical_history_data[$fieldName] = $_POST["q$i"] === 'Yes';
                 if (isset($_POST["q{$i}_remarks"]) && $_POST["q{$i}_remarks"] !== 'None') {

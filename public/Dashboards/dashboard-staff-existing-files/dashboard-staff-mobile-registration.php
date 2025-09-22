@@ -3,30 +3,8 @@ session_start();
 require_once '../../../assets/conn/db_conn.php';
 require '../../../assets/php_func/user_roles_staff.php';
 
-// Add this function at the top with other PHP code
-function generateSecureToken($donor_id) {
-    // Create a unique token using donor_id and a random component
-    $random = bin2hex(random_bytes(16));
-    $timestamp = time();
-    $token = hash('sha256', $donor_id . $random . $timestamp);
-    
-    // Store the token mapping in the session
-    if (!isset($_SESSION['donor_tokens'])) {
-        $_SESSION['donor_tokens'] = [];
-    }
-    $_SESSION['donor_tokens'][$token] = [
-        'donor_id' => $donor_id,
-        'expires' => time() + 3600 // Token expires in 1 hour
-    ];
-    
-    return $token;
-}
-
-// Add this function near the top after session_start()
-function hashDonorId($donor_id) {
-    $salt = "RedCross2024"; // Adding a salt for extra security
-    return hash('sha256', $donor_id . $salt);
-}
+// Note: generateSecureToken and hashDonorId functions removed as they are unused
+// These functions were defined but never called in this file
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
@@ -1353,13 +1331,14 @@ $donors = array_slice($donors, $offset, $records_per_page);
                         donorInfoHTML += `
                             <div class="card mb-3">
                                 <div class="card-header bg-light">
-                                    <h6 class="mb-0">Donor Status</h6>
+                                    <h6 class="mb-0"><i class="fas fa-user-times text-warning me-2"></i>Donor Status</h6>
                                 </div>
                                 <div class="card-body">
-                                    <div class="alert alert-danger mb-0">
-                                        <h6 class="alert-heading mb-2">Not Eligible - Donor Refused</h6>
+                                    <div class="alert alert-warning mb-0">
+                                        <h6 class="alert-heading mb-2">Deferred - Donor Choice</h6>
                                         <p class="mb-0"><strong>Reason:</strong> ${deferralData.reason || 'No reason provided'}</p>
                                         ${deferralData.remarks ? `<p class="mb-0"><strong>Remarks:</strong> ${deferralData.remarks}</p>` : ''}
+                                        <p class="mb-0 mt-2"><small class="text-muted">Donor can return at any time as this was their choice.</small></p>
                                     </div>
                                 </div>
                             </div>`;

@@ -490,6 +490,8 @@ $today = date('F d, Y');
     </div>
 </div>
 
+<!-- Confirmation Modal removed - using the one from main dashboard -->
+
 <form method="POST" action="declaration-form-process.php" id="modalDeclarationForm">
     <input type="hidden" name="donor_id" value="<?php echo htmlspecialchars($donor_id); ?>">
     <input type="hidden" name="action" id="modalDeclarationAction" value="">
@@ -501,7 +503,7 @@ $today = date('F d, Y');
         <button type="button" class="modal-btn modal-btn-print" onclick="printDeclaration()">
             <i class="fas fa-print"></i> Print Declaration
         </button>
-        <button type="button" class="modal-btn modal-btn-success" onclick="submitDeclarationForm()">
+        <button type="button" class="modal-btn modal-btn-success" onclick="submitDeclarationForm(event)">
             <i class="fas fa-check-circle"></i> Complete Registration
         </button>
     </div>
@@ -521,4 +523,7 @@ $today = date('F d, Y');
 // Functions are now globally available from the main dashboard
 // Print and submit functions are handled by the parent window
 console.log('Declaration form modal content loaded with screening data');
+
+// Functions are now defined in the main dashboard scope
+// showDeclarationConfirmation and confirmDeclarationSubmission are available globally
 </script> 

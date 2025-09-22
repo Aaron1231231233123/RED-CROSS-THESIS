@@ -5,15 +5,15 @@
 // Global variables for defer modal state
 let currentDeferData = null;
 
-// Comprehensive function to fetch data from all source tables
-async function fetchAllSourceDataForScreening(donorId) {
+// Comprehensive function to fetch data from all source tables for screening deferral
+async function fetchAllSourceDataForScreeningDeferral(donorId) {
     try {
         console.log('Fetching comprehensive data for donor:', donorId);
         
         const [screeningForm, physicalExam, donorForm] = await Promise.all([
-            fetchScreeningFormDataForScreening(donorId),
-            fetchPhysicalExamDataForScreening(donorId),
-            fetchDonorFormDataForScreening(donorId)
+            fetchScreeningFormDataForScreeningDeferral(donorId),
+            fetchPhysicalExamDataForScreeningDeferral(donorId),
+            fetchDonorFormDataForScreeningDeferral(donorId)
         ]);
         
         return {
@@ -31,8 +31,8 @@ async function fetchAllSourceDataForScreening(donorId) {
     }
 }
 
-// Fetch data from screening_form table
-async function fetchScreeningFormDataForScreening(donorId) {
+// Fetch data from screening_form table for screening deferral
+async function fetchScreeningFormDataForScreeningDeferral(donorId) {
     try {
         console.log('Fetching screening form data for donor_id:', donorId);
         const response = await fetch(`../api/get-screening-form.php?donor_id=${donorId}`);
@@ -49,8 +49,8 @@ async function fetchScreeningFormDataForScreening(donorId) {
     }
 }
 
-// Fetch data from physical_examination table
-async function fetchPhysicalExamDataForScreening(donorId) {
+// Fetch data from physical_examination table for screening deferral
+async function fetchPhysicalExamDataForScreeningDeferral(donorId) {
     try {
         console.log('Fetching physical exam data for donor_id:', donorId);
         const response = await fetch(`../api/get-physical-examination.php?donor_id=${donorId}`);
@@ -67,8 +67,8 @@ async function fetchPhysicalExamDataForScreening(donorId) {
     }
 }
 
-// Fetch data from donor_form table
-async function fetchDonorFormDataForScreening(donorId) {
+// Fetch data from donor_form table for screening deferral
+async function fetchDonorFormDataForScreeningDeferral(donorId) {
     try {
         console.log('Fetching donor form data for donor_id:', donorId);
         const response = await fetch(`../api/get-donor-form.php?donor_id=${donorId}`);
@@ -446,7 +446,7 @@ async function submitScreeningDeferral() {
     try {
         // Fetch all source data
         console.log('Fetching comprehensive data for donor:', donorId);
-        const allSourceData = await fetchAllSourceDataForScreening(donorId);
+        const allSourceData = await fetchAllSourceDataForScreeningDeferral(donorId);
         console.log('Fetched all source data:', allSourceData);
         console.log('Screening form data:', allSourceData.screeningForm);
         console.log('Medical history ID from screening form:', allSourceData.screeningForm?.medical_history_id);
@@ -680,6 +680,11 @@ async function updateScreeningPhysicalExaminationAfterDeferral(physicalExamId, d
 
 // Show screening deferral confirmation modal
 function showScreeningDeferralConfirmedModal() {
+    // Clean up any existing backdrops first
+    if (window.cleanupModalBackdrops) {
+        window.cleanupModalBackdrops();
+    }
+    
     // Add CSS rule to ensure confirmation modal is always on top
     const style = document.createElement('style');
     style.textContent = `
@@ -724,8 +729,12 @@ function showScreeningDeferralConfirmedModal() {
     modal.show();
     
     // Add event listener for when modal is closed to reload page
-    document.getElementById('deferralConfirmedModal').addEventListener('hidden.bs.modal', function() {
+    modalElement.addEventListener('hidden.bs.modal', function() {
         console.log('Screening deferral confirmation modal closed, reloading page...');
+        // Clean up backdrops before reload
+        if (window.cleanupModalBackdrops) {
+            window.cleanupModalBackdrops();
+        }
         window.location.reload();
     }, { once: true });
 }
@@ -838,9 +847,13 @@ function handleScreeningDeferDonor() {
     
     const screeningModal = document.getElementById('screeningFormModal');
     if (screeningModal) {
-        const modal = bootstrap.Modal.getInstance(screeningModal);
-        if (modal) {
-            modal.hide();
+        if (window.closeModalSafely) {
+            window.closeModalSafely(screeningModal);
+        } else {
+            const modal = bootstrap.Modal.getInstance(screeningModal);
+            if (modal) {
+                modal.hide();
+            }
         }
     }
     
@@ -862,6 +875,6 @@ if (typeof module !== 'undefined' && module.exports) {
         showScreeningDeferToast,
         openScreeningDeferModal,
         handleScreeningDeferDonor,
-        fetchAllSourceDataForScreening
+        fetchAllSourceDataForScreeningDeferral
     };
 }

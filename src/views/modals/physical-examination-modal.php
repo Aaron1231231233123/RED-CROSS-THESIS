@@ -272,33 +272,39 @@
                                         // Get the logged-in user's name from the users table
                                         if (isset($_SESSION['user_id'])) {
                                             $user_id = $_SESSION['user_id'];
-                                            $ch = curl_init(SUPABASE_URL . '/rest/v1/users?select=first_name,surname&user_id=eq.' . $user_id);
-                                            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                                            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                                                'apikey: ' . SUPABASE_API_KEY,
-                                                'Authorization: Bearer ' . SUPABASE_API_KEY
-                                            ]);
                                             
-                                            $response = curl_exec($ch);
-                                            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                                            curl_close($ch);
+                                            // Use the unified API function if available, otherwise fallback to direct CURL
+                                            if (function_exists('makeSupabaseApiCall')) {
+                                                $user_data = makeSupabaseApiCall(
+                                                    'users',
+                                                    ['first_name', 'surname'],
+                                                    ['user_id' => 'eq.' . $user_id]
+                                                );
+                                            } else {
+                                                // Fallback to direct CURL if unified function not available
+                                                $ch = curl_init(SUPABASE_URL . '/rest/v1/users?select=first_name,surname&user_id=eq.' . $user_id);
+                                                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                                                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                                                    'apikey: ' . SUPABASE_API_KEY,
+                                                    'Authorization: Bearer ' . SUPABASE_API_KEY
+                                                ]);
+                                                
+                                                $response = curl_exec($ch);
+                                                curl_close($ch);
+                                                $user_data = json_decode($response, true) ?: [];
+                                            }
                                             
-                                            if ($http_code === 200) {
-                                                $user_data = json_decode($response, true);
-                                                if (is_array($user_data) && !empty($user_data)) {
-                                                    $user = $user_data[0];
-                                                    $first_name = isset($user['first_name']) ? htmlspecialchars($user['first_name']) : '';
-                                                    $surname = isset($user['surname']) ? htmlspecialchars($user['surname']) : '';
-                                                    
-                                                    if ($first_name && $surname) {
-                                                        echo $first_name . ' ' . $surname;
-                                                    } elseif ($first_name) {
-                                                        echo $first_name;
-                                                    } elseif ($surname) {
-                                                        echo $surname;
-                                                    } else {
-                                                        echo 'Physician';
-                                                    }
+                                            if (!empty($user_data) && is_array($user_data)) {
+                                                $user = $user_data[0];
+                                                $first_name = isset($user['first_name']) ? htmlspecialchars($user['first_name']) : '';
+                                                $surname = isset($user['surname']) ? htmlspecialchars($user['surname']) : '';
+                                                
+                                                if ($first_name && $surname) {
+                                                    echo $first_name . ' ' . $surname;
+                                                } elseif ($first_name) {
+                                                    echo $first_name;
+                                                } elseif ($surname) {
+                                                    echo $surname;
                                                 } else {
                                                     echo 'Physician';
                                                 }

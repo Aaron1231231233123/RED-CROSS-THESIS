@@ -3,30 +3,8 @@ session_start();
 require_once '../../assets/conn/db_conn.php';
 require '../../assets/php_func/user_roles_staff.php';
 
-// Add this function at the top with other PHP code
-function generateSecureToken($donor_id) {
-    // Create a unique token using donor_id and a random component
-    $random = bin2hex(random_bytes(16));
-    $timestamp = time();
-    $token = hash('sha256', $donor_id . $random . $timestamp);
-    
-    // Store the token mapping in the session
-    if (!isset($_SESSION['donor_tokens'])) {
-        $_SESSION['donor_tokens'] = [];
-    }
-    $_SESSION['donor_tokens'][$token] = [
-        'donor_id' => $donor_id,
-        'expires' => time() + 3600 // Token expires in 1 hour
-    ];
-    
-    return $token;
-}
-
-// Add this function near the top after session_start()
-function hashDonorId($donor_id) {
-    $salt = "RedCross2024"; // Adding a salt for extra security
-    return hash('sha256', $donor_id . $salt);
-}
+// Note: generateSecureToken and hashDonorId functions removed as they are unused
+// These functions were defined but never called in this file
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {

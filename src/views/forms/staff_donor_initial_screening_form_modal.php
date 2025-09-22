@@ -147,7 +147,7 @@
                                     <span class="screening-input-suffix">g/dL</span>
                                 </div>
                                 <div id="specificGravityAlert" class="text-danger mt-1" style="display: none; font-size: 0.875rem;">
-                                    ⚠️ Minimum acceptable specific gravity is 12.5 g/dL. Donation must be deferred for donor safety.
+                                    ⚠️ Specific gravity should be between 12.5-18.0 g/dL for donor safety. Values outside this range require deferral.
                                 </div>
                             </div>
                             <div class="col-12">

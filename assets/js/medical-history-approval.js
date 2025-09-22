@@ -32,14 +32,20 @@ function initializeMedicalHistoryApproval() {
     const approveButtons = document.querySelectorAll('.approve-medical-history-btn');
     console.log('Found approve buttons:', approveButtons.length);
     approveButtons.forEach(btn => {
+        // Remove existing event listeners to prevent duplicates
+        btn.removeEventListener('click', handleApproveClick);
         btn.addEventListener('click', handleApproveClick);
     });
 
     // Handle decline button clicks
     const declineButtons = document.querySelectorAll('.decline-medical-history-btn');
     console.log('Found decline buttons:', declineButtons.length);
-    declineButtons.forEach(btn => {
+    declineButtons.forEach((btn, index) => {
+        console.log(`Setting up decline button ${index}:`, btn);
+        // Remove existing event listeners to prevent duplicates
+        btn.removeEventListener('click', handleDeclineClick);
         btn.addEventListener('click', handleDeclineClick);
+        console.log(`Decline button ${index} event listener attached`);
     });
 
     // Handle decline form submission
@@ -143,8 +149,11 @@ function bindApproveInterceptors() {
 
 // Click handler for Decline buttons (opens the dedicated decline modal)
 function handleDeclineClick(e) {
+    console.log('handleDeclineClick called', e);
     try { if (e && typeof e.preventDefault === 'function') e.preventDefault(); } catch(_) {}
     try { if (e && typeof e.stopPropagation === 'function') e.stopPropagation(); } catch(_) {}
+    
+    console.log('About to call showDeclineModal');
     showDeclineModal();
     return false;
 }
@@ -184,6 +193,8 @@ function showDeclineModal() {
     
     if (!modalElement) {
         console.error('Medical history decline modal not found!');
+        console.log('Available modals:', document.querySelectorAll('.modal').length);
+        console.log('Modal IDs:', Array.from(document.querySelectorAll('.modal')).map(m => m.id));
         console.log('Trying fallback modal...');
         
         // Try fallback modal for testing
@@ -494,25 +505,12 @@ async function processMedicalHistoryDecline(declineReason, restrictionType, dona
             console.log('Donor form data being used:', allSourceData.donorForm);
             
                                // Submit to update-eligibility endpoint
-                   fetch('../api/update-eligibility.php', {
+                   makeApiCall('../api/update-eligibility.php', {
                        method: 'POST',
                        headers: {
                            'Content-Type': 'application/json',
                        },
                        body: JSON.stringify(eligibilityData)
-                   })
-                   .then(response => {
-                       if (!response.ok) {
-                           throw new Error(`HTTP error! status: ${response.status}`);
-                       }
-                       return response.text().then(text => {
-                           try {
-                               return JSON.parse(text);
-                           } catch (e) {
-                               console.error('Response text:', text);
-                               throw new Error('Invalid JSON response: ' + text.substring(0, 100));
-                           }
-                       });
                    })
             .then(result => {
                        if (result.success) {
@@ -562,25 +560,12 @@ async function processMedicalHistoryDecline(declineReason, restrictionType, dona
     console.log('Using defer functionality with data:', deferData);
     
     // Submit to the same endpoint as the defer button
-    fetch('../../assets/php_func/create_eligibility.php', {
+    makeApiCall('../../assets/php_func/create_eligibility.php', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify(deferData)
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.text().then(text => {
-            try {
-                return JSON.parse(text);
-            } catch (e) {
-                console.error('Response text:', text);
-                throw new Error('Invalid JSON response: ' + text.substring(0, 100));
-            }
-        });
     })
     .then(result => {
         if (result.success) {
@@ -719,8 +704,7 @@ async function getDonorRegistrationChannel(donorId) {
     try {
         // This should be an API call to get the registration channel from donor_form
         // For now, we'll simulate it - you need to implement the actual API endpoint
-        const response = await fetch(`/api/get-donor-info.php?donor_id=${donorId}`);
-        const data = await response.json();
+        const data = await makeApiCall(`/api/get-donor-info.php?donor_id=${donorId}`);
         
         if (data.success && data.donor_info && data.donor_info.registration_channel) {
             return data.donor_info.registration_channel;
@@ -886,7 +870,7 @@ function updatePhysicalExaminationAfterDecline(physicalExamId, restrictionType, 
             needs_review: false
         });
         
-        fetch('../api/update-physical-examination.php', {
+        makeApiCall('../api/update-physical-examination.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -896,12 +880,6 @@ function updatePhysicalExaminationAfterDecline(physicalExamId, restrictionType, 
                 remarks: remarks,
                 needs_review: false
             })
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
         })
         .then(result => {
             if (result.success) {
@@ -921,7 +899,7 @@ function updatePhysicalExaminationAfterDecline(physicalExamId, restrictionType, 
             needs_review: false
         });
         
-        fetch('../api/create-physical-examination.php', {
+        makeApiCall('../api/create-physical-examination.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -931,12 +909,6 @@ function updatePhysicalExaminationAfterDecline(physicalExamId, restrictionType, 
                 remarks: remarks,
                 needs_review: false
             })
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
         })
         .then(result => {
             if (result.success) {
@@ -1060,15 +1032,13 @@ async function fetchScreeningFormData(donorId) {
         
         // First, let's test what's in the screening_form table
         try {
-            const testResponse = await fetch(`../api/test-screening-form.php?donor_id=${donorId}`);
-            const testData = await testResponse.json();
+            const testData = await makeApiCall(`../api/test-screening-form.php?donor_id=${donorId}`);
             console.log('Screening form test results:', testData);
         } catch (testError) {
             console.error('Error testing screening form:', testError);
         }
         
-        const response = await fetch(`../api/get-screening-form.php?donor_id=${donorId}`);
-        const data = await response.json();
+        const data = await makeApiCall(`../api/get-screening-form.php?donor_id=${donorId}`);
         console.log('Screening form API response:', data);
         
         if (data.success && data.screening_form) {
@@ -1152,8 +1122,7 @@ async function fetchScreeningFormData(donorId) {
 async function fetchPhysicalExamData(donorId) {
     try {
         console.log('Fetching physical exam data for donor_id:', donorId);
-        const response = await fetch(`../api/get-physical-examination.php?donor_id=${donorId}`);
-        const data = await response.json();
+        const data = await makeApiCall(`../api/get-physical-examination.php?donor_id=${donorId}`);
         console.log('Physical exam API response:', data);
         
         if (data.success && data.physical_exam) {
@@ -1224,8 +1193,7 @@ async function fetchPhysicalExamData(donorId) {
 // Fetch data from donor_form table
 async function fetchDonorFormData(donorId) {
     try {
-        const response = await fetch(`../api/get-donor-form.php?donor_id=${donorId}`);
-        const data = await response.json();
+        const data = await makeApiCall(`../api/get-donor-form.php?donor_id=${donorId}`);
         
         if (data.success && data.donor_form) {
             return {
@@ -1249,15 +1217,13 @@ async function updateEligibilityTable(eligibilityData) {
     try {
         // This should be an API call to update the eligibility table
         // For now, we'll simulate it - you need to implement the actual API endpoint
-        const response = await fetch('../api/update-eligibility.php', {
+        const result = await makeApiCall('../api/update-eligibility.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify(eligibilityData)
         });
-        
-        const result = await response.json();
         
         if (result.success) {
             console.log('Eligibility table updated successfully:', result);
@@ -1562,7 +1528,10 @@ function attachInnerModalApproveHandler() {
     } catch(_) {}
 })();
 
-// Queue donor profile reopen while success modal is visible
+// DISABLED: Queue donor profile reopen while success modal is visible
+// This hook was causing conflicts with the dashboard's modal reopening system
+// The showApprovedThenReturn function now handles the complete flow properly
+/*
 (function hookOpenDonorProfile(){
     try {
         if (window.__mhOpenHooked) return;
@@ -1584,8 +1553,12 @@ function attachInnerModalApproveHandler() {
         }
     } catch(_) {}
 })();
+*/
 
-// Prevent any other modal from opening while success modal is active
+// DISABLED: Prevent any other modal from opening while success modal is active
+// This was causing conflicts with the dashboard's modal management system
+// The showApprovedThenReturn function now handles modal flow properly
+/*
 (function preventOtherModalsDuringSuccess(){
     try {
         if (window.__mhModalGuard) return; window.__mhModalGuard = true;
@@ -1637,9 +1610,18 @@ function attachInnerModalApproveHandler() {
 
 function showApprovedThenReturn(donorId, screeningData) {
     console.log('[MH] showApprovedThenReturn called with:', { donorId, screeningData });
+    
+    // CRITICAL: Prevent duplicate calls
+    if (window.__mhShowApprovedActive) {
+        console.warn('[MH] showApprovedThenReturn already active, preventing duplicate call');
+        return false;
+    }
+    window.__mhShowApprovedActive = true;
+    
     const approvedEl = document.getElementById('medicalHistoryApprovalModal');
     if (!approvedEl) {
         console.error('[MH] medicalHistoryApprovalModal not found!');
+        window.__mhShowApprovedActive = false; // Reset flag on error
         return false;
     }
     
@@ -1713,7 +1695,11 @@ function showApprovedThenReturn(donorId, screeningData) {
     const a = new bootstrap.Modal(approvedEl);
     let returned = false;
     function returnToProfile() {
-        if (returned) return; returned = true;
+        if (returned) return; 
+        returned = true;
+        
+        // Reset the active flag when returning to profile
+        window.__mhShowApprovedActive = false;
         window.__mhSuccessActive = false;
         const ctx = window.lastDonorProfileContext;
         
@@ -1736,7 +1722,13 @@ function showApprovedThenReturn(donorId, screeningData) {
             document.body.classList.remove('modal-open');
             document.body.style.overflow = '';
             document.body.style.paddingRight = '';
-            console.log('[MH] Modal environment cleaned');
+            
+            // Prevent duplicate cleaning logs
+            if (!window.__mhEnvironmentCleaned) {
+                console.log('[MH] Modal environment cleaned');
+                window.__mhEnvironmentCleaned = true;
+                setTimeout(() => { window.__mhEnvironmentCleaned = false; }, 1000);
+            }
         } catch(e) { console.warn('[MH] Cleanup error', e); }
         
         try { if (typeof closeMedicalHistoryModal === 'function') closeMedicalHistoryModal(); } catch(_) {}
@@ -1750,13 +1742,48 @@ function showApprovedThenReturn(donorId, screeningData) {
             const donorId = (ctx && (ctx.donorId || (ctx.screeningData && (ctx.screeningData.donor_form_id || ctx.screeningData.donor_id))))
                              || window.__mhLastDonorId
                              || (currentMedicalHistoryData && currentMedicalHistoryData.donor_id);
+            
+            // Prevent duplicate reopen attempts
+            if (window.__mhReopenActive) {
+                console.warn('[MH] Reopen already active, skipping attempt', attempts);
+                return;
+            }
+            window.__mhReopenActive = true;
+            
             console.log('[MH] Reopen attempt', attempts, 'donorId=', donorId);
             if (!donorId) return;
             const dataArg = (ctx && ctx.screeningData) ? ctx.screeningData : { donor_form_id: donorId };
-            if (typeof window.openDonorProfileModal === 'function') { try { window.openDonorProfileModal(dataArg); } catch(err) { console.warn('[MH] openDonorProfileModal error', err); } return; }
-            if (typeof window.__origOpenDonorProfile === 'function') { try { window.__origOpenDonorProfile(dataArg); } catch(err) { console.warn('[MH] __origOpenDonorProfile error', err); } return; }
-            if (forceShowDonorProfileElement()) { console.log('[MH] Forced Donor Profile element visible'); return; }
-            if (attempts < 20) setTimeout(tryOpen, 150);
+            if (typeof window.openDonorProfileModal === 'function') { 
+                try { 
+                    window.openDonorProfileModal(dataArg); 
+                    window.__mhReopenActive = false; // Reset flag on success
+                    return; 
+                } catch(err) { 
+                    console.warn('[MH] openDonorProfileModal error', err); 
+                    window.__mhReopenActive = false; // Reset flag on error
+                } 
+            }
+            if (typeof window.__origOpenDonorProfile === 'function') { 
+                try { 
+                    window.__origOpenDonorProfile(dataArg); 
+                    window.__mhReopenActive = false; // Reset flag on success
+                    return; 
+                } catch(err) { 
+                    console.warn('[MH] __origOpenDonorProfile error', err); 
+                    window.__mhReopenActive = false; // Reset flag on error
+                } 
+            }
+            if (forceShowDonorProfileElement()) { 
+                console.log('[MH] Forced Donor Profile element visible'); 
+                window.__mhReopenActive = false; // Reset flag on success
+                return; 
+            }
+            if (attempts < 20) {
+                window.__mhReopenActive = false; // Reset flag before retry
+                setTimeout(tryOpen, 150);
+            } else {
+                window.__mhReopenActive = false; // Reset flag when max attempts reached
+            }
         };
         setTimeout(tryOpen, 80);
     }

@@ -351,30 +351,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Add this function at the top with other PHP code
-function generateSecureToken($donor_id) {
-    // Create a unique token using donor_id and a random component
-    $random = bin2hex(random_bytes(16));
-    $timestamp = time();
-    $token = hash('sha256', $donor_id . $random . $timestamp);
-    
-    // Store the token mapping in the session
-    if (!isset($_SESSION['donor_tokens'])) {
-        $_SESSION['donor_tokens'] = [];
-    }
-    $_SESSION['donor_tokens'][$token] = [
-        'donor_id' => $donor_id,
-        'expires' => time() + 3600 // Token expires in 1 hour
-    ];
-    
-    return $token;
-}
-
-// Add this function near the top after session_start()
-function hashDonorId($donor_id) {
-    $salt = "RedCross2024"; // Adding a salt for extra security
-    return hash('sha256', $donor_id . $salt);
-}
+// Note: generateSecureToken and hashDonorId functions removed as they are unused
+// These functions were defined but never called in this file
 
 // Helper function to determine donor type based on eligibility and table IDs
 function getDonorType($donor_id, $medical_info, $eligibility_by_donor, $stage = 'medical_review', $screening_info = null, $physical_info = null) {
@@ -569,7 +547,7 @@ foreach ($medical_by_donor as $rev_donor_id => $rev_medical) {
         if ($st === 'approved') $status = 'Eligible';
         elseif ($st === 'temporary deferred') $status = 'Deferred';
         elseif ($st === 'permanently deferred') $status = 'Ineligible';
-        elseif ($st === 'refused') $status = 'Refused';
+        elseif ($st === 'refused') $status = 'Deferred';
     }
     $donor_history[] = [
         'no' => $counter++,
@@ -612,7 +590,7 @@ foreach ($blood_collections as $blood_info) {
                 if ($st === 'approved') $status = 'Eligible';
                 elseif ($st === 'temporary deferred') $status = 'Deferred';
                 elseif ($st === 'permanently deferred') $status = 'Ineligible';
-                elseif ($st === 'refused') $status = 'Refused';
+                elseif ($st === 'refused') $status = 'Deferred';
             }
             $donor_history[] = [
         'no' => $counter++,
@@ -654,7 +632,7 @@ foreach ($physical_exams as $physical_info) {
             if ($st === 'approved') $status = 'Eligible';
             elseif ($st === 'temporary deferred') $status = 'Deferred';
             elseif ($st === 'permanently deferred') $status = 'Ineligible';
-            elseif ($st === 'refused') $status = 'Refused';
+            elseif ($st === 'refused') $status = 'Deferred';
         }
         $donor_history[] = [
             'no' => $counter++,
@@ -695,7 +673,7 @@ foreach ($screening_forms as $screening_info) {
             if ($st === 'approved') $status = 'Eligible';
             elseif ($st === 'temporary deferred') $status = 'Deferred';
             elseif ($st === 'permanently deferred') $status = 'Ineligible';
-            elseif ($st === 'refused') $status = 'Refused';
+            elseif ($st === 'refused') $status = 'Deferred';
         }
         $donor_history[] = [
             'no' => $counter++,
@@ -3073,7 +3051,7 @@ $donor_history = $unique_donor_history;
                                      <td class="text-center">${safe(fitnessResult)}</td>
                                      <td class="text-center">${safe(remarks)}</td>
                                      <td class="text-center">
-                                         <button type="button" class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); event.preventDefault(); showPhysicalExaminationModal('${eligibility.eligibility_id}');" title="View Physical Examination Results">
+                                         <button type="button" class="btn btn-sm btn-outline-primary" onclick="showPhysicalExaminationModal('${eligibility.eligibility_id}')" title="View Physical Examination Results">
                                              <i class="fas fa-eye"></i>
                                          </button>
                                      </td>
@@ -4311,6 +4289,52 @@ $donor_history = $unique_donor_history;
         window.showDeclarationFormModal = function(donorId) {
             //console.log('Showing declaration form modal for donor ID:', donorId);
             
+            // Show confirmation modal first
+            const confirmationModalHtml = `
+                <div class="modal fade" id="screeningToDeclarationConfirmationModal" tabindex="-1" aria-labelledby="screeningToDeclarationConfirmationModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 0.375rem 0.375rem 0 0;">
+                                <h5 class="modal-title" id="screeningToDeclarationConfirmationModalLabel">Screening Submitted Successfully</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="mb-0">Screening submitted. Please proceed to the declaration form to complete the donor registration process.</p>
+                            </div>
+                            <div class="modal-footer border-0 justify-content-end">
+                                <button type="button" class="btn" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;" onclick="proceedToDeclarationForm('${donorId}')">Proceed to Declaration Form</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            
+            // Remove existing modal if any
+            const existingModal = document.getElementById('screeningToDeclarationConfirmationModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            // Add the modal to the document
+            document.body.insertAdjacentHTML('beforeend', confirmationModalHtml);
+            
+            // Show the confirmation modal
+            const confirmationModal = new bootstrap.Modal(document.getElementById('screeningToDeclarationConfirmationModal'));
+            confirmationModal.show();
+            
+            // Add event listener to remove modal from DOM after it's hidden
+            document.getElementById('screeningToDeclarationConfirmationModal').addEventListener('hidden.bs.modal', function () {
+                this.remove();
+            });
+        };
+        
+        // Function to proceed to declaration form after confirmation
+        window.proceedToDeclarationForm = function(donorId) {
+            // Close confirmation modal
+            const confirmationModal = bootstrap.Modal.getInstance(document.getElementById('screeningToDeclarationConfirmationModal'));
+            if (confirmationModal) {
+                confirmationModal.hide();
+            }
+            
             const declarationModal = new bootstrap.Modal(document.getElementById('declarationFormModal'));
             const modalContent = document.getElementById('declarationFormModalContent');
             
@@ -4444,79 +4468,113 @@ $donor_history = $unique_donor_history;
                         }, 500);
                     };
                     
+                    // Confirmation functions removed - using direct submission now
+                    
                     // Ensure submit function is available globally
-                    window.submitDeclarationForm = function() {
-                        // Close declaration form modal
-                        const declarationModal = bootstrap.Modal.getInstance(document.getElementById('declarationFormModal'));
-                        if (declarationModal) {
-                            declarationModal.hide();
+                    window.submitDeclarationForm = function(event) {
+                        
+                        // Process the declaration form
+                        const form = document.getElementById('modalDeclarationForm');
+                        if (!form) {
+                            // Use custom modal instead of browser alert
+                            if (window.customConfirm) {
+                                window.customConfirm('Form not found. Please try again.', function() {
+                                    // Just close the modal, no additional action needed
+                                });
+                            } else {
+                                alert('Form not found. Please try again.');
+                            }
+                            return;
                         }
                         
-                        // Close any other modals that might be open
-                        const screeningSuccessModal = bootstrap.Modal.getInstance(document.getElementById('screeningSuccessModal'));
-                        if (screeningSuccessModal) {
-                            screeningSuccessModal.hide();
+                        document.getElementById('modalDeclarationAction').value = 'complete';
+                        
+                        // Prevent default form submission
+                        if (event) {
+                            event.preventDefault();
                         }
                         
-                        // Reload the page after a short delay to ensure modals are closed
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 300);
+                        // Submit the form via AJAX
+                        const formData = new FormData(form);
                         
-                        // Handle confirmation button click
-                        document.getElementById('confirmProcessingBtn').onclick = function() {
-                            //console.log('Proceeding to Initial Screening');
-                            
-                            // Close confirmation modal
-                            dataProcessingModal.hide();
-                            
-                            // Process the declaration form
-                            const form = document.getElementById('modalDeclarationForm');
-                            if (!form) {
-                                // Use custom modal instead of browser alert
+                        // Include screening data if available
+                        if (window.currentScreeningData) {
+                            formData.append('screening_data', JSON.stringify(window.currentScreeningData));
+                            formData.append('debug_log', 'Including screening data: ' + JSON.stringify(window.currentScreeningData));
+                        } else {
+                            formData.append('debug_log', 'No screening data available');
+                        }
+                        
+                        formData.append('debug_log', 'Submitting form data...');
+                        
+                        // Debug: Log what we're sending
+                        const debugFormData = new FormData();
+                        debugFormData.append('debug_log', 'FormData contents:');
+                        for (let [key, value] of formData.entries()) {
+                            debugFormData.append('debug_log', '  ' + key + ': ' + value);
+                        }
+                        fetch('../../src/views/forms/declaration-form-process.php', {
+                            method: 'POST',
+                            body: debugFormData
+                        }).catch(() => {});
+                        
+                        fetch('../../src/views/forms/declaration-form-process.php', {
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('Network response was not ok: ' + response.status);
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            if (data.success) {
+                                // Close declaration form modal
+                                const declarationModal = bootstrap.Modal.getInstance(document.getElementById('declarationFormModal'));
+                                if (declarationModal) {
+                                    declarationModal.hide();
+                                }
+                                
+                                // Show success message
                                 if (window.customConfirm) {
-                                    window.customConfirm('Form not found. Please try again.', function() {
+                                    window.customConfirm('Registration completed successfully!', function() {
+                                        window.location.reload();
+                                    });
+                                } else {
+                                    alert('Registration completed successfully!');
+                                    window.location.reload();
+                                }
+                            } else {
+                                // Show error message
+                                if (window.customConfirm) {
+                                    window.customConfirm('Error: ' + (data.message || 'Unknown error occurred'), function() {
                                         // Just close the modal, no additional action needed
                                     });
                                 } else {
-                                alert('Form not found. Please try again.');
-                                }
-                                return;
-                            }
-                            
-                            document.getElementById('modalDeclarationAction').value = 'complete';
-                            
-                            // Submit the form via AJAX
-                            const formData = new FormData(form);
-                            
-                            fetch('../../src/views/forms/declaration-form-process.php', {
-                                method: 'POST',
-                                body: formData
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    // Always approve - no more draft option
-                                    //console.log('Registration complete, reloading page...');
-                                    
-                                    // Force complete page reload
-                                    window.location.href = window.location.href;
-                                } else {
                                     alert('Error: ' + (data.message || 'Unknown error occurred'));
                                 }
-                            })
-                            .catch(error => {
-                                //console.error('Error:', error);
-                                // Use custom modal instead of browser alert
-                                if (window.customConfirm) {
-                                    window.customConfirm('An error occurred while processing the form.', function() {
-                                        // Just close the modal, no additional action needed
-                            });
-                                } else {
-                                    alert('An error occurred while processing the form.');
-                        }
-                            });
-                        };
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error submitting declaration form:', error);
+                            
+                            // Log error to server
+                            const errorFormData = new FormData();
+                            errorFormData.append('debug_log', 'JavaScript Error: ' + error.message);
+                            fetch('../../src/views/forms/declaration-form-process.php', {
+                                method: 'POST',
+                                body: errorFormData
+                            }).catch(() => {});
+                            
+                            if (window.customConfirm) {
+                                window.customConfirm('An error occurred while processing the form: ' + error.message, function() {
+                                    // Just close the modal, no additional action needed
+                                });
+                            } else {
+                                alert('An error occurred while processing the form: ' + error.message);
+                            }
+                        });
                     };
                 })
                 .catch(error => {
@@ -5164,8 +5222,8 @@ $donor_history = $unique_donor_history;
                         threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
                         const hasRemainingDays = (threeMonthsLater - today) > 0;
                         
-                        // Show button ONLY for "refused" status OR when waiting period is complete
-                        if (status === 'refused') {
+                        // Show button ONLY for "Deferred" status (refused donors) OR when waiting period is complete
+                        if (status === 'Deferred') {
                             shouldShowMarkButton = true;
                         }
                         // Show button if approved status and waiting period is complete (no remaining days)
@@ -5243,7 +5301,10 @@ $donor_history = $unique_donor_history;
                         const hasRemainingDays = (threeMonthsLater - today) > 0;
                         if (hasRemainingDays || (eligibility.status !== 'approved' && eligibility.status !== 'refused')) {
                             controlMarkReviewButton(donorId);
-                            showDonorEligibilityAlert(donorId);
+                            // Don't show eligibility alert for "refused" status - it's treated as deferred
+                            if (eligibility.status !== 'refused') {
+                                showDonorEligibilityAlert(donorId);
+                            }
                         } else {
                             showDonorStatusModal(donorId);
                         }
