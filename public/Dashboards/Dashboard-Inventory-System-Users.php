@@ -20,28 +20,59 @@ if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] !== $required_role) {
 	exit();
 }
 
-// Fetch users directly from users table (populate from provided schema)
+// Fetch users from Supabase users table with subroles
 $users = [];
 try {
-    if (function_exists('querySQL')) {
-        $records = querySQL('users', 'user_id,email,role_id,user_staff_roles');
-        if (is_array($records)) {
-            foreach ($records as $u) {
+    if (function_exists('supabaseRequest')) {
+        // Get users data including timestamps
+        $usersResponse = supabaseRequest('users?select=user_id,email,first_name,surname,middle_name,role_id,is_active,created_at,last_login_at', 'GET');
+        
+        if (isset($usersResponse['data']) && is_array($usersResponse['data'])) {
+            // Get user_roles data for subroles
+            $userRolesResponse = supabaseRequest('user_roles?select=user_id,user_staff_roles', 'GET');
+            $userRoles = [];
+            if (isset($userRolesResponse['data']) && is_array($userRolesResponse['data'])) {
+                foreach ($userRolesResponse['data'] as $role) {
+                    $userRoles[$role['user_id']] = $role['user_staff_roles'] ?? '';
+                }
+            }
+            
+            foreach ($usersResponse['data'] as $u) {
                 $roleId = isset($u['role_id']) ? (int)$u['role_id'] : null;
-                $staffRole = $u['user_staff_roles'] ?? null;
-                // Map role for display
+                $userId = $u['user_id'] ?? '';
+                
+                
+                // Map role for display with subroles
                 $roleDisplay = '';
                 if ($roleId === 1) {
                     $roleDisplay = 'Admin';
                 } elseif ($roleId === 2) {
                     $roleDisplay = 'Hospital';
                 } elseif ($roleId === 3) {
-                    $roleDisplay = !empty($staffRole) ? $staffRole : 'Staff';
+                    $staffRole = $userRoles[$userId] ?? '';
+                    if (!empty($staffRole)) {
+                        $roleDisplay = 'Staff - ' . ucfirst($staffRole);
+                    } else {
+                        $roleDisplay = 'Staff';
+                    }
                 }
+                
+                // Build full name
+                $fullName = '';
+                if (!empty($u['surname']) || !empty($u['first_name'])) {
+                    $fullName = trim(($u['surname'] ?? '') . ', ' . ($u['first_name'] ?? '') . ' ' . ($u['middle_name'] ?? ''));
+                } else {
+                    $fullName = $u['email'] ?? '';
+                }
+                
                 $users[] = [
-                    'id' => $u['user_id'] ?? '',
+                    'id' => $userId,
+                    'name' => $fullName,
                     'email' => $u['email'] ?? '',
                     'role' => $roleDisplay,
+                    'is_active' => isset($u['is_active']) ? (bool)$u['is_active'] : true,
+                    'created_at' => $u['created_at'] ?? null,
+                    'last_login_at' => $u['last_login_at'] ?? null,
                 ];
             }
         }
@@ -173,7 +204,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <p class="text-muted mb-0">Create, edit, and deactivate system users</p>
                         </div>
                         <div>
-                            <button class="btn btn-danger"><i class="fa fa-user-plus me-2"></i>Add User</button>
+                            <button class="btn btn-danger" id="openCreateUserModalBtn"><i class="fa fa-user-plus me-2"></i>Add User</button>
                         </div>
                     </div>
                     <div class="card">
@@ -200,31 +231,45 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <div class="table-responsive">
                                 <table class="table table-bordered table-hover mb-0" id="usersTable">
                                     <thead>
-                                        <tr class="bg-danger text-white">
-                                            <th>User ID</th>
-                                            <th>Name</th>
-                                            <th>Role</th>
-                                            <th>Email</th>
-                                            <th>Status</th>
-                                            <th>Actions</th>
+                                        <tr>
+                                            <th style="background-color: #b22222; color: white; font-weight: 700;">No.</th>
+                                            <th style="background-color: #b22222; color: white; font-weight: 700;">User ID</th>
+                                            <th style="background-color: #b22222; color: white; font-weight: 700;">Name</th>
+                                            <th style="background-color: #b22222; color: white; font-weight: 700;">Email</th>
+                                            <th style="background-color: #b22222; color: white; font-weight: 700;">Role</th>
+                                            <th style="background-color: #b22222; color: white; font-weight: 700;">Status</th>
+                                            <th style="background-color: #b22222; color: white; font-weight: 700;">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <?php if (empty($users)): ?>
                                         <tr>
-                                            <td colspan="6" class="text-center">No users found. Connect to your users table to populate.</td>
+                                            <td colspan="7" class="text-center">No users found. Connect to your users table to populate.</td>
                                         </tr>
                                         <?php else: ?>
-                                        <?php foreach ($users as $u): ?>
+                                        <?php foreach ($users as $index => $u): ?>
                                         <tr>
+                                            <td><?php echo $index + 1; ?></td>
                                             <td><?php echo htmlspecialchars($u['id'] ?? ''); ?></td>
+                                            <td><?php echo htmlspecialchars($u['name'] ?? ''); ?></td>
                                             <td><?php echo htmlspecialchars($u['email'] ?? ''); ?></td>
                                             <td><?php echo htmlspecialchars($u['role'] ?? ''); ?></td>
-                                            <td><?php echo htmlspecialchars($u['email'] ?? ''); ?></td>
-                                            <td></td>
                                             <td>
-                                                <button class="btn btn-sm btn-success me-1">Activate</button>
-                                                <button class="btn btn-sm btn-secondary">Deactivate</button>
+                                                <?php if (isset($u['is_active']) && $u['is_active']): ?>
+                                                    <span class="badge bg-success">Active</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary">Inactive</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-sm btn-info me-1" onclick="showViewUserModal('<?php echo htmlspecialchars($u['id']); ?>', '<?php echo htmlspecialchars($u['name']); ?>', '<?php echo htmlspecialchars($u['email']); ?>', '<?php echo htmlspecialchars($u['role']); ?>', '<?php echo isset($u['is_active']) && $u['is_active'] ? "Active" : "Inactive"; ?>', '<?php echo isset($u['created_at']) ? htmlspecialchars($u['created_at']) : ''; ?>', '<?php echo isset($u['last_login_at']) ? htmlspecialchars($u['last_login_at']) : ''; ?>')">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <?php if (isset($u['is_active']) && $u['is_active']): ?>
+                                                    <button class="btn btn-sm btn-danger" onclick="showDeactivateModal('<?php echo htmlspecialchars($u['id']); ?>', '<?php echo htmlspecialchars($u['name']); ?>')">Deactivate</button>
+                                                <?php else: ?>
+                                                    <button class="btn btn-sm btn-success" onclick="showActivateModal('<?php echo htmlspecialchars($u['id']); ?>', '<?php echo htmlspecialchars($u['name']); ?>')">Activate</button>
+                                                <?php endif; ?>
                                             </td>
                                         </tr>
                                         <?php endforeach; ?>
@@ -238,7 +283,584 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             </main>
         </div>
     </div>
+
+    <!-- Create Staff/User Modal -->
+    <div class="modal fade" id="createUserModal" tabindex="-1" aria-labelledby="createUserModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="createUserModalLabel" style="color:#b22222; font-weight: 700;">User Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label" style="font-weight:600; font-size:1.1rem;">First Name</label>
+                            <input type="text" class="form-control" id="newUserFirstName" placeholder="First Name">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label" style="font-weight:600; font-size:1.1rem;">Surname</label>
+                            <input type="text" class="form-control" id="newUserSurname" placeholder="Surname">
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label" style="font-weight:600; font-size:1.1rem;">Middle Name <span class="text-muted">(Optional)</span></label>
+                            <input type="text" class="form-control" id="newUserMiddleName" placeholder="Middle Name">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label" style="font-weight:600; font-size:1.1rem;">Suffix <span class="text-muted">(Optional)</span></label>
+                            <select class="form-select" id="newUserSuffix">
+                                <option value="">None</option>
+                                <option value="Jr.">Jr.</option>
+                                <option value="Sr.">Sr.</option>
+                                <option value="III">III</option>
+                                <option value="IV">IV</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" style="font-weight:600; font-size:1.1rem;">Email Address</label>
+                        <input type="email" class="form-control" id="newUserEmail" placeholder="Your email address">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" style="font-weight:600; font-size:1.1rem;">Role</label>
+                        <select class="form-select" id="newUserRole">
+                            <option value="">-</option>
+                            <option value="1">Admin</option>
+                            <option value="2">Hospital</option>
+                            <option value="3">Staff</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="subroleContainer" style="display: none;">
+                        <label class="form-label" style="font-weight:600; font-size:1.1rem;">Staff Subrole</label>
+                        <select class="form-select" id="newUserSubrole">
+                            <option value="">-</option>
+                            <option value="reviewer">Reviewer</option>
+                            <option value="interviewer">Interviewer</option>
+                            <option value="phlebotomist">Phlebotomist</option>
+                            <option value="physician">Physician</option>
+                        </select>
+                    </div>
+                    <div class="mb-1">
+                        <label class="form-label" style="font-weight:600; font-size:1.1rem;">Password</label>
+                        <input type="password" class="form-control" id="newUserPassword" placeholder="Your password">
+                    </div>
+                    <div class="small text-muted mt-2" id="createUserError" style="display:none"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-warning" id="createUserSubmitBtn">Add User</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Add User Modal -->
+    <div class="modal fade" id="confirmAddUserModal" tabindex="-1" aria-labelledby="confirmAddUserModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="confirmAddUserModalLabel">
+                        <i class="fas fa-user-plus me-2"></i>
+                        Confirm Add User
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-center">Are you sure you want to add this new user to the system?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmAddUserBtn">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- View User Modal -->
+    <div class="modal fade" id="viewUserModal" tabindex="-1" aria-labelledby="viewUserModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header" style="border-bottom: 1px solid #dee2e6;">
+                    <h5 class="modal-title" id="viewUserModalLabel" style="color: #b22222; font-weight: 700; font-size: 1.5rem;">
+                        User Details
+                    </h5>
+                    <div id="viewUserStatusBadge" style="margin-left: auto;"></div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" style="padding: 1.5rem;">
+                    <!-- User Name and ID Section -->
+                    <div class="mb-4">
+                        <h4 id="viewUserName" style="font-weight: 700; color: #000; margin-bottom: 0.5rem;"></h4>
+                        <p id="viewUserId" style="color: #6c757d; margin: 0; font-size: 0.9rem;">User ID: <span id="viewUserIdValue"></span></p>
+                    </div>
+                    
+                    <hr style="margin: 1rem 0; border-color: #dee2e6;">
+                    
+                    <!-- Form Fields Section -->
+                    <div class="mb-3">
+                        <label class="form-label" style="font-weight: 600; color: #000;">Email Address</label>
+                        <input type="email" class="form-control" id="viewUserEmail" readonly style="background-color: #f8f9fa; border: 1px solid #dee2e6;">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label" style="font-weight: 600; color: #000;">Role</label>
+                        <select class="form-select" id="viewUserRole" disabled style="background-color: #f8f9fa; border: 1px solid #dee2e6;">
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label" style="font-weight: 600; color: #000;">Password</label>
+                        <input type="password" class="form-control" id="viewUserPassword" readonly style="background-color: #f8f9fa; border: 1px solid #dee2e6;" value="********">
+                    </div>
+                    
+                    <!-- Footer Information -->
+                    <div class="row mt-4" style="font-size: 0.85rem; color: #6c757d;">
+                        <div class="col-6">
+                            <span>Last Login: <span id="viewUserLastLogin">Not available</span></span>
+                        </div>
+                        <div class="col-6 text-end">
+                            <span>Account Creation Date: <span id="viewUserCreatedDate">Not available</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deactivate Confirmation Modal -->
+    <div class="modal fade" id="deactivateModal" tabindex="-1" aria-labelledby="deactivateModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deactivateModalLabel">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Confirm Deactivation
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center mb-3">
+                        <i class="fas fa-user-times text-danger" style="font-size: 2.5rem;"></i>
+                    </div>
+                    <p class="text-center mb-2">Are you sure you want to deactivate this account?</p>
+                    <p class="text-center text-muted">The user will lose access.</p>
+                    <div class="alert alert-warning mt-3">
+                        <strong>User:</strong> <span id="deactivateUserName"></span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeactivateBtn">
+                        <i class="fas fa-user-times me-2"></i>Deactivate
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activate Confirmation Modal -->
+    <div class="modal fade" id="activateModal" tabindex="-1" aria-labelledby="activateModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="activateModalLabel">
+                        <i class="fas fa-user-check me-2"></i>
+                        Confirm Reactivation
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center mb-3">
+                        <i class="fas fa-user-check text-success" style="font-size: 2.5rem;"></i>
+                    </div>
+                    <p class="text-center mb-2">Are you sure you want to reactivate this account?</p>
+                    <p class="text-center text-muted">The user will regain access.</p>
+                    <div class="alert alert-info mt-3">
+                        <strong>User:</strong> <span id="activateUserName"></span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirmActivateBtn">Activate</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Deactivated Success Modal -->
+    <div class="modal fade" id="userDeactivatedModal" tabindex="-1" aria-labelledby="userDeactivatedModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="userDeactivatedModalLabel">
+                        <i class="fas fa-user-times me-2"></i>
+                        User Deactivated
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-center">User account has been deactivated.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Reactivated Success Modal -->
+    <div class="modal fade" id="userActivatedModal" tabindex="-1" aria-labelledby="userActivatedModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="userActivatedModalLabel">
+                        <i class="fas fa-user-check me-2"></i>
+                        User Reactivated
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-center">User account has been reactivated.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentUserId = null;
+        let currentUserName = null;
+
+        // Debug: Check if elements exist
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, checking elements...');
+            console.log('confirmActivateBtn exists:', document.getElementById('confirmActivateBtn') !== null);
+            console.log('activateModal exists:', document.getElementById('activateModal') !== null);
+        });
+
+        // Show deactivate confirmation modal
+        function showDeactivateModal(userId, userName) {
+            currentUserId = userId;
+            currentUserName = userName;
+            document.getElementById('deactivateUserName').textContent = userName;
+            const modal = new bootstrap.Modal(document.getElementById('deactivateModal'));
+            modal.show();
+        }
+
+        // Open Create User modal
+        document.getElementById('openCreateUserModalBtn').addEventListener('click', function() {
+            document.getElementById('newUserFirstName').value = '';
+            document.getElementById('newUserSurname').value = '';
+            document.getElementById('newUserMiddleName').value = '';
+            document.getElementById('newUserSuffix').value = '';
+            document.getElementById('newUserEmail').value = '';
+            document.getElementById('newUserRole').value = '';
+            document.getElementById('newUserSubrole').value = '';
+            document.getElementById('newUserPassword').value = '';
+            document.getElementById('subroleContainer').style.display = 'none';
+            const err = document.getElementById('createUserError');
+            err.style.display = 'none';
+            err.textContent = '';
+            const modal = new bootstrap.Modal(document.getElementById('createUserModal'));
+            modal.show();
+        });
+
+        // Show/hide subrole dropdown based on role selection
+        document.getElementById('newUserRole').addEventListener('change', function() {
+            const roleId = this.value;
+            const subroleContainer = document.getElementById('subroleContainer');
+            const subroleSelect = document.getElementById('newUserSubrole');
+            
+            if (roleId === '3') { // Staff role
+                subroleContainer.style.display = 'block';
+                subroleSelect.required = true;
+            } else {
+                subroleContainer.style.display = 'none';
+                subroleSelect.required = false;
+                subroleSelect.value = '';
+            }
+        });
+
+        // Submit create user - show confirmation modal first
+        document.getElementById('createUserSubmitBtn').addEventListener('click', function() {
+            const firstName = (document.getElementById('newUserFirstName').value || '').trim();
+            const surname = (document.getElementById('newUserSurname').value || '').trim();
+            const middleName = (document.getElementById('newUserMiddleName').value || '').trim();
+            const suffix = document.getElementById('newUserSuffix').value;
+            const email = (document.getElementById('newUserEmail').value || '').trim();
+            const roleId = document.getElementById('newUserRole').value;
+            const subrole = document.getElementById('newUserSubrole').value;
+            const password = document.getElementById('newUserPassword').value;
+            const err = document.getElementById('createUserError');
+
+            // Basic validation
+            if (!firstName || !surname || !email || !roleId || !password) {
+                err.textContent = 'Please fill in First Name, Surname, Email, Role, and Password.';
+                err.style.display = 'block';
+                err.className = 'small text-danger mt-2';
+                return;
+            }
+
+            // Additional validation for Staff role
+            if (roleId === '3' && !subrole) {
+                err.textContent = 'Please select a Staff subrole.';
+                err.style.display = 'block';
+                err.className = 'small text-danger mt-2';
+                return;
+            }
+
+            // Store form data for later use
+            window.pendingUserData = { firstName, surname, middleName, suffix, email, roleId, subrole, password };
+
+            // Close create user modal and show confirmation modal
+            const createModal = bootstrap.Modal.getInstance(document.getElementById('createUserModal'));
+            createModal.hide();
+            
+            setTimeout(() => {
+                const confirmModal = new bootstrap.Modal(document.getElementById('confirmAddUserModal'));
+                confirmModal.show();
+            }, 300);
+        });
+
+        // Handle confirmation modal
+        document.getElementById('confirmAddUserBtn').addEventListener('click', function() {
+            const { firstName, surname, middleName, suffix, email, roleId, subrole, password } = window.pendingUserData;
+            const err = document.getElementById('createUserError');
+
+            const btn = document.getElementById('confirmAddUserBtn');
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Adding...';
+
+            fetch('../api/create_staff_user.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    first_name: firstName,
+                    surname: surname,
+                    middle_name: middleName || null,
+                    suffix: suffix || null,
+                    email, 
+                    password, 
+                    role_id: parseInt(roleId, 10),
+                    subrole: subrole || null
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data && data.success) {
+                    const confirmModal = bootstrap.Modal.getInstance(document.getElementById('confirmAddUserModal'));
+                    confirmModal.hide();
+                    
+                    // Show success modal
+                    setTimeout(() => {
+                        const successModal = new bootstrap.Modal(document.getElementById('userActivatedModal'));
+                        document.querySelector('#userActivatedModal .modal-title').innerHTML = '<i class="fas fa-user-check me-2"></i>User Added';
+                        document.querySelector('#userActivatedModal .modal-body').innerHTML = '<p class="text-center">User successfully added.</p>';
+                        successModal.show();
+                        setTimeout(() => location.reload(), 1500);
+                    }, 300);
+                } else {
+                    // Show error in create user modal
+                    const createModal = new bootstrap.Modal(document.getElementById('createUserModal'));
+                    createModal.show();
+                    err.textContent = (data && data.message) ? data.message : 'Failed to create user.';
+                    err.style.display = 'block';
+                    err.className = 'small text-danger mt-2';
+                }
+            })
+            .catch(e => {
+                // Show error in create user modal
+                const createModal = new bootstrap.Modal(document.getElementById('createUserModal'));
+                createModal.show();
+                err.textContent = 'Network error while creating user.';
+                err.style.display = 'block';
+                err.className = 'small text-danger mt-2';
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+            });
+        });
+
+        // Show activate confirmation modal
+        function showActivateModal(userId, userName) {
+            console.log('showActivateModal called with:', userId, userName);
+            currentUserId = userId;
+            currentUserName = userName;
+            document.getElementById('activateUserName').textContent = userName;
+            const modal = new bootstrap.Modal(document.getElementById('activateModal'));
+            modal.show();
+        }
+
+        // Show view user modal
+        function showViewUserModal(userId, userName, userEmail, userRole, userStatus, createdAt, lastLoginAt) {
+            // Set user name and ID
+            document.getElementById('viewUserName').textContent = userName;
+            document.getElementById('viewUserIdValue').textContent = userId;
+            
+            // Set email
+            document.getElementById('viewUserEmail').value = userEmail;
+            
+            // Set role in dropdown
+            const roleSelect = document.getElementById('viewUserRole');
+            roleSelect.innerHTML = `<option value="${userRole}" selected>${userRole}</option>`;
+            
+            // Display the status badge in header
+            const statusBadge = document.getElementById('viewUserStatusBadge');
+            if (userStatus === 'Active') {
+                statusBadge.innerHTML = '<span class="badge bg-success">Active</span>';
+            } else {
+                statusBadge.innerHTML = '<span class="badge bg-secondary">Inactive</span>';
+            }
+            
+            // Format and display dates
+            document.getElementById('viewUserLastLogin').textContent = formatDate(lastLoginAt, true);
+            document.getElementById('viewUserCreatedDate').textContent = formatDate(createdAt, false);
+            
+            const modal = new bootstrap.Modal(document.getElementById('viewUserModal'));
+            modal.show();
+        }
+
+        // Format dates for display
+        function formatDate(dateString, includeTime = false) {
+            if (!dateString || dateString === '' || dateString === 'null' || dateString === 'undefined') {
+                return 'Not available';
+            }
+            
+            try {
+                const date = new Date(dateString);
+                if (isNaN(date.getTime())) {
+                    return 'Not available';
+                }
+                
+                const day = date.getDate().toString().padStart(2, '0');
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                const year = date.getFullYear();
+                
+                if (includeTime) {
+                    const hours = date.getHours();
+                    const minutes = date.getMinutes().toString().padStart(2, '0');
+                    const ampm = hours >= 12 ? 'PM' : 'AM';
+                    const displayHours = hours % 12 || 12;
+                    return `${day}/${month}/${year} ${displayHours}:${minutes} ${ampm}`;
+                }
+                
+                return `${day}/${month}/${year}`;
+            } catch (error) {
+                console.error('Date formatting error:', error);
+                return 'Not available';
+            }
+        }
+
+        // Handle deactivate confirmation
+        document.getElementById('confirmDeactivateBtn').addEventListener('click', function() {
+            if (currentUserId) {
+                // Close the confirmation modal
+                const confirmModal = bootstrap.Modal.getInstance(document.getElementById('deactivateModal'));
+                confirmModal.hide();
+                
+                // Show loading state
+                const deactivateBtn = document.getElementById('confirmDeactivateBtn');
+                const originalText = deactivateBtn.innerHTML;
+                deactivateBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Deactivating...';
+                deactivateBtn.disabled = true;
+                
+                // Call API to deactivate user
+                fetch('../api/update_user_status.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: currentUserId,
+                        is_active: false
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Show success modal
+                        setTimeout(() => {
+                            const successModal = new bootstrap.Modal(document.getElementById('userDeactivatedModal'));
+                            successModal.show();
+                            
+                            // Auto-reload after modal is shown
+                            setTimeout(() => {
+                                location.reload();
+                            }, 2000);
+                        }, 300);
+                    } else {
+                        alert('Error: ' + data.message);
+                        // Reset button
+                        deactivateBtn.innerHTML = originalText;
+                        deactivateBtn.disabled = false;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while deactivating the user.');
+                    // Reset button
+                    deactivateBtn.innerHTML = originalText;
+                    deactivateBtn.disabled = false;
+                });
+            }
+        });
+
+        // Handle activate confirmation
+        document.getElementById('confirmActivateBtn').addEventListener('click', function() {
+            console.log('Activate button clicked, currentUserId:', currentUserId);
+            if (currentUserId) {
+                // Close the confirmation modal
+                const confirmModal = bootstrap.Modal.getInstance(document.getElementById('activateModal'));
+                confirmModal.hide();
+                
+                // Show loading state
+                const activateBtn = document.getElementById('confirmActivateBtn');
+                const originalText = activateBtn.innerHTML;
+                activateBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Activating...';
+                activateBtn.disabled = true;
+                
+                // Call API to activate user
+                fetch('../api/update_user_status.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: currentUserId,
+                        is_active: true
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Show success modal
+                        setTimeout(() => {
+                            const successModal = new bootstrap.Modal(document.getElementById('userActivatedModal'));
+                            successModal.show();
+                            
+                            // Auto-reload after modal is shown
+                            setTimeout(() => {
+                                location.reload();
+                            }, 2000);
+                        }, 300);
+                    } else {
+                        alert('Error: ' + data.message);
+                        // Reset button
+                        activateBtn.innerHTML = originalText;
+                        activateBtn.disabled = false;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while activating the user.');
+                    // Reset button
+                    activateBtn.innerHTML = originalText;
+                    activateBtn.disabled = false;
+                });
+            }
+        });
+    </script>
 </body>
 </html>
 
