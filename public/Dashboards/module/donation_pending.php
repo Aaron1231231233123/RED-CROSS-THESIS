@@ -130,15 +130,65 @@ try {
                     } else if ($physNeeds === true) {
                         $statusLabel = 'Pending (Physical Examination)';
                     } else {
-                        // Physical done, check collection via screening_id
-                        $collNeeds = ($screeningId && isset($collectionByScreeningId[$screeningId])) ? $collectionByScreeningId[$screeningId] : null;
+                        // Physical done, check collection via physical_exam_id or screening_id
+                        $collNeeds = null;
+                        
+                        // First try to find blood collection by physical_exam_id
+                        // Check for completed physical examination (remarks is not empty and not 'Pending')
+                        $physicalExamCurl = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=physical_exam_id,remarks&donor_id=eq.' . $donorId . '&remarks=not.is.null&remarks=neq.Pending&order=created_at.desc&limit=1');
+                        curl_setopt($physicalExamCurl, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($physicalExamCurl, CURLOPT_HTTPHEADER, [
+                            'apikey: ' . SUPABASE_API_KEY,
+                            'Authorization: Bearer ' . SUPABASE_API_KEY,
+                            'Content-Type: application/json'
+                        ]);
+                        $physicalExamResponse = curl_exec($physicalExamCurl);
+                        $physicalExamHttpCode = curl_getinfo($physicalExamCurl, CURLINFO_HTTP_CODE);
+                        curl_close($physicalExamCurl);
+                        
+                        if ($physicalExamHttpCode === 200) {
+                            $physicalExams = json_decode($physicalExamResponse, true) ?: [];
+                            if (!empty($physicalExams)) {
+                                $physicalExam = $physicalExams[0];
+                                $physicalExamId = $physicalExam['physical_exam_id'];
+                                $remarks = $physicalExam['remarks'] ?? '';
+                                
+                                // Only proceed if physical examination is completed (has valid remarks)
+                                if (!empty($remarks) && $remarks !== 'Pending') {
+                                    // Check blood collection by physical_exam_id
+                                    $collectionCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=needs_review&physical_exam_id=eq.' . $physicalExamId);
+                                    curl_setopt($collectionCurl, CURLOPT_RETURNTRANSFER, true);
+                                    curl_setopt($collectionCurl, CURLOPT_HTTPHEADER, [
+                                        'apikey: ' . SUPABASE_API_KEY,
+                                        'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                        'Content-Type: application/json'
+                                    ]);
+                                    $collectionResponse = curl_exec($collectionCurl);
+                                    $collectionHttpCode = curl_getinfo($collectionCurl, CURLINFO_HTTP_CODE);
+                                    curl_close($collectionCurl);
+                                    
+                                    if ($collectionHttpCode === 200) {
+                                        $collections = json_decode($collectionResponse, true) ?: [];
+                                        if (!empty($collections)) {
+                                            $collNeeds = isset($collections[0]['needs_review']) ? (bool)$collections[0]['needs_review'] : null;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Fallback to screening_id method if physical_exam_id method didn't work
+                        if ($collNeeds === null && $screeningId && isset($collectionByScreeningId[$screeningId])) {
+                            $collNeeds = $collectionByScreeningId[$screeningId];
+                        }
+                        
                         if ($collNeeds === null) {
                             $statusLabel = 'Pending (Collection)';
                         } else if ($collNeeds === true) {
                             $statusLabel = 'Pending (Collection)';
                         } else {
-                            // All stages marked needs_review=false; keep as collection done
-                            $statusLabel = 'Pending (Collection)';
+                            // All stages marked needs_review=false; collection completed
+                            $statusLabel = 'Completed';
                         }
                     }
                 }

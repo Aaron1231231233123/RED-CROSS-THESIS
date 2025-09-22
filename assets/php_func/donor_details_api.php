@@ -356,15 +356,147 @@ try {
         $derived['screening_status'] = $hasScreening ? 'Passed' : 'Pending';
     }
 
-    // Physician statuses
+    // Physician statuses - check if physical examination is completed based on remarks
     if (!isset($derived['review_status'])) {
-        // If at least reached physician stage
-        $derived['review_status'] = ($statusLower === 'approved' || $statusLower === 'eligible' || $statusLower === 'declined')
+        // Check if there's a completed physical examination based on remarks
+        $hasCompletedPhysical = false;
+        
+        // First try to find by physical_exam_id if available
+        if (isset($derived['physical_exam_id']) && !empty($derived['physical_exam_id'])) {
+            try {
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=remarks&physical_exam_id=eq.' . urlencode($derived['physical_exam_id']));
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Accept: application/json'
+                ]);
+                $resp = curl_exec($ch);
+                $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                
+                if ($http === 200) {
+                    $arr = json_decode($resp, true);
+                    if (!empty($arr) && isset($arr[0]['remarks'])) {
+                        $remarks = $arr[0]['remarks'];
+                        // Physical examination is completed if remarks is not empty and not 'Pending'
+                        $hasCompletedPhysical = !empty($remarks) && $remarks !== 'Pending';
+                        error_log("Physical examination check (review_status) - Physical Exam ID: " . $derived['physical_exam_id'] . ", Remarks: " . $remarks . ", Completed: " . ($hasCompletedPhysical ? 'true' : 'false'));
+                    } else {
+                        error_log("Physical examination check (review_status) - No remarks found for Physical Exam ID: " . $derived['physical_exam_id']);
+                    }
+                } else {
+                    error_log("Physical examination check (review_status) - HTTP Error: " . $http . " for Physical Exam ID: " . $derived['physical_exam_id']);
+                }
+            } catch (Exception $e) {
+                error_log("Error checking physical examination remarks (review_status): " . $e->getMessage());
+            }
+        }
+        
+        // If not found by physical_exam_id, try to find by donor_id
+        if (!$hasCompletedPhysical) {
+            try {
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=remarks&donor_id=eq.' . urlencode($donor_id) . '&order=created_at.desc&limit=1');
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Accept: application/json'
+                ]);
+                $resp = curl_exec($ch);
+                $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                
+                if ($http === 200) {
+                    $arr = json_decode($resp, true);
+                    if (!empty($arr) && isset($arr[0]['remarks'])) {
+                        $remarks = $arr[0]['remarks'];
+                        // Physical examination is completed if remarks is not empty and not 'Pending'
+                        $hasCompletedPhysical = !empty($remarks) && $remarks !== 'Pending';
+                        error_log("Physical examination check (review_status by donor_id) - Donor ID: " . $donor_id . ", Remarks: " . $remarks . ", Completed: " . ($hasCompletedPhysical ? 'true' : 'false'));
+                    } else {
+                        error_log("Physical examination check (review_status by donor_id) - No remarks found for Donor ID: " . $donor_id);
+                    }
+                } else {
+                    error_log("Physical examination check (review_status by donor_id) - HTTP Error: " . $http . " for Donor ID: " . $donor_id);
+                }
+            } catch (Exception $e) {
+                error_log("Error checking physical examination remarks by donor_id (review_status): " . $e->getMessage());
+            }
+        }
+        
+        $derived['review_status'] = ($statusLower === 'approved' || $statusLower === 'eligible' || $statusLower === 'declined' || $hasCompletedPhysical)
             ? 'Completed' : 'Pending';
     }
     if (!isset($derived['physical_status'])) {
-        // Physical exam considered completed if final decision exists (approved/eligible/declined)
-        $derived['physical_status'] = ($statusLower === 'approved' || $statusLower === 'eligible' || $statusLower === 'declined')
+        // Check if there's a completed physical examination based on remarks
+        $hasCompletedPhysical = false;
+        
+        // First try to find by physical_exam_id if available
+        if (isset($derived['physical_exam_id']) && !empty($derived['physical_exam_id'])) {
+            try {
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=remarks&physical_exam_id=eq.' . urlencode($derived['physical_exam_id']));
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Accept: application/json'
+                ]);
+                $resp = curl_exec($ch);
+                $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                
+                if ($http === 200) {
+                    $arr = json_decode($resp, true);
+                    if (!empty($arr) && isset($arr[0]['remarks'])) {
+                        $remarks = $arr[0]['remarks'];
+                        // Physical examination is completed if remarks is not empty and not 'Pending'
+                        $hasCompletedPhysical = !empty($remarks) && $remarks !== 'Pending';
+                        error_log("Physical examination check (physical_status) - Physical Exam ID: " . $derived['physical_exam_id'] . ", Remarks: " . $remarks . ", Completed: " . ($hasCompletedPhysical ? 'true' : 'false'));
+                    } else {
+                        error_log("Physical examination check (physical_status) - No remarks found for Physical Exam ID: " . $derived['physical_exam_id']);
+                    }
+                } else {
+                    error_log("Physical examination check (physical_status) - HTTP Error: " . $http . " for Physical Exam ID: " . $derived['physical_exam_id']);
+                }
+            } catch (Exception $e) {
+                error_log("Error checking physical examination remarks (physical_status): " . $e->getMessage());
+            }
+        }
+        
+        // If not found by physical_exam_id, try to find by donor_id
+        if (!$hasCompletedPhysical) {
+            try {
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=remarks&donor_id=eq.' . urlencode($donor_id) . '&order=created_at.desc&limit=1');
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Accept: application/json'
+                ]);
+                $resp = curl_exec($ch);
+                $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                
+                if ($http === 200) {
+                    $arr = json_decode($resp, true);
+                    if (!empty($arr) && isset($arr[0]['remarks'])) {
+                        $remarks = $arr[0]['remarks'];
+                        // Physical examination is completed if remarks is not empty and not 'Pending'
+                        $hasCompletedPhysical = !empty($remarks) && $remarks !== 'Pending';
+                        error_log("Physical examination check (physical_status by donor_id) - Donor ID: " . $donor_id . ", Remarks: " . $remarks . ", Completed: " . ($hasCompletedPhysical ? 'true' : 'false'));
+                    } else {
+                        error_log("Physical examination check (physical_status by donor_id) - No remarks found for Donor ID: " . $donor_id);
+                    }
+                } else {
+                    error_log("Physical examination check (physical_status by donor_id) - HTTP Error: " . $http . " for Donor ID: " . $donor_id);
+                }
+            } catch (Exception $e) {
+                error_log("Error checking physical examination remarks by donor_id (physical_status): " . $e->getMessage());
+            }
+        }
+        
+        $derived['physical_status'] = ($statusLower === 'approved' || $statusLower === 'eligible' || $statusLower === 'declined' || $hasCompletedPhysical)
             ? 'Completed' : 'Pending';
     }
 
@@ -373,14 +505,18 @@ try {
         $collection_status = '-';
         $blood_collection_id = $derived['blood_collection_id'] ?? null;
         $screening_id = $derived['screening_id'] ?? null;
+        $physical_exam_id = $derived['physical_exam_id'] ?? null;
+        
         try {
             $headers = [
                 'apikey: ' . SUPABASE_API_KEY,
                 'Authorization: Bearer ' . SUPABASE_API_KEY,
                 'Accept: application/json'
             ];
+            
+            // First try by blood_collection_id
             if ($blood_collection_id) {
-                $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=is_successful&blood_collection_id=eq.' . urlencode($blood_collection_id) . '&limit=1');
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=is_successful,needs_review&blood_collection_id=eq.' . urlencode($blood_collection_id) . '&limit=1');
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
                 $resp = curl_exec($ch);
@@ -389,11 +525,17 @@ try {
                 if ($http === 200) {
                     $arr = json_decode($resp, true);
                     if (!empty($arr)) {
-                        $collection_status = !empty($arr[0]['is_successful']) ? 'Successful' : 'Unsuccessful';
+                        if (isset($arr[0]['is_successful'])) {
+                            $collection_status = $arr[0]['is_successful'] ? 'Successful' : 'Unsuccessful';
+                        } elseif (isset($arr[0]['needs_review']) && $arr[0]['needs_review'] === true) {
+                            $collection_status = 'Pending';
+                        }
                     }
                 }
-            } elseif ($screening_id) {
-                $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=is_successful&screening_id=eq.' . urlencode($screening_id) . '&order=created_at.desc&limit=1');
+            } 
+            // Try by physical_exam_id (preferred method for workflow progression)
+            elseif ($physical_exam_id) {
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=is_successful,needs_review&physical_exam_id=eq.' . urlencode($physical_exam_id) . '&order=created_at.desc&limit=1');
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
                 $resp = curl_exec($ch);
@@ -402,11 +544,36 @@ try {
                 if ($http === 200) {
                     $arr = json_decode($resp, true);
                     if (!empty($arr)) {
-                        $collection_status = !empty($arr[0]['is_successful']) ? 'Successful' : 'Unsuccessful';
+                        if (isset($arr[0]['is_successful'])) {
+                            $collection_status = $arr[0]['is_successful'] ? 'Successful' : 'Unsuccessful';
+                        } elseif (isset($arr[0]['needs_review']) && $arr[0]['needs_review'] === true) {
+                            $collection_status = 'Pending';
+                        }
                     }
                 }
             }
-        } catch (Exception $e) {}
+            // Fallback to screening_id
+            elseif ($screening_id) {
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=is_successful,needs_review&screening_id=eq.' . urlencode($screening_id) . '&order=created_at.desc&limit=1');
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+                $resp = curl_exec($ch);
+                $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if ($http === 200) {
+                    $arr = json_decode($resp, true);
+                    if (!empty($arr)) {
+                        if (isset($arr[0]['is_successful'])) {
+                            $collection_status = $arr[0]['is_successful'] ? 'Successful' : 'Unsuccessful';
+                        } elseif (isset($arr[0]['needs_review']) && $arr[0]['needs_review'] === true) {
+                            $collection_status = 'Pending';
+                        }
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Error fetching blood collection status: " . $e->getMessage());
+        }
         $derived['collection_status'] = $collection_status;
     }
 

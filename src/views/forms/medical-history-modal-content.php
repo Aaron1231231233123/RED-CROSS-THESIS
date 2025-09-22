@@ -621,16 +621,157 @@ if ($http_code === 200) {
      </div>
  </div>
 
- <div class="modal-footer">
-     <div class="footer-left"></div>
-     <div class="footer-right">
-         <button class="prev-button" id="modalPrevButton" style="display: none;">&#8592; Previous</button>
-         <button class="edit-button" id="modalEditButton" style="margin-right: 10px;">Edit</button>
-         <button class="next-button" id="modalNextButton">Next →</button>
-     </div>
- </div>
+<div class="modal-footer">
+    <div class="footer-left"></div>
+    <div class="footer-right">
+        <button class="prev-button" id="modalPrevButton" style="display: none;">&#8592; Previous</button>
+        <button class="edit-button" id="modalEditButton" style="margin-right: 10px;">Edit</button>
+        <button class="next-button" id="modalNextButton">Next →</button>
+        <button class="btn btn-success" id="modalSubmitButton" style="display: none; margin-left: 10px;">
+            <i class="fas fa-check me-2"></i>Submit Medical History
+        </button>
+        <button class="btn btn-danger" id="modalDeclineButton" style="display: none; margin-left: 10px;">
+            <i class="fas fa-times me-2"></i>Decline Medical History
+        </button>
+        <button class="btn btn-success" id="modalApproveButton" style="display: none; margin-left: 10px;">
+            <i class="fas fa-check-circle me-2"></i>Approve Medical History
+        </button>
+    </div>
+</div>
 
- <!-- Data for JavaScript -->
+<!-- Decline Medical History Confirmation Modal -->
+<div class="modal fade" id="declineMedicalHistoryModal" tabindex="-1" aria-labelledby="declineMedicalHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 15px; border: none;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
+                <h5 class="modal-title" id="declineMedicalHistoryModalLabel">
+                    <i class="fas fa-times-circle me-2"></i>
+                    Decline Medical History?
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <div class="text-center">
+                    <h5 class="mb-3">Are you sure you want to decline this donor's medical history?</h5>
+                    <p class="text-muted mb-4">The donor will be marked as ineligible for donation.</p>
+                    
+                    <div class="mb-3">
+                        <label for="declineReason" class="form-label fw-semibold">Reason for declinement:</label>
+                        <textarea class="form-control" id="declineReason" rows="4" 
+                                  placeholder="Please provide a detailed reason for declining this donor's medical history..." 
+                                  required maxlength="500" style="min-height: 100px;"></textarea>
+                        <div class="form-text">
+                            <span id="declineCharCount">0/500 characters</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">
+                    Cancel
+                </button>
+                <button type="button" class="btn btn-primary px-4" id="confirmDeclineBtn" disabled>
+                    Submit
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Approve Medical History Confirmation Modal -->
+<div class="modal fade" id="approveMedicalHistoryModal" tabindex="-1" aria-labelledby="approveMedicalHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 15px; border: none;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border-radius: 15px 15px 0 0;">
+                <h5 class="modal-title" id="approveMedicalHistoryModalLabel">
+                    <i class="fas fa-check-circle me-2"></i>
+                    Approve Medical History?
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <div class="text-center">
+                    <div class="mb-3">
+                        <i class="fas fa-check-circle text-success" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="mb-3">Are you sure you want to approve this donor's medical history?</h5>
+                    <p class="text-muted mb-4">This will allow the donor to proceed to the next step in the evaluation process.</p>
+                </div>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-success px-4" id="confirmApproveBtn">
+                    <i class="fas fa-check me-2"></i>Approve
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Medical History Declined Success Modal -->
+<div class="modal fade" id="medicalHistoryDeclinedModal" tabindex="-1" aria-labelledby="medicalHistoryDeclinedModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 15px; border: none;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
+                <h5 class="modal-title" id="medicalHistoryDeclinedModalLabel">
+                    <i class="fas fa-ban me-2"></i>
+                    Medical History Declined
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <div class="text-center">
+                    <div class="mb-3">
+                        <i class="fas fa-times-circle text-danger" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="mb-3">Donor's medical history has been declined.</h5>
+                    <p class="text-muted mb-4">Donor marked as ineligible for donation.</p>
+                </div>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Medical History Approved Success Modal -->
+<div class="modal fade" id="medicalHistoryApprovedModal" tabindex="-1" aria-labelledby="medicalHistoryApprovedModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 15px; border: none;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border-radius: 15px 15px 0 0;">
+                <h5 class="modal-title" id="medicalHistoryApprovedModalLabel">
+                    <i class="fas fa-check-circle me-2"></i>
+                    Medical History Approved
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <div class="text-center">
+                    <div class="mb-3">
+                        <i class="fas fa-check-circle text-success" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="mb-3">The donor's medical history has been approved.</h5>
+                    <p class="text-muted mb-4">The donor can now proceed to the next step in the evaluation process.</p>
+                </div>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Close
+                </button>
+                <button type="button" class="btn btn-primary px-4" id="proceedToPhysicalExamBtn">
+                    <i class="fas fa-arrow-right me-2"></i>Proceed to Physical Examination
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Data for JavaScript -->
  <script type="application/json" id="modalData">
  {
      "medicalHistoryData": <?php echo $medical_history_data ? json_encode($medical_history_data) : 'null'; ?>,
@@ -1236,6 +1377,325 @@ function mhInitializeSaveConfirmation() {
 
 // Call this after the edit functionality is initialized
 setTimeout(mhInitializeSaveConfirmation, 100);
+
+// Admin new donor processing flow integration
+function mhInitializeAdminFlow() {
+    console.log('Initializing admin flow for medical history modal');
+    
+    // Show submit button when on last step
+    const nextButton = document.getElementById('modalNextButton');
+    const submitButton = document.getElementById('modalSubmitButton');
+    const declineButton = document.getElementById('modalDeclineButton');
+    const approveButton = document.getElementById('modalApproveButton');
+    const prevButton = document.getElementById('modalPrevButton');
+    
+    if (nextButton && submitButton) {
+        // Override next button behavior for admin flow
+        nextButton.addEventListener('click', function() {
+            // Check if we're on the last step
+            const currentStep = document.querySelector('.step.active');
+            if (currentStep && currentStep.getAttribute('data-step') === '6') {
+                console.log('Reached final step - showing approve/decline buttons for admin');
+                // Hide next button and show action buttons (Approve/Decline only for admin)
+                nextButton.style.display = 'none';
+                // Don't show submit button for admin - only approve/decline
+                submitButton.style.display = 'none';
+                declineButton.style.display = 'inline-block';
+                approveButton.style.display = 'inline-block';
+            }
+        });
+        
+        // Also check if we're already on the last step when the modal loads
+        setTimeout(() => {
+            const currentStep = document.querySelector('.step.active');
+            if (currentStep && currentStep.getAttribute('data-step') === '6') {
+                console.log('Already on final step - showing approve/decline buttons for admin');
+                nextButton.style.display = 'none';
+                submitButton.style.display = 'none';
+                declineButton.style.display = 'inline-block';
+                approveButton.style.display = 'inline-block';
+            }
+        }, 100);
+        
+        // Handle submit button click (for new donor flow)
+        submitButton.addEventListener('click', function() {
+            // Save the medical history data first
+            saveEditedData().then(() => {
+                // Close the medical history modal
+                const medicalHistoryModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModalAdmin'));
+                if (medicalHistoryModal) {
+                    medicalHistoryModal.hide();
+                }
+                
+                // Show initial screening confirmation modal
+                setTimeout(() => {
+                    if (typeof window.showInitialScreeningConfirmation === 'function') {
+                        window.showInitialScreeningConfirmation();
+                    } else {
+                        console.error('showInitialScreeningConfirmation function not found');
+                    }
+                }, 300);
+            }).catch(error => {
+                console.error('Error saving medical history:', error);
+                mhShowQuietErrorToast('Failed to save medical history data');
+            });
+        });
+        
+        // Handle decline button click
+        if (declineButton) {
+            declineButton.addEventListener('click', function() {
+                // Show decline confirmation modal
+                const declineModal = new bootstrap.Modal(document.getElementById('declineMedicalHistoryModal'));
+                declineModal.show();
+            });
+        }
+        
+        // Handle approve button click
+        if (approveButton) {
+            approveButton.addEventListener('click', function() {
+                // Show approve confirmation modal
+                const approveModal = new bootstrap.Modal(document.getElementById('approveMedicalHistoryModal'));
+                approveModal.show();
+            });
+        }
+    }
+    
+    // Initialize decline modal functionality
+    mhInitializeDeclineModal();
+    
+    // Initialize approve modal functionality
+    mhInitializeApproveModal();
+}
+
+// Initialize decline modal functionality
+function mhInitializeDeclineModal() {
+    const declineReason = document.getElementById('declineReason');
+    const declineCharCount = document.getElementById('declineCharCount');
+    const confirmDeclineBtn = document.getElementById('confirmDeclineBtn');
+    
+    if (declineReason && declineCharCount && confirmDeclineBtn) {
+        // Character count and validation
+        declineReason.addEventListener('input', function() {
+            const length = this.value.length;
+            declineCharCount.textContent = `${length}/500 characters`;
+            
+            // Enable/disable submit button based on minimum length
+            if (length >= 10) {
+                confirmDeclineBtn.disabled = false;
+                confirmDeclineBtn.classList.remove('btn-secondary');
+                confirmDeclineBtn.classList.add('btn-danger');
+            } else {
+                confirmDeclineBtn.disabled = true;
+                confirmDeclineBtn.classList.remove('btn-danger');
+                confirmDeclineBtn.classList.add('btn-secondary');
+            }
+        });
+        
+        // Handle confirm decline
+        confirmDeclineBtn.addEventListener('click', function() {
+            const reason = declineReason.value.trim();
+            if (reason.length < 10) {
+                alert('Please provide a reason with at least 10 characters.');
+                return;
+            }
+            
+            // Process decline
+            mhProcessDecline(reason);
+        });
+    }
+}
+
+// Initialize approve modal functionality
+function mhInitializeApproveModal() {
+    const confirmApproveBtn = document.getElementById('confirmApproveBtn');
+    
+    if (confirmApproveBtn) {
+        confirmApproveBtn.addEventListener('click', function() {
+            // Process approval
+            mhProcessApproval();
+        });
+    }
+}
+
+// Process medical history decline
+function mhProcessDecline(reason) {
+    console.log('Processing medical history decline:', reason);
+    
+    // Show loading state
+    const confirmDeclineBtn = document.getElementById('confirmDeclineBtn');
+    const originalText = confirmDeclineBtn.innerHTML;
+    confirmDeclineBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+    confirmDeclineBtn.disabled = true;
+    
+    // Get donor ID from the form
+    const form = document.getElementById('modalMedicalHistoryForm');
+    const donorIdInput = form.querySelector('input[name="donor_id"]');
+    const donorId = donorIdInput ? donorIdInput.value : null;
+    
+    if (!donorId) {
+        console.error('No donor ID found for decline processing');
+        confirmDeclineBtn.innerHTML = originalText;
+        confirmDeclineBtn.disabled = false;
+        mhShowQuietErrorToast('Error: No donor ID found');
+        return;
+    }
+    
+    // Make API call to update medical history approval status
+    const formData = new FormData();
+    formData.append('action', 'decline_medical_history');
+    formData.append('donor_id', donorId);
+    formData.append('decline_reason', reason);
+    
+    fetch('../../assets/php_func/process_medical_history_approval.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Medical history declined successfully');
+            
+            // Close decline modal
+            const declineModal = bootstrap.Modal.getInstance(document.getElementById('declineMedicalHistoryModal'));
+            if (declineModal) {
+                declineModal.hide();
+            }
+            
+            // Close medical history modal
+            const medicalHistoryModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModalAdmin'));
+            if (medicalHistoryModal) {
+                medicalHistoryModal.hide();
+            }
+            
+            // Show decline success modal
+            setTimeout(() => {
+                const declinedModal = new bootstrap.Modal(document.getElementById('medicalHistoryDeclinedModal'));
+                declinedModal.show();
+            }, 300);
+            
+        } else {
+            console.error('Failed to decline medical history:', data.message);
+            mhShowQuietErrorToast(data.message || 'Failed to decline medical history');
+        }
+    })
+    .catch(error => {
+        console.error('Error declining medical history:', error);
+        mhShowQuietErrorToast('Network error occurred while declining medical history');
+    })
+    .finally(() => {
+        // Reset button state
+        confirmDeclineBtn.innerHTML = originalText;
+        confirmDeclineBtn.disabled = false;
+        
+        // Clear form
+        document.getElementById('declineReason').value = '';
+        document.getElementById('declineCharCount').textContent = '0/500 characters';
+    });
+}
+
+// Process medical history approval
+function mhProcessApproval() {
+    console.log('Processing medical history approval');
+    
+    // Show loading state
+    const confirmApproveBtn = document.getElementById('confirmApproveBtn');
+    const originalText = confirmApproveBtn.innerHTML;
+    confirmApproveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+    confirmApproveBtn.disabled = true;
+    
+    // Get donor ID from the form
+    const form = document.getElementById('modalMedicalHistoryForm');
+    const donorIdInput = form.querySelector('input[name="donor_id"]');
+    const donorId = donorIdInput ? donorIdInput.value : null;
+    
+    if (!donorId) {
+        console.error('No donor ID found for approval processing');
+        confirmApproveBtn.innerHTML = originalText;
+        confirmApproveBtn.disabled = false;
+        mhShowQuietErrorToast('Error: No donor ID found');
+        return;
+    }
+    
+    // Make API call to update medical history approval status
+    const formData = new FormData();
+    formData.append('action', 'approve_medical_history');
+    formData.append('donor_id', donorId);
+    
+    fetch('../../assets/php_func/process_medical_history_approval.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Medical history approved successfully');
+            
+            // Close approve modal
+            const approveModal = bootstrap.Modal.getInstance(document.getElementById('approveMedicalHistoryModal'));
+            if (approveModal) {
+                approveModal.hide();
+            }
+            
+            // Close medical history modal
+            const medicalHistoryModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModalAdmin'));
+            if (medicalHistoryModal) {
+                medicalHistoryModal.hide();
+            }
+            
+            // Show approve success modal
+            setTimeout(() => {
+                const approvedModal = new bootstrap.Modal(document.getElementById('medicalHistoryApprovedModal'));
+                approvedModal.show();
+                
+                // Add event listener for the proceed button
+                const proceedBtn = document.getElementById('proceedToPhysicalExamBtn');
+                if (proceedBtn) {
+                    proceedBtn.addEventListener('click', function() {
+                        approvedModal.hide();
+                        setTimeout(() => {
+                            // For admin context, proceed directly to physical examination
+                            if (typeof window.proceedToPhysicalExamination === 'function') {
+                                window.proceedToPhysicalExamination(donorId);
+                            } else if (typeof window.showPhysicianPhysicalExamConfirmation === 'function') {
+                                window.showPhysicianPhysicalExamConfirmation();
+                            } else if (typeof window.showApproveDonorConfirmation === 'function') {
+                                window.showApproveDonorConfirmation();
+                            } else {
+                                console.error('No confirmation function found');
+                            }
+                        }, 300);
+                    });
+                }
+            }, 300);
+            
+        } else {
+            console.error('Failed to approve medical history:', data.message);
+            mhShowQuietErrorToast(data.message || 'Failed to approve medical history');
+        }
+    })
+    .catch(error => {
+        console.error('Error approving medical history:', error);
+        mhShowQuietErrorToast('Network error occurred while approving medical history');
+    })
+    .finally(() => {
+        // Reset button state
+        confirmApproveBtn.innerHTML = originalText;
+        confirmApproveBtn.disabled = false;
+    });
+}
+
+// Initialize admin flow
+setTimeout(mhInitializeAdminFlow, 200);
+
+// Also try to initialize admin flow when the modal content is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(mhInitializeAdminFlow, 500);
+});
+
+// Force admin flow initialization for admin context
+if (typeof window !== 'undefined' && window.location && window.location.href.includes('dashboard-Inventory-System-list-of-donations')) {
+    setTimeout(mhInitializeAdminFlow, 1000);
+}
 
 // Show a small, quiet success toast
 function mhShowQuietSuccessToast() {

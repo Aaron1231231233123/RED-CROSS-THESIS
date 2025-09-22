@@ -1,87 +1,72 @@
 <?php
-// Start session if not already started
 session_start();
+require_once '../conn/db_conn.php';
 
-// Include database connection
-include_once '../conn/db_conn.php';
-
-// Set header to return JSON
+// Set content type to JSON
 header('Content-Type: application/json');
 
-// Get the raw POST data
-$data = json_decode(file_get_contents('php://input'), true);
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    echo json_encode(['success' => false, 'message' => 'Not authenticated']);
+    exit;
+}
 
-// Check if there's a donor_id in the request
-if (isset($data['donor_id']) && !empty($data['donor_id'])) {
-    // Store the donor_id in the session
-    $_SESSION['donor_id'] = $data['donor_id'];
+// Check if request method is POST
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    echo json_encode(['success' => false, 'message' => 'Invalid request method']);
+    exit;
+}
+
+// Get JSON input
+$input = json_decode(file_get_contents('php://input'), true);
+
+if (!$input || !isset($input['donor_id']) || !isset($input['action'])) {
+    echo json_encode(['success' => false, 'message' => 'Missing required parameters']);
+    exit;
+}
+
+$donor_id = $input['donor_id'];
+$action = $input['action'];
+
+if ($action === 'set_donor_session') {
+    // Set donor_id in session
+    $_SESSION['donor_id'] = $donor_id;
     
-    // Check if this is for processing or viewing/editing
-    if (isset($data['view_mode']) && $data['view_mode'] === true) {
-        $_SESSION['view_mode'] = true;
-        error_log("Session updated: donor_id set to {$_SESSION['donor_id']}, view_mode flag set to true");
-    } else {
-        // Explicitly set admin_processing flag
-        $_SESSION['admin_processing'] = true; 
-        error_log("Session updated: donor_id set to {$_SESSION['donor_id']}, admin_processing flag set to true");
+    // For admin users, we might need to set additional session variables
+    if (isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1) {
+        // Admin user - set minimal required session variables
+        $_SESSION['donor_id'] = $donor_id;
         
-        // Call the create_eligibility_record.php to ensure eligibility record is created
+        // Try to get screening_id if available
         try {
-            $donor_id = $data['donor_id'];
-            error_log("Calling create_eligibility_record.php for donor_id: $donor_id");
-            
-            // Make API call to create/update eligibility record
-            $ch = curl_init('./create_eligibility_record.php');
-            curl_setopt_array($ch, [
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => SUPABASE_URL . "/rest/v1/screening_form?donor_form_id=eq." . $donor_id . "&order=created_at.desc&limit=1",
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_CUSTOMREQUEST => 'POST',
-                CURLOPT_POSTFIELDS => json_encode(['donor_id' => $donor_id, 'processing_flow' => true]),
                 CURLOPT_HTTPHEADER => [
-                    'Content-Type: application/json'
-                ]
+                    "apikey: " . SUPABASE_API_KEY,
+                    "Authorization: Bearer " . SUPABASE_API_KEY,
+                    "Content-Type: application/json"
+                ],
             ]);
             
-            $response = curl_exec($ch);
-            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $err = curl_error($ch);
-            curl_close($ch);
+            $response = curl_exec($curl);
+            $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+            curl_close($curl);
             
-            if ($err) {
-                error_log("cURL error creating eligibility record: $err");
-            } else {
-                $result = json_decode($response, true);
-                if (isset($result['success']) && $result['success']) {
-                    error_log("Successfully created/updated eligibility record for donor ID: $donor_id");
-                    if (isset($result['status'])) {
-                        error_log("Donor status is now: " . $result['status']);
-                    }
-                } else {
-                    $errorMessage = $result['error'] ?? $result['message'] ?? 'Unknown error';
-                    if (strpos($errorMessage, 'already exists') !== false) {
-                        error_log("Eligibility record already exists for donor ID: $donor_id - skipping creation");
-                    } else {
-                        error_log("Failed to create/update eligibility record: " . $errorMessage);
-                    }
+            if ($http_code === 200) {
+                $data = json_decode($response, true);
+                if (!empty($data)) {
+                    $_SESSION['screening_id'] = $data[0]['screening_id'];
                 }
             }
-            
-            error_log("Eligibility record creation response: " . substr($response, 0, 200) . "... (HTTP code: $http_code)");
         } catch (Exception $e) {
-            error_log("Error creating eligibility record: " . $e->getMessage());
+            error_log("Error fetching screening_id: " . $e->getMessage());
         }
     }
     
-    // Return success response
-    echo json_encode([
-        'success' => true,
-        'message' => 'Donor ID stored in session',
-        'donor_id' => $_SESSION['donor_id'],
-        'mode' => isset($_SESSION['view_mode']) ? 'view' : 'process'
-    ]);
+    echo json_encode(['success' => true, 'message' => 'Session variables set successfully']);
 } else {
-    // Return error response
-    echo json_encode([
-        'success' => false,
-        'error' => 'No donor ID provided'
-    ]);
-} 
+    echo json_encode(['success' => false, 'message' => 'Invalid action']);
+}
+?>

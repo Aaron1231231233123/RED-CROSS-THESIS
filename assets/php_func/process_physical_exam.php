@@ -248,6 +248,11 @@ function processPhysicalExam($physicalExamId, $donorId, $remarks, $reason = '') 
                 return ['success' => false, 'error' => 'Failed to update eligibility. HTTP Code: ' . $updateHttpCode];
             }
             
+            // If physical exam is accepted, create blood collection record
+            if ($status === 'approved') {
+                createBloodCollectionRecord($physicalExamId, $donorId, $screeningId);
+            }
+            
             return [
                 'success' => true, 
                 'message' => 'Eligibility record updated successfully',
@@ -361,4 +366,189 @@ if ($method === 'POST') {
     echo json_encode($result);
 } else {
     echo json_encode(['success' => false, 'error' => 'Only POST method is allowed']);
+}
+
+/**
+ * Create blood collection record when physical examination is approved
+ */
+function createBloodCollectionRecord($physicalExamId, $donorId, $screeningId = null) {
+    try {
+        $now = gmdate('c');
+        
+        // Check if blood collection record already exists
+        $checkCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=blood_collection_id&physical_exam_id=eq.' . $physicalExamId);
+        curl_setopt($checkCurl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($checkCurl, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json'
+        ]);
+        
+        $checkResponse = curl_exec($checkCurl);
+        $checkHttpCode = curl_getinfo($checkCurl, CURLINFO_HTTP_CODE);
+        curl_close($checkCurl);
+        
+        if ($checkHttpCode === 200) {
+            $existingCollections = json_decode($checkResponse, true) ?: [];
+            if (!empty($existingCollections)) {
+                // Blood collection record already exists, just update needs_review
+                $collectionId = $existingCollections[0]['blood_collection_id'];
+                $updateCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?blood_collection_id=eq.' . $collectionId);
+                curl_setopt($updateCurl, CURLOPT_CUSTOMREQUEST, 'PATCH');
+                curl_setopt($updateCurl, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($updateCurl, CURLOPT_HTTPHEADER, [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Content-Type: application/json',
+                    'Prefer: return=minimal'
+                ]);
+                curl_setopt($updateCurl, CURLOPT_POSTFIELDS, json_encode([
+                    'needs_review' => true,
+                    'updated_at' => $now
+                ]));
+                
+                $updateResponse = curl_exec($updateCurl);
+                $updateHttpCode = curl_getinfo($updateCurl, CURLINFO_HTTP_CODE);
+                curl_close($updateCurl);
+                
+                if ($updateHttpCode >= 200 && $updateHttpCode < 300) {
+                    error_log("Updated existing blood collection record for physical exam $physicalExamId");
+                }
+                return;
+            }
+        }
+        
+        // Create new blood collection record
+        $collectionData = [
+            'physical_exam_id' => $physicalExamId,
+            'donor_id' => $donorId,
+            'needs_review' => true,
+            'status' => 'pending',
+            'created_at' => $now,
+            'updated_at' => $now
+        ];
+        
+        if ($screeningId) {
+            $collectionData['screening_id'] = $screeningId;
+        }
+        
+        $createCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection');
+        curl_setopt($createCurl, CURLOPT_POST, true);
+        curl_setopt($createCurl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($createCurl, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=minimal'
+        ]);
+        curl_setopt($createCurl, CURLOPT_POSTFIELDS, json_encode($collectionData));
+        
+        $createResponse = curl_exec($createCurl);
+        $createHttpCode = curl_getinfo($createCurl, CURLINFO_HTTP_CODE);
+        curl_close($createCurl);
+        
+        if ($createHttpCode >= 200 && $createHttpCode < 300) {
+            error_log("Created blood collection record for physical exam $physicalExamId, donor $donorId");
+        } else {
+            error_log("Failed to create blood collection record: HTTP $createHttpCode, Response: $createResponse");
+        }
+        
+    } catch (Exception $e) {
+        error_log("Error creating blood collection record: " . $e->getMessage());
+    }
+} 
+    
+    echo json_encode($result);
+} else {
+    echo json_encode(['success' => false, 'error' => 'Only POST method is allowed']);
+}
+
+/**
+ * Create blood collection record when physical examination is approved
+ */
+function createBloodCollectionRecord($physicalExamId, $donorId, $screeningId = null) {
+    try {
+        $now = gmdate('c');
+        
+        // Check if blood collection record already exists
+        $checkCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=blood_collection_id&physical_exam_id=eq.' . $physicalExamId);
+        curl_setopt($checkCurl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($checkCurl, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json'
+        ]);
+        
+        $checkResponse = curl_exec($checkCurl);
+        $checkHttpCode = curl_getinfo($checkCurl, CURLINFO_HTTP_CODE);
+        curl_close($checkCurl);
+        
+        if ($checkHttpCode === 200) {
+            $existingCollections = json_decode($checkResponse, true) ?: [];
+            if (!empty($existingCollections)) {
+                // Blood collection record already exists, just update needs_review
+                $collectionId = $existingCollections[0]['blood_collection_id'];
+                $updateCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?blood_collection_id=eq.' . $collectionId);
+                curl_setopt($updateCurl, CURLOPT_CUSTOMREQUEST, 'PATCH');
+                curl_setopt($updateCurl, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($updateCurl, CURLOPT_HTTPHEADER, [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Content-Type: application/json',
+                    'Prefer: return=minimal'
+                ]);
+                curl_setopt($updateCurl, CURLOPT_POSTFIELDS, json_encode([
+                    'needs_review' => true,
+                    'updated_at' => $now
+                ]));
+                
+                $updateResponse = curl_exec($updateCurl);
+                $updateHttpCode = curl_getinfo($updateCurl, CURLINFO_HTTP_CODE);
+                curl_close($updateCurl);
+                
+                if ($updateHttpCode >= 200 && $updateHttpCode < 300) {
+                    error_log("Updated existing blood collection record for physical exam $physicalExamId");
+                }
+                return;
+            }
+        }
+        
+        // Create new blood collection record
+        $collectionData = [
+            'physical_exam_id' => $physicalExamId,
+            'donor_id' => $donorId,
+            'needs_review' => true,
+            'status' => 'pending',
+            'created_at' => $now,
+            'updated_at' => $now
+        ];
+        
+        if ($screeningId) {
+            $collectionData['screening_id'] = $screeningId;
+        }
+        
+        $createCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection');
+        curl_setopt($createCurl, CURLOPT_POST, true);
+        curl_setopt($createCurl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($createCurl, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=minimal'
+        ]);
+        curl_setopt($createCurl, CURLOPT_POSTFIELDS, json_encode($collectionData));
+        
+        $createResponse = curl_exec($createCurl);
+        $createHttpCode = curl_getinfo($createCurl, CURLINFO_HTTP_CODE);
+        curl_close($createCurl);
+        
+        if ($createHttpCode >= 200 && $createHttpCode < 300) {
+            error_log("Created blood collection record for physical exam $physicalExamId, donor $donorId");
+        } else {
+            error_log("Failed to create blood collection record: HTTP $createHttpCode, Response: $createResponse");
+        }
+        
+    } catch (Exception $e) {
+        error_log("Error creating blood collection record: " . $e->getMessage());
+    }
 } 

@@ -452,8 +452,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 // Redirect based on role
                 if ($_SESSION['role_id'] == 1) {
-                    // Admin redirect to blood collection
-                    header('Location: blood-collection-form.php');
+                    // Admin redirect back to dashboard with success parameter
+                    header('Location: ../../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php?physical_exam_completed=1');
                     exit();
                 } else if ($_SESSION['role_id'] == 3 && $is_physician) {
                     // Physician - redirect to blood collection

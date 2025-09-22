@@ -97,7 +97,7 @@ $bloodInventory = [];
 
 try {
     // OPTIMIZATION 1: Single query to blood_bank_units table (has all the data we need!)
-    $bloodBankUnitsResponse = supabaseRequest("blood_bank_units?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,created_at,updated_at&unit_serial_number=not.is.null&order=collected_at.desc");
+    $bloodBankUnitsResponse = supabaseRequest("blood_bank_units?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,hospital_request_id,created_at,updated_at&unit_serial_number=not.is.null&order=collected_at.desc");
     $bloodBankUnitsData = isset($bloodBankUnitsResponse['data']) ? $bloodBankUnitsResponse['data'] : [];
     
     // OPTIMIZATION 2: Get donor data only for units we actually have (reduces data transfer)
@@ -183,6 +183,7 @@ try {
                 'expiration_date' => $expirationDate->format('Y-m-d'),
                 'status' => $status,
                 'unit_status' => $item['status'],
+                'hospital_request_id' => $item['hospital_request_id'] ?? null,
                 'created_at' => $item['created_at'],
                 'updated_at' => $item['updated_at'],
                 'donor' => $donorInfo
@@ -1216,115 +1217,85 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         </div>
     </div>
 
-    <!-- Donor Details Modal -->
-    <div class="modal fade donor-details-modal" id="donorDetailsModal" tabindex="-1" aria-labelledby="donorDetailsModalLabel" aria-hidden="true">
+    <!-- Blood Bank Unit Details Modal -->
+    <div class="modal fade" id="bloodBankUnitDetailsModal" tabindex="-1" aria-labelledby="bloodBankUnitDetailsModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="donorDetailsModalLabel">
-                        <i class="fas fa-eye me-2"></i> View Blood Unit & Donor Details
+                <div class="modal-header" style="background-color: #dc3545; color: white;">
+                    <h5 class="modal-title" id="bloodBankUnitDetailsModalLabel" style="font-weight: bold; font-size: 1.5rem;">
+                        Blood Bank
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <!-- Blood Unit Information -->
-                    <div class="donor-details-section">
-                        <h3>Blood Unit Information</h3>
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="donor-details-form-group">
-                                    <label class="donor-details-form-label">Serial Number</label>
-                                    <input type="text" class="donor-details-form-control" id="modal-serial-number" readonly>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="donor-details-form-group">
-                                    <label class="donor-details-form-label">Blood Type</label>
-                                    <input type="text" class="donor-details-form-control" id="modal-blood-type" readonly>
-                                </div>
+                <div class="modal-body" style="padding: 30px;">
+                    <!-- Unit Serial Number and Blood Type Header -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="text-center">
+                                <div style="font-size: 2rem; font-weight: bold; color: #000; margin-bottom: 5px;" id="modal-unit-serial">20230715-001-123</div>
+                                <div style="font-size: 0.9rem; color: #666;">Unit Serial Number</div>
                             </div>
                         </div>
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="donor-details-form-group">
-                                    <label class="donor-details-form-label">Collection Date</label>
-                                    <input type="text" class="donor-details-form-control" id="modal-collection-date" readonly>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="donor-details-form-group">
-                                    <label class="donor-details-form-label">Expiration Date</label>
-                                    <input type="text" class="donor-details-form-control" id="modal-expiration-date" readonly>
-                                </div>
+                        <div class="col-md-6">
+                            <div class="text-center">
+                                <div style="font-size: 2rem; font-weight: bold; color: #000; margin-bottom: 5px;" id="modal-blood-type-display">A+</div>
+                                <div style="font-size: 0.9rem; color: #666;">Blood Type</div>
                             </div>
                         </div>
                     </div>
-
-                    <!-- Donor Information -->
-                    <div class="donor-details-section">
-                        <h3>Donor Information</h3>
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="donor-details-form-group">
-                                    <label class="donor-details-form-label">Surname</label>
-                                    <input type="text" class="donor-details-form-control" id="modal-surname" readonly>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="donor-details-form-group">
-                                    <label class="donor-details-form-label">First Name</label>
-                                    <input type="text" class="donor-details-form-control" id="modal-first-name" readonly>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="donor-details-form-group">
-                                    <label class="donor-details-form-label">Middle Name</label>
-                                    <input type="text" class="donor-details-form-control" id="modal-middle-name" readonly>
-                                </div>
+                    
+                    <!-- Form Fields -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="modal-collection-date" class="form-label" style="font-weight: 500; color: #333;">Collection Date</label>
+                                <input type="text" class="form-control" id="modal-collection-date" readonly style="border: 1px solid #ced4da; border-radius: 4px; padding: 8px;">
                             </div>
                         </div>
-                        <div class="row">
-                            <div class="col-md-3">
-                                <div class="donor-details-form-group">
-                                    <label class="donor-details-form-label">Birthdate</label>
-                                    <input type="text" class="donor-details-form-control" id="modal-birthdate" readonly>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="donor-details-form-group">
-                                    <label class="donor-details-form-label">Age</label>
-                                    <input type="text" class="donor-details-form-control" id="modal-age" readonly>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="donor-details-form-group">
-                                    <label class="donor-details-form-label">Sex</label>
-                                    <input type="text" class="donor-details-form-control" id="modal-sex" readonly>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="donor-details-form-group">
-                                    <label class="donor-details-form-label">Civil Status</label>
-                                    <input type="text" class="donor-details-form-control" id="modal-civil-status" readonly>
-                                </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="modal-expiration-date" class="form-label" style="font-weight: 500; color: #333;">Expiration Date</label>
+                                <input type="text" class="form-control" id="modal-expiration-date" readonly style="border: 1px solid #ced4da; border-radius: 4px; padding: 8px;">
                             </div>
                         </div>
                     </div>
-
-                    <!-- Donor Eligibility Status -->
-                    <div class="donor-details-section">
-                        <h3>Donor Eligibility Status</h3>
-                        <div>
-                            <span class="eligibility-status" id="modal-eligibility-status">INELIGIBLE</span>
-                            <span id="modal-eligibility-message">Unknown status</span>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="modal-collected-from" class="form-label" style="font-weight: 500; color: #333;">Collected From</label>
+                                <input type="text" class="form-control" id="modal-collected-from" readonly style="border: 1px solid #ced4da; border-radius: 4px; padding: 8px;">
+                            </div>
                         </div>
-                        <div class="mt-2 text-muted" id="modal-eligibility-note">
-                            Donor can donate blood now
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="modal-recipient-hospital" class="form-label" style="font-weight: 500; color: #333;">Recipient Hospital</label>
+                                <input type="text" class="form-control" id="modal-recipient-hospital" readonly style="border: 1px solid #ced4da; border-radius: 4px; padding: 8px;">
+                            </div>
                         </div>
                     </div>
-
-                    <div class="text-end mt-4">
-                        <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Close</button>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="modal-phlebotomist-name" class="form-label" style="font-weight: 500; color: #333;">Phlebotomist Name</label>
+                                <input type="text" class="form-control" id="modal-phlebotomist-name" readonly style="border: 1px solid #ced4da; border-radius: 4px; padding: 8px;">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="modal-blood-status" class="form-label" style="font-weight: 500; color: #333;">Blood Status</label>
+                                <input type="text" class="form-control" id="modal-blood-status" readonly style="border: 1px solid #ced4da; border-radius: 4px; padding: 8px; font-style: italic; color: #6c757d;" placeholder="(Available, Reserved, Expired, Used)">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Loading indicator -->
+                    <div id="modal-loading" class="text-center" style="display: none;">
+                        <div class="spinner-border text-danger" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading blood bank unit details...</p>
                     </div>
                 </div>
             </div>
@@ -1380,101 +1351,74 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         const currentPageInventory = <?php echo json_encode($currentPageInventory); ?>;
         const startIndex = <?php echo $startIndex; ?>;
         
-        // Function to display donor details in modal
+        // Function to display blood bank unit details in modal
         function showDonorDetails(index) {
             // We need to use the real index from the full inventory array
             const realIndex = startIndex + index;
             const bag = bloodInventory[realIndex];
-            const donor = bag.donor;
             
-            // Blood Unit Information
-            document.getElementById('modal-serial-number').value = bag.serial_number;
-            document.getElementById('modal-blood-type').value = bag.blood_type;
-            document.getElementById('modal-collection-date').value = bag.collection_date;
-            document.getElementById('modal-expiration-date').value = bag.expiration_date;
+            // Show loading indicator
+            document.getElementById('modal-loading').style.display = 'block';
             
-            // Donor Information
-            document.getElementById('modal-surname').value = donor.surname;
-            document.getElementById('modal-first-name').value = donor.first_name;
-            document.getElementById('modal-middle-name').value = donor.middle_name;
-            document.getElementById('modal-birthdate').value = donor.birthdate;
-            document.getElementById('modal-age').value = donor.age;
-            document.getElementById('modal-sex').value = donor.sex;
-            document.getElementById('modal-civil-status').value = donor.civil_status;
-            
-            // Set eligibility status directly from bag data
-            const statusElem = document.getElementById('modal-eligibility-status');
-            const messageElem = document.getElementById('modal-eligibility-message');
-            const noteElem = document.getElementById('modal-eligibility-note');
-            if (bag.eligibility_status === 'approved') {
-                statusElem.textContent = 'ELIGIBLE';
-                statusElem.style.backgroundColor = '#198754'; // green
-                messageElem.textContent = 'Approved for donation';
-                // Calculate next eligible donation date (45 days after collection_date)
-                const collectionDate = new Date(bag.collection_date);
-                const nextDonationDate = new Date(collectionDate);
-                nextDonationDate.setDate(collectionDate.getDate() + 45);
-                const options = { year: 'numeric', month: 'long', day: 'numeric' };
-                noteElem.textContent = 'Next eligible donation date: ' + nextDonationDate.toLocaleDateString(undefined, options);
-            } else {
-                // Fallback to AJAX/legacy logic
-                fetchEligibilityStatus(bag.donor_id);
-            }
-            
-            // Show the modal
-            const modal = new bootstrap.Modal(document.getElementById('donorDetailsModal'));
+            // Show the modal first
+            const modal = new bootstrap.Modal(document.getElementById('bloodBankUnitDetailsModal'));
             modal.show();
-        }
-        
-        // Function to fetch eligibility status for a donor
-        function fetchEligibilityStatus(donorId) {
-            if (!donorId) {
-                updateEligibilityStatus({
-                    is_eligible: false,
-                    status_message: 'Unknown status',
-                    remaining_days: 0
-                });
-                return;
-            }
             
-            // AJAX call to get eligibility status
-            fetch(`get_donor_eligibility.php?donor_id=${donorId}`)
+            // Fetch detailed information from API
+            fetch(`../../assets/php_func/blood_bank_unit_details_api.php?unit_id=${bag.unit_id}`)
                 .then(response => response.json())
                 .then(data => {
-                    updateEligibilityStatus(data);
+                    // Hide loading indicator
+                    document.getElementById('modal-loading').style.display = 'none';
+                    
+                    if (data.error) {
+                        console.error('Error fetching unit details:', data.error);
+                        // Fallback to basic data
+                        populateBasicData(bag);
+                    } else {
+                        // Populate modal with detailed data
+                        populateDetailedData(data);
+                    }
                 })
                 .catch(error => {
-                    console.error('Error fetching eligibility:', error);
-                    updateEligibilityStatus({
-                        is_eligible: false,
-                        status_message: 'Error retrieving status',
-                        remaining_days: 0
-                    });
+                    console.error('Error fetching unit details:', error);
+                    // Hide loading indicator
+                    document.getElementById('modal-loading').style.display = 'none';
+                    // Fallback to basic data
+                    populateBasicData(bag);
                 });
         }
         
-        // Update the eligibility status in the modal
-        function updateEligibilityStatus(data) {
-            const statusElem = document.getElementById('modal-eligibility-status');
-            const messageElem = document.getElementById('modal-eligibility-message');
-            const noteElem = document.getElementById('modal-eligibility-note');
+        // Function to populate modal with detailed data from API
+        function populateDetailedData(data) {
+            // Unit Serial Number and Blood Type (large display)
+            document.getElementById('modal-unit-serial').textContent = data.unit_serial_number || 'N/A';
+            document.getElementById('modal-blood-type-display').textContent = data.blood_type || 'N/A';
             
-            if (data.is_eligible) {
-                statusElem.textContent = 'ELIGIBLE';
-                statusElem.style.backgroundColor = '#198754'; // green
-            } else {
-                statusElem.textContent = 'INELIGIBLE';
-                statusElem.style.backgroundColor = '#dc3545'; // red
-            }
-            
-            messageElem.textContent = data.status_message;
-            
-            if (data.remaining_days > 0) {
-                noteElem.textContent = `Donor can donate after ${data.remaining_days} days`;
-            } else {
-                noteElem.textContent = 'Donor can donate blood now';
-            }
+            // Form fields
+            document.getElementById('modal-collection-date').value = data.collection_date || 'N/A';
+            document.getElementById('modal-expiration-date').value = data.expiration_date || 'N/A';
+            document.getElementById('modal-collected-from').value = data.collected_from || 'Blood Bank';
+            document.getElementById('modal-recipient-hospital').value = data.recipient_hospital || 'Not Assigned';
+            document.getElementById('modal-phlebotomist-name').value = data.phlebotomist_name || 'Not Available';
+            document.getElementById('modal-blood-status').value = data.blood_status || 'Available';
         }
+        
+        // Function to populate modal with basic data (fallback)
+        function populateBasicData(bag) {
+            // Unit Serial Number and Blood Type (large display)
+            document.getElementById('modal-unit-serial').textContent = bag.serial_number || 'N/A';
+            document.getElementById('modal-blood-type-display').textContent = bag.blood_type || 'N/A';
+            
+            // Form fields
+            document.getElementById('modal-collection-date').value = bag.collection_date || 'N/A';
+            document.getElementById('modal-expiration-date').value = bag.expiration_date || 'N/A';
+            document.getElementById('modal-collected-from').value = 'Blood Bank';
+            document.getElementById('modal-recipient-hospital').value = 'Not Assigned';
+            document.getElementById('modal-phlebotomist-name').value = 'Not Available';
+            document.getElementById('modal-blood-status').value = bag.status || 'Available';
+        }
+        
 
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize modals

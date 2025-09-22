@@ -9,6 +9,110 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['role_id']) || $_SESSION['r
     exit();
 }
 
+// Handle POST requests for request processing
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['accept_request']) && isset($_POST['request_id'])) {
+        // Handle approve request
+        $request_id = intval($_POST['request_id']);
+        
+        try {
+            // Update request status to Accepted
+            $update_data = [
+                'status' => 'Accepted',
+                'last_updated' => date('Y-m-d H:i:s'),
+                'approved_by' => $_SESSION['user_id'],
+                'approved_at' => date('Y-m-d H:i:s')
+            ];
+            
+            $response = supabaseRequest(
+                "blood_requests?request_id=eq." . $request_id,
+                'PATCH',
+                $update_data
+            );
+            
+            if ($response['code'] >= 200 && $response['code'] < 300) {
+                // Redirect with success message
+                header("Location: " . $_SERVER['PHP_SELF'] . "?status=accepted&success=1&message=" . urlencode("Request #$request_id has been approved successfully."));
+                exit();
+            } else {
+                throw new Exception("Failed to update request status. HTTP Code: " . $response['code']);
+            }
+        } catch (Exception $e) {
+            error_log("Error approving request: " . $e->getMessage());
+            header("Location: " . $_SERVER['PHP_SELF'] . "?error=" . urlencode("Failed to approve request: " . $e->getMessage()));
+            exit();
+        }
+    }
+    
+    if (isset($_POST['decline_request']) && isset($_POST['request_id'])) {
+        // Handle decline request
+        $request_id = intval($_POST['request_id']);
+        $decline_reason = isset($_POST['decline_reason']) ? trim($_POST['decline_reason']) : 'No reason provided';
+        
+        try {
+            // Update request status to Declined
+            $update_data = [
+                'status' => 'Declined',
+                'last_updated' => date('Y-m-d H:i:s'),
+                'decline_reason' => $decline_reason,
+                'declined_by' => $_SESSION['user_id'],
+                'declined_at' => date('Y-m-d H:i:s')
+            ];
+            
+            $response = supabaseRequest(
+                "blood_requests?request_id=eq." . $request_id,
+                'PATCH',
+                $update_data
+            );
+            
+            if ($response['code'] >= 200 && $response['code'] < 300) {
+                // Redirect with success message
+                header("Location: " . $_SERVER['PHP_SELF'] . "?status=declined&success=1&message=" . urlencode("Request #$request_id has been declined."));
+                exit();
+            } else {
+                throw new Exception("Failed to update request status. HTTP Code: " . $response['code']);
+            }
+        } catch (Exception $e) {
+            error_log("Error declining request: " . $e->getMessage());
+            header("Location: " . $_SERVER['PHP_SELF'] . "?error=" . urlencode("Failed to decline request: " . $e->getMessage()));
+            exit();
+        }
+    }
+    
+    if (isset($_POST['handover_request']) && isset($_POST['request_id'])) {
+        // Handle handover request
+        $request_id = intval($_POST['request_id']);
+        
+        try {
+            // Update request status to Confirmed (Handed Over)
+            $update_data = [
+                'status' => 'Confirmed',
+                'last_updated' => date('Y-m-d H:i:s'),
+                'handed_over_by' => $_SESSION['user_id'],
+                'handed_over_at' => date('Y-m-d H:i:s')
+            ];
+            
+            $response = supabaseRequest(
+                "blood_requests?request_id=eq." . $request_id,
+                'PATCH',
+                $update_data
+            );
+            
+            if ($response['code'] >= 200 && $response['code'] < 300) {
+                // Redirect with success message
+                header("Location: " . $_SERVER['PHP_SELF'] . "?status=handedover&success=1&message=" . urlencode("Request #$request_id has been marked as handed over."));
+                exit();
+            } else {
+                throw new Exception("Failed to update request status. HTTP Code: " . $response['code']);
+            }
+        } catch (Exception $e) {
+            error_log("Error processing handover: " . $e->getMessage());
+            header("Location: " . $_SERVER['PHP_SELF'] . "?error=" . urlencode("Failed to process handover: " . $e->getMessage()));
+            exit();
+        }
+    }
+}
+
 // OPTIMIZATION: Include shared optimized functions
 include_once __DIR__ . '/module/optimized_functions.php';
 
@@ -16,30 +120,119 @@ include_once __DIR__ . '/module/optimized_functions.php';
 $startTime = microtime(true);
 
 // Fetch blood requests based on status from GET parameter
-$status = isset($_GET['status']) ? strtolower($_GET['status']) : 'requests';
+// Unified view: ignore status filters for this page and show all requests
+$status = 'all';
 
-function fetchBloodRequestsByStatus($status) {
-    if ($status === 'accepted') {
-        $endpoint = "blood_requests?or=(status.eq.Accepted,status.eq.Printed)&order=is_asap.desc,requested_on.desc";
-    } elseif ($status === 'handedover') {
-        $endpoint = "blood_requests?status=eq.Confirmed&order=is_asap.desc,requested_on.desc";
-    } elseif ($status === 'declined') {
-        $endpoint = "blood_requests?status=eq.Declined&order=is_asap.desc,requested_on.desc";
-    } else { // 'requests' or any other value defaults to pending + rescheduled + printed
-        $endpoint = "blood_requests?or=(status.eq.Pending,status.eq.Rescheduled,status.eq.Printed)&order=is_asap.desc,requested_on.desc";
-    }
-    
-    // OPTIMIZATION: Use enhanced API function with retry mechanism
+function fetchAllBloodRequests() {
+    // Fetch all statuses for a single unified list, newest first and urgent first
+    $endpoint = "blood_requests?order=is_asap.desc,requested_on.desc";
     $response = supabaseRequest($endpoint);
     if (isset($response['data'])) {
         return $response['data'];
-    } else {
-        error_log("Error fetching blood requests: " . ($response['error'] ?? 'Unknown error'));
+    }
+    error_log("Error fetching all blood requests: " . ($response['error'] ?? 'Unknown error'));
+    return [];
+}
+
+$blood_requests = fetchAllBloodRequests();
+
+// Handle success/error messages
+$success_message = '';
+$error_message = '';
+if (isset($_GET['success']) && $_GET['success'] == '1' && isset($_GET['message'])) {
+    $success_message = urldecode($_GET['message']);
+}
+if (isset($_GET['error'])) {
+    $error_message = urldecode($_GET['error']);
+}
+
+// Function to fetch blood units for a specific request
+function fetchBloodUnitsForRequest($request_id) {
+    try {
+        // First, get the request details to know what blood type is needed
+        $requestResponse = supabaseRequest("blood_requests?request_id=eq." . $request_id);
+        if (!isset($requestResponse['data']) || empty($requestResponse['data'])) {
+            return [];
+        }
+        
+        $request = $requestResponse['data'][0];
+        $needed_blood_type = $request['patient_blood_type'];
+        $needed_rh_factor = $request['rh_factor'];
+        $needed_units = intval($request['units_requested']);
+        
+        // Get compatible blood types
+        $compatible_types = [];
+        $is_positive = $needed_rh_factor === 'Positive';
+        
+        // O+ can receive O+ and O-
+        // O- can only receive O-
+        // A+ can receive A+, A-, O+, O-
+        // A- can receive A-, O-
+        // B+ can receive B+, B-, O+, O-
+        // B- can receive B-, O-
+        // AB+ can receive all types
+        // AB- can receive AB-, A-, B-, O-
+        
+        switch ($needed_blood_type) {
+            case 'O':
+                if ($is_positive) {
+                    $compatible_types = ['O+', 'O-'];
+                } else {
+                    $compatible_types = ['O-'];
+                }
+                break;
+            case 'A':
+                if ($is_positive) {
+                    $compatible_types = ['A+', 'A-', 'O+', 'O-'];
+                } else {
+                    $compatible_types = ['A-', 'O-'];
+                }
+                break;
+            case 'B':
+                if ($is_positive) {
+                    $compatible_types = ['B+', 'B-', 'O+', 'O-'];
+                } else {
+                    $compatible_types = ['B-', 'O-'];
+                }
+                break;
+            case 'AB':
+                if ($is_positive) {
+                    $compatible_types = ['AB+', 'AB-', 'A+', 'A-', 'B+', 'B-', 'O+', 'O-'];
+                } else {
+                    $compatible_types = ['AB-', 'A-', 'B-', 'O-'];
+                }
+                break;
+        }
+        
+        // Convert to database format (with + and - instead of Positive/Negative)
+        $db_compatible_types = [];
+        foreach ($compatible_types as $type) {
+            $blood_type = substr($type, 0, -1);
+            $rh_factor = substr($type, -1) === '+' ? 'Positive' : 'Negative';
+            $db_compatible_types[] = $blood_type . '|' . $rh_factor;
+        }
+        
+        // Build the query to get available blood units
+        $blood_type_conditions = [];
+        foreach ($db_compatible_types as $type) {
+            list($bt, $rh) = explode('|', $type);
+            $blood_type_conditions[] = "(blood_type.eq.{$bt}&rh_factor.eq.{$rh})";
+        }
+        
+        $blood_type_filter = implode(',', $blood_type_conditions);
+        $endpoint = "blood_bank_units?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,hospital_request_id&or=({$blood_type_filter})&status=eq.Valid&hospital_request_id=is.null&order=collected_at.asc&limit=" . $needed_units;
+        
+    $response = supabaseRequest($endpoint);
+    if (isset($response['data'])) {
+        return $response['data'];
+        }
+        
+        return [];
+    } catch (Exception $e) {
+        error_log("Error fetching blood units for request: " . $e->getMessage());
         return [];
     }
 }
-
-$blood_requests = fetchBloodRequestsByStatus($status);
 
 // Helper function to get compatible blood types based on recipient's blood type
 function getCompatibleBloodTypes($blood_type, $rh_factor) {
@@ -934,18 +1127,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
                             <span><i class="fas fa-tint"></i>Blood Bank</span>
                         </a>
-                        <a class="nav-link" data-bs-toggle="collapse" href="#hospitalRequestsCollapse" role="button" aria-expanded="false" aria-controls="hospitalRequestsCollapse">
+                        <a href="Dashboard-Inventory-System-Hospital-Request.php" class="nav-link active">
                             <span><i class="fas fa-list"></i>Hospital Requests</span>
-                            <i class="fas fa-chevron-down"></i>
                         </a>
-                        <div class="collapse<?php echo (!isset($status) || in_array($status, ['requests', 'accepted', 'handedover', 'declined'])) ? ' show' : ''; ?>" id="hospitalRequestsCollapse">
-                            <div class="collapse-menu">
-                                <a href="Dashboard-Inventory-System-Hospital-Request.php?status=requests" class="nav-link<?php echo (!isset($_GET['status']) || $_GET['status'] === 'requests') ? ' active' : ''; ?>">Requests</a>
-                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=accepted" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'accepted') ? ' active' : ''; ?>">Approved</a>
-                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=handedover" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'handedover') ? ' active' : ''; ?>">Handed Over</a>
-                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=declined" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'declined') ? ' active' : ''; ?>">Declined</a>
-                            </div>
-                        </div>
                         <a href="#" class="nav-link">
                             <span><i class="fas fa-chart-line"></i>Forecast Reports</span>
                         </a>
@@ -1052,33 +1236,41 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     </div>
                 <?php else: ?>
                 <div class="table-responsive">
-                    <table class="table table-bordered table-hover align-middle" id="requestTable">
+                    <table class="table table-striped table-hover" id="requestTable">
                         <thead class="table-dark">
                             <tr>
+                                <th style="width:32px;"></th>
+                                <th>No.</th>
+                                <th>Request ID</th>
                                 <th>Hospital</th>
+                                <th>Blood Type</th>
+                                <th>Quantity</th>
                                 <th>Request Date</th>
-                                <th>Required Date</th>
-                                <th>Time Sent</th>
                                 <th>Status</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
-                        <?php foreach ($blood_requests as $request): ?>
+                        <?php $rowNum=1; foreach ($blood_requests as $request): ?>
                             <?php 
                                 $hospital_name = $request['hospital_admitted'] ? $request['hospital_admitted'] : 'Hospital';
-                                $request_date = $request['requested_on'] ? date('Y-m-d', strtotime($request['requested_on'])) : '-';
-                                $required_date = $request['when_needed'] ? date('Y-m-d', strtotime($request['when_needed'])) : '-';
-                                $time_sent = $request['when_needed'] ? strtoupper(date('h:i a', strtotime($request['when_needed']))) : '-';
                                 $blood_type_display = $request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-');
-                                $component_display = 'Whole Blood';
                                 $priority_display = $request['is_asap'] ? 'Urgent' : 'Routine';
+                                $requested_on = $request['requested_on'] ? date('Y-m-d', strtotime($request['requested_on'])) : '-';
+                                $is_asap = !empty($request['is_asap']);
                             ?>
                             <tr>
+                                <td style="text-align:center;">
+                                    <?php if ($is_asap && strtolower($request['status']) === 'pending'): ?>
+                                        <img src="../assets/img/icons8-warning-96.png" alt="Urgent" style="height:20px; width:20px;" />
+                                    <?php endif; ?>
+                                </td>
+                                <td><?php echo $rowNum++; ?></td>
+                                <td><?php echo htmlspecialchars($request['request_id']); ?></td>
                                 <td><?php echo htmlspecialchars($hospital_name); ?></td>
-                                <td><?php echo htmlspecialchars($request_date); ?></td>
-                                <td><?php echo htmlspecialchars($required_date); ?></td>
-                                <td><?php echo htmlspecialchars($time_sent); ?></td>
+                                <td><?php echo htmlspecialchars($blood_type_display); ?></td>
+                                <td><?php echo htmlspecialchars($request['units_requested']); ?></td>
+                                <td><?php echo htmlspecialchars($requested_on); ?></td>
                                 <td>
                                     <?php
                                     $status_val = isset($request['status']) ? strtolower($request['status']) : '';
@@ -1089,7 +1281,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     } elseif ($status_val === 'printed') {
                                         echo '<span class="badge bg-info text-dark">Printed</span>';
                                     } elseif ($status_val === 'accepted') {
-                                        echo '<span class="badge bg-primary">Approved</span>';
+                                            echo '<span class="badge bg-success">Approved</span>';
+                                        } elseif ($status_val === 'declined') {
+                                            echo '<span class="badge bg-danger">Declined</span>';
+                                        } elseif ($status_val === 'confirmed') {
+                                            echo '<span class="badge bg-warning text-dark">Handed Over</span>';
+                                        } else {
+                                            echo '<span class="badge bg-secondary">'.htmlspecialchars($request['status'] ?? 'N/A').'</span>';
                                     }
                                     ?>
                                 </td>
@@ -1102,16 +1300,21 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         onclick="loadRequestDetails(
                                             '<?php echo htmlspecialchars($request['request_id']); ?>',
                                             '<?php echo htmlspecialchars($request['patient_name']); ?>',
-                                            '<?php echo htmlspecialchars($blood_type_display); ?>',
-                                            '<?php echo htmlspecialchars($component_display); ?>',
+                                            '<?php echo htmlspecialchars($request['patient_blood_type']); ?>',
+                                            'Whole Blood',
                                             '<?php echo htmlspecialchars($request['rh_factor']); ?>',
                                             '<?php echo htmlspecialchars($request['units_requested']); ?>',
                                             '<?php echo htmlspecialchars($request['patient_diagnosis']); ?>',
                                             '<?php echo htmlspecialchars($hospital_name); ?>',
                                             '<?php echo htmlspecialchars($request['physician_name']); ?>',
                                             '<?php echo htmlspecialchars($priority_display); ?>',
-                                            '<?php echo htmlspecialchars($request['status']); ?>'
-                                        )">
+                                            '<?php echo htmlspecialchars($request['status']); ?>',
+                                            '<?php echo htmlspecialchars($request['requested_on']); ?>',
+                                            '<?php echo htmlspecialchars($request['when_needed']); ?>',
+                                            '<?php echo htmlspecialchars($request['patient_age']); ?>',
+                                            '<?php echo htmlspecialchars($request['patient_gender']); ?>'
+                                        )"
+                                        >
                                         <i class="fas fa-eye"></i>
                                     </button>
                                 </td>
@@ -1124,81 +1327,159 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             </div>
             
         
-        <!-- Modal for Full Request Details -->
+        <!-- Referral Blood Shipment Record Modal -->
         <div class="modal fade" id="requestModal" tabindex="-1" aria-labelledby="requestModalLabel" aria-hidden="true">
-            
             <div class="modal-dialog modal-lg">
                 <div id="alertContainer"></div>
-                <div class="modal-content">
-                    
-                    <div class="modal-header">
-                        <h5 class="modal-title">Blood Request Details</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <div class="modal-content" style="border-radius: 10px; border: none;">
+                    <!-- Modal Header -->
+                    <div class="modal-header" style="background: #dc3545; color: white; border-radius: 10px 10px 0 0; padding: 20px;">
+                        <div class="d-flex justify-content-between align-items-center w-100">
+                            <div>
+                                <div style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 5px;">
+                                    Date: <span id="modalRequestDate">-</span>
                     </div>
-                    <div class="modal-body">
+                                <h4 class="modal-title mb-0" style="font-weight: bold; font-size: 1.5rem;">
+                                    Referral Blood Shipment Record
+                                </h4>
+                            </div>
+                                <div class="d-flex align-items-center gap-3">
+                                    <span id="modalRequestStatus" class="badge" style="background: #28a745; padding: 8px 12px; font-size: 0.9rem;">Handed-Over</span>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="margin-left: 10px;"></button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Modal Body -->
+                    <div class="modal-body" style="padding: 30px;">
                         <form id="requestDetailsForm">
                             <input type="hidden" id="modalRequestId" name="request_id">
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <label>Patient Name:</label>
-                                    <input type="text" class="form-control" id="patientName" readonly>
+                            
+                            <!-- Patient Information -->
+                            <div class="mb-4">
+                                <h5 style="font-weight: bold; color: #333; margin-bottom: 15px;">Patient Information</h5>
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <h4 style="font-weight: bold; color: #000; margin-bottom: 5px;" id="modalPatientName">-</h4>
+                                        <p style="color: #666; margin: 0; font-size: 1.05rem;" id="modalPatientDetails">-</p>
+                                        <div class="d-flex gap-4 mt-2" style="color:#444;">
+                                            <div><span class="fw-bold">Age:</span> <span id="modalPatientAge">-</span></div>
+                                            <div><span class="fw-bold"> Gender:</span> <span id="modalPatientGender">-</span></div>
                                 </div>
-                                <div class="col-md-3">
-                                    <label>Blood Type:</label>
-                                    <input type="text" class="form-control" id="bloodType" readonly>
                                 </div>
-                                <div class="col-md-3">
-                                    <label>RH Factor:</label>
-                                    <input type="text" class="form-control" id="rhFactor" readonly>
                                 </div>
                             </div>
                             
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <label>Component:</label>
-                                    <input type="text" class="form-control" id="component" readonly>
+                            <hr style="border-color: #ddd; margin: 20px 0;">
+                            
+                            <!-- Request Details -->
+                            <div class="mb-4">
+                                <h5 style="font-weight: bold; color: #333; margin-bottom: 20px;">Request Details</h5>
+                                
+                                <!-- Diagnosis -->
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Diagnosis:</label>
+                                    <input type="text" class="form-control" id="modalDiagnosis" readonly style="border: 1px solid #ddd; padding: 10px;">
                                 </div>
-                                <div class="col-md-6">
-                                    <label>Units Needed:</label>
-                                    <input type="number" class="form-control" id="unitsNeeded" readonly>
+                            
+                                <!-- Blood Type Table -->
+                                <div class="mb-3">
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered" style="margin: 0;">
+                                            <thead style="background: #dc3545; color: white;">
+                                                <tr>
+                                                    <th style="padding: 12px; text-align: center;">Blood Type</th>
+                                                    <th style="padding: 12px; text-align: center;">RH</th>
+                                                    <th style="padding: 12px; text-align: center;">Number of Units</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td style="padding: 12px; text-align: center;">
+                                                        <input type="text" class="form-control text-center" id="modalBloodType" readonly style="border: none; background: transparent;">
+                                                    </td>
+                                                    <td style="padding: 12px; text-align: center;">
+                                                        <input type="text" class="form-control text-center" id="modalRhFactor" readonly style="border: none; background: transparent;">
+                                                    </td>
+                                                    <td style="padding: 12px; text-align: center;">
+                                                        <input type="text" class="form-control text-center" id="modalUnitsNeeded" readonly style="border: none; background: transparent;">
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
                                 </div>
                             </div>
                             
+                                <!-- When Needed -->
                             <div class="mb-3">
-                                <label>Diagnosis:</label>
-                                <input type="text" class="form-control" id="diagnosis" readonly>
+                                    <label class="form-label fw-bold">When Needed:</label>
+                                    <div class="d-flex align-items-center gap-4" style="border:1px solid #ddd; border-radius:6px; padding:10px 12px;">
+                                        <div class="form-check d-flex align-items-center gap-2 me-3">
+                                            <input class="form-check-input" type="radio" name="whenNeededOption" id="asapRadio" value="asap">
+                                            <label class="form-check-label fw-bold" for="asapRadio">ASAP</label>
+                                        </div>
+                                        <div class="form-check d-flex align-items-center gap-2">
+                                            <input class="form-check-input" type="radio" name="whenNeededOption" id="scheduledRadio" value="scheduled">
+                                            <label class="form-check-label fw-bold" for="scheduledRadio">Scheduled</label>
+                                            <input type="text" class="form-control" id="modalScheduledDisplay" style="width: 240px; margin-left: 10px;" readonly>
+                                        </div>
+                                    </div>
                             </div>
         
+                                <!-- Hospital and Physician -->
                             <div class="row mb-3">
                                 <div class="col-md-6">
-                                    <label>Hospital:</label>
-                                    <input type="text" class="form-control" id="hospital" readonly>
+                                        <label class="form-label fw-bold">Hospital Admitted:</label>
+                                        <input type="text" class="form-control" id="modalHospital" readonly style="border: 1px solid #ddd; padding: 10px;">
                                 </div>
                                 <div class="col-md-6">
-                                    <label>Requesting Physician:</label>
-                                    <input type="text" class="form-control" id="physician" readonly>
+                                        <label class="form-label fw-bold">Requesting Physician:</label>
+                                        <input type="text" class="form-control" id="modalPhysician" readonly style="border: 1px solid #ddd; padding: 10px;">
                                 </div>
                             </div>
         
+                                <!-- Approval Information (shown when approved) -->
+                                <div id="approvalSection" style="display: none;">
+                                    <hr style="border-color: #ddd; margin: 20px 0;">
                             <div class="mb-3">
-                                <label>Priority:</label>
-                                <input type="text" class="form-control" id="priority" readonly>
+                                        <label class="form-label fw-bold">Approved by:</label>
+                                        <input type="text" class="form-control" id="modalApprovedBy" readonly style="border: 1px solid #ddd; padding: 10px; background: #f8f9fa;">
+                                    </div>
                             </div>
                             
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-danger" id="declineRequest">
-                                    <i class="fas fa-times-circle"></i> Decline Request
-                                </button>
-                                <button type="button" class="btn btn-success" id="modalAcceptButton">
-                                    <i class="fas fa-check-circle"></i> Accept Request
-                                </button>
-                                <button type="button" class="btn btn-primary" id="handOverButton" style="display: none;">
-                                    <i class="fas fa-truck"></i> Hand Over
-                                </button>
+                                <!-- Handover Information (shown when handed over) -->
+                                <div id="handoverSection" style="display: none;">
+                                    <hr style="border-color: #ddd; margin: 20px 0;">
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Handed Over by:</label>
+                                        <input type="text" class="form-control" id="modalHandedOverBy" readonly style="border: 1px solid #ddd; padding: 10px; background: #f8f9fa;">
+                                    </div>
+                                </div>
                             </div>
                         </form>
                     </div>
-               
+                    
+                    <!-- Modal Footer -->
+                    <div class="modal-footer" style="padding: 20px 30px; border-top: 1px solid #ddd; background: #f8f9fa; border-radius: 0 0 10px 10px;">
+                        <div class="d-flex gap-2 w-100 justify-content-end">
+                            <!-- Decline Button -->
+                            <button type="button" class="btn btn-danger" id="declineRequest" style="padding: 10px 20px; font-weight: bold; border-radius: 5px;">
+                                <i class="fas fa-times-circle me-2"></i>Decline Request
+                                </button>
+                            
+                            <!-- Approve Button -->
+                            <button type="button" class="btn btn-success" id="modalAcceptButton" style="padding: 10px 20px; font-weight: bold; border-radius: 5px;">
+                                <i class="fas fa-check-circle me-2"></i>Approve Request
+                                </button>
+                            
+                            <!-- Hand Over Button -->
+                            <button type="button" class="btn btn-primary" id="handOverButton" style="padding: 10px 20px; font-weight: bold; border-radius: 5px; display: none;">
+                                <i class="fas fa-truck me-2"></i>Handed Over
+                                </button>
+                            </div>
+                    </div>
+                </div>
+            </div>
             </div>
             
 </main>
@@ -1206,20 +1487,22 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         </div>
     </div>
     
-    <div class="modal fade" id="confirmDeclineModal" tabindex="-1" aria-labelledby="confirmDeclineLabel" aria-hidden="true">
+    <!-- Approve Request Confirmation Modal -->
+    <div class="modal fade" id="approveConfirmModal" tabindex="-1" aria-labelledby="approveConfirmLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Confirm Decline</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div class="modal-content" style="border-radius: 10px; border: none;">
+                <div class="modal-header" style="background: #dc3545; color: white; border-radius: 10px 10px 0 0;">
+                    <h5 class="modal-title" id="approveConfirmLabel" style="font-weight: bold;">Approve Request?</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <p id="modalBodyText"></p>
+                <div class="modal-body" style="padding: 25px;">
+                    <p id="approveConfirmText" style="margin: 0; font-size: 1rem; color: #333;">
+                        Are you sure you want to approve this blood request? The requested units will be prepared for handover.
+                    </p>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
-
-                    <button type="button" class="btn btn-danger" id="confirmDeclineBtn">Yes</button>
+                <div class="modal-footer" style="padding: 20px 25px; border-top: 1px solid #ddd;">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="padding: 8px 20px; font-weight: bold;">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirmApproveBtn" style="padding: 8px 20px; font-weight: bold; background: #007bff;">Accept</button>
                 </div>
             </div>
         </div>
@@ -1228,46 +1511,186 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <!-- Decline Request Modal -->
     <div class="modal fade" id="declineRequestModal" tabindex="-1" aria-labelledby="declineRequestModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Reason for Declining</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div class="modal-content" style="border-radius: 10px; border: none;">
+                <div class="modal-header" style="background: #dc3545; color: white; border-radius: 10px 10px 0 0;">
+                    <h5 class="modal-title" id="declineRequestModalLabel" style="font-weight: bold;">Decline Request?</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <form id="declineRequestForm" method="post">
-            <div class="modal-body">
+                    <div class="modal-body" style="padding: 25px;">
               <input type="hidden" name="request_id" id="declineRequestId">
               <input type="hidden" name="decline_request" value="1">
-              <select class="form-select" name="decline_reason" id="declineReasonSelect" required>
-                <option value="" selected disabled>Select a reason</option>
-                <option value="Ineligible Requestor">Ineligible Requestor</option>
-                <option value="Medical Restrictions">Medical Restrictions</option>
-                <option value="Pending Verification">Pending Verification</option>
-                <option value="Duplicate Request">Duplicate Request</option>
-                <option value="Other">Other</option>
-              </select>
+                        <p style="margin-bottom: 20px; font-size: 1rem; color: #333;">
+                            Are you sure you want to decline this request for <strong id="declineRequestIdText">Request ID</strong>?
+                        </p>
+                        <p style="margin-bottom: 20px; font-size: 0.9rem; color: #dc3545; font-weight: bold;">
+                            This action cannot be undone.
+                        </p>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold" style="color: #333;">Reason for Declining</label>
+                            <textarea class="form-control" name="decline_reason" id="declineReasonText" rows="3" 
+                                placeholder="Please provide a reason for declining this request..." 
+                                style="border: 1px solid #ddd; padding: 10px;" required></textarea>
             </div>
-            <div class="modal-footer">
-              <button type="submit" class="btn btn-danger">Confirm</button>
+                    </div>
+                    <div class="modal-footer" style="padding: 20px 25px; border-top: 1px solid #ddd;">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="padding: 8px 20px; font-weight: bold;">Cancel</button>
+                        <button type="submit" class="btn btn-danger" style="padding: 8px 20px; font-weight: bold;">Confirm</button>
             </div>
           </form>
         </div>
       </div>
     </div>
     
-    <!-- Decline Confirmation Modal -->
-    <div class="modal fade" id="declineFinalConfirmModal" tabindex="-1" aria-labelledby="declineFinalConfirmModalLabel" aria-hidden="true">
+    <!-- Request Declined Success Modal -->
+    <div class="modal fade" id="requestDeclinedModal" tabindex="-1" aria-labelledby="requestDeclinedLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header bg-danger text-white">
-            <h5 class="modal-title" id="declineFinalConfirmModalLabel">Confirm Decline</h5>
+            <div class="modal-content" style="border-radius: 10px; border: none;">
+                <div class="modal-header" style="background: #dc3545; color: white; border-radius: 10px 10px 0 0;">
+                    <h5 class="modal-title" id="requestDeclinedLabel" style="font-weight: bold;">Request Declined</h5>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
-          <div class="modal-body">
-            <p id="declineFinalConfirmText"></p>
+                <div class="modal-body" style="padding: 25px;">
+                    <p style="margin: 0; font-size: 1rem; color: #333;">
+                        Request <strong id="declinedRequestId">HRQ-00125</strong> has been declined.
+                    </p>
+                    <p style="margin: 10px 0 0 0; font-size: 0.9rem; color: #333;">
+                        Reason: <strong id="declinedReason">Insufficient stock of O+</strong>
+                    </p>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" id="declineFinalConfirmBtn" class="btn btn-danger">Yes, Decline</button>
+                <div class="modal-footer" style="padding: 20px 25px; border-top: 1px solid #ddd;">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal" style="padding: 8px 20px; font-weight: bold;">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Request Approved Success Modal -->
+    <div class="modal fade" id="requestApprovedModal" tabindex="-1" aria-labelledby="requestApprovedLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 10px; border: none;">
+                <div class="modal-header" style="background: #dc3545; color: white; border-radius: 10px 10px 0 0;">
+                    <h5 class="modal-title" id="requestApprovedLabel" style="font-weight: bold;">Request Approved</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" style="padding: 25px;">
+                    <p style="margin: 0; font-size: 1rem; color: #333;">
+                        The blood units have been allocated to this request.
+                    </p>
+                </div>
+                <div class="modal-footer" style="padding: 20px 25px; border-top: 1px solid #ddd;">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal" style="padding: 8px 20px; font-weight: bold;">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Handover Confirmation Modal -->
+    <div class="modal fade" id="handoverConfirmModal" tabindex="-1" aria-labelledby="handoverConfirmLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content" style="border-radius: 10px; border: none;">
+                <div class="modal-header" style="background: #dc3545; color: white; border-radius: 10px 10px 0 0; padding: 20px;">
+                    <div class="d-flex justify-content-between align-items-center w-100">
+                        <div>
+                            <div style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 5px;">
+                                Date: <span id="handoverModalDate">-</span>
+                            </div>
+                            <h4 class="modal-title mb-0" style="font-weight: bold; font-size: 1.5rem;">
+                                Handover Blood Units
+                            </h4>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="margin-left: 10px;"></button>
+                    </div>
+                </div>
+                
+                <div class="modal-body" style="padding: 30px;">
+                    <!-- Hospital Information -->
+                    <div class="mb-4">
+                        <h5 style="font-weight: bold; color: #333; margin-bottom: 15px;">Hospital Information</h5>
+                        <div class="row">
+                            <div class="col-md-8">
+                                <h4 style="font-weight: bold; color: #000; margin-bottom: 5px;" id="handoverHospitalName">-</h4>
+                                <p style="color: #666; margin: 0; font-size: 1.1rem;" id="handoverHospitalDetails">-</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr style="border-color: #ddd; margin: 20px 0;">
+                    
+                    <!-- Blood Units Table -->
+                    <div class="mb-4">
+                        <h5 style="font-weight: bold; color: #333; margin-bottom: 20px;">Blood Units to Hand Over</h5>
+                        
+                        <div class="table-responsive">
+                            <table class="table table-bordered" style="margin: 0;">
+                                <thead style="background: #dc3545; color: white;">
+                                    <tr>
+                                        <th style="padding: 12px; text-align: center;">Unit Serial Number</th>
+                                        <th style="padding: 12px; text-align: center;">Blood Type</th>
+                                        <th style="padding: 12px; text-align: center;">Bag Type</th>
+                                        <th style="padding: 12px; text-align: center;">Expiration Date</th>
+                                        <th style="padding: 12px; text-align: center;">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="handoverUnitsTableBody">
+                                    <!-- Blood units will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Summary Information -->
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <div class="card" style="border: 1px solid #ddd; border-radius: 5px;">
+                                    <div class="card-body" style="padding: 15px;">
+                                        <h6 style="font-weight: bold; margin-bottom: 10px; color: #333;">Request Summary</h6>
+                                        <p style="margin: 5px 0; font-size: 0.9rem;"><strong>Request ID:</strong> <span id="handoverRequestId">-</span></p>
+                                        <p style="margin: 5px 0; font-size: 0.9rem;"><strong>Patient:</strong> <span id="handoverPatientName">-</span></p>
+                                        <p style="margin: 5px 0; font-size: 0.9rem;"><strong>Total Units:</strong> <span id="handoverTotalUnits">-</span></p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card" style="border: 1px solid #ddd; border-radius: 5px;">
+                                    <div class="card-body" style="padding: 15px;">
+                                        <h6 style="font-weight: bold; margin-bottom: 10px; color: #333;">Handover Details</h6>
+                                        <p style="margin: 5px 0; font-size: 0.9rem;"><strong>Handed Over by:</strong> <span id="handoverStaffName">-</span></p>
+                                        <p style="margin: 5px 0; font-size: 0.9rem;"><strong>Date & Time:</strong> <span id="handoverDateTime">-</span></p>
+                                        <p style="margin: 5px 0; font-size: 0.9rem;"><strong>Status:</strong> <span class="badge bg-success">Ready for Handover</span></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-footer" style="padding: 20px 30px; border-top: 1px solid #ddd; background: #f8f9fa; border-radius: 0 0 10px 10px;">
+                    <div class="d-flex gap-2 w-100 justify-content-end">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="padding: 10px 20px; font-weight: bold; border-radius: 5px;">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="confirmHandoverBtn" style="padding: 10px 20px; font-weight: bold; border-radius: 5px; background: #007bff;">
+                            <i class="fas fa-truck me-2"></i>Confirm Handover
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Handover Success Modal -->
+    <div class="modal fade" id="handoverSuccessModal" tabindex="-1" aria-labelledby="handoverSuccessLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 10px; border: none;">
+                <div class="modal-header" style="background: #dc3545; color: white; border-radius: 10px 10px 0 0;">
+                    <h5 class="modal-title" id="handoverSuccessLabel" style="font-weight: bold;">Handover Successful</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" style="padding: 25px;">
+                    <p style="margin: 0; font-size: 1rem; color: #333;">
+                        Requested blood units have been successfully handed over and marked as completed.
+                    </p>
+                </div>
+                <div class="modal-footer" style="padding: 20px 25px; border-top: 1px solid #ddd;">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal" style="padding: 8px 20px; font-weight: bold;">OK</button>
           </div>
         </div>
       </div>
@@ -1281,58 +1704,233 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-    // Add this function to populate the modal fields (must be global for inline onclick)
-    function loadRequestDetails(request_id, patientName, bloodType, component, rhFactor, unitsNeeded, diagnosis, hospital, physician, priority, status) {
+    // Enhanced function to populate the modal fields based on wireframe design
+    function loadRequestDetails(request_id, patientName, bloodType, component, rhFactor, unitsNeeded, diagnosis, hospital, physician, priority, status, requestDate, whenNeeded, patientAge, patientGender) {
         console.log('loadRequestDetails called with:', arguments);
+        
+        // Set basic request info
         document.getElementById('modalRequestId').value = request_id;
-        document.getElementById('patientName').value = patientName;
-        document.getElementById('bloodType').value = bloodType;
-        document.getElementById('component').value = component;
-        document.getElementById('rhFactor').value = rhFactor;
-        document.getElementById('unitsNeeded').value = unitsNeeded;
-        document.getElementById('diagnosis').value = diagnosis;
-        document.getElementById('hospital').value = hospital;
-        document.getElementById('physician').value = physician;
-        document.getElementById('priority').value = priority;
+        document.getElementById('modalRequestDate').textContent = requestDate ? new Date(requestDate).toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        }) : '-';
         
-        // Handle button visibility based on status
+        // Set patient information
+        document.getElementById('modalPatientName').textContent = patientName || '-';
+        // Remove units/priority line under name per request
+        document.getElementById('modalPatientDetails').textContent = '';
+        // Age and Gender fields (prefer arguments; fallback to __currentRequest)
+        const ageVal = (patientAge !== undefined && patientAge !== null && patientAge !== '') ? patientAge : (window.__currentRequest && window.__currentRequest.patient_age);
+        const genderVal = (patientGender !== undefined && patientGender !== null && patientGender !== '') ? patientGender : (window.__currentRequest && window.__currentRequest.patient_gender);
+        document.getElementById('modalPatientAge').textContent = (ageVal !== undefined && ageVal !== null && ageVal !== '') ? ageVal : '-';
+        document.getElementById('modalPatientGender').textContent = (genderVal !== undefined && genderVal !== null && genderVal !== '') ? genderVal : '-';
+        
+        // Set request details
+        document.getElementById('modalDiagnosis').value = diagnosis || '';
+        document.getElementById('modalBloodType').value = bloodType || '';
+        document.getElementById('modalRhFactor').value = rhFactor || '';
+        document.getElementById('modalUnitsNeeded').value = unitsNeeded || '';
+        document.getElementById('modalHospital').value = hospital || '';
+        document.getElementById('modalPhysician').value = physician || '';
+        
+        // Handle When Needed (ASAP checkbox + scheduled formatted string)
+        const asapRadio = document.getElementById('asapRadio');
+        const scheduledRadio = document.getElementById('scheduledRadio');
+        const scheduledDisplay = document.getElementById('modalScheduledDisplay');
+        const isAsap = (priority === 'Urgent' || priority === 'ASAP');
+        if (asapRadio && scheduledRadio) {
+            asapRadio.checked = !!isAsap;
+            scheduledRadio.checked = !isAsap;
+        }
+        if (scheduledDisplay) {
+            if (whenNeeded) {
+                const d = new Date(whenNeeded);
+                const pad = (n) => n.toString().padStart(2,'0');
+                const day = pad(d.getDate());
+                const month = pad(d.getMonth()+1);
+                const year = d.getFullYear();
+                let hours = d.getHours();
+                const minutes = pad(d.getMinutes());
+                const ampm = hours >= 12 ? 'PM' : 'AM';
+                hours = hours % 12; if (hours === 0) hours = 12;
+                const time = `${hours}:${minutes} ${ampm}`;
+                scheduledDisplay.value = `${day}/${month}/${year} ${time}`;
+            } else {
+                scheduledDisplay.value = '';
+            }
+        }
+        
+        // Add event listeners for radio button changes
+        if (asapRadio && scheduledRadio && scheduledDateInput) {
+            asapRadio.addEventListener('change', function() {
+                if (this.checked) {
+                    scheduledDateInput.disabled = true;
+                }
+            });
+            
+            scheduledRadio.addEventListener('change', function() {
+                if (this.checked) {
+                    scheduledDateInput.disabled = false;
+                }
+            });
+        }
+        
+        // Set status badge (rename Confirmed to Handed-Over on display)
+        const statusBadge = document.getElementById('modalRequestStatus');
+        const displayStatus = (status === 'Confirmed') ? 'Handed-Over' : (status || 'Pending');
+        statusBadge.textContent = displayStatus;
+        
+        // Set status badge color based on status
+        switch(displayStatus) {
+            case 'Pending':
+            case 'Rescheduled':
+                statusBadge.style.background = '#ffc107';
+                statusBadge.style.color = '#000';
+                break;
+            case 'Accepted':
+            case 'Approved':
+                statusBadge.style.background = '#28a745';
+                statusBadge.style.color = '#fff';
+                break;
+            case 'Declined':
+                statusBadge.style.background = '#dc3545';
+                statusBadge.style.color = '#fff';
+                break;
+            case 'Handed-Over':
+            case 'Handed Over':
+            case 'Confirmed':
+                statusBadge.style.background = '#ffc107';
+                statusBadge.style.color = '#000';
+                break;
+            default:
+                statusBadge.style.background = '#6c757d';
+                statusBadge.style.color = '#fff';
+        }
+        
+        // Handle button visibility and sections based on status
         const acceptButton = document.getElementById('modalAcceptButton');
+        const declineButton = document.getElementById('declineRequest');
         const handOverButton = document.getElementById('handOverButton');
+        const approvalSection = document.getElementById('approvalSection');
+        const handoverSection = document.getElementById('handoverSection');
         
-        if (acceptButton && handOverButton) {
-            // Show Accept button for Pending and Rescheduled statuses
+        // Reset all sections
+        if (approvalSection) approvalSection.style.display = 'none';
+        if (handoverSection) handoverSection.style.display = 'none';
+        
+        if (acceptButton && declineButton && handOverButton) {
+            // Show Accept/Decline buttons for Pending and Rescheduled statuses
             if (['Pending', 'Rescheduled'].includes(status)) {
                 acceptButton.style.display = 'inline-block';
+                declineButton.style.display = 'inline-block';
                 handOverButton.style.display = 'none';
             }
-            // Show Hand Over button only for Printed status
-            else if (status === 'Printed') {
+            // Show Hand Over button only for Accepted/Approved status
+            else if (['Accepted', 'Approved'].includes(status)) {
                 acceptButton.style.display = 'none';
+                declineButton.style.display = 'none';
                 handOverButton.style.display = 'inline-block';
+                if (approvalSection) {
+                    approvalSection.style.display = 'block';
+                    document.getElementById('modalApprovedBy').value = `Approved by Dr. ${physician || 'Staff'} - ${new Date().toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                    })} at ${new Date().toLocaleTimeString('en-US', { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    })}`;
+                }
             }
-            // Hide both buttons for Accepted status (Approved requests)
-            else if (status === 'Accepted') {
+            // Show handover info for Confirmed/Handed Over status
+            else if (['Confirmed', 'Handed Over'].includes(status)) {
                 acceptButton.style.display = 'none';
+                declineButton.style.display = 'none';
                 handOverButton.style.display = 'none';
+                if (handoverSection) {
+                    handoverSection.style.display = 'block';
+                    document.getElementById('modalHandedOverBy').value = `Handed Over by Staff ${physician || 'Member'} - ${new Date().toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                    })}`;
+                }
             }
-            // Hide both buttons for other statuses (Completed, Declined, etc.)
+            // Hide all buttons for other statuses (Declined, etc.)
             else {
                 acceptButton.style.display = 'none';
+                declineButton.style.display = 'none';
                 handOverButton.style.display = 'none';
             }
         }
     }
 
+    // Function to populate handover modal with blood units data
+    function populateHandoverModal(data) {
+        // Set basic information
+        document.getElementById('handoverModalDate').textContent = new Date().toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        
+        document.getElementById('handoverHospitalName').textContent = data.request.hospital_admitted || 'Hospital';
+        document.getElementById('handoverHospitalDetails').textContent = `Request ID: ${data.request.request_id} | Patient: ${data.request.patient_name}`;
+        
+        // Set summary information
+        document.getElementById('handoverRequestId').textContent = data.request.request_id;
+        document.getElementById('handoverPatientName').textContent = data.request.patient_name;
+        document.getElementById('handoverTotalUnits').textContent = data.total_units;
+        
+        // Set handover details
+        document.getElementById('handoverStaffName').textContent = 'Staff Member'; // You can get this from session
+        document.getElementById('handoverDateTime').textContent = new Date().toLocaleString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        // Populate blood units table
+        const tableBody = document.getElementById('handoverUnitsTableBody');
+        tableBody.innerHTML = '';
+        
+        if (data.blood_units && data.blood_units.length > 0) {
+            data.blood_units.forEach((unit, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td style="padding: 12px; text-align: center; font-weight: bold;">${unit.serial_number}</td>
+                    <td style="padding: 12px; text-align: center;">${unit.blood_type}</td>
+                    <td style="padding: 12px; text-align: center;">${unit.bag_type}</td>
+                    <td style="padding: 12px; text-align: center;">${unit.expiration_date}</td>
+                    <td style="padding: 12px; text-align: center;">
+                        <span class="badge bg-success">${unit.status}</span>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        } else {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td colspan="5" style="padding: 20px; text-align: center; color: #666;">
+                    No compatible blood units available
+                </td>
+            `;
+            tableBody.appendChild(row);
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         // Initialize modals
-        const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
-        const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
-            backdrop: false,
-            keyboard: false
-        });
         const requestDetailsModal = new bootstrap.Modal(document.getElementById('requestModal'));
-        const confirmDeclineModal = new bootstrap.Modal(document.getElementById('confirmDeclineModal'));
-        const acceptRequestModal = new bootstrap.Modal(document.getElementById('acceptRequestModal'));
+        const approveConfirmModal = new bootstrap.Modal(document.getElementById('approveConfirmModal'));
+        const declineRequestModal = new bootstrap.Modal(document.getElementById('declineRequestModal'));
+        const requestDeclinedModal = new bootstrap.Modal(document.getElementById('requestDeclinedModal'));
+        const requestApprovedModal = new bootstrap.Modal(document.getElementById('requestApprovedModal'));
+        const handoverConfirmModal = new bootstrap.Modal(document.getElementById('handoverConfirmModal'));
+        const handoverSuccessModal = new bootstrap.Modal(document.getElementById('handoverSuccessModal'));
 
         // Initialize search functionality
         const searchInput = document.getElementById('searchInput');
@@ -1498,10 +2096,20 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             });
         }
 
-        // Accept Request button logic
+        // Approve Request button logic
         document.getElementById('modalAcceptButton').addEventListener('click', function() {
+            // Hide the main modal and show approval confirmation
+            requestDetailsModal.hide();
+            setTimeout(() => {
+                approveConfirmModal.show();
+            }, 300);
+        });
+
+        // Confirm Approve button logic
+        document.getElementById('confirmApproveBtn').addEventListener('click', function() {
             // Get the request_id from the hidden field
             var requestId = document.getElementById('modalRequestId').value;
+            
             // Create a hidden form and submit it
             var form = document.createElement('form');
             form.method = 'POST';
@@ -1522,12 +2130,80 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
         // Hand Over button logic
         document.getElementById('handOverButton').addEventListener('click', function() {
+            // Get request ID
+            var requestId = document.getElementById('modalRequestId').value;
+            
+            // Show loading state
+            var handoverBtn = this;
+            var originalText = handoverBtn.innerHTML;
+            handoverBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Loading...';
+            handoverBtn.disabled = true;
+            
+            // Fetch blood units for this request
+            fetch(`../../public/api/get-blood-units-for-request.php?request_id=${requestId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Populate handover modal
+                        populateHandoverModal(data);
+                        
+                        // Hide the main modal and show handover confirmation
+                        requestDetailsModal.hide();
+                        setTimeout(() => {
+                            handoverConfirmModal.show();
+                        }, 300);
+                    } else {
+                        alert('Error: ' + (data.error || 'Failed to fetch blood units'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error fetching blood units. Please try again.');
+                })
+                .finally(() => {
+                    // Reset button state
+                    handoverBtn.innerHTML = originalText;
+                    handoverBtn.disabled = false;
+                });
+        });
+
+        // Confirm Handover button logic
+        document.getElementById('confirmHandoverBtn').addEventListener('click', function() {
             // Get the request_id from the hidden field
             var requestId = document.getElementById('modalRequestId').value;
             
-            // Show confirmation dialog
-            if (confirm('Are you sure you want to mark this request as completed (handed over)?')) {
-                // Create a hidden form and submit it
+            // Show loading state
+            var confirmBtn = this;
+            var originalText = confirmBtn.innerHTML;
+            confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+            confirmBtn.disabled = true;
+            
+            // First, update the blood units to assign them to this request
+            fetch(`../../public/api/get-blood-units-for-request.php?request_id=${requestId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.blood_units.length > 0) {
+                        // Update each blood unit with the hospital_request_id
+                        const updatePromises = data.blood_units.map(unit => {
+                            return fetch('../../public/api/update-blood-unit-request.php', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    unit_id: unit.unit_id,
+                                    hospital_request_id: requestId
+                                })
+                            });
+                        });
+                        
+                        return Promise.all(updatePromises);
+                    } else {
+                        throw new Error('No blood units available for handover');
+                    }
+                })
+                .then(() => {
+                    // Now submit the handover form
                 var form = document.createElement('form');
                 form.method = 'POST';
                 form.action = '';
@@ -1543,7 +2219,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 form.appendChild(handover);
                 document.body.appendChild(form);
                 form.submit();
-            }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error processing handover: ' + error.message);
+                    // Reset button state
+                    confirmBtn.innerHTML = originalText;
+                    confirmBtn.disabled = false;
+                });
         });
 
         // Decline button in the request details modal
@@ -1554,51 +2237,33 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 // Set the request ID in the decline modal
                 const reqId = document.getElementById('modalRequestId').value;
                 document.getElementById('declineRequestId').value = reqId;
-                // Reset the select
-                document.getElementById('declineReasonSelect').selectedIndex = 0;
+                document.getElementById('declineRequestIdText').textContent = reqId;
+                // Reset the textarea
+                document.getElementById('declineReasonText').value = '';
                 // Hide the request details modal first
-                var requestDetailsModal = bootstrap.Modal.getInstance(document.getElementById('requestModal'));
-                if (requestDetailsModal) requestDetailsModal.hide();
+                requestDetailsModal.hide();
                 // Show the decline modal
-                var declineModal = new bootstrap.Modal(document.getElementById('declineRequestModal'));
-                setTimeout(function() { declineModal.show(); }, 300); // Wait for fade out
+                setTimeout(function() { 
+                    declineRequestModal.show(); 
+                }, 300); // Wait for fade out
             });
         }
 
-        // Step 2: Intercept the decline reason form submit
+        // Handle decline form submission
         const declineRequestForm = document.getElementById('declineRequestForm');
-        const declineReasonSelect = document.getElementById('declineReasonSelect');
-        const declineFinalConfirmModal = new bootstrap.Modal(document.getElementById('declineFinalConfirmModal'));
-        const declineFinalConfirmText = document.getElementById('declineFinalConfirmText');
-        const declineFinalConfirmBtn = document.getElementById('declineFinalConfirmBtn');
-
-        let declineFormSubmitPending = false; // Prevent double submit
+        const declineReasonText = document.getElementById('declineReasonText');
 
         if (declineRequestForm) {
             declineRequestForm.addEventListener('submit', function(e) {
-                if (!declineFormSubmitPending) {
                     e.preventDefault();
-                    const reason = declineReasonSelect.value;
+                const reason = declineReasonText.value.trim();
                     if (!reason) {
-                        alert('Please select a reason for declining.');
+                    alert('Please provide a reason for declining.');
                         return;
-                    }
-                    // Show the confirmation modal with the selected reason
-                    declineFinalConfirmText.innerHTML = `Are you sure you want to decline this request for the following reason?<br><strong>${reason}</strong>`;
-                    declineFinalConfirmModal.show();
                 }
-            });
-        }
-
-        // Step 3: On confirm, submit the form
-        if (declineFinalConfirmBtn) {
-            declineFinalConfirmBtn.addEventListener('click', function() {
-                declineFormSubmitPending = true;
-                declineFinalConfirmModal.hide();
-                // Submit the form after a short delay to allow modal to hide smoothly
-                setTimeout(() => {
-                    declineRequestForm.submit();
-                }, 300);
+                
+                // Submit the form directly
+                this.submit();
             });
         }
     });

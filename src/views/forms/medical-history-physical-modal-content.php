@@ -766,6 +766,10 @@ if ($http_code === 200) {
                 data-donor-id="<?php echo htmlspecialchars($donor_id); ?>">
             <i class="fas fa-times-circle me-2"></i>Decline
         </button>
+        <button type="button" class="btn btn-success approve-medical-history-btn px-4" 
+                data-donor-id="<?php echo htmlspecialchars($donor_id); ?>">
+            <i class="fas fa-check-circle me-2"></i>Approve
+        </button>
         <button class="next-button" id="modalNextButton">Next →</button>
     </div>
 </div>
@@ -1028,7 +1032,43 @@ setTimeout(() => {
     } else {
         console.log('Medical history approval functions not loaded yet');
     }
+    
+    // Initialize physician-specific approval functionality
+    initializePhysicianApprovalButtons();
 }, 200);
+
+// Initialize physician approval buttons
+function initializePhysicianApprovalButtons() {
+    console.log('Initializing physician approval buttons...');
+    
+    // Handle decline button
+    const declineButtons = document.querySelectorAll('.decline-medical-history-btn');
+    declineButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const donorId = this.getAttribute('data-donor-id');
+            console.log('Decline button clicked for donor:', donorId);
+            
+            // Show decline confirmation modal
+            const declineModal = new bootstrap.Modal(document.getElementById('medicalHistoryDeclineModal'));
+            declineModal.show();
+        });
+    });
+    
+    // Handle approve button
+    const approveButtons = document.querySelectorAll('.approve-medical-history-btn');
+    approveButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const donorId = this.getAttribute('data-donor-id');
+            console.log('Approve button clicked for donor:', donorId);
+            
+            // Show approve confirmation modal
+            const approveModal = new bootstrap.Modal(document.getElementById('medicalHistoryApproveConfirmModal'));
+            approveModal.show();
+        });
+    });
+    
+    console.log('Physician approval buttons initialized');
+}
 
 // Debug: Check modal loading status
 setTimeout(() => {

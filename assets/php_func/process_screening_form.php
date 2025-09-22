@@ -125,7 +125,13 @@ function processScreeningForm() {
                     if (is_array($response_data) && isset($response_data[0]['medical_history_id'])) {
                         $medical_history_id = $response_data[0]['medical_history_id'];
                         error_log("Created new medical_history_id: $medical_history_id for donor_id: $donor_id");
+                    } else {
+                        error_log("Failed to create medical history - invalid response format: " . $response);
+                        throw new Exception("Failed to create medical history record");
                     }
+                } else {
+                    error_log("Failed to create medical history - HTTP Code: $http_code, Response: $response");
+                    throw new Exception("Failed to create medical history record. HTTP Code: $http_code");
                 }
             }
         }
@@ -134,6 +140,11 @@ function processScreeningForm() {
             throw new Exception("Could not create or find medical_history_id");
         }
 
+        // Check if user_id exists in session
+        if (!isset($_SESSION['user_id'])) {
+            throw new Exception("User session not found. Please log in again.");
+        }
+        
         // Prepare the base data for insertion
         $screening_data = [
             'donor_form_id' => $donor_id,
