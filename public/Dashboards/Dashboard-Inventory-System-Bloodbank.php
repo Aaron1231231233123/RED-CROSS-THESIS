@@ -892,18 +892,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link active">
                             <span><i class="fas fa-tint"></i>Blood Bank</span>
                         </a>
-                        <a class="nav-link" data-bs-toggle="collapse" href="#hospitalRequestsCollapse" role="button" aria-expanded="false" aria-controls="hospitalRequestsCollapse">
+                        <a href="Dashboard-Inventory-System-Hospital-Request.php" class="nav-link">
                             <span><i class="fas fa-list"></i>Hospital Requests</span>
-                            <i class="fas fa-chevron-down"></i>
                         </a>
-                        <div class="collapse" id="hospitalRequestsCollapse">
-                            <div class="collapse-menu">
-                                <a href="Dashboard-Inventory-System-Hospital-Request.php?status=requests" class="nav-link">Requests</a>
-                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=accepted" class="nav-link">Approved  </a>
-                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=handedover" class="nav-link">Handed Over</a>
-                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=declined" class="nav-link">Declined</a>
-                            </div>
-                        </div>
                         <a href="#" class="nav-link">
                             <span><i class="fas fa-chart-line"></i>Forecast Reports</span>
                         </a>

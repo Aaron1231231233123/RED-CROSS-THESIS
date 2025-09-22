@@ -1,6 +1,9 @@
 <?php
 session_start();
 require_once '../../assets/conn/db_conn.php';
+// Send short-term caching headers for better performance on slow networks
+header('Cache-Control: public, max-age=180');
+header('Vary: Accept-Encoding');
 
 // Check if the user is logged in and has admin role (role_id = 1)
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['role_id']) || $_SESSION['role_id'] != 1) {
@@ -123,9 +126,10 @@ $startTime = microtime(true);
 // Unified view: ignore status filters for this page and show all requests
 $status = 'all';
 
-function fetchAllBloodRequests() {
-    // Fetch all statuses for a single unified list, newest first and urgent first
-    $endpoint = "blood_requests?order=is_asap.desc,requested_on.desc";
+function fetchAllBloodRequests($limit = 50, $offset = 0) {
+    // Narrow columns and paginate (urgent first, newest first)
+    $select = "request_id,hospital_admitted,patient_blood_type,rh_factor,units_requested,is_asap,requested_on,status,patient_name,patient_age,patient_gender,patient_diagnosis,physician_name,when_needed";
+    $endpoint = "blood_requests?select=" . urlencode($select) . "&order=is_asap.desc,requested_on.desc&limit={$limit}&offset={$offset}";
     $response = supabaseRequest($endpoint);
     if (isset($response['data'])) {
         return $response['data'];
@@ -134,7 +138,10 @@ function fetchAllBloodRequests() {
     return [];
 }
 
-$blood_requests = fetchAllBloodRequests();
+$page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$page_size = 50;
+$offset = ($page - 1) * $page_size;
+$blood_requests = fetchAllBloodRequests($page_size, $offset);
 
 // Handle success/error messages
 $success_message = '';
@@ -1262,7 +1269,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <tr>
                                 <td style="text-align:center;">
                                     <?php if ($is_asap && strtolower($request['status']) === 'pending'): ?>
-                                        <img src="../assets/img/icons8-warning-96.png" alt="Urgent" style="height:20px; width:20px;" />
+                                        <img src="../assets/img/icons8-warning-96.png" alt="Urgent" style="height:20px; width:20px;" loading="lazy" />
                                     <?php endif; ?>
                                 </td>
                                 <td><?php echo $rowNum++; ?></td>
@@ -1322,6 +1329,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <?php endforeach; ?>
                         </tbody>
                     </table>
+                    <div class="d-flex justify-content-end gap-2 mt-2">
+                        <?php if ($page > 1): ?>
+                            <a class="btn btn-outline-secondary btn-sm" href="?page=<?php echo $page-1; ?>">Prev</a>
+                        <?php endif; ?>
+                        <?php if (count($blood_requests) === $page_size): ?>
+                            <a class="btn btn-outline-secondary btn-sm" href="?page=<?php echo $page+1; ?>">Next</a>
+                        <?php endif; ?>
+                    </div>
                 </div>
                 <?php endif; ?>
             </div>
@@ -1820,14 +1835,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         if (handoverSection) handoverSection.style.display = 'none';
         
         if (acceptButton && declineButton && handOverButton) {
-            // Show Accept/Decline buttons for Pending and Rescheduled statuses
-            if (['Pending', 'Rescheduled'].includes(status)) {
+            // Use displayStatus to determine controls
+            if (['Pending', 'Rescheduled'].includes(displayStatus)) {
                 acceptButton.style.display = 'inline-block';
                 declineButton.style.display = 'inline-block';
                 handOverButton.style.display = 'none';
             }
             // Show Hand Over button only for Accepted/Approved status
-            else if (['Accepted', 'Approved'].includes(status)) {
+            else if (['Accepted', 'Approved'].includes(displayStatus)) {
                 acceptButton.style.display = 'none';
                 declineButton.style.display = 'none';
                 handOverButton.style.display = 'inline-block';
@@ -1844,7 +1859,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 }
             }
             // Show handover info for Confirmed/Handed Over status
-            else if (['Confirmed', 'Handed Over'].includes(status)) {
+            else if (['Handed-Over', 'Handed Over', 'Confirmed'].includes(displayStatus)) {
                 acceptButton.style.display = 'none';
                 declineButton.style.display = 'none';
                 handOverButton.style.display = 'none';

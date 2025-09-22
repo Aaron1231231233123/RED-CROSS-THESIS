@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preview: Hospital Request Modals</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="p-4">
+    <h3 class="mb-3">Preview: Hospital Request Details Modal</h3>
+    <p class="text-muted">Click a status to open the modal with sample data.</p>
+    <div class="d-flex gap-2 mb-4">
+        <button class="btn btn-warning" onclick="openDemo('Pending', true)">Pending (ASAP)</button>
+        <button class="btn btn-success" onclick="openDemo('Accepted', false)">Approved</button>
+        <button class="btn btn-danger" onclick="openDemo('Declined', false)">Declined</button>
+        <button class="btn btn-secondary" onclick="openDemo('Confirmed', false)">Handed-Over</button>
+    </div>
+
+    <!-- Unified Request Modal (copied structure) -->
+    <div class="modal fade" id="requestModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content" style="border-radius:10px;border:none;">
+                <div class="modal-header" style="background:#dc3545;color:#fff;border-radius:10px 10px 0 0; padding:20px;">
+                    <div class="d-flex justify-content-between align-items-center w-100">
+                        <div>
+                            <div style="font-size:0.9rem;opacity:.8;margin-bottom:5px;">Date: <span id="modalRequestDate">-</span></div>
+                            <h4 class="modal-title mb-0" style="font-weight:bold;font-size:1.5rem;">Referral Blood Shipment Record</h4>
+                        </div>
+                        <div class="d-flex align-items-center gap-3">
+                            <span id="modalRequestStatus" class="badge" style="background:#ffc107;color:#000;padding:8px 12px;font-size:.9rem;">Pending</span>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-body" style="padding:30px;">
+                    <form id="requestDetailsForm">
+                        <input type="hidden" id="modalRequestId" name="request_id">
+                        <div class="mb-4">
+                            <h5 style="font-weight:bold;color:#333;margin-bottom:15px;">Patient Information</h5>
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <h4 style="font-weight:bold;color:#000;margin-bottom:5px;" id="modalPatientName">-</h4>
+                                    <p id="modalPatientDetails" style="margin:0;"></p>
+                                    <div class="d-flex gap-4 mt-2" style="color:#444;">
+                                        <div><span class="fw-bold">Age:</span> <span id="modalPatientAge">-</span></div>
+                                        <div><span class="fw-bold">Gender:</span> <span id="modalPatientGender">-</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr style="border-color:#ddd;margin:20px 0;">
+
+                        <div class="mb-4">
+                            <h5 style="font-weight:bold;color:#333;margin-bottom:20px;">Request Details</h5>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Diagnosis:</label>
+                                <input type="text" class="form-control" id="modalDiagnosis" readonly>
+                            </div>
+                            <div class="mb-3">
+                                <div class="table-responsive">
+                                    <table class="table table-bordered" style="margin:0;">
+                                        <thead style="background:#dc3545;color:#fff;">
+                                            <tr>
+                                                <th class="text-center">Blood Type</th>
+                                                <th class="text-center">RH</th>
+                                                <th class="text-center">Number of Units</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td class="text-center"><input type="text" class="form-control text-center" id="modalBloodType" readonly style="border:none;background:transparent;"></td>
+                                                <td class="text-center"><input type="text" class="form-control text-center" id="modalRhFactor" readonly style="border:none;background:transparent;"></td>
+                                                <td class="text-center"><input type="text" class="form-control text-center" id="modalUnitsNeeded" readonly style="border:none;background:transparent;"></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">When Needed:</label>
+                                <div class="d-flex align-items-center gap-4" style="border:1px solid #ddd;border-radius:6px;padding:10px 12px;">
+                                    <div class="form-check d-flex align-items-center gap-2 me-3">
+                                        <input class="form-check-input" type="radio" name="whenNeededOption" id="asapRadio" value="asap">
+                                        <label class="form-check-label fw-bold" for="asapRadio">ASAP</label>
+                                    </div>
+                                    <div class="form-check d-flex align-items-center gap-2">
+                                        <input class="form-check-input" type="radio" name="whenNeededOption" id="scheduledRadio" value="scheduled">
+                                        <label class="form-check-label fw-bold" for="scheduledRadio">Scheduled</label>
+                                        <input type="text" class="form-control" id="modalScheduledDisplay" style="width:240px;margin-left:10px;" readonly>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Hospital Admitted:</label>
+                                    <input type="text" class="form-control" id="modalHospital" readonly>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Requesting Physician:</label>
+                                    <input type="text" class="form-control" id="modalPhysician" readonly>
+                                </div>
+                            </div>
+                            <div id="approvalSection" style="display:none;">
+                                <hr style="border-color:#ddd;margin:20px 0;">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Approved by:</label>
+                                    <input type="text" class="form-control" id="modalApprovedBy" readonly style="background:#f8f9fa;">
+                                </div>
+                            </div>
+                            <div id="handoverSection" style="display:none;">
+                                <hr style="border-color:#ddd;margin:20px 0;">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Handed Over by:</label>
+                                    <input type="text" class="form-control" id="modalHandedOverBy" readonly style="background:#f8f9fa;">
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer" style="padding:20px 30px;border-top:1px solid #ddd;background:#f8f9fa;border-radius:0 0 10px 10px;">
+                    <div class="d-flex gap-2 w-100 justify-content-end">
+                        <button type="button" class="btn btn-danger" id="declineRequest">Decline Request</button>
+                        <button type="button" class="btn btn-success" id="modalAcceptButton">Approve Request</button>
+                        <button type="button" class="btn btn-primary" id="handOverButton" style="display:none;">Handed Over</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    function loadRequestDetails(request_id, patientName, bloodType, component, rhFactor, unitsNeeded, diagnosis, hospital, physician, priority, status, requestDate, whenNeeded, patientAge, patientGender) {
+        document.getElementById('modalRequestId').value = request_id;
+        document.getElementById('modalRequestDate').textContent = requestDate ? new Date(requestDate).toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'}) : '-';
+        document.getElementById('modalPatientName').textContent = patientName || '-';
+        document.getElementById('modalPatientDetails').textContent = '';
+        document.getElementById('modalPatientAge').textContent = patientAge || '-';
+        document.getElementById('modalPatientGender').textContent = patientGender || '-';
+        document.getElementById('modalDiagnosis').value = diagnosis || '';
+        document.getElementById('modalBloodType').value = bloodType || '';
+        document.getElementById('modalRhFactor').value = rhFactor || '';
+        document.getElementById('modalUnitsNeeded').value = unitsNeeded || '';
+        document.getElementById('modalHospital').value = hospital || '';
+        document.getElementById('modalPhysician').value = physician || '';
+
+        const asapRadio = document.getElementById('asapRadio');
+        const scheduledRadio = document.getElementById('scheduledRadio');
+        const scheduledDisplay = document.getElementById('modalScheduledDisplay');
+        const isAsap = (priority === 'Urgent' || priority === 'ASAP');
+        if (asapRadio && scheduledRadio) { asapRadio.checked = !!isAsap; scheduledRadio.checked = !isAsap; }
+        if (scheduledDisplay) {
+            if (whenNeeded) {
+                const d = new Date(whenNeeded);
+                const pad = (n) => n.toString().padStart(2,'0');
+                const day = pad(d.getDate());
+                const month = pad(d.getMonth()+1);
+                const year = d.getFullYear();
+                let hours = d.getHours();
+                const minutes = pad(d.getMinutes());
+                const ampm = hours >= 12 ? 'PM' : 'AM';
+                hours = hours % 12; if (hours === 0) hours = 12;
+                scheduledDisplay.value = `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
+            } else { scheduledDisplay.value = ''; }
+        }
+
+        const statusBadge = document.getElementById('modalRequestStatus');
+        const displayStatus = (status === 'Confirmed') ? 'Handed-Over' : (status || 'Pending');
+        statusBadge.textContent = displayStatus;
+        switch(displayStatus){
+            case 'Pending': statusBadge.style.background = '#ffc107'; statusBadge.style.color = '#000'; break;
+            case 'Accepted': case 'Approved': statusBadge.style.background = '#28a745'; statusBadge.style.color = '#fff'; break;
+            case 'Declined': statusBadge.style.background = '#dc3545'; statusBadge.style.color = '#fff'; break;
+            case 'Handed-Over': case 'Handed Over': case 'Confirmed': statusBadge.style.background = '#ffc107'; statusBadge.style.color = '#000'; break;
+            default: statusBadge.style.background = '#6c757d'; statusBadge.style.color = '#fff';
+        }
+
+        // Buttons visibility
+        const acceptButton = document.getElementById('modalAcceptButton');
+        const declineButton = document.getElementById('declineRequest');
+        const handOverButton = document.getElementById('handOverButton');
+        const approvalSection = document.getElementById('approvalSection');
+        const handoverSection = document.getElementById('handoverSection');
+        if (approvalSection) approvalSection.style.display = 'none';
+        if (handoverSection) handoverSection.style.display = 'none';
+
+        if (displayStatus === 'Pending' || displayStatus === 'Rescheduled') {
+            acceptButton.style.display = 'inline-block';
+            declineButton.style.display = 'inline-block';
+            handOverButton.style.display = 'none';
+        } else if (displayStatus === 'Accepted' || displayStatus === 'Approved') {
+            acceptButton.style.display = 'none';
+            declineButton.style.display = 'none';
+            handOverButton.style.display = 'inline-block';
+            approvalSection.style.display = 'block';
+            document.getElementById('modalApprovedBy').value = 'Approved by Dr. Demo';
+        } else if (displayStatus === 'Handed-Over') {
+            acceptButton.style.display = 'none';
+            declineButton.style.display = 'none';
+            handOverButton.style.display = 'none';
+            handoverSection.style.display = 'block';
+            document.getElementById('modalHandedOverBy').value = 'Handed over by Staff Demo';
+        } else {
+            acceptButton.style.display = 'none';
+            declineButton.style.display = 'none';
+            handOverButton.style.display = 'none';
+        }
+
+        new bootstrap.Modal(document.getElementById('requestModal')).show();
+    }
+
+    function openDemo(status, isAsap){
+        loadRequestDetails(
+            '12345',
+            'John Doe',
+            'A',
+            'Whole Blood',
+            (status==='Declined'?'Negative':'Positive'),
+            '2',
+            'Blood Transfusion',
+            'Western Visayas Sanitarium and General Hospital',
+            'Dr. Nelwin James Oscares',
+            isAsap ? 'Urgent' : 'Routine',
+            status,
+            new Date().toISOString(),
+            new Date(Date.now()+3600*1000).toISOString(),
+            '32',
+            'Male'
+        );
+    }
+    </script>
+</body>
+</html>
+
+

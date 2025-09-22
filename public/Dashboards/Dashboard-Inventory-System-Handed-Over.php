@@ -910,18 +910,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <span><i class="fas fa-tint me-2"></i>Blood Bank</span>
                         </a>
                         
-                        <a class="nav-link" data-bs-toggle="collapse" href="#hospitalRequestsCollapse" role="button" aria-expanded="true" aria-controls="hospitalRequestsCollapse">
+                        <a href="Dashboard-Inventory-System-Hospital-Request.php" class="nav-link">
                             <span><i class="fas fa-list"></i>Hospital Requests</span>
-                            <i class="fas fa-chevron-down"></i>
                         </a>
-                        <div class="collapse show" id="hospitalRequestsCollapse">
-                            <div class="collapse-menu">
-                                <a href="Dashboard-Inventory-System-Hospital-Request.php?status=requests" class="nav-link<?php echo (!isset($_GET['status']) || $_GET['status'] === 'requests') ? ' active' : ''; ?>">Requests</a>
-                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=accepted" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'accepted') ? ' active' : ''; ?>">Approved</a>
-                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=handedover" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'handedover') ? ' active' : ''; ?>">Handed Over</a>
-                                <a href="Dashboard-Inventory-System-Handed-Over.php?status=declined" class="nav-link<?php echo (isset($_GET['status']) && $_GET['status'] === 'declined') ? ' active' : ''; ?>">Declined</a>
-                            </div>
-                        </div>
                         
                         <a href="#" class="nav-link">
                             <span><i class="fas fa-chart-line me-2"></i>Forecast Reports</span>
@@ -1324,16 +1315,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         const handoverSection = document.getElementById('handoverSection');
         if (approvalSection) approvalSection.style.display = 'none';
         if (handoverSection) handoverSection.style.display = 'none';
-        if (['Pending','Rescheduled'].includes(status)) {
+        if (['Pending','Rescheduled'].includes(displayStatus)) {
             if (acceptButton) acceptButton.style.display = 'inline-block';
             if (declineButton) declineButton.style.display = 'inline-block';
             if (handOverButton) handOverButton.style.display = 'none';
-        } else if (['Accepted','Approved'].includes(status)) {
+        } else if (['Accepted','Approved'].includes(displayStatus)) {
             if (acceptButton) acceptButton.style.display = 'none';
             if (declineButton) declineButton.style.display = 'none';
             if (handOverButton) handOverButton.style.display = 'inline-block';
             if (approvalSection) { approvalSection.style.display = 'block'; document.getElementById('modalApprovedBy').value = `Approved by ${physician || 'Staff'}`; }
-        } else if (['Confirmed','Handed Over'].includes(status)) {
+        } else if (['Handed-Over','Handed Over','Confirmed'].includes(displayStatus)) {
             if (acceptButton) acceptButton.style.display = 'none';
             if (declineButton) declineButton.style.display = 'none';
             if (handOverButton) handOverButton.style.display = 'none';
