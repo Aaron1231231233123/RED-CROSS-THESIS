@@ -88,12 +88,6 @@ class BloodCollectionModal {
         // Blood status option selection and reaction visibility
         document.querySelectorAll('input[name="is_successful"]').forEach(radio => {
             radio.addEventListener('change', () => {
-                // Log the radio button change
-                console.log('Radio button changed:', {
-                    value: radio.value,
-                    checked: radio.checked
-                });
-
                 // Remove selected class from all status options
                 document.querySelectorAll('.blood-status-card').forEach(opt => {
                     opt.classList.remove('selected');
@@ -102,14 +96,10 @@ class BloodCollectionModal {
                 // Add selected class to current option parent
                 if (radio.checked) {
                     radio.closest('.blood-status-card').classList.add('selected');
-                    // Log the selected status
-                    console.log('Selected status:', radio.value);
                 }
                 
                 // Show/hide reaction management based on selection
-                const isFailure = radio.value === 'NO';
-                console.log('Showing reaction section:', isFailure);
-                this.updateReactionVisibility(isFailure);
+                this.updateReactionVisibility(radio.value === 'NO');
             });
         });
 
@@ -243,36 +233,18 @@ class BloodCollectionModal {
                 fetch(`../../assets/php_func/get_physical_exam_details.php?physical_exam_id=${this.bloodCollectionData.physical_exam_id}`)
             ]);
 
-            let donorData = null;
-            let physicalData = null;
-
             if (donorResponse.ok) {
-                const donorResult = await donorResponse.json();
-                if (donorResult.success) {
-                    donorData = donorResult.data;
-                    this.donorData = donorData; // Store donor data
-                    this.populateDonorInfo(donorData);
+                const donorData = await donorResponse.json();
+                if (donorData.success) {
+                    this.populateDonorInfo(donorData.data);
                 }
             }
 
             if (physicalExamResponse.ok) {
-                const physicalResult = await physicalExamResponse.json();
-                if (physicalResult.success) {
-                    physicalData = physicalResult.data;
-                    this.physicalExamData = physicalData; // Store physical exam data
-                    this.populatePhysicalExamInfo(physicalData);
+                const physicalData = await physicalExamResponse.json();
+                if (physicalData.success) {
+                    this.populatePhysicalExamInfo(physicalData.data);
                 }
-            }
-
-            // Store blood type from either source
-            if (donorData && donorData.blood_type) {
-                this.bloodType = donorData.blood_type;
-            } else if (physicalData && physicalData.blood_type) {
-                this.bloodType = physicalData.blood_type;
-            }
-
-            if (!this.bloodType) {
-                console.warn('No blood type found in donor or physical exam data');
             }
 
         } catch (error) {
@@ -290,10 +262,6 @@ class BloodCollectionModal {
         if (donorNameDisplay) {
             const fullName = `${donorData.surname || ''} ${donorData.first_name || ''} ${donorData.middle_name || ''}`.trim();
             donorNameDisplay.textContent = fullName || 'Unknown Donor';
-            // Store blood type in data attribute
-            if (donorData.blood_type) {
-                donorNameDisplay.dataset.bloodType = donorData.blood_type;
-            }
         }
 
         if (collectionDateDisplay) {
@@ -324,15 +292,8 @@ class BloodCollectionModal {
     }
 
     populatePhysicalExamInfo(physicalData) {
-        // Store physical exam data for later use
-        this.physicalExamData = physicalData;
-        
-        // Extract blood type from screening form data if available
-        if (physicalData && physicalData.screening_form && physicalData.screening_form.blood_type) {
-            this.bloodType = physicalData.screening_form.blood_type;
-            console.log('Found blood type from screening form:', this.bloodType);
-        }
-        
+        // Since we simplified Step 1, we don't need to populate detailed physical exam info
+        // The collection details form only shows basic information
         console.log('Physical exam data available for reference:', physicalData);
     }
 
@@ -468,16 +429,10 @@ class BloodCollectionModal {
                 duration = `${diffMinutes} minutes`;
             }
         }
-
-        // Log the actual form data for debugging
-        console.log('Form Data for Summary:', {
-            is_successful: formData.is_successful,
-            is_successful_type: typeof formData.is_successful
-        });
         
         const summaryElements = {
             'summary-blood-bag': formData.blood_bag_type || '-',
-            'summary-successful': formData.is_successful === true ? 'Successful' : 'Failed',
+            'summary-successful': formData.is_successful === 'YES' ? 'Successful' : 'Failed',
             'summary-start-time': formData.start_time || '-',
             'summary-end-time': formData.end_time || '-',
             'summary-duration': duration,
@@ -509,57 +464,17 @@ class BloodCollectionModal {
         const formData = new FormData(form);
         const data = {};
 
-        // Log raw form data for debugging
-        console.log('Raw form data:', Object.fromEntries(formData.entries()));
-
-        // Convert FormData to object with proper type conversions
+        // Convert FormData to object
         for (let [key, value] of formData.entries()) {
-            if (key === 'is_successful') {
-                // Convert YES/NO to boolean and log the conversion
-                const boolValue = value === 'YES';
-                console.log('Converting is_successful:', { raw: value, converted: boolValue });
-                data[key] = boolValue;
-            } else if (key === 'blood_bag_type') {
-                // Ensure blood bag type is properly formatted (e.g., "S-KARMI" -> "S-KARMI")
-                // No additional processing needed as it's already in correct format
-                data[key] = value;
-            } else {
-                data[key] = value;
-            }
+            data[key] = value;
         }
 
         // Add hidden data
         data.physical_exam_id = this.bloodCollectionData.physical_exam_id;
         data.donor_id = this.bloodCollectionData.donor_id;
-        
-        // Add blood type - try all possible sources
-        if (this.bloodType) {
-            data.blood_type = this.bloodType;
-        } else if (this.physicalExamData && this.physicalExamData.screening_form && this.physicalExamData.screening_form.blood_type) {
-            data.blood_type = this.physicalExamData.screening_form.blood_type;
-        } else if (this.donorData && this.donorData.blood_type) {
-            data.blood_type = this.donorData.blood_type;
-        }
-
-        if (!data.blood_type) {
-            // Log available data for debugging
-            console.log('Physical Exam Data:', this.physicalExamData);
-            console.log('Donor Data:', this.donorData);
-            console.log('Blood Type:', this.bloodType);
-            
-            // Try to fetch screening form data directly if not found
-            this.showToast('Fetching blood type from screening form...', 'info');
-            return this.fetchScreeningFormData(data);
-        }
-        
-        // Set amount_taken to 1 unit (standard donation)
-        data.amount_taken = 1;
         // Hint to backend: if a row exists, increment amount_taken instead of replacing
         // and update other fields.
         data.update_mode = 'increment_on_existing';
-
-        // Add debugging
-        console.log('Submitting form data:', data);
 
         return data;
     }
@@ -641,85 +556,42 @@ class BloodCollectionModal {
         }
     }
 
-    async submitForm() {
-        try {
-            // This method will be called from the final confirmation modal
-            const formData = await this.getFormData();
+    submitForm() {
+        // This method will be called from the final confirmation modal
+        const formData = this.getFormData();
+        
+        if (!this.validateFormData(formData)) {
+            return;
+        }
+
+        this.showLoading(true);
+        this.isSubmitting = true;
+
+        // Submit to backend
+        fetch('../../assets/php_func/process_blood_collection.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            this.isSubmitting = false;
+            this.showLoading(false);
             
-            if (!this.validateFormData(formData)) {
-                return;
-            }
-
-            this.showLoading(true);
-            this.isSubmitting = true;
-
-            // Log the data being sent
-            console.log('Submitting to backend:', formData);
-
-            // Submit to backend
-            const response = await fetch('../../assets/php_func/process_blood_collection.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(formData)
-            });
-
-            // Log the raw response for debugging
-            const text = await response.text();
-            console.log('Raw server response:', text);
-
-            // Check if the response is empty
-            if (!text.trim()) {
-                // If empty response but status is 2xx, consider it success
-                if (response.ok) {
-                    this.showSuccessModal();
-                    return;
-                }
-                throw new Error('Empty response from server');
-            }
-
-            let data;
-            try {
-                // Try to extract just the first JSON object if there are multiple
-                const jsonMatch = text.match(/\{.*?\}/);
-                if (jsonMatch) {
-                    data = JSON.parse(jsonMatch[0]);
-                } else {
-                    data = JSON.parse(text);
-                }
-            } catch (e) {
-                // If the operation seems successful (status 2xx) despite JSON parse error
-                if (response.ok) {
-                    console.warn('JSON parse error but operation seems successful:', e);
-                    this.showSuccessModal();
-                    return;
-                }
-                console.error('Failed to parse response:', text);
-                throw new Error('Invalid response format');
-            }
-
-            if (!response.ok) {
-                const errorMsg = data.error || data.message || `HTTP error! status: ${response.status}`;
-                console.error('Server error:', errorMsg);
-                this.showToast(errorMsg, 'error');
-                throw new Error(errorMsg);
-            }
-
             if (data.success) {
                 this.showSuccessModal();
             } else {
-                const errorMsg = data.error || data.message || 'Submission failed';
-                console.error('Submission failed:', errorMsg);
-                this.showToast(errorMsg, 'error');
+                this.showToast(data.message || 'Submission failed', 'error');
             }
-        } catch (error) {
-            console.error('Error submitting form:', error);
-            this.showToast(error.message || 'Network error occurred', 'error');
-        } finally {
+        })
+        .catch(error => {
             this.isSubmitting = false;
             this.showLoading(false);
-        }
+            console.error('Error:', error);
+            this.showToast('Network error occurred', 'error');
+        });
     }
 
     showSuccessModal() {
@@ -828,26 +700,6 @@ class BloodCollectionModal {
         }
     }
 
-    async fetchScreeningFormData(formData) {
-        try {
-            // Fetch screening form data using donor_id
-            const response = await fetch(`../../assets/php_func/get_screening_form.php?donor_id=${this.bloodCollectionData.donor_id}`);
-            const result = await response.json();
-            
-            if (result.success && result.data && result.data.blood_type) {
-                formData.blood_type = result.data.blood_type;
-                this.bloodType = result.data.blood_type;
-                console.log('Successfully fetched blood type from screening form:', formData.blood_type);
-                return formData;
-            } else {
-                throw new Error('Blood type not found in screening form');
-            }
-        } catch (error) {
-            console.error('Error fetching screening form data:', error);
-            throw new Error('Blood type is required but could not be found in any source (donor, physical exam, or screening form)');
-        }
-    }
-
     showToast(message, type = 'info') {
         // Create toast element
         const toast = document.createElement('div');
@@ -881,14 +733,4 @@ class BloodCollectionModal {
 }
 
 // Initialize the blood collection modal
-document.addEventListener('DOMContentLoaded', () => {
-    window.bloodCollectionModal = new BloodCollectionModal();
-    
-    // Add debugging
-    console.log('Blood collection modal initialized:', window.bloodCollectionModal);
-    
-    // Verify openModal method exists
-    if (typeof window.bloodCollectionModal.openModal !== 'function') {
-        console.error('openModal method not found on blood collection modal!');
-    }
-}); 
+window.bloodCollectionModal = new BloodCollectionModal(); 

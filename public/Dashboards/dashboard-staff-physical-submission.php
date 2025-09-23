@@ -90,6 +90,24 @@ foreach ($eligibility_records as $er) {
     }
 }
 
+// 2c. Get medical history approval map (for UI read-only rules and action swapping)
+$medical_history_rows = makeSupabaseApiCall(
+    'medical_history',
+    ['donor_id', 'medical_approval', 'needs_review']
+);
+$medical_by_donor = [];
+foreach ($medical_history_rows as $mh) {
+    if (!isset($mh['donor_id'])) { continue; }
+    $did = (string)$mh['donor_id'];
+    $medical_by_donor[$did] = [
+        'medical_approval' => isset($mh['medical_approval']) ? $mh['medical_approval'] : null,
+        'needs_review' => isset($mh['needs_review']) ? (
+            ($mh['needs_review'] === true) || ($mh['needs_review'] === 1) || ($mh['needs_review'] === '1') ||
+            (is_string($mh['needs_review']) && in_array(strtolower(trim($mh['needs_review'])), ['true','t','yes','y'], true))
+        ) : false,
+    ];
+}
+
 // 2. Get all physical examination records with full details
 $physical_exams = makeSupabaseApiCall(
     'physical_examination',
@@ -424,7 +442,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
     <link rel="stylesheet" href="../../assets/css/medical-history-approval-modals.css">
     <script src="../../assets/js/physical_examination_modal.js"></script>
     <script src="../../assets/js/defer_donor_modal.js"></script>
-    <script src="../../assets/js/medical-history-approval.js"></script>
+    
     <style>
         :root {
             --bg-color: #f5f5f5;
@@ -1911,6 +1929,74 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         .type-new { color: #2e7d32; font-weight: 700; }
         .type-returning { color: #1976d2; font-weight: 700; }
     </style>
+    <style>
+        /* Initial Screening Modal - match MH design and ensure proper backdrop layering */
+        #screeningFormModal {
+            z-index: 1055 !important;
+        }
+        #screeningFormModal .modal-dialog {
+            max-width: 800px;
+            width: 90%;
+        }
+        #screeningFormModal .modal-content.screening-modal-content {
+            border-radius: 15px;
+            border: none;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        #screeningFormModal .screening-modal-header {
+            background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+            color: #fff;
+            border: none;
+            padding: 16px 20px;
+        }
+        #screeningFormModal .btn-close.btn-close-white { filter: invert(1); }
+        #screeningFormModal .screening-modal-body { padding: 24px; }
+        #screeningFormModal .screening-modal-footer {
+            background: #fff;
+            border-top: 1px solid #e9ecef;
+            padding: 16px 20px;
+        }
+        /* Ensure backdrop is visible and does not block inputs */
+        .modal-backdrop.show { opacity: .5 !important; }
+        #screeningFormModal * { pointer-events: auto; }
+    </style>
+    <style>
+        /* Extend screening modal UI to match MH look */
+        #screeningFormModal .screening-progress-container { background:#fff; padding:20px; border-bottom:1px solid #e9ecef; position:relative; }
+        #screeningFormModal .screening-progress-steps { display:flex; justify-content:space-between; align-items:center; position:relative; z-index:2; }
+        #screeningFormModal .screening-step { display:flex; flex-direction:column; align-items:center; cursor:pointer; transition:all .3s ease; }
+        #screeningFormModal .screening-step-number { width:40px; height:40px; border-radius:50%; background:#e9ecef; color:#6c757d; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:16px; margin-bottom:8px; border:none; }
+        #screeningFormModal .screening-step-label { font-size:12px; color:#6c757d; font-weight:500; text-align:center; }
+        #screeningFormModal .screening-step.active .screening-step-number,
+        #screeningFormModal .screening-step.completed .screening-step-number { background:#b22222; color:#fff; }
+        #screeningFormModal .screening-step.active .screening-step-label,
+        #screeningFormModal .screening-step.completed .screening-step-label { color:#b22222; font-weight:600; }
+        #screeningFormModal .screening-progress-line { position:absolute; top:40%; left:0; right:0; height:2px; background:#e9ecef; transform:translateY(-50%); z-index:1; }
+        #screeningFormModal .screening-progress-fill { height:100%; background:#b22222; width:0%; transition:width .5s ease; }
+
+        #screeningFormModal .screening-step-content { display:none; animation: fadeIn .3s ease; }
+        #screeningFormModal .screening-step-content.active { display:block; }
+        #screeningFormModal .screening-step-title h6 { color:#333; margin-bottom:10px; font-size:1.1rem; font-weight:600; }
+        #screeningFormModal .screening-step-title p { color:#6c757d; margin-bottom:20px; }
+
+        #screeningFormModal .screening-label { color:#6c757d; font-weight:500; font-size:.95rem; }
+        #screeningFormModal .screening-input { width:100%; border:1px solid #e9ecef; border-radius:6px; padding:.5rem .75rem; transition:border-color .2s ease; }
+        #screeningFormModal .screening-input:focus { outline:none; border-color:#b22222; box-shadow:0 0 0 .15rem rgba(178,34,34,.15); }
+        #screeningFormModal .screening-input-group { position:relative; }
+        #screeningFormModal .screening-input-suffix { position:absolute; right:10px; top:50%; transform:translateY(-50%); color:#6c757d; font-size:.85rem; }
+
+        #screeningFormModal .screening-detail-card { background:#f8f9fa; border:1px solid #ddd; padding:20px; border-radius:8px; margin-bottom:16px; }
+        #screeningFormModal .screening-category-title { background:#e9ecef; color:#b22222; font-weight:700; text-align:center; padding:10px; margin:-20px -20px 15px -20px; }
+
+        #screeningFormModal .screening-review-title { color:#b22222; font-weight:700; margin-bottom:10px; }
+        #screeningFormModal .screening-review-item { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #f8f9fa; }
+        #screeningFormModal .screening-review-item:last-child { border-bottom:none; }
+        #screeningFormModal .screening-review-label { color:#6c757d; font-weight:500; }
+        #screeningFormModal .screening-review-value { color:#212529; font-weight:600; }
+
+        @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+    </style>
 </head>
 <body class="light-mode">
     <div class="container-fluid p-0">
@@ -2286,7 +2372,8 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
 
         <?php include '../../src/views/modals/defer-donor-modal.php'; ?>
     <?php include '../../src/views/modals/physical-examination-modal.php'; ?>
-    <?php include '../../src/views/modals/medical-history-approval-modals.php'; ?>
+    
+    <?php include '../../src/views/forms/physician-screening-form-content-modal.php'; ?>
 
     <!-- Physical Examination Modal is included from external file -->
 
@@ -2445,7 +2532,16 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
          */
         const ModalManager = {
             show: function(modalId) {
-                const modal = new bootstrap.Modal(document.getElementById(modalId));
+                const el = document.getElementById(modalId);
+                if (!el) return null;
+                // Use static backdrop for screening modal to avoid accidental closes
+                const opts = (modalId === 'screeningFormModal') ? { backdrop: 'static', keyboard: false, focus: true } : {};
+                // Ensure attributes reflect options (helps with third-party triggers)
+                if (modalId === 'screeningFormModal') {
+                    try { el.setAttribute('data-bs-backdrop', 'static'); } catch(_) {}
+                    try { el.setAttribute('data-bs-keyboard', 'false'); } catch(_) {}
+                }
+                const modal = new bootstrap.Modal(el, opts);
                 modal.show();
                 return modal;
             },
@@ -2461,6 +2557,11 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 return bootstrap.Modal.getInstance(document.getElementById(modalId));
             }
         };
+
+        // Shim: silence unused initializer in physician flow
+        if (typeof window.initializeMedicalHistoryApproval !== 'function') {
+            window.initializeMedicalHistoryApproval = function(){};
+        }
         
         function showConfirmationModal() {
             ModalManager.show('confirmationModal');
@@ -2492,6 +2593,11 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 // Remove existing event listeners first
                 document.querySelectorAll(".view-btn").forEach(button => {
                     button.removeEventListener("click", button.viewClickHandler);
+                    // On every show, force-refresh content to ensure latest DB state
+                    try {
+                        window.lastDonorProfileContext = { donorId: donorId, screeningData: screeningData };
+                        setTimeout(() => { refreshDonorProfileModal({ donorId, screeningData }); }, 60);
+                    } catch(_) {}
                 });
                 document.querySelectorAll(".edit-btn").forEach(button => {
                     button.removeEventListener("click", button.editClickHandler);
@@ -2609,42 +2715,22 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 searchCategory.addEventListener('change', debouncedSearch);
             }
 
-            // Replace edit buttons with view when medical_approval is Approved
+            // Respect server-side editability: do NOT override edit buttons for Approved MH
+            // If a row is editable because needs_review === true or pending, keep it editable.
             function enforceApprovedReadOnlyButtons() {
-                const rows = Array.from(screeningTableBody.querySelectorAll('tr'));
-                rows.forEach(row => {
-                    try {
-                        const dataAttr = row.getAttribute('data-screening');
-                        if (!dataAttr) return;
-                        const data = JSON.parse(dataAttr);
-                        const donorId = data.donor_form_id || data.donor_id;
-                        if (!donorId) return;
-                        const med = medicalByDonor && medicalByDonor[donorId];
-                        const isApproved = med && (med.medical_approval === 'Approved');
-                        if (!isApproved) return;
-
-                        // If there is an edit button, replace it with a view button
-                        const editBtn = row.querySelector('.edit-btn');
-                        if (editBtn) {
-                            const viewBtn = document.createElement('button');
-                            viewBtn.type = 'button';
-                            viewBtn.className = 'btn btn-info btn-sm view-btn';
-                            viewBtn.setAttribute('data-screening', editBtn.getAttribute('data-screening'));
-                            viewBtn.title = 'View Details';
-                            viewBtn.innerHTML = '<i class="fas fa-eye"></i>';
-                            editBtn.replaceWith(viewBtn);
-                        }
-                    } catch (e) {
-                        console.warn('Row parse error:', e);
-                    }
-                });
-
-                // Re-bind handlers for the new view buttons
                 attachButtonClickHandlers();
             }
 
             // Run once on load
             enforceApprovedReadOnlyButtons();
+
+            // Removed: allow screening modal to close normally (no guard)
+
+            // When Screening or Medical History modals close via X, return to Donor Profile
+            installReturnToProfileOnClose();
+
+            // Install deep diagnostic hooks to find who closes/hides modals/overlays
+            installModalCloseDebugHooks();
 
             // Defer modal will be initialized when opened
             
@@ -2655,6 +2741,187 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             // Ensure footer visibility matches remarks when arriving from other flows
             try { enforcePendingConfirmVisibility(); } catch(_) {}
         });
+
+        // Reopen Donor Profile when certain modals are closed by the user
+        function installReturnToProfileOnClose(){
+            try {
+                const reopenProfile = function(){
+                    try {
+                        if (window.__suppressReturnToProfile) { window.__suppressReturnToProfile = false; return; }
+                        const dpEl = document.getElementById('donorProfileModal');
+                        if (!dpEl) return;
+                        const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
+                        dp.show();
+                        // After showing, force-refresh the modal content so latest DB values are displayed
+                        setTimeout(() => { try { refreshDonorProfileModal(); } catch(_) {} }, 100);
+                    } catch(_) {}
+                };
+                // Screening modal (Bootstrap)
+                const sEl = document.getElementById('screeningFormModal');
+                if (sEl && !sEl.__returnHooked) {
+                    sEl.__returnHooked = true;
+                    sEl.addEventListener('hidden.bs.modal', function(){ reopenProfile(); });
+                    // Also hook the top-right close button explicitly
+                    const xBtn = sEl.querySelector('.btn-close');
+                    if (xBtn && !xBtn.__returnHooked) {
+                        xBtn.__returnHooked = true;
+                        xBtn.addEventListener('click', function(){
+                            setTimeout(reopenProfile, 200);
+                        });
+                    }
+                }
+                // Medical History modal (custom) – use our close workflow
+                try {
+                    const btn = document.querySelector('#medicalHistoryModal .medical-close-btn');
+                    if (btn && !btn.__returnHooked) {
+                        btn.__returnHooked = true;
+                        btn.addEventListener('click', function(){
+                            try { window.__suppressReturnToProfile = false; } catch(_) {}
+                        });
+                    }
+                } catch(_) {}
+            } catch(_) {}
+        }
+
+        // Diagnostic: Find exact sources that hide/remove modals and overlays
+        function installModalCloseDebugHooks(){
+            try {
+                if (window.__modalDebugHooksInstalled) return; window.__modalDebugHooksInstalled = true;
+                const isWatched = function(el){
+                    try {
+                        if (!el) return false;
+                        if (el.id === 'screeningFormModal' || el.id === 'donorProfileModal' || el.id === 'medicalHistoryModal' || el.id === 'simpleCustomModal') return true;
+                        const cls = el.classList ? Array.from(el.classList) : [];
+                        if (cls.includes('modal-backdrop') || cls.includes('modal')) return true;
+                    } catch(_) {}
+                    return false;
+                };
+                const logStack = function(prefix, el){
+                    try {
+                        const desc = el ? (el.id ? ('#'+el.id) : (el.className || el.tagName)) : '(null)';
+                        const stack = (new Error()).stack;
+                        console.warn(prefix + ' → ' + desc, '\nStack:\n' + stack);
+                    } catch(_) {}
+                };
+                // Wrap removeChild
+                try {
+                    const origRemoveChild = Node.prototype.removeChild;
+                    Node.prototype.removeChild = function(child){
+                        try { if (isWatched(child)) logStack('[ModalDebug] removeChild', child); } catch(_) {}
+                        return origRemoveChild.apply(this, arguments);
+                    };
+                } catch(_) {}
+                // Wrap remove()
+                try {
+                    const origRemove = Element.prototype.remove;
+                    Element.prototype.remove = function(){
+                        try { if (isWatched(this)) logStack('[ModalDebug] element.remove', this); } catch(_) {}
+                        return origRemove.apply(this, arguments);
+                    };
+                } catch(_) {}
+                // Wrap replaceChild
+                try {
+                    const origReplaceChild = Node.prototype.replaceChild;
+                    Node.prototype.replaceChild = function(newChild, oldChild){
+                        try { if (isWatched(oldChild)) logStack('[ModalDebug] replaceChild(old)', oldChild); } catch(_) {}
+                        return origReplaceChild.apply(this, arguments);
+                    };
+                } catch(_) {}
+                // MutationObserver for attribute changes that hide
+                try {
+                    const body = document.body;
+                    const mo = new MutationObserver((muts) => {
+                        try {
+                            muts.forEach((m) => {
+                                try {
+                                    const t = m.target;
+                                    if (!isWatched(t)) return;
+                                    if (m.type === 'attributes' && (m.attributeName === 'class' || m.attributeName === 'style')) {
+                                        const disp = (t.style && t.style.display) || '';
+                                        const hidden = (disp === 'none') || (t.classList && !t.classList.contains('show') && (t.classList.contains('modal') || t.id === 'screeningFormModal'));
+                                        if (hidden) logStack('[ModalDebug] attribute-hide', t);
+                                    }
+                                } catch(_) {}
+                            });
+                        } catch(_) {}
+                    });
+                    mo.observe(body, { attributes:true, childList:true, subtree:true, attributeFilter:['class','style'] });
+                } catch(_) {}
+            } catch(_) {}
+        }
+
+        // Removed guardScreeningApproveClose (allowed to close freely)
+
+        // Controlled Approve handler for screening modal (no modal close)
+        async function handleScreeningApproveClick(){
+            try {
+                const modal = document.getElementById('screeningFormModal');
+                if (!modal) return;
+                const donorIdInput = modal.querySelector('input[name="donor_id"]');
+                const donorId = donorIdInput && donorIdInput.value ? donorIdInput.value : (window.currentDonorData && window.currentDonorData.donor_id) || '';
+                if (!donorId) {
+                    if (window.customInfo) window.customInfo('Unable to resolve donor. Please reopen.'); else alert('Unable to resolve donor.');
+                    return;
+                }
+                const proceed = function(){
+                    (async () => {
+                        try {
+                            try { showProcessingModal('Approving medical history...'); } catch(_) {}
+                            const fd = new FormData();
+                            fd.append('donor_id', donorId);
+                            fd.append('medical_approval', 'Approved');
+                            const res = await fetch('../../public/api/update-medical-approval.php', { method: 'POST', body: fd });
+                            const json = await res.json().catch(() => ({ success:false }));
+                            if (!json || !json.success) {
+                                if (window.customInfo) window.customInfo('Failed to set Medical History to Approved.'); else alert('Failed to set Medical History to Approved.');
+                                return;
+                            }
+                            // Update in-memory cache so UI doesn't flash Not Approved
+                            try {
+                                if (typeof window.medicalByDonor === 'object') {
+                                    const key = donorId; const k2 = String(donorId);
+                                    window.medicalByDonor[key] = window.medicalByDonor[key] || {};
+                                    window.medicalByDonor[key].medical_approval = 'Approved';
+                                    window.medicalByDonor[k2] = window.medicalByDonor[k2] || {};
+                                    window.medicalByDonor[k2].medical_approval = 'Approved';
+                                }
+                            } catch(_) {}
+
+                            // Prepare context for donor profile refresh
+                            try { window.lastDonorProfileContext = { donorId: donorId, screeningData: { donor_form_id: donorId } }; } catch(_) {}
+                            // Release guard so global hide.bs.modal does not block closing
+                            try { window.__screeningApproveActive = false; } catch(_) {}
+                            // Fade-close screening, then reopen Donor Profile (with a slight delay for DB commit)
+                            try {
+                                const inst = bootstrap.Modal.getInstance(modal) || new bootstrap.Modal(modal);
+                                inst.hide();
+                            } catch(_) { modal.classList.remove('show'); setTimeout(()=>{ modal.style.display='none'; }, 150); }
+                            // Ensure backdrops/body state are cleaned to truly close the screening modal
+                            setTimeout(function(){
+                                try { forceCloseScreeningModal(); } catch(_) {}
+                            }, 100);
+                            setTimeout(function(){
+                                const dpEl = document.getElementById('donorProfileModal');
+                                if (dpEl) {
+                                    const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
+                                    try { dp.show(); } catch(_) {}
+                                    // Force-refresh donor profile to pull latest data
+                                    try { refreshDonorProfileModal({ donorId, screeningData: { donor_form_id: donorId } }); } catch(_) {}
+                                }
+                                try { setTimeout(()=>hideProcessingModal(), 400); } catch(_) {}
+                            }, 1200);
+                        } catch(_) {
+                            if (window.customInfo) window.customInfo('Network error approving Medical History.'); else alert('Network error.');
+                        }
+                    })();
+                };
+                if (window.customConfirm) {
+                    window.customConfirm('Approve Medical History for this donor?', proceed);
+                } else if (confirm('Approve Medical History for this donor?')) {
+                    proceed();
+                }
+            } catch(_) {}
+        }
         // Enforce footer Confirm visibility based on physical_examination.needs_review
         function enforcePendingConfirmVisibility() {
             try {
@@ -2764,15 +3031,12 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             // Show the modal
             const donorProfileModalEl = document.getElementById('donorProfileModal');
             const donorProfileModal = new bootstrap.Modal(donorProfileModalEl);
-            // Guard early hides for ~3s after open
-            try { window.__dpOpenGuardUntil = Date.now() + 3000; } catch(_) {}
             donorProfileModalEl.addEventListener('hide.bs.modal', function(ev){
                 try {
-                    const now = Date.now();
-                    const withinGuard = window.__dpOpenGuardUntil && now < window.__dpOpenGuardUntil;
                     const allowHide = !!window.allowDonorProfileHide;
                     const successActive = !!(window.__mhSuccessActive || window.__peSuccessActive);
-                    if ((withinGuard || successActive) && !allowHide) {
+                    // Only prevent hide during success states unless explicitly allowed
+                    if (successActive && !allowHide) {
                         ev.preventDefault();
                         return false;
                     }
@@ -2783,29 +3047,18 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             try {
                 donorProfileModalEl.addEventListener('shown.bs.modal', function(){
                     try { window.isOpeningDonorProfile = false; } catch(_) {}
+                    // Ensure screening modal is fully closed when donor profile is shown
+                    try {
+                        const sEl = document.getElementById('screeningFormModal');
+                        if (sEl) {
+                            const sInst = bootstrap.Modal.getInstance(sEl) || new bootstrap.Modal(sEl);
+                            try { sInst.hide(); } catch(_) {}
+                            try { sEl.classList.remove('show'); sEl.style.display='none'; sEl.setAttribute('aria-hidden','true'); } catch(_) {}
+                        }
+                        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                        document.body.classList.add('modal-open');
+                    } catch(_) {}
                 });
-            } catch(_) {}
-            // Attribute observer to immediately restore visibility if something toggles classes/styles during guard
-            try {
-                // Disconnect any previous observer
-                try { if (window.__dpObserver && typeof window.__dpObserver.disconnect === 'function') window.__dpObserver.disconnect(); } catch(_) {}
-                const observer = new MutationObserver(() => {
-                    const now = Date.now();
-                    const withinGuard = window.__dpOpenGuardUntil && now < window.__dpOpenGuardUntil;
-                    if (!withinGuard) return;
-                    const isShown = donorProfileModalEl.classList.contains('show') && donorProfileModalEl.style.display !== 'none';
-                    if (!isShown) {
-                        donorProfileModalEl.style.display = 'block';
-                        donorProfileModalEl.classList.add('show');
-                        try { donorProfileModal.show(); } catch(_) {}
-                    }
-                });
-                // Store observer globally so we can disconnect before intentional hides
-                try { window.__dpObserver = observer; } catch(_) {}
-                try { donorProfileModalEl.__dpObserver = observer; } catch(_) {}
-                observer.observe(donorProfileModalEl, { attributes: true, attributeFilter: ['class', 'style'] });
-                // Auto-disconnect after guard interval
-                setTimeout(() => { try { observer.disconnect(); if (window.__dpObserver === observer) window.__dpObserver = null; } catch(_) {} }, 3200);
             } catch(_) {}
             
             // Set up the close listener
@@ -2823,7 +3076,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 donorProfileModal.show();
             }
             
-            // Load donor profile content
+            // Load donor profile content (with inline loader while open)
             loadDonorProfileContent(donorId, screeningData);
             
             // Bind proceed button functionality
@@ -2863,9 +3116,27 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             console.log('Donor profile modal integrity verified');
         }
         
+        // Inline loader for donor profile modal content
+        function setDonorProfileLoading(message){
+            try {
+                const modalContent = document.getElementById('donorProfileModalContent');
+                if (!modalContent) return;
+                modalContent.innerHTML = `
+                    <div class="text-center" style="padding: 28px 0;">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2 mb-0">${message || 'Loading donor profile...'}</p>
+                    </div>
+                `;
+            } catch(_) {}
+        }
+
         function loadDonorProfileContent(donorId, screeningData) {
-            // Fetch donor profile content
-            fetch(`../../src/views/forms/donor-profile-modal-content.php?donor_id=${donorId}`)
+            // Fetch donor profile content directly into the modal
+            setDonorProfileLoading('Loading donor profile...');
+            const ts = Date.now();
+            fetch(`../../src/views/forms/donor-profile-modal-content.php?donor_id=${donorId}&_=${ts}`)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
@@ -2898,6 +3169,32 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         </div>
                     `;
                 });
+        }
+
+        // Force-close the Initial Screening modal if it is open
+        function forceCloseScreeningModal() {
+            try {
+                const sEl = document.getElementById('screeningFormModal');
+                if (!sEl) return;
+                // Best-effort: hide via Bootstrap API first
+                try { (bootstrap.Modal.getInstance(sEl) || new bootstrap.Modal(sEl)).hide(); } catch(_) {}
+                // Hard close styles/attributes
+                try { sEl.classList.remove('show'); sEl.style.display = 'none'; sEl.setAttribute('aria-hidden','true'); } catch(_) {}
+                // Remove stray backdrops and reset body
+                try { document.querySelectorAll('.modal-backdrop').forEach(b => b.remove()); } catch(_) {}
+                try { document.body.classList.remove('modal-open'); document.body.style.overflow=''; document.body.style.paddingRight=''; } catch(_) {}
+            } catch(_) {}
+        }
+
+        // Helper: force-refresh donor profile modal content from server
+        function refreshDonorProfileModal(forceContext) {
+            try {
+                const ctx = forceContext || window.lastDonorProfileContext || {};
+                const donorId = ctx.donorId || (ctx.screeningData && ctx.screeningData.donor_form_id);
+                if (!donorId) return;
+                setDonorProfileLoading('Reloading donor profile...');
+                loadDonorProfileContent(donorId, ctx.screeningData || { donor_form_id: donorId });
+            } catch(_) {}
         }
 
         // When medical_approval is Approved, change Medical History action to a view (eye) button
@@ -3139,16 +3436,18 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
 
                         // Requirements satisfied -> process based on selection.
                         const selection = (selectEl && selectEl.value) ? String(selectEl.value) : '';
-                        if (selection === 'approve') {
-                            // Advance to collection: accept PE and flag BC needs_review
-                            await advanceToCollection(donorId);
-                            return;
-                        }
-                        // If not approving, do not navigate; simply close the modal (UX choice) or keep open.
-                        if (window.customInfo) {
-                            window.customInfo('Selection recorded. No transition performed.');
-                        }
-                        return;
+                if (selection === 'approve') {
+                    // Return to donor profile after confirm (physician flow)
+                    try { window.allowDonorProfileHide = false; } catch(_) {}
+                    const dpEl = document.getElementById('donorProfileModal');
+                    if (dpEl) {
+                        const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
+                        try { dp.show(); } catch(_) {}
+                    }
+                    return;
+                }
+                // Do nothing for other selections
+                return;
                     } catch (e) {
                         // Fail-safe: do not proceed silently; show message
                         if (window.customInfo) {
@@ -3343,6 +3642,21 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 window.currentDonorApproved = !!(rec && (rec.medical_approval === 'Approved'));
             } catch (e) { window.currentDonorApproved = false; }
             
+            // Ensure Screening modal is fully closed before showing MH
+            try {
+                const sEl = document.getElementById('screeningFormModal');
+                if (sEl) {
+                    const sInst = bootstrap.Modal.getInstance(sEl) || new bootstrap.Modal(sEl);
+                    try { sInst.hide(); } catch(_) {}
+                    try { sEl.classList.remove('show'); sEl.style.display='none'; sEl.setAttribute('aria-hidden','true'); } catch(_) {}
+                }
+                // Remove any stale backdrops from other modals to prevent stacking issues
+                document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow='';
+                document.body.style.paddingRight='';
+            } catch(_) {}
+
             // Hide donor profile without cleanup, then show MH above it
             try {
                 window.skipDonorProfileCleanup = true;
@@ -3423,8 +3737,19 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 
                 console.log('Medical history modal closed');
                 
-                // REMOVED: Automatic donor profile reopening - handled by medical history approval system
-                // This prevents conflicts with showApprovedThenReturn function
+                // Return to Donor Profile modal unless explicitly prevented (e.g., proceeding to Initial Screening)
+                try {
+                    const prevented = !!window.__preventReturnToProfile;
+                    // Reset flag for next time
+                    window.__preventReturnToProfile = false;
+                    if (!prevented) {
+                        const dpEl = document.getElementById('donorProfileModal');
+                        if (dpEl) {
+                            const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
+                            dp.show();
+                        }
+                    }
+                } catch(_) {}
             }, 300);
         }
         
@@ -3445,7 +3770,27 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     // Update modal content
                     const modalContent = document.getElementById('medicalHistoryModalContent');
                     modalContent.innerHTML = html;
+                    // Remove any inline Approve buttons rendered inside the content; only use footer Approve
+                    try {
+                        setTimeout(() => {
+                            const container = document.getElementById('medicalHistoryModalContent');
+                            if (!container) return;
+                            const nodes = container.querySelectorAll('button, a');
+                            nodes.forEach(btn => {
+                                const txt = (btn.textContent || '').trim().toLowerCase();
+                                if (txt === 'approve' || txt === 'approve medical history') {
+                                    if (btn.parentNode) btn.parentNode.removeChild(btn);
+                                }
+                            });
+                        }, 50);
+                    } catch(_) {}
                     
+                    // Enforce buttons based on medical_approval status (Approved => view-only)
+                    try {
+                        const donorId = window.currentDonorId || (window.lastDonorProfileContext && window.lastDonorProfileContext.donorId) || null;
+                        enforceMedicalApprovalButtons(donorId);
+                    } catch(_) {}
+
                     // Debug: Check if donor_id field is present in the loaded form
                     const donorIdField = modalContent.querySelector('input[name="donor_id"]');
                     if (donorIdField) {
@@ -3528,6 +3873,33 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         </div>
                     `;
                 });
+        }
+
+        // Replace Approve/Decline with View when medical_approval == 'Approved'
+        function enforceMedicalApprovalButtons(donorId){
+            try {
+                let approved = !!window.currentDonorApproved;
+                if (!approved && donorId && medicalByDonor) {
+                    const rec = medicalByDonor[donorId] || medicalByDonor[String(donorId)] || null;
+                    approved = !!(rec && rec.medical_approval === 'Approved');
+                }
+                if (!approved) return;
+                const container = document.getElementById('medicalHistoryModalContent') || document;
+                // Remove decline and approve action buttons if present
+                container.querySelectorAll('.decline-medical-history-btn, .approve-medical-history-btn').forEach(function(btn){
+                    try { btn.remove(); } catch(_) {}
+                });
+                // Hide any generic Approve/Decline/Submit buttons from inline content
+                const texts = ['approve','decline','submit'];
+                container.querySelectorAll('button, a').forEach(function(el){
+                    const t = (el.textContent||'').trim().toLowerCase();
+                    if (texts.includes(t)) { try { el.style.display='none'; } catch(_) {} }
+                });
+                // Ensure any previously added view-only button is removed
+                container.querySelectorAll('#mhViewOnlyBtn').forEach(function(b){ try { b.remove(); } catch(_) {} });
+                // Enforce readonly visuals
+                enforceMedicalApprovedReadonly();
+            } catch(e) { console.warn('enforceMedicalApprovalButtons error', e); }
         }
 
         // Footer controls removed – inner modal provides its own navigation/buttons
@@ -4099,7 +4471,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         approveBtn.type = 'button';
                         approveBtn.id = 'modalApproveButton';
                         approveBtn.className = 'btn btn-success';
-                        approveBtn.innerHTML = '<i class="fas fa-check me-2"></i>Approve';
+                        approveBtn.innerHTML = '<i class="fas fa-arrow-right me-2"></i>Proceed to Initial Screening';
                         // Place the Approve button next to Next/Close button in the footer controls
                         if (nextButton && nextButton.parentNode) {
                             nextButton.parentNode.appendChild(approveBtn);
@@ -4112,18 +4484,57 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         try { 
                             window.__mhApproveConfirmed = false; 
                             window.__mhApproveFromPrimary = true; 
-                            window.__mhApprovePending = false;
+                            window.__mhApprovePending = true;
                         } catch(_) {}
                         
-                        window.customConfirm('Are you sure you want to approve this donor\'s medical history?', function(){
-                            // Set approval flags before calling processFormSubmission
-                            try { 
-                                window.__mhApproveConfirmed = true; 
-                                window.__mhApprovePending = true;
+                        window.customConfirm('Proceed to Initial Screening? (Medical History will NOT be submitted here)', function(){
+                            try { window.__mhApproveConfirmed = true; } catch(_) {}
+                            // Cache Medical History form data for later submission at Screening approve
+                            try {
+                                const mhForm = document.getElementById('modalMedicalHistoryForm');
+                                if (mhForm) {
+                                    const fd = new FormData(mhForm);
+                                    const cache = {};
+                                    fd.forEach((v, k) => { cache[k] = v; });
+                                    // Ensure required approve fields are set
+                                    cache['action'] = 'approve';
+                                    cache['medical_approval'] = 'Approved';
+                                    if (!cache['donor_id'] && window.currentDonorId) cache['donor_id'] = window.currentDonorId;
+                                    window.pendingMedicalApprovalData = cache;
+                                }
                             } catch(_) {}
-                            
-                            console.log('Approval confirmed, calling processFormSubmission');
-                            processFormSubmission('approve');
+                            // Close MH modal and open Initial Screening without submitting MH
+                            try { window.__preventReturnToProfile = true; } catch(_) {}
+                            try { if (typeof closeMedicalHistoryModal === 'function') closeMedicalHistoryModal(); } catch(_) {}
+                            // Resolve donor id robustly from multiple sources
+                            let donorId = null;
+                            try {
+                                const donorIdEl = document.querySelector('#modalMedicalHistoryForm input[name="donor_id"]');
+                                if (donorIdEl && donorIdEl.value) donorId = donorIdEl.value;
+                            } catch(_) {}
+                            if (!donorId && window.currentDonorId) donorId = window.currentDonorId;
+                            if (!donorId && window.lastDonorProfileContext && window.lastDonorProfileContext.donorId) donorId = window.lastDonorProfileContext.donorId;
+                            if (!donorId && window.currentScreeningData && window.currentScreeningData.donor_form_id) donorId = window.currentScreeningData.donor_form_id;
+                            if (!donorId) {
+                                try {
+                                    const hint = document.querySelector('#donorProfileModal [data-donor-id]');
+                                    if (hint) donorId = hint.getAttribute('data-donor-id');
+                                } catch(_) {}
+                            }
+                            if (!donorId) {
+                                console.warn('Unable to resolve donor_id for Initial Screening');
+                                try { window.customInfo && window.customInfo('Unable to resolve donor. Please reopen the donor and try again.'); } catch(_) {}
+                                return;
+                            }
+                            setTimeout(function(){
+                                try {
+                                    if (typeof showScreeningFormModal === 'function' && donorId) {
+                                        showScreeningFormModal(donorId);
+                                    } else if (typeof window.openScreeningModal === 'function' && donorId) {
+                                        window.openScreeningModal({ donor_id: donorId });
+                                    }
+                                } catch(_) {}
+                            }, 200);
                         });
                     };
                 } else {
@@ -4414,8 +4825,93 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             // Set donor data for the screening form
             window.currentDonorData = { donor_id: donorId };
             
+            // Clean up any lingering Bootstrap backdrops and body state before opening
+            try {
+                document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); });
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+                // Do not remove custom confirm/info overlays here; allow confirmation to remain visible
+                // Ensure other Bootstrap modals are fully hidden
+                document.querySelectorAll('.modal.show').forEach(function(m){
+                    if (m.id !== 'screeningFormModal') {
+                        m.classList.remove('show');
+                        m.style.display = 'none';
+                        m.setAttribute('aria-hidden','true');
+                    }
+                });
+            } catch(_) {}
+            
+            // Debounce: avoid double-open if called rapidly from two sources
+            try {
+                const now = Date.now();
+                if (window.__screeningOpenAt && (now - window.__screeningOpenAt) < 800) {
+                    return;
+                }
+                window.__screeningOpenAt = now;
+            } catch(_) {}
+
             // Show the screening form modal
             ModalManager.show('screeningFormModal');
+            // Ensure proper stacking order so backdrop never overlays the dialog
+            try {
+                const modalEl = document.getElementById('screeningFormModal');
+                if (modalEl) {
+                    modalEl.style.zIndex = '1065';
+                    const dlg = modalEl.querySelector('.modal-dialog');
+                    if (dlg) dlg.style.zIndex = '1066';
+                }
+                const sweepBackdrops = () => {
+                    const backs = document.querySelectorAll('.modal-backdrop');
+                    // Remove ALL stale backdrops to prevent over-dimming
+                    backs.forEach((b) => { try { b.remove(); } catch(_) {} });
+                    document.body.classList.add('modal-open');
+                    document.body.style.overflow = 'hidden';
+                    document.body.style.paddingRight = '';
+                };
+                setTimeout(sweepBackdrops, 20);
+                setTimeout(sweepBackdrops, 120);
+                setTimeout(sweepBackdrops, 260);
+
+                // Protect against any script that force-hides the screening modal for a short window
+                if (modalEl) {
+                    try {
+                        const guardUntil = Date.now() + 6000;
+                        const reassert = () => {
+                            // If protection window elapsed, stop
+                            if (Date.now() > guardUntil) return false;
+                            // Reassert visibility and classes
+                            modalEl.style.display = 'block';
+                            if (!modalEl.classList.contains('show')) modalEl.classList.add('show');
+                            document.body.classList.add('modal-open');
+                            return true;
+                        };
+                        // Block Bootstrap hidden event
+                        const onHidden = (ev) => {
+                            if (ev && ev.target === modalEl && Date.now() <= guardUntil) {
+                                console.warn('[Phys-Screening] Re-opening screening modal after hidden event');
+                                ev.stopImmediatePropagation();
+                                ev.preventDefault?.();
+                                reassert();
+                                try { (bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl, { backdrop:'static', keyboard:false })).show(); } catch(_) {}
+                            }
+                        };
+                        modalEl.addEventListener('hidden.bs.modal', onHidden, true);
+                        // Observe class/style mutations that would hide it
+                        const mo = new MutationObserver((muts) => {
+                            if (Date.now() > guardUntil) { try { mo.disconnect(); } catch(_) {} return; }
+                            const isHidden = (modalEl.style.display === 'none') || !modalEl.classList.contains('show');
+                            if (isHidden) {
+                                console.warn('[Phys-Screening] Prevented screening modal hide via mutation');
+                                reassert();
+                            }
+                        });
+                        mo.observe(modalEl, { attributes:true, attributeFilter:['class','style'] });
+                        // Auto stop guard after window
+                        setTimeout(() => { try { mo.disconnect(); modalEl.removeEventListener('hidden.bs.modal', onHidden, true); } catch(_) {} }, 6200);
+                    } catch(_) {}
+                }
+            } catch(_) {}
             
             // Set the donor ID in the screening form
             const donorIdInput = document.querySelector('#screeningFormModal input[name="donor_id"]');
@@ -4468,7 +4964,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         };
         
         // Custom confirmation function to replace browser confirm
-        function customConfirm(message, onConfirm) {
+        if (!window.customConfirm) window.customConfirm = function(message, onConfirm) {
             // Create a simple modal without Bootstrap
             const modalHTML = `
                 <div id="simpleCustomModal" style="
@@ -4537,52 +5033,95 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 </div>
             `;
             
-            // Remove any existing modal
+            // Prevent multiple confirms at the same time
+            try { if (window.__confirmOverlayActive) return; } catch(_) {}
+            // Remove any existing modal (stale)
             const existingModal = document.getElementById('simpleCustomModal');
             if (existingModal) {
-                existingModal.remove();
+                try { existingModal.remove(); } catch(_) {}
             }
             
             // Add modal to page
             document.body.insertAdjacentHTML('beforeend', modalHTML);
+            try { window.__confirmOverlayActive = true; window.__confirmDismissed = false; } catch(_) {}
+            // Guard the custom confirm overlay from being hidden/removed for a few seconds
+            try {
+                const overlay = document.getElementById('simpleCustomModal');
+                const guardUntil = Date.now() + 6000;
+                // Keep overlay visible and above everything
+                const keepVisible = function(){
+                    try {
+                        if (!overlay) return;
+                        overlay.style.display = 'flex';
+                        overlay.style.zIndex = '99999';
+                        document.body.classList.add('modal-open');
+                    } catch(_) {}
+                };
+                keepVisible();
+                // Prevent Escape from closing it
+                const keyHandler = function(ev){
+                    try {
+                        if (Date.now() > guardUntil) { document.removeEventListener('keydown', keyHandler, true); return; }
+                        if (ev.key === 'Escape' || ev.keyCode === 27) { ev.preventDefault(); ev.stopPropagation(); return false; }
+                    } catch(_) {}
+                };
+                document.addEventListener('keydown', keyHandler, true);
+                // Observe overlay for style/class mutations
+                let moOverlay = new MutationObserver(() => {
+                    if (Date.now() > guardUntil) { try { moOverlay.disconnect(); } catch(_) {} return; }
+                    if (window.__confirmDismissed) { try { moOverlay.disconnect(); } catch(_) {} return; }
+                    keepVisible();
+                });
+                if (overlay) moOverlay.observe(overlay, { attributes:true, attributeFilter:['class','style'] });
+                // Observe body tree for accidental removal of overlay; if removed, re-append quickly
+                let moBody = new MutationObserver(() => {
+                    try {
+                        if (Date.now() > guardUntil) { try { moBody.disconnect(); } catch(_) {} return; }
+                        if (window.__confirmDismissed) { try { moBody.disconnect(); } catch(_) {} return; }
+                        const exists = document.getElementById('simpleCustomModal');
+                        if (!exists && overlay) {
+                            console.warn('[Phys-Screening] Restoring confirmation overlay after external removal');
+                            document.body.appendChild(overlay);
+                            keepVisible();
+                        }
+                    } catch(_) {}
+                });
+                moBody.observe(document.body, { childList:true, subtree:true });
+                // Stop guards after window
+                setTimeout(() => { try { moOverlay.disconnect(); moBody.disconnect(); document.removeEventListener('keydown', keyHandler, true); } catch(_) {} }, 6200);
+                // Store observers for cleanup on close
+                try { overlay.__moOverlay = moOverlay; overlay.__moBody = moBody; } catch(_) {}
+                // Swallow clicks outside dialog
+                try {
+                    overlay.addEventListener('click', function(ev){
+                        try {
+                            const dialog = overlay.firstElementChild;
+                            if (dialog && !dialog.contains(ev.target)) { ev.preventDefault(); ev.stopPropagation(); }
+                        } catch(_) {}
+                    }, true);
+                } catch(_) {}
+            } catch(_) {}
             
             // Set up confirmation function
             window.confirmSimpleModal = function() {
+                try { window.__confirmDismissed = true; } catch(_) {}
                 closeSimpleModal();
                 if (onConfirm) onConfirm();
             };
             
             window.closeSimpleModal = function() {
+                try { window.__confirmDismissed = true; window.__confirmOverlayActive = false; } catch(_) {}
                 const modal = document.getElementById('simpleCustomModal');
                 if (modal) {
-                    modal.remove();
+                    try { if (modal.__moOverlay) modal.__moOverlay.disconnect(); } catch(_) {}
+                    try { if (modal.__moBody) modal.__moBody.disconnect(); } catch(_) {}
+                    try { modal.remove(); } catch(_) {}
                 }
             };
-        }
-        
-        // Make customConfirm globally available
-        window.customConfirm = customConfirm;
+        };
 
-        // Info-only modal (single Return button)
-        function customInfo(message) {
-            const html = `
-                <div id="simpleCustomModalInfo" style="position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); z-index:99999; display:flex; align-items:center; justify-content:center;">
-                    <div style="background:white; padding:30px; border-radius:10px; max-width:500px; width:90%; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
-                        <div style="background:#9c0000; color:white; padding:15px 20px; margin:-30px -30px 20px -30px; border-radius:10px 10px 0 0; display:flex; justify-content:space-between; align-items:center;">
-                            <h5 style="margin:0;"><i class="fas fa-info-circle me-2"></i>Notice</h5>
-                            <button onclick="(function(){var m=document.getElementById('simpleCustomModalInfo'); if(m) m.remove();})()" style="background:none; border:none; color:white; font-size:20px; cursor:pointer;">&times;</button>
-                        </div>
-                        <p style="font-size:16px; line-height:1.5; margin-bottom:25px; white-space:pre-line;">${message}</p>
-                        <div style="text-align:right;">
-                            <button onclick="(function(){var m=document.getElementById('simpleCustomModalInfo'); if(m) m.remove();})()" style="background:#6c757d; color:white; border:none; padding:10px 25px; border-radius:6px; cursor:pointer;">Return</button>
-                        </div>
-                    </div>
-                </div>`;
-            const existing = document.getElementById('simpleCustomModalInfo');
-            if (existing) existing.remove();
-            document.body.insertAdjacentHTML('beforeend', html);
-        }
-        window.customInfo = customInfo;
+        // Disable the Notice/Return info modal
+        window.customInfo = function(message) { /* no-op per physician flow */ };
         
         // Remove risky overrides that may trigger Illegal invocation and unintended modal closes
         // Kept header styling but without mutating Element.prototype or forcing modal-open class changes
@@ -4600,6 +5139,41 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     dashboardHeader.style.width = '100%';
                     dashboardHeader.style.boxSizing = 'border-box';
                 }
+            } catch(_) {}
+        })();
+
+        // Link MH → Screening: after medical history approval completes, open Initial Screening
+        (function(){
+            try {
+                if (window.__mhScreeningHooked) return; // idempotent
+                window.__mhScreeningHooked = true;
+                const install = function(){
+                    if (typeof window.showApprovedThenReturn !== 'function') return false;
+                    const __orig = window.showApprovedThenReturn;
+                    // Disable automatic Screening open here to avoid double-opens; rely on MH module
+                    window.showApprovedThenReturn = function(donorId, screeningData){
+                        try { __orig.apply(this, arguments); } catch(_) {}
+                        // Intentionally NOT opening Screening here; MH module triggers it.
+                    };
+                    return true;
+                };
+                // Try now, and again after a short delay if not yet available
+                if (!install()) {
+                    setTimeout(install, 500);
+                    setTimeout(install, 1200);
+                }
+
+                // Remove any duplicate Approve buttons inside MH content if present
+                try {
+                    const container = document.getElementById('medicalHistoryModalContent') || document;
+                    const approveBtns = container.querySelectorAll('button, a');
+                    approveBtns.forEach(function(btn){
+                        const txt = (btn.textContent || '').trim().toLowerCase();
+                        if ((txt === 'approve' || txt === 'approve medical history') && btn.id !== 'modalApproveButton') {
+                            if (btn.parentNode) btn.parentNode.removeChild(btn);
+                        }
+                    });
+                } catch(_) {}
             } catch(_) {}
         })();
     </script>

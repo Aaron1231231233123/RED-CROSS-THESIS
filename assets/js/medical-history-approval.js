@@ -158,6 +158,65 @@ function handleDeclineClick(e) {
     return false;
 }
 
+// Primary Approve click handler (moves flow to Initial Screening modal)
+function handleApproveClick(e) {
+    try {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    } catch(_) {}
+    try {
+        // Ensure we have donor context
+        ensureMedicalHistoryContextFromPage();
+        const ctx = window.currentMedicalHistoryData || {};
+        const donorId = ctx.donor_id || (window.lastDonorProfileContext && window.lastDonorProfileContext.donorId) || window.currentDonorId || null;
+        if (!donorId) {
+            showMedicalHistoryToast('Error', 'Cannot resolve donor. Please reopen the donor profile.', 'error');
+            return false;
+        }
+
+        // Confirm approval intent; we do not submit MH here. Screening will perform final approval.
+        if (typeof showConfirmApproveModal === 'function') {
+            showConfirmApproveModal(function(){
+                try {
+                    // Close MH modal cleanly
+                    const mhEl = document.getElementById('medicalHistoryModal');
+                    if (mhEl) {
+                        const mh = bootstrap.Modal.getInstance(mhEl) || new bootstrap.Modal(mhEl);
+                        try { mh.hide(); } catch(_) {}
+                        setTimeout(() => {
+                            try { mhEl.classList.remove('show'); mhEl.style.display = 'none'; mhEl.setAttribute('aria-hidden','true'); } catch(_) {}
+                            try { document.querySelectorAll('.modal-backdrop').forEach(b => b.remove()); } catch(_) {}
+                            try { document.body.classList.remove('modal-open'); document.body.style.overflow = ''; document.body.style.paddingRight = ''; } catch(_) {}
+                        }, 40);
+                    }
+                } catch(_) {}
+
+                // Open Initial Screening modal (physician copy)
+                setTimeout(function(){
+                    if (typeof window.showScreeningFormModal === 'function') {
+                        window.showScreeningFormModal(String(donorId));
+                    } else {
+                        showMedicalHistoryToast('Error', 'Screening modal not available. Please refresh.', 'error');
+                    }
+                }, 120);
+            });
+        } else {
+            // Fallback without custom confirmation
+            if (confirm('Proceed to Initial Screening? (Medical History approval will be finalized there)')) {
+                if (typeof window.showScreeningFormModal === 'function') {
+                    window.showScreeningFormModal(String(donorId));
+                } else {
+                    showMedicalHistoryToast('Error', 'Screening modal not available. Please refresh.', 'error');
+                }
+            }
+        }
+    } catch (err) {
+        console.error('handleApproveClick error:', err);
+        showMedicalHistoryToast('Error', 'Unable to proceed to Initial Screening.', 'error');
+    }
+    return false;
+}
+
 // Handle restriction type change
 function handleRestrictionTypeChange() {
     const restrictionType = document.getElementById('restrictionType').value;
@@ -1590,6 +1649,7 @@ function attachInnerModalApproveHandler() {
         }, true);
     } catch(_) {}
 })();
+*/
 
 // Listen for central approval event and run the success flow
 (function listenForApprovalEvent(){

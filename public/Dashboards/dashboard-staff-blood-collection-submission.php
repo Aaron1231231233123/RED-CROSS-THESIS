@@ -2471,31 +2471,9 @@ foreach ($display_records as $index => $record) {
                         <div class="blood-report-header">
                             <div class="blood-report-title">
                                 <h5>Blood Collection Report</h5>
-                                    <div class="blood-report-meta">
+                                <div class="blood-report-meta">
                                     <span class="blood-report-date"><?php echo date('F j, Y'); ?></span>
-                                    <span class="blood-report-phlebotomist">Phlebotomist: <span id="summary-phlebotomist"><?php 
-                                        if (isset($_SESSION['user_id'])) {
-                                            $user_id = $_SESSION['user_id'];
-                                            $ch = curl_init(SUPABASE_URL . '/rest/v1/users?select=first_name,surname&user_id=eq.' . $user_id);
-                                            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                                            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                                                'apikey: ' . SUPABASE_API_KEY,
-                                                'Authorization: Bearer ' . SUPABASE_API_KEY
-                                            ]);
-                                            $response = curl_exec($ch);
-                                            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                                            curl_close($ch);
-                                            
-                                            if ($http_code === 200) {
-                                                $user_data = json_decode($response, true);
-                                                if (!empty($user_data)) {
-                                                    $first_name = $user_data[0]['first_name'] ?? '';
-                                                    $surname = $user_data[0]['surname'] ?? '';
-                                                    echo htmlspecialchars(trim($first_name . ' ' . $surname));
-                                                }
-                                            }
-                                        }
-                                    ?></span></span>
+                                    <span class="blood-report-phlebotomist">Phlebotomist: <span id="summary-phlebotomist">Current User</span></span>
                                 </div>
                             </div>
                         </div>
@@ -2842,16 +2820,10 @@ foreach ($display_records as $index => $record) {
                 // Open the Blood Collection modal
                 if (window.bloodCollectionModal) {
                     window.bloodCollectionModal.openModal(currentCollectionData);
-                    // Auto-fill phlebotomist hidden field with current user's name
+                    // Auto-fill phlebotomist hidden field
                     const phField = document.getElementById('blood-phlebotomist');
-                    if (phField) {
-                        // Get the name from the collector-name span which has the current user's full name
-                        const collectorNameSpan = document.querySelector('.collector-name');
-                        if (collectorNameSpan) {
-                            phField.value = collectorNameSpan.textContent.trim();
-                        } else if (LOGGED_PHLEBOTOMIST) {
-                            phField.value = LOGGED_PHLEBOTOMIST;
-                        }
+                    if (phField && LOGGED_PHLEBOTOMIST) {
+                        phField.value = LOGGED_PHLEBOTOMIST;
                     }
                 } else {
                     console.error("Blood collection modal not initialized");

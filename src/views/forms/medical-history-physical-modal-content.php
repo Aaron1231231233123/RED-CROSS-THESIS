@@ -21,10 +21,7 @@ if (!$donor_id) {
 // Set donor_id in session for form processing
 $_SESSION['donor_id'] = $donor_id;
 
-// Debug: Check what's in the session
-echo "<!-- Session Debug: donor_id = " . htmlspecialchars($donor_id) . " -->";
-echo "<!-- Session Debug: screening_id = " . (isset($_SESSION['screening_id']) ? htmlspecialchars($_SESSION['screening_id']) : 'NOT SET') . " -->";
-echo "<!-- Session Debug: All session vars = " . htmlspecialchars(print_r($_SESSION, true)) . " -->";
+// Debug echoes removed to avoid leaking session data in markup
 
 // Check for correct roles (admin role_id 1 or staff role_id 3)
 if (!isset($_SESSION['role_id'])) {
@@ -114,6 +111,77 @@ if ($http_code === 200) {
     error_log("Failed to fetch medical history data. HTTP code: $http_code");
 }
 ?>
+<script>
+// Physician MH modal: enforce clean modal/backdrop lifecycle and smooth handoff to Screening
+(function(){
+    try {
+        // Hard teardown utility made available to the dashboard as well
+        function hardTeardownOverlays() {
+            try {
+                // Remove all Bootstrap backdrops
+                document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); });
+                // Remove any custom confirm/info overlays
+                const sc = document.getElementById('simpleCustomModal');
+                if (sc) sc.remove();
+                const sci = document.getElementById('simpleCustomModalInfo');
+                if (sci) sci.remove();
+                // Reset body state
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+                // Force-hide any other Bootstrap modals that might still be flagged visible
+                document.querySelectorAll('.modal.show').forEach(function(m){
+                    m.classList.remove('show');
+                    m.style.display = 'none';
+                    m.setAttribute('aria-hidden','true');
+                });
+            } catch(_) {}
+        }
+        // Expose for external callers (dashboard)
+        window.__physHardTeardown = hardTeardownOverlays;
+
+        // When any MH approve/decline/proceed button is clicked, schedule a hard teardown
+        document.addEventListener('click', function(e){
+            try {
+                const el = e.target.closest('button, a');
+                if (!el) return;
+                const txt = (el.textContent || '').trim().toLowerCase();
+                const isApprove = el.classList.contains('approve-medical-history-btn') || txt === 'approve' || txt === 'approve medical history';
+                const isDecline = el.classList.contains('decline-medical-history-btn') || txt === 'decline';
+                if (isApprove || isDecline) {
+                    // Defer slightly to allow any immediate UI updates, then teardown overlays
+                    setTimeout(hardTeardownOverlays, 50);
+                }
+                // Any close button inside MH
+                const isDismiss = el.hasAttribute('data-bs-dismiss') && el.getAttribute('data-bs-dismiss') === 'modal';
+                if (isDismiss) {
+                    setTimeout(hardTeardownOverlays, 50);
+                }
+            } catch(_) {}
+        }, { capture: true });
+
+        // When the MH modal hides, guarantee teardown
+        document.addEventListener('hidden.bs.modal', function(ev){
+            try {
+                if (ev && ev.target && ev.target.id === 'medicalHistoryModal') {
+                    hardTeardownOverlays();
+                }
+            } catch(_) {}
+        }, { capture: true });
+
+        // When the MH modal shows, dedupe backdrops (keep last Bootstrap one)
+        document.addEventListener('shown.bs.modal', function(ev){
+            try {
+                if (ev && ev.target && ev.target.id === 'medicalHistoryModal') {
+                    const backs = Array.from(document.querySelectorAll('.modal-backdrop'));
+                    if (backs.length > 1) backs.slice(0, -1).forEach(function(b){ b.remove(); });
+                    document.body.classList.add('modal-open');
+                }
+            } catch(_) {}
+        }, { capture: true });
+    } catch(_) {}
+})();
+</script>
 
 <!-- Include Font Awesome for icons -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -684,82 +752,62 @@ if ($http_code === 200) {
         <button class="prev-button" id="modalPrevButton" style="display: none;">&#8592; Previous</button>
         <button class="edit-button" id="modalEditButton" style="margin-right: 10px;">Edit</button>
         <?php
-        // Try to get screening_id from multiple sources
+        // Resolve screening_id with proper fallbacks
         $screening_id = null;
-        
-        // First try session
+
+        // 1) Session
         if (isset($_SESSION['screening_id']) && !empty($_SESSION['screening_id'])) {
             $screening_id = $_SESSION['screening_id'];
         }
-        // Then try GET parameter
-        elseif (isset($_GET['screening_id']) && !empty($_GET['screening_id'])) {
+        // 2) GET param
+        if (!$screening_id && isset($_GET['screening_id']) && !empty($_GET['screening_id'])) {
             $screening_id = $_GET['screening_id'];
         }
-        // Then try to extract from medical history data if available
-        elseif ($medical_history_data && isset($medical_history_data['screening_id'])) {
+        // 3) From loaded MH data
+        if (!$screening_id && $medical_history_data && isset($medical_history_data['screening_id'])) {
             $screening_id = $medical_history_data['screening_id'];
         }
-        // Try to get from screening_form table using donor_id
-        elseif ($donor_id) {
+        // 4) Query screening_form by donor_id
+        if (!$screening_id && $donor_id) {
             $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?donor_id=eq.' . $donor_id . '&select=screening_id&order=created_at.desc&limit=1');
-            
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
                 'apikey: ' . SUPABASE_API_KEY,
                 'Authorization: Bearer ' . SUPABASE_API_KEY
             ]);
-            
             $response = curl_exec($ch);
             $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-            
             if ($http_code === 200) {
                 $screening_data = json_decode($response, true);
                 if (!empty($screening_data)) {
                     $screening_id = $screening_data[0]['screening_id'];
-                    echo "<!-- Found screening_id from screening_form: $screening_id -->";
-                } else {
-                    echo "<!-- No screening data found for donor_id: $donor_id -->";
                 }
-            } else {
-                echo "<!-- Failed to fetch screening data. HTTP code: $http_code -->";
             }
         }
-        // Try to get from physical_examination table using donor_id
-        elseif ($donor_id) {
+        // 5) Fallback: query physical_examination by donor_id
+        if (!$screening_id && $donor_id) {
             $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?donor_id=eq.' . $donor_id . '&select=screening_id&order=created_at.desc&limit=1');
-            
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
                 'apikey: ' . SUPABASE_API_KEY,
                 'Authorization: Bearer ' . SUPABASE_API_KEY
             ]);
-            
             $response = curl_exec($ch);
             $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-            
             if ($http_code === 200) {
                 $physical_data = json_decode($response, true);
                 if (!empty($physical_data)) {
                     $screening_id = $physical_data[0]['screening_id'];
-                    echo "<!-- Found screening_id from physical_examination: $screening_id -->";
-                } else {
-                    echo "<!-- No physical examination data found for donor_id: $donor_id -->";
                 }
-            } else {
-                echo "<!-- Failed to fetch physical examination data. HTTP code: $http_code -->";
             }
         }
-        // Finally, try to get from donor profile if available
-        elseif (isset($_SESSION['current_screening_id'])) {
+        // 6) Last resort: prior context
+        if (!$screening_id && isset($_SESSION['current_screening_id'])) {
             $screening_id = $_SESSION['current_screening_id'];
         }
-        
-        // If still no screening_id, use a placeholder
-        if (!$screening_id) {
-            $screening_id = 'no-screening-id';
-        }
+        if (!$screening_id) { $screening_id = 'no-screening-id'; }
         ?>
         
         <button type="button" class="btn btn-outline-danger decline-medical-history-btn px-4" 
@@ -1092,45 +1140,4 @@ setTimeout(() => {
 }, 500);
 </script>
 
-<!-- Include Medical History Approval Modals -->
-<?php 
-echo "<!-- Loading medical history approval modals... -->";
-$modalPath = '../modals/medical-history-approval-modals.php';
-if (file_exists($modalPath)) {
-    include $modalPath;
-    echo "<!-- Medical history approval modals loaded successfully -->";
-} else {
-    echo "<!-- ERROR: Modal file not found at: $modalPath -->";
-    echo "<!-- Current directory: " . __DIR__ . " -->";
-}
-?>
-
-<!-- Debug: Check if modals are loaded -->
-<div id="modalDebugInfo" style="display: none;">
-    <p>Decline Modal: <span id="declineModalStatus">Checking...</span></p>
-    <p>Approval Modal: <span id="approvalModalStatus">Checking...</span></p>
-</div>
-
-<!-- Fallback Modal for Testing (remove this after fixing the main modal) -->
-<div class="modal fade" id="fallbackDeclineModal" tabindex="-1" aria-labelledby="fallbackDeclineModalLabel" aria-hidden="true" style="z-index: 99999 !important;">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="fallbackDeclineModalLabel">Decline Medical History (Fallback)</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p>This is a fallback modal for testing. The main modal system should be working.</p>
-                <p>If you see this, there's an issue with the main modal include.</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Include Medical History Approval CSS -->
-<link rel="stylesheet" href="../../assets/css/medical-history-approval-modals.css">
-
-<!-- Medical History Approval JavaScript is included in the main dashboard -->
+<!-- Medical History Approval Modals are included in the parent dashboard. Avoid duplicate includes here to prevent ID conflicts. -->

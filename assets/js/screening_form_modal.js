@@ -1,6 +1,8 @@
 // Screening Form Modal JavaScript
 document.addEventListener('DOMContentLoaded', function() {
     const screeningModal = document.getElementById('screeningFormModal');
+    // If some global guard is preventing close, make sure we allow it after approve
+    try { window.releaseScreeningApproveGuard = function(){ try { window.__screeningApproveActive = false; } catch(_) {} }; } catch(_) {}
     const screeningForm = document.getElementById('screeningForm');
     
     if (!screeningModal || !screeningForm) return;
@@ -841,6 +843,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Function to open screening modal with donor data
 function openScreeningModal(donorData) {
+    // Debounce: prevent duplicate open calls within 800ms
+    try {
+        const now = Date.now();
+        if (window.__screeningOpenAt && (now - window.__screeningOpenAt) < 800) {
+            return; // ignore duplicate rapid calls
+        }
+        window.__screeningOpenAt = now;
+    } catch(_) {}
+
     // Store donor data globally for form submission
     window.currentDonorData = donorData;
     
