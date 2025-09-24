@@ -25,7 +25,7 @@ try {
     require_once '../../assets/conn/db_conn.php';
     
     // Query the physical_examination table for the donor using Supabase cURL
-    $url = SUPABASE_URL . '/rest/v1/physical_examination?donor_id=eq.' . urlencode($donor_id) . '&order=created_at.desc&limit=1';
+    $url = SUPABASE_URL . '/rest/v1/physical_examination?donor_id=eq.' . urlencode($donor_id) . '&order=updated_at.desc,created_at.desc&limit=1';
     
     // Log the URL being queried
     error_log("Physical examination query URL: " . $url);
@@ -71,7 +71,7 @@ try {
                 'needs_review' => $physicalData['needs_review'] ?? null,
                 'physician' => $physicalData['physician'] ?? null,
                 'screening_id' => $physicalData['screening_id'] ?? null,
-                'status' => $physicalData['status'] ?? null
+                // Do not expose legacy status; use remarks only
             ]
         ]);
     } else {
@@ -93,7 +93,7 @@ try {
             'needs_review' => null,
             'physician' => null,
             'screening_id' => null,
-            'status' => null
+            //'status' => null
         ];
         
         echo json_encode([

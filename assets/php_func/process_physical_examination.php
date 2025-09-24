@@ -174,6 +174,22 @@ try {
     }
     
     if ($should_update) {
+        // Fetch current updated_at to preserve FIFO if desired
+        try {
+            $chk = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=updated_at&physical_exam_id=eq.' . $physical_exam_id . '&limit=1');
+            curl_setopt($chk, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($chk, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY
+            ]);
+            $currResp = curl_exec($chk);
+            curl_close($chk);
+            $curr = json_decode($currResp, true);
+            if (is_array($curr) && isset($curr[0]['updated_at'])) {
+                // Preserve existing updated_at by sending it back explicitly
+                $physical_exam_data['updated_at'] = $curr[0]['updated_at'];
+            }
+        } catch (Exception $e) { /* ignore */ }
         // UPDATE existing record
         $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?physical_exam_id=eq.' . $physical_exam_id);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');

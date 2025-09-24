@@ -1,5 +1,5 @@
 <!-- Screening Form Modal (Physician Copy) -->
-<div class="modal fade" id="screeningFormModal" tabindex="-1" aria-labelledby="screeningFormModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+<div class="modal fade" id="screeningFormModal" tabindex="-1" aria-labelledby="screeningFormModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg" style="max-width: 900px; margin: 2.25rem auto;">
         <div class="modal-content screening-modal-content" style="position: relative; z-index: 1060; pointer-events: auto;">
             <div class="modal-header screening-modal-header">
@@ -199,6 +199,61 @@
         const nextBtn = document.getElementById('physNextBtn');
         const submitBtn = document.getElementById('screeningSubmitButton');
         const approveBtn = document.getElementById('physApproveBtn');
+        let __approveCheckTimer = null;
+
+        // Resolve donor id robustly from multiple sources
+        function resolveDonorId(){
+            try {
+                const direct = (formEl && formEl.querySelector('input[name="donor_id"]')) ? formEl.querySelector('input[name="donor_id"]').value : '';
+                if (direct) return direct;
+            } catch(_) {}
+            try { if (window.currentDonorData && window.currentDonorData.donor_id) return window.currentDonorData.donor_id; } catch(_) {}
+            try { if (window.lastDonorProfileContext && window.lastDonorProfileContext.donorId) return window.lastDonorProfileContext.donorId; } catch(_) {}
+            try { if (window.currentDonorId) return window.currentDonorId; } catch(_) {}
+            try { if (window.lastDonorProfileContext && window.lastDonorProfileContext.screeningData && window.lastDonorProfileContext.screeningData.donor_form_id) return window.lastDonorProfileContext.screeningData.donor_form_id; } catch(_) {}
+            return '';
+        }
+
+        // Normalize and check Approved state from medicalByDonor
+        function isMedicalApprovedFor(donorId){
+            try {
+                if (!donorId || !window.medicalByDonor) return false;
+                const rec = window.medicalByDonor[donorId] || window.medicalByDonor[String(donorId)] || null;
+                if (!rec || rec.medical_approval == null) return false;
+                const raw = String(rec.medical_approval).trim().toLowerCase();
+                return raw === 'approved';
+            } catch(_) { return false; }
+        }
+
+        // Fallback: fetch live medical approval from server and update cache
+        async function refreshMhApprovalAndUpdate(donorId){
+            try {
+                if (!donorId) return false;
+                // Try preferred helper if available in this project
+                let status = null;
+                try {
+                    const res = await fetch(`../../assets/php_func/fetch_medical_history_info.php?donor_id=${encodeURIComponent(donorId)}`);
+                    if (res && res.ok) {
+                        const json = await res.json().catch(()=>null);
+                        if (json && json.success && json.data) {
+                            status = json.data.medical_approval || json.data.medicalApproval || json.data.status || null;
+                        }
+                    }
+                } catch(_) {}
+                if (status == null) return false;
+                const raw = String(status).trim();
+                // Update in-memory cache for both numeric and string keys
+                try {
+                    window.medicalByDonor = window.medicalByDonor || {};
+                    const k1 = donorId; const k2 = String(donorId);
+                    window.medicalByDonor[k1] = window.medicalByDonor[k1] || {};
+                    window.medicalByDonor[k1].medical_approval = raw;
+                    window.medicalByDonor[k2] = window.medicalByDonor[k2] || {};
+                    window.medicalByDonor[k2].medical_approval = raw;
+                } catch(_) {}
+                return (raw.toLowerCase() === 'approved');
+            } catch(_) { return false; }
+        }
 
         // Helper: simple confirm UI fallback
         function confirmProceed(message, onConfirm){
@@ -343,19 +398,32 @@
                 const step2Active = !!document.querySelector('.screening-step-content[data-step="2"].active');
                 // Hide Approve if MH is already Approved
                 let mhApproved = false;
-                try {
-                    const donorId = (formEl.querySelector('input[name="donor_id"]') && formEl.querySelector('input[name="donor_id"]').value) ||
-                                     (window.currentDonorData && window.currentDonorData.donor_id) ||
-                                     (window.lastDonorProfileContext && (window.lastDonorProfileContext.donorId || (window.lastDonorProfileContext.screeningData && window.lastDonorProfileContext.screeningData.donor_form_id))) ||
-                                     (window.currentDonorId) || '';
-                    if (donorId && window.medicalByDonor) {
-                        const rec = window.medicalByDonor[donorId] || window.medicalByDonor[String(donorId)] || null;
-                        mhApproved = !!(rec && rec.medical_approval === 'Approved');
-                    }
-                } catch(_) {}
+                try { mhApproved = isMedicalApprovedFor(resolveDonorId()); } catch(_) {}
                 approveBtn.style.display = (step2Active && !mhApproved) ? 'inline-block' : 'none';
                 // Hide Next on step 2
                 if (nextBtn) nextBtn.style.display = step2Active ? 'none' : '';
+                // Schedule a short re-check to catch late data hydration
+                try {
+                    if (__approveCheckTimer) clearTimeout(__approveCheckTimer);
+                    __approveCheckTimer = setTimeout(function(){ try { _recheckApproveVisibility(); } catch(_) {} }, 150);
+                } catch(_) {}
+                // If still showing and we do not have Approved in cache, try live refresh once
+                if (step2Active && !mhApproved) {
+                    const donorId = resolveDonorId();
+                    refreshMhApprovalAndUpdate(donorId).then((isApproved) => {
+                        try { if (isApproved) _recheckApproveVisibility(); } catch(_) {}
+                    }).catch(()=>{});
+                }
+            } catch(_) {}
+        }
+
+        function _recheckApproveVisibility(){
+            try {
+                const step2Active = !!document.querySelector('.screening-step-content[data-step="2"].active');
+                if (!approveBtn) return;
+                let mhApproved = false;
+                try { mhApproved = isMedicalApprovedFor(resolveDonorId()); } catch(_) {}
+                approveBtn.style.display = (step2Active && !mhApproved) ? 'inline-block' : 'none';
             } catch(_) {}
         }
 
@@ -412,6 +480,14 @@
                 } catch(_) {}
                 // Update Approve visibility based on current step
                 ensureApproveOnFinalStep();
+                // Poll briefly after open to catch async updates to medicalByDonor
+                try {
+                    let c = 0; const max = 10; // ~1.5s total at 150ms
+                    const t = setInterval(function(){
+                        try { _recheckApproveVisibility(); } catch(_) {}
+                        if (++c >= max) clearInterval(t);
+                    }, 150);
+                } catch(_) {}
                 // Deduplicate backdrops: keep only the newest one for this modal
                 try {
                     const backs = Array.from(document.querySelectorAll('.modal-backdrop'));
@@ -502,15 +578,7 @@
                 } catch(_) { /* noop */ }
             });
 
-            // Prevent unintended close while approve flow is active
-            modalEl.addEventListener('hide.bs.modal', function(ev){
-                try {
-                    if (window.__physApproveActive) {
-                        ev.preventDefault();
-                        return false;
-                    }
-                } catch(_) {}
-            });
+            // Removed close guard to allow consistent closing behavior
 
             // Force step navigation for read-only: allow Next without validation
             function goToStep(step){
@@ -549,10 +617,11 @@
                     // Toggle buttons
                 const nextBtnLocal = document.getElementById('physNextBtn');
                     if (nextBtnLocal) nextBtnLocal.style.display = (step === 2 ? 'none' : '');
-                    const approveLocal = document.getElementById('physApproveBtn');
-                    if (approveLocal) approveLocal.style.display = (step === 2 ? 'inline-block' : 'none');
+                    // Do not force-show Approve here; delegate to ensureApproveOnFinalStep()
                 const prevBtn = document.getElementById('physPrevBtn');
                 if (prevBtn) prevBtn.style.display = (step === 2 ? 'inline-block' : 'none');
+                // Enforce approve visibility against MH state when arriving on step 2
+                try { ensureApproveOnFinalStep(); } catch(_) {}
                 } catch(_) {}
             }
 

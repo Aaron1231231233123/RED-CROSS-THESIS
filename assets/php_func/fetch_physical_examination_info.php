@@ -111,7 +111,7 @@ function fetchPhysicalExaminationInfo($donorId) {
     // Get physical examination data
     $physical_curl = curl_init();
     curl_setopt_array($physical_curl, [
-        CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?donor_id=eq." . $donorId . "&select=blood_pressure,pulse_rate,body_temp,gen_appearance,skin,heent,heart_and_lungs,reason,status,disapproval_reason,remarks,created_at&order=created_at.desc&limit=1",
+        CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?donor_id=eq." . urlencode($donorId) . "&select=blood_pressure,pulse_rate,body_temp,gen_appearance,skin,heent,heart_and_lungs,blood_bag_type,reason,disapproval_reason,remarks,remark,remarks_status,created_at,updated_at&order=updated_at.desc,created_at.desc&limit=1",
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
             "apikey: " . SUPABASE_API_KEY,
@@ -131,6 +131,26 @@ function fetchPhysicalExaminationInfo($donorId) {
     
     $physical_exam = json_decode($physical_response, true);
     $physical_info = !empty($physical_exam) ? $physical_exam[0] : null;
+    // Fallback: if no PE by donor_id, try by latest screening_id
+    if (!$physical_info && !empty($screening_info['screening_id'])) {
+        $sid = $screening_info['screening_id'];
+        $physical_curl2 = curl_init();
+        curl_setopt_array($physical_curl2, [
+            CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?screening_id=eq." . urlencode($sid) . "&select=blood_pressure,pulse_rate,body_temp,gen_appearance,skin,heent,heart_and_lungs,blood_bag_type,reason,disapproval_reason,remarks,remark,remarks_status,created_at,updated_at&order=updated_at.desc,created_at.desc&limit=1",
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                "apikey: " . SUPABASE_API_KEY,
+                "Authorization: Bearer " . SUPABASE_API_KEY,
+                "Content-Type: application/json"
+            ]
+        ]);
+        $physical_response2 = curl_exec($physical_curl2);
+        $physical_exam2 = json_decode($physical_response2, true);
+        curl_close($physical_curl2);
+        if (!empty($physical_exam2)) {
+            $physical_info = $physical_exam2[0];
+        }
+    }
     error_log("Physical info: " . json_encode($physical_info));
     
     // Get medical history data
@@ -167,6 +187,13 @@ function fetchPhysicalExaminationInfo($donorId) {
     }
     if ($physical_info) {
         $combined_data = array_merge($combined_data, $physical_info);
+        // Preserve Physical Examination decision under unique keys to avoid being overwritten
+        if (isset($physical_info['remarks'])) {
+            $combined_data['pe_remarks'] = $physical_info['remarks'];
+        }
+        if (isset($physical_info['remarks_status'])) {
+            $combined_data['pe_remarks_status'] = $physical_info['remarks_status'];
+        }
     }
     if ($medical_info) {
         $combined_data = array_merge($combined_data, $medical_info);
@@ -293,9 +320,46 @@ if (isset($_GET['eligibility_id'])) {
     }
 }
 // Handle direct calls to this script with donor_id parameter (legacy support)
-elseif (isset($_GET['donor_id'])) {
-    $donorId = $_GET['donor_id'];
-    $physicalExamInfo = fetchPhysicalExaminationInfo($donorId);
+elseif (isset($_GET['screening_id']) || isset($_GET['donor_id'])) {
+    $donorId = $_GET['donor_id'] ?? null;
+    $screeningId = $_GET['screening_id'] ?? null;
+    if ($screeningId) {
+        // Direct fetch by screening_id only
+        $physical_curl = curl_init();
+        curl_setopt_array($physical_curl, [
+            CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?screening_id=eq." . urlencode($screeningId) . "&select=blood_pressure,pulse_rate,body_temp,gen_appearance,skin,heent,heart_and_lungs,blood_bag_type,reason,disapproval_reason,remarks,remarks_status,created_at,updated_at&order=updated_at.desc,created_at.desc&limit=1",
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                "apikey: " . SUPABASE_API_KEY,
+                "Authorization: Bearer " . SUPABASE_API_KEY,
+                "Content-Type: application/json"
+            ]
+        ]);
+        $physical_response = curl_exec($physical_curl);
+        $http_code = curl_getinfo($physical_curl, CURLINFO_HTTP_CODE);
+        if ($physical_response === false) {
+            echo json_encode(['success' => false, 'message' => 'cURL error fetching physical examination by screening_id', 'curl_error' => curl_error($physical_curl)]);
+            curl_close($physical_curl);
+            exit;
+        }
+        curl_close($physical_curl);
+        $arr = json_decode($physical_response, true);
+        if ($http_code !== 200) {
+            echo json_encode(['success' => false, 'message' => 'Supabase error', 'http_code' => $http_code, 'body' => $physical_response]);
+            exit;
+        }
+        if (is_array($arr) && !empty($arr)) {
+            $row = $arr[0];
+            $physicalExamInfo = array_merge($row, [
+                'pe_remarks' => ($row['remarks'] ?? $row['remark'] ?? null),
+                'pe_remarks_status' => $row['remarks_status'] ?? null
+            ]);
+        } else {
+            $physicalExamInfo = null;
+        }
+    } else {
+        $physicalExamInfo = fetchPhysicalExaminationInfo($donorId);
+    }
     
     header('Content-Type: application/json');
     if ($physicalExamInfo) {
@@ -305,8 +369,8 @@ elseif (isset($_GET['donor_id'])) {
         ]);
     } else {
         echo json_encode([
-            'success' => false,
-            'message' => 'No physical examination record found for this donor'
+            'success' => true,
+            'data' => null
         ]);
     }
 }

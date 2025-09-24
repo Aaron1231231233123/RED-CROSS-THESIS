@@ -139,7 +139,7 @@
             <!-- Step 3: Blood Bag Selection -->
             <div class="modal-body physical-step-content" id="physical-step-3">
                 <div class="physical-step-inner">
-                    <h4>Step 4: Blood Bag Selection</h4>
+                    <h4>Step 3: Blood Bag Selection</h4>
                     <p class="text-muted">Please select the appropriate blood bag type</p>
                     
                     <div class="physical-blood-bag-section">
@@ -173,7 +173,7 @@
             <!-- Step 4: Review and Submit -->
             <div class="modal-body physical-step-content" id="physical-step-4">
                 <div class="physical-step-inner">
-                    <h4>Step 5: Review & Submit</h4>
+                    <h4>Step 4: Review & Submit</h4>
                     <p class="text-muted">Please review all information before submitting</p>
                     
                     <div class="examination-report">
@@ -327,9 +327,6 @@
             <!-- Modal Navigation -->
             <div class="modal-footer">
                 <div class="physical-nav-buttons w-100 d-flex justify-content-end gap-2">
-                    <button type="button" class="btn btn-outline-secondary physical-cancel-btn" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-2"></i>Cancel
-                    </button>
                     <button type="button" class="btn btn-outline-danger physical-defer-btn">
                         <i class="fas fa-ban me-2"></i>Defer Donor
                     </button>

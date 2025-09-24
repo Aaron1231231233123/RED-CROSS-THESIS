@@ -5,6 +5,7 @@ class PhysicalExaminationModal {
         this.totalSteps = 4; // Steps: 1 Vital, 2 Exam, 3 Blood Bag, 4 Review
         this.formData = {};
         this.screeningData = null;
+        this.isReadonly = false; // prevents submit visibility when terminal state
         
         this.init();
     }
@@ -58,25 +59,18 @@ class PhysicalExaminationModal {
         });
     }
     
-    openModal(screeningData) {
+    async openModal(screeningData) {
         this.screeningData = screeningData;
         this.resetForm();
+        this.isReadonly = false;
         
         // Pre-populate donor information
         if (screeningData) {
             document.getElementById('physical-donor-id').value = screeningData.donor_form_id || '';
             document.getElementById('physical-screening-id').value = screeningData.screening_id || '';
             
-            // By default, DO NOT prefill from database. Enable only if explicitly requested.
-            const prefillEnabled = (window.PE_PREFILL === true);
-            if (prefillEnabled) {
-                // Populate initial screening summary
-                this.populateInitialScreeningSummary(screeningData);
-                // If a physical examination exists with status pending, fetch and hydrate form
-                if (screeningData.donor_form_id) {
-                    this.fetchExistingPhysicalExamination(screeningData.donor_form_id);
-                }
-            }
+            // Always populate summary basics; then hydrate existing exam for readonly or resume
+            this.populateInitialScreeningSummary(screeningData);
         }
         
         const modalEl = document.getElementById('physicalExaminationModal');
@@ -86,6 +80,93 @@ class PhysicalExaminationModal {
         this.currentStep = 1;
         this.updateProgressIndicator();
         this.showStep(1);
+        // Re-assert prefilled blood bag shortly after show to avoid race with layout/render
+        try {
+            const reapply = () => { if (this.formData && this.formData.__bagPrefill) { this.setBloodBagSelection(this.formData.__bagPrefill); } };
+            setTimeout(reapply, 200);
+            setTimeout(reapply, 600);
+            setTimeout(reapply, 1200);
+        } catch(_) {}
+
+        // Hydrate existing exam and enforce readonly when status is terminal (anything not Pending)
+        try {
+            let donorId = screeningData && (screeningData.donor_form_id || screeningData.donor_id);
+            // Robust fallback sources for donor id
+            if (!donorId) {
+                try { donorId = document.getElementById('physical-donor-id')?.value || donorId; } catch(_) {}
+                try { donorId = (window.lastDonorProfileContext && (window.lastDonorProfileContext.donorId || (window.lastDonorProfileContext.screeningData && window.lastDonorProfileContext.screeningData.donor_form_id))) || donorId; } catch(_) {}
+                try { donorId = window.__peLastDonorId || donorId; } catch(_) {}
+            }
+            if (donorId) {
+                // Try both sources. Prefer fallback (returns physical_exam) because it's what your console shows
+                const exam = await this.getLatestExamWithFallback(donorId) || await this.fetchExistingPhysicalExamination(donorId);
+                const getState = (ex) => {
+                    if (!ex) return '';
+                    const val = (ex.remarks != null ? ex.remarks : (ex.status != null ? ex.status : '')).toString();
+                    return String(val).trim().toLowerCase();
+                };
+                const st = getState(exam);
+                // Treat any not-pending as terminal; be resilient to variants
+                const terminal = (!!st && st !== 'pending') || /accepted/.test(st) || /refus/.test(st) || /defer/.test(st) || /declin/.test(st);
+                if (terminal || window.forcePhysicalReadonly) {
+                    this.hideReviewStage();
+                    this.applyReadonlyMode();
+                }
+                // Perform explicit prefill ONLY when terminal (readonly)
+                if (exam && (terminal || window.forcePhysicalReadonly)) {
+                    const valOf = (keys) => {
+                        for (const k of keys) { if (exam[k] != null && exam[k] !== '') return exam[k]; }
+                        return '';
+                    };
+                    const bp = valOf(['blood_pressure','bp','bloodPres','blood_pres']);
+                    const pr = valOf(['pulse_rate','pulse']);
+                    const bt = valOf(['body_temp','temperature','temp']);
+                    const ga = valOf(['gen_appearance','general_appearance']);
+                    const sk = valOf(['skin']);
+                    const he = valOf(['heent']);
+                    const hl = valOf(['heart_and_lungs','heart_lungs']);
+                    const bag = valOf(['blood_bag_type','bag_type']);
+                    const setVal = (id, value) => { const el = document.getElementById(id); if (el && value !== undefined && value !== null && String(value).length) { el.value = value; el.classList.add('is-valid'); } };
+                    setVal('physical-blood-pressure', bp);
+                    setVal('physical-pulse-rate', pr);
+                    setVal('physical-body-temp', bt);
+                    setVal('physical-gen-appearance', ga);
+                    setVal('physical-skin', sk);
+                    setVal('physical-heent', he);
+                    setVal('physical-heart-lungs', hl);
+                    // Blood bag selection
+                    this.setBloodBagSelection(bag);
+                }
+                // If still pending, ensure no prefill leaks
+                if (!terminal && !window.forcePhysicalReadonly) {
+                    try {
+                        document.querySelectorAll('#physicalExaminationForm input, #physicalExaminationForm select, #physicalExaminationForm textarea').forEach(el => {
+                            if (el.name === 'blood_bag_type') { el.checked = false; const c = el.closest('.physical-option-card'); if (c) c.classList.remove('selected'); }
+                        });
+                    } catch(_) {}
+                }
+            } else if (window.forcePhysicalReadonly) {
+                this.hideReviewStage();
+                this.applyReadonlyMode();
+            }
+        } catch(_) {}
+    }
+
+    async getLatestExamWithFallback(donorId){
+        try {
+            // Primary endpoint
+            const a = await makeApiCall(`../../assets/php_func/fetch_physical_examination_info.php?donor_id=${donorId}`);
+            if (a && a.success && a.data) return a.data;
+        } catch(_) {}
+        try {
+            // Fallback endpoint used elsewhere in project
+            const b = await makeApiCall(`../api/get-physical-examination.php?donor_id=${donorId}`);
+            if (b) {
+                if (b.physical_exam) return b.physical_exam;
+                if (b.success && b.data) return b.data;
+            }
+        } catch(_) {}
+        return null;
     }
     
     closeModal() {
@@ -98,11 +179,10 @@ class PhysicalExaminationModal {
     async fetchExistingPhysicalExamination(donorId) {
         try {
             // Fetch the latest physical examination record for this donor (includes status)
-            const json = await makeApiCall(`../../assets/php_func/fetch_physical_examination_info.php?donor_id=${donorId}`);
+            const json = await makeApiCall(`../../assets/php_func/fetch_physical_examination_info.php?donor_id=${donorId}&_=${Date.now()}`);
             if (!json || !json.success || !json.data) return;
             const exam = json.data;
             const status = (exam.status || '').toString().toLowerCase();
-            if (status !== 'pending') return;
 
             // Hydrate fields
             const setVal = (id, value) => {
@@ -121,21 +201,142 @@ class PhysicalExaminationModal {
             setVal('physical-skin', exam.skin);
             setVal('physical-heent', exam.heent);
             setVal('physical-heart-lungs', exam.heart_and_lungs);
+            // Also try to populate vital signs from alternate keys (compat)
+            setVal('physical-blood-pressure', exam.blood_pressure_value || exam.bp || document.getElementById('physical-blood-pressure')?.value);
+            setVal('physical-pulse-rate', exam.pulse || exam.pulse_rate || document.getElementById('physical-pulse-rate')?.value);
+            setVal('physical-body-temp', exam.temperature || exam.body_temp || document.getElementById('physical-body-temp')?.value);
 
-            // Blood bag type
-            if (exam.blood_bag_type) {
-                const radio = document.querySelector(`input[name="blood_bag_type"][value="${exam.blood_bag_type}"]`);
-                if (radio) {
-                    radio.checked = true;
-                    this.updateOptionCardSelection(radio);
-                }
+            // Blood bag type (robust normalization) — only prefill when terminal
+            const st = (exam.status || exam.remarks || '').toString().trim().toLowerCase();
+            const terminal = (!!st && st !== 'pending') || /accepted/.test(st) || /refus/.test(st) || /defer/.test(st) || /declin/.test(st);
+            if (terminal || this.isReadonly || window.forcePhysicalReadonly) {
+                this.setBloodBagSelection(exam.blood_bag_type);
+            } else {
+                this.setBloodBagSelection('');
             }
 
             // Update review summary if already on final step
             this.updateSummary();
+            return exam;
         } catch (e) {
             console.warn('Failed to fetch existing physical exam:', e);
         }
+    }
+
+    setBloodBagSelection(value) {
+        try {
+            const valRaw = (value == null) ? '' : String(value);
+            const normalized = valRaw.trim().toLowerCase().replace(/[^a-z]/g, '');
+            // Store for reapplication after render
+            try { this.formData.__bagPrefill = valRaw; } catch(_) {}
+            try { console.log('[PE] setBloodBagSelection input=', valRaw, 'normalized=', normalized); } catch(_) {}
+            // If Pending or empty, clear selection
+            if (!normalized || normalized === 'pending') {
+                document.querySelectorAll('input[name="blood_bag_type"]').forEach(inp => {
+                    inp.checked = false;
+                    const card = inp.closest('.physical-option-card');
+                    if (card) card.classList.remove('selected');
+                });
+                try { console.log('[PE] cleared blood_bag_type selection (pending/empty)'); } catch(_) {}
+                return;
+            }
+            const synonyms = {
+                'single': 'Single',
+                'multiple': 'Multiple',
+                'topbottom': 'Top & Bottom',
+                'topandbottom': 'Top & Bottom',
+                'topbottomset': 'Top & Bottom'
+            };
+            let radio = null;
+            // First pass: exact normalized match on existing radio values
+            document.querySelectorAll('input[name="blood_bag_type"]').forEach(inp => {
+                if (!radio) {
+                    const v = inp.value ? String(inp.value).trim().toLowerCase().replace(/[^a-z]/g, '') : '';
+                    if (v === normalized) radio = inp;
+                }
+            });
+            if (!radio) {
+                const mapped = synonyms[normalized];
+                if (mapped) {
+                    radio = document.querySelector(`input[name="blood_bag_type"][value="${mapped}"]`);
+                }
+            }
+            if (radio) {
+                // Delay to ensure DOM/labels are fully rendered
+                const apply = () => {
+                    try {
+                        // Uncheck others and remove selection class
+                        document.querySelectorAll('input[name="blood_bag_type"]').forEach(inp => {
+                            if (inp !== radio) {
+                                inp.checked = false;
+                                const c = inp.closest('.physical-option-card');
+                                if (c) c.classList.remove('selected');
+                            }
+                        });
+                        radio.checked = true;
+                        this.updateOptionCardSelection(radio);
+                        try { console.log('[PE] applied selection to', radio.value); } catch(_) {}
+                        try { radio.dispatchEvent(new Event('change', { bubbles: true })); } catch(_) {}
+                    } catch(_) {}
+                };
+                try { requestAnimationFrame(apply); } catch(_) { setTimeout(apply, 0); }
+            } else {
+                try {
+                    const all = Array.from(document.querySelectorAll('input[name="blood_bag_type"]')).map(i => i.value);
+                    console.warn('[PE] No matching radio for blood_bag_type=', valRaw, 'available=', all);
+                } catch(_) {}
+            }
+        } catch(_) {}
+    }
+
+    applyReadonlyMode() {
+        try {
+            const modalRoot = document.getElementById('physicalExaminationModal');
+            if (!modalRoot) return;
+            this.isReadonly = true;
+            // Hide Submit button always in readonly
+            const submitBtn = modalRoot.querySelector('.physical-submit-btn');
+            if (submitBtn) submitBtn.style.display = 'none';
+            // Hide Defer button in readonly
+            const deferBtn = modalRoot.querySelector('.physical-defer-btn');
+            if (deferBtn) deferBtn.style.display = 'none';
+            // Disable all form controls but keep nav buttons active
+            modalRoot.querySelectorAll('input, select, textarea, button').forEach(el => {
+                const isNav = el.classList.contains('physical-prev-btn') || el.classList.contains('physical-next-btn') || el.classList.contains('physical-close-btn');
+                if (!isNav) {
+                    if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') {
+                        el.disabled = true;
+                    }
+                }
+            });
+        } catch(_) {}
+    }
+
+    hideReviewStage() {
+        try {
+            // Limit to 3 steps and hide step 4 indicator/content
+            this.totalSteps = 3;
+            this.isReadonly = true;
+            const s4 = document.querySelector('.physical-step[data-step="4"]');
+            if (s4) {
+                try { s4.parentNode && s4.parentNode.removeChild(s4); } catch(_) { s4.style.display = 'none'; }
+            }
+            const step4Content = document.getElementById('physical-step-4');
+            if (step4Content) {
+                try { step4Content.parentNode && step4Content.parentNode.removeChild(step4Content); } catch(_) { step4Content.style.display = 'none'; }
+            }
+            // Keep normal flow from step 1; update indicators normally
+            this.currentStep = Math.min(this.currentStep || 1, 3);
+            this.updateProgressIndicator();
+            this.showStep(this.currentStep);
+            // Hide Submit when review stage is removed (readonly).
+            const submitBtn = document.querySelector('.physical-submit-btn');
+            if (submitBtn) submitBtn.style.display = 'none';
+            // Ensure any stray step-4 indicator cannot be seen
+            try {
+                document.querySelectorAll('.physical-step[data-step="4"]').forEach(el => el.remove());
+            } catch(_) {}
+        } catch(_) {}
     }
     
     resetForm() {
@@ -215,7 +416,13 @@ class PhysicalExaminationModal {
         
         if (prevBtn) prevBtn.style.display = this.currentStep === 1 ? 'none' : 'inline-block';
         if (nextBtn) nextBtn.style.display = this.currentStep === this.totalSteps ? 'none' : 'inline-block';
-        if (submitBtn) submitBtn.style.display = this.currentStep === this.totalSteps ? 'inline-block' : 'none';
+        if (submitBtn) {
+            if (this.isReadonly) {
+                submitBtn.style.display = 'none';
+            } else {
+                submitBtn.style.display = this.currentStep === this.totalSteps ? 'inline-block' : 'none';
+            }
+        }
     }
     
     updateProgressIndicator() {
@@ -233,11 +440,11 @@ class PhysicalExaminationModal {
         }
         
         // Update progress fill
-        const progressFill = document.querySelector('.physical-progress-fill');
-        if (progressFill) {
-            const progressPercentage = ((this.currentStep - 1) / (this.totalSteps - 1)) * 100;
-            progressFill.style.width = progressPercentage + '%';
-        }
+            const progressFill = document.querySelector('.physical-progress-fill');
+            if (progressFill) {
+                const progressPercentage = ((this.currentStep - 1) / (Math.max(this.totalSteps, 2) - 1)) * 100;
+                progressFill.style.width = progressPercentage + '%';
+            }
     }
     
     validateCurrentStep() {
@@ -376,10 +583,10 @@ class PhysicalExaminationModal {
     async fetchScreeningDetails(screeningId, donorId) {
         try {
             // Fetch screening form data
-            const screeningData = await makeApiCall(`../../assets/php_func/get_screening_details.php?screening_id=${screeningId}`);
+            const screeningData = await makeApiCall(`../../assets/php_func/get_screening_details.php?screening_id=${screeningId}&_=${Date.now()}`);
             
             // Fetch donor form data  
-            const donorData = await makeApiCall(`../../assets/php_func/get_donor_details.php?donor_id=${donorId}`);
+            const donorData = await makeApiCall(`../../assets/php_func/get_donor_details.php?donor_id=${donorId}&_=${Date.now()}`);
             
             if (screeningData.success && donorData.success) {
                 this.populateScreeningFields(screeningData.data, donorData.data);
@@ -392,46 +599,42 @@ class PhysicalExaminationModal {
     }
     
     populateScreeningFields(screeningData, donorData) {
-        // Populate screening information
-        document.getElementById('screening-date').textContent = 
-            screeningData.created_at ? new Date(screeningData.created_at).toLocaleDateString() : 'N/A';
-        document.getElementById('donor-blood-type').textContent = screeningData.blood_type || 'N/A';
-        document.getElementById('donation-type').textContent = screeningData.donation_type || 'N/A';
-        document.getElementById('body-weight').textContent = 
-            screeningData.body_weight ? screeningData.body_weight + ' kg' : 'N/A';
-        document.getElementById('specific-gravity').textContent = screeningData.specific_gravity || 'N/A';
-        
+        const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+        // Populate screening information (guard all DOM writes)
+        setText('screening-date', screeningData && screeningData.created_at ? new Date(screeningData.created_at).toLocaleDateString() : 'N/A');
+        setText('donor-blood-type', (screeningData && (screeningData.blood_type || screeningData.bloodtype)) || 'N/A');
+        setText('donation-type', (screeningData && (screeningData.donation_type || screeningData.donation_type_new || screeningData.donationtype)) || 'N/A');
+        setText('body-weight', (screeningData && (screeningData.body_weight || screeningData.weight)) ? (screeningData.body_weight || screeningData.weight) + ' kg' : 'N/A');
+        setText('specific-gravity', (screeningData && (screeningData.specific_gravity || screeningData.sp_gr || screeningData.hemoglobin)) || 'N/A');
+
         // Populate donor information
-        const fullName = `${donorData.surname || ''}, ${donorData.first_name || ''} ${donorData.middle_name || ''}`.trim();
-        document.getElementById('donor-name').textContent = fullName || 'N/A';
-        document.getElementById('donor-id').textContent = donorData.prc_donor_number || 'N/A';
-        document.getElementById('donor-age').textContent = donorData.age || 'N/A';
-        document.getElementById('donor-sex').textContent = donorData.sex || 'N/A';
-        document.getElementById('donor-civil-status').textContent = donorData.civil_status || 'N/A';
-        document.getElementById('donor-mobile').textContent = donorData.mobile || 'N/A';
-        document.getElementById('donor-address').textContent = donorData.permanent_address || 'N/A';
-        document.getElementById('donor-occupation').textContent = donorData.occupation || 'N/A';
-        
-        
+        const fullName = `${(donorData && donorData.surname) || ''}, ${(donorData && donorData.first_name) || ''} ${(donorData && donorData.middle_name) || ''}`.trim();
+        setText('donor-name', fullName || 'N/A');
+        setText('donor-id', (donorData && (donorData.prc_donor_number || donorData.prc_id || donorData.donor_id)) || 'N/A');
+        setText('donor-age', (donorData && donorData.age) || 'N/A');
+        setText('donor-sex', (donorData && donorData.sex) || 'N/A');
+        setText('donor-civil-status', (donorData && donorData.civil_status) || 'N/A');
+        setText('donor-mobile', (donorData && (donorData.mobile || donorData.contact_no)) || 'N/A');
+        setText('donor-address', (donorData && (donorData.permanent_address || donorData.address)) || 'N/A');
+        setText('donor-occupation', (donorData && donorData.occupation) || 'N/A');
     }
     
     setDefaultScreeningValues() {
+        const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
         // Set default values if data fetch fails
-        document.getElementById('screening-date').textContent = new Date().toLocaleDateString();
-        document.getElementById('donor-name').textContent = 'Loading...';
-        document.getElementById('donor-id').textContent = 'Loading...';
-        document.getElementById('donor-blood-type').textContent = 'Loading...';
-        document.getElementById('donation-type').textContent = 'Loading...';
-        document.getElementById('body-weight').textContent = 'Loading...';
-        document.getElementById('specific-gravity').textContent = 'Loading...';
-        document.getElementById('donor-age').textContent = 'Loading...';
-        document.getElementById('donor-sex').textContent = 'Loading...';
-        document.getElementById('donor-civil-status').textContent = 'Loading...';
-        document.getElementById('donor-mobile').textContent = 'Loading...';
-        document.getElementById('donor-address').textContent = 'Loading...';
-        document.getElementById('donor-occupation').textContent = 'Loading...';
-        
-        
+        setText('screening-date', new Date().toLocaleDateString());
+        setText('donor-name', 'Loading...');
+        setText('donor-id', 'Loading...');
+        setText('donor-blood-type', 'Loading...');
+        setText('donation-type', 'Loading...');
+        setText('body-weight', 'Loading...');
+        setText('specific-gravity', 'Loading...');
+        setText('donor-age', 'Loading...');
+        setText('donor-sex', 'Loading...');
+        setText('donor-civil-status', 'Loading...');
+        setText('donor-mobile', 'Loading...');
+        setText('donor-address', 'Loading...');
+        setText('donor-occupation', 'Loading...');
     }
 
     updateSummary() {
