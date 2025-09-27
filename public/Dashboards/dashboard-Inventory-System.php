@@ -1,4 +1,7 @@
 <?php
+// Speed up first render of home dashboard for admin
+header('Cache-Control: public, max-age=120, stale-while-revalidate=60');
+header('Vary: Accept-Encoding');
 // Prevent browser caching
 header("Cache-Control: no-cache, no-store, must-revalidate");
 header("Pragma: no-cache");

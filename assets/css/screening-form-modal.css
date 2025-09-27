@@ -1,0 +1,496 @@
+/* Screening Form Modal Styles */
+/* This file contains all CSS styles for the screening form modal */
+
+/* Modal Base Styles */
+#screeningFormModal .modal-content {
+    border-radius: 15px;
+    border: none;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    overflow: hidden;
+}
+
+#screeningFormModal .modal-header {
+    background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+    color: white;
+    border-bottom: none;
+    padding: 1.5rem;
+}
+
+#screeningFormModal .modal-body {
+    padding: 2rem;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+#screeningFormModal .modal-footer {
+    border-top: none;
+    padding: 1.5rem;
+    background: #f8f9fa;
+}
+
+/* Progress Indicator Styles */
+.screening-progress-container {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 1.5rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.screening-progress-steps {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    margin-bottom: 1rem;
+}
+
+.screening-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    z-index: 2;
+    transition: all 0.3s ease;
+}
+
+.screening-step-number {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #6c757d;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    transition: all 0.3s ease;
+}
+
+.screening-step-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #6c757d;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.screening-step.active .screening-step-number {
+    background: #b22222;
+    transform: scale(1.1);
+}
+
+.screening-step.active .screening-step-label {
+    color: #b22222;
+    font-weight: 600;
+}
+
+.screening-step.completed .screening-step-number {
+    background: #28a745;
+    transform: scale(1.05);
+}
+
+.screening-step.completed .screening-step-label {
+    color: #28a745;
+}
+
+.screening-progress-line {
+    position: absolute;
+    top: 20px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #dee2e6;
+    z-index: 1;
+}
+
+.screening-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #b22222 0%, #28a745 100%);
+    transition: width 0.5s ease;
+    width: 0%;
+}
+
+/* Step Content Styles */
+.screening-step-content {
+    display: none;
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+.screening-step-content.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.screening-step-inner {
+    padding: 1rem 0;
+}
+
+.screening-step-title h6 {
+    color: #495057;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.screening-step-title .text-muted {
+    margin-bottom: 1.5rem;
+}
+
+/* Form Styles */
+.screening-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+.screening-input {
+    border-radius: 8px;
+    border: 2px solid #e9ecef;
+    padding: 0.75rem 1rem;
+    transition: all 0.3s ease;
+    width: 100%;
+}
+
+.screening-input:focus {
+    border-color: #b22222;
+    box-shadow: 0 0 0 0.2rem rgba(178, 34, 34, 0.25);
+    outline: none;
+}
+
+.screening-input-group {
+    display: flex;
+    align-items: center;
+    position: relative;
+}
+
+.screening-input-suffix {
+    position: absolute;
+    right: 12px;
+    color: #6c757d;
+    font-weight: 500;
+    pointer-events: none;
+}
+
+/* Detail Card Styles */
+.screening-detail-card {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.screening-category-title {
+    background: #b22222;
+    color: white;
+    font-weight: bold;
+    text-align: center;
+    padding: 10px;
+    margin: -20px -20px 15px -20px;
+    border-radius: 12px 12px 0 0;
+}
+
+/* Review Section Styles */
+.screening-review-section {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.screening-review-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.screening-review-title {
+    color: #b22222;
+    font-weight: 600;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #b22222;
+    padding-bottom: 8px;
+}
+
+.screening-review-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.screening-review-item:last-child {
+    border-bottom: none;
+}
+
+.screening-review-label {
+    font-weight: 500;
+    color: #495057;
+}
+
+.screening-review-value {
+    font-weight: 600;
+    color: #b22222;
+}
+
+/* Interviewer Info Styles */
+.screening-interviewer-info {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Button Styles */
+#screeningFormModal .btn {
+    border-radius: 8px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+#screeningFormModal .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+#screeningFormModal .btn:active {
+    transform: translateY(0);
+}
+
+#screeningFormModal .btn-danger {
+    background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+    color: white;
+    border-color: #b22222;
+}
+
+#screeningFormModal .btn-success {
+    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+    color: white;
+    border-color: #28a745;
+}
+
+#screeningFormModal .btn-outline-secondary {
+    background: transparent;
+    color: #6c757d;
+    border-color: #6c757d;
+}
+
+#screeningFormModal .btn-outline-danger {
+    background: transparent;
+    color: #b22222;
+    border-color: #b22222;
+}
+
+/* Alert Styles */
+#screeningFormModal .alert {
+    border-radius: 8px;
+    border: none;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+#screeningFormModal .alert-danger {
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+    color: #721c24;
+}
+
+#screeningFormModal .alert-warning {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    color: #856404;
+}
+
+/* Table Styles */
+#screeningFormModal .table {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+#screeningFormModal .table thead th {
+    background: #b22222;
+    color: white;
+    border: none;
+    padding: 1rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+#screeningFormModal .table tbody td {
+    padding: 1rem;
+    border-top: 1px solid #dee2e6;
+    vertical-align: middle;
+}
+
+#screeningFormModal .table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Form Control Styles */
+#screeningFormModal .form-control {
+    border-radius: 8px;
+    border: 2px solid #e9ecef;
+    padding: 0.75rem 1rem;
+    transition: all 0.3s ease;
+}
+
+#screeningFormModal .form-control:focus {
+    border-color: #b22222;
+    box-shadow: 0 0 0 0.2rem rgba(178, 34, 34, 0.25);
+}
+
+#screeningFormModal .form-control.is-valid {
+    border-color: #28a745;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3e%3cpath fill='%2328a745' d='m2.3 6.73.94-.94 1.44 1.44 2.88-2.88.94.94-3.82 3.82z'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right calc(0.375em + 0.1875rem) center;
+    background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+}
+
+#screeningFormModal .form-control.is-invalid {
+    border-color: #dc3545;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath d='m5.8 4.6 1.4 1.4 1.4-1.4'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right calc(0.375em + 0.1875rem) center;
+    background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .screening-progress-steps {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .screening-progress-line {
+        display: none;
+    }
+    
+    #screeningFormModal .modal-body {
+        padding: 1rem;
+    }
+    
+    .screening-detail-card {
+        padding: 15px;
+    }
+    
+    .screening-review-card {
+        padding: 15px;
+    }
+    
+    .screening-interviewer-info {
+        padding: 15px;
+    }
+}
+
+@media (max-width: 576px) {
+    #screeningFormModal .modal-dialog {
+        margin: 0.5rem;
+    }
+    
+    #screeningFormModal .modal-content {
+        border-radius: 12px;
+    }
+    
+    .screening-step-number {
+        width: 35px;
+        height: 35px;
+        font-size: 0.9rem;
+    }
+    
+    .screening-step-label {
+        font-size: 0.8rem;
+    }
+    
+    #screeningFormModal .btn {
+        padding: 0.6rem 1rem;
+        font-size: 0.9rem;
+    }
+}
+
+/* Animation Classes */
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+.slide-in-right {
+    animation: slideInRight 0.3s ease-in-out;
+}
+
+.slide-in-left {
+    animation: slideInLeft 0.3s ease-in-out;
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInLeft {
+    from { transform: translateX(-100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* Loading States */
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255,255,255,0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    border-radius: 15px;
+}
+
+.loading-content {
+    text-align: center;
+}
+
+.loading-content .spinner-border {
+    margin-bottom: 1rem;
+}
+
+.loading-content p {
+    color: #6c757d;
+    margin: 0;
+}
+
+/* Focus States */
+.screening-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 0.2rem rgba(178, 34, 34, 0.25);
+    border-color: #b22222;
+}
+
+/* Disabled States */
+.screening-input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background-color: #e9ecef;
+}
+
+/* Success States */
+.screening-input.is-valid {
+    color: #28a745;
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+}
+
+/* Error States */
+.screening-input.is-invalid {
+    color: #721c24;
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+}

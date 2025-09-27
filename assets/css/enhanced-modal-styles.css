@@ -1,0 +1,499 @@
+/**
+ * Enhanced Modal Styles
+ * Improved styling for workflow modals with animations and better UX
+ */
+
+/* Enhanced Modal Base Styles */
+.enhanced-modal {
+    border-radius: 15px !important;
+    border: none !important;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3) !important;
+    overflow: hidden !important;
+}
+
+.enhanced-modal .modal-header {
+    border-bottom: none !important;
+    padding: 1.5rem !important;
+}
+
+.enhanced-modal .modal-body {
+    padding: 2rem !important;
+}
+
+.enhanced-modal .modal-footer {
+    border-top: none !important;
+    padding: 1.5rem !important;
+}
+
+/* Progress Indicator Styles */
+.workflow-progress-container {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 1.5rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.workflow-progress-steps {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    margin-bottom: 1rem;
+}
+
+.workflow-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    z-index: 2;
+    transition: all 0.3s ease;
+}
+
+.workflow-step-number {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #6c757d;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    transition: all 0.3s ease;
+}
+
+.workflow-step-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #6c757d;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.workflow-step.active .workflow-step-number {
+    background: #007bff;
+    transform: scale(1.1);
+}
+
+.workflow-step.active .workflow-step-label {
+    color: #007bff;
+    font-weight: 600;
+}
+
+.workflow-step.completed .workflow-step-number {
+    background: #28a745;
+    transform: scale(1.05);
+}
+
+.workflow-step.completed .workflow-step-label {
+    color: #28a745;
+}
+
+.workflow-progress-line {
+    position: absolute;
+    top: 20px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #dee2e6;
+    z-index: 1;
+}
+
+.workflow-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #007bff 0%, #28a745 100%);
+    transition: width 0.5s ease;
+    width: 0%;
+}
+
+/* Step Content Styles */
+.workflow-step-content {
+    display: none;
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+.workflow-step-content.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.workflow-step-inner {
+    padding: 1rem 0;
+}
+
+.workflow-step-inner h4 {
+    color: #495057;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.workflow-step-inner .text-muted {
+    margin-bottom: 1.5rem;
+}
+
+/* Enhanced Form Styles */
+.enhanced-form-group {
+    margin-bottom: 1.5rem;
+}
+
+.enhanced-form-group .form-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+}
+
+.enhanced-form-group .form-control {
+    border-radius: 8px;
+    border: 2px solid #e9ecef;
+    padding: 0.75rem 1rem;
+    transition: all 0.3s ease;
+}
+
+.enhanced-form-group .form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
+}
+
+.enhanced-form-group .form-control.is-valid {
+    border-color: #28a745;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3e%3cpath fill='%2328a745' d='m2.3 6.73.94-.94 1.44 1.44 2.88-2.88.94.94-3.82 3.82z'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right calc(0.375em + 0.1875rem) center;
+    background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+}
+
+.enhanced-form-group .form-control.is-invalid {
+    border-color: #dc3545;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath d='m5.8 4.6 1.4 1.4 1.4-1.4'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right calc(0.375em + 0.1875rem) center;
+    background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+}
+
+/* Enhanced Button Styles */
+.enhanced-btn {
+    border-radius: 8px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.enhanced-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.enhanced-btn:active {
+    transform: translateY(0);
+}
+
+.enhanced-btn-primary {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: white;
+    border-color: #007bff;
+}
+
+.enhanced-btn-success {
+    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+    color: white;
+    border-color: #28a745;
+}
+
+.enhanced-btn-danger {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    border-color: #dc3545;
+}
+
+.enhanced-btn-warning {
+    background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+    color: #212529;
+    border-color: #ffc107;
+}
+
+.enhanced-btn-secondary {
+    background: linear-gradient(135deg, #6c757d 0%, #545b62 100%);
+    color: white;
+    border-color: #6c757d;
+}
+
+/* Navigation Button Styles */
+.workflow-nav-buttons {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+.workflow-nav-buttons .btn {
+    min-width: 120px;
+}
+
+.workflow-nav-buttons .btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* Enhanced Alert Styles */
+.enhanced-alert {
+    border-radius: 10px;
+    border: none;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.enhanced-alert-success {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    color: #155724;
+}
+
+.enhanced-alert-danger {
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+    color: #721c24;
+}
+
+.enhanced-alert-warning {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    color: #856404;
+}
+
+.enhanced-alert-info {
+    background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+    color: #0c5460;
+}
+
+/* Enhanced Card Styles */
+.enhanced-card {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.enhanced-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+}
+
+.enhanced-card-header {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-bottom: 1px solid #dee2e6;
+    padding: 1.5rem;
+}
+
+.enhanced-card-body {
+    padding: 2rem;
+}
+
+.enhanced-card-footer {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-top: 1px solid #dee2e6;
+    padding: 1.5rem;
+}
+
+/* Enhanced Table Styles */
+.enhanced-table {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.enhanced-table thead th {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: white;
+    border: none;
+    padding: 1rem;
+    font-weight: 600;
+}
+
+.enhanced-table tbody td {
+    padding: 1rem;
+    border-top: 1px solid #dee2e6;
+    vertical-align: middle;
+}
+
+.enhanced-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Enhanced Badge Styles */
+.enhanced-badge {
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.enhanced-badge-success {
+    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+    color: white;
+}
+
+.enhanced-badge-danger {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+}
+
+.enhanced-badge-warning {
+    background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+    color: #212529;
+}
+
+.enhanced-badge-info {
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    color: white;
+}
+
+.enhanced-badge-secondary {
+    background: linear-gradient(135deg, #6c757d 0%, #545b62 100%);
+    color: white;
+}
+
+/* Enhanced Spinner Styles */
+.enhanced-spinner {
+    width: 2rem;
+    height: 2rem;
+    border: 0.25rem solid #f3f3f3;
+    border-top: 0.25rem solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Enhanced Loading States */
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255,255,255,0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    border-radius: 15px;
+}
+
+.loading-content {
+    text-align: center;
+}
+
+.loading-content .enhanced-spinner {
+    margin-bottom: 1rem;
+}
+
+.loading-content p {
+    color: #6c757d;
+    margin: 0;
+}
+
+/* Enhanced Responsive Design */
+@media (max-width: 768px) {
+    .workflow-progress-steps {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .workflow-progress-line {
+        display: none;
+    }
+    
+    .workflow-nav-buttons {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .workflow-nav-buttons .btn {
+        width: 100%;
+    }
+    
+    .enhanced-modal .modal-body {
+        padding: 1rem;
+    }
+    
+    .enhanced-card-body {
+        padding: 1rem;
+    }
+}
+
+/* Enhanced Animation Classes */
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+.slide-in-right {
+    animation: slideInRight 0.3s ease-in-out;
+}
+
+.slide-in-left {
+    animation: slideInLeft 0.3s ease-in-out;
+}
+
+.slide-in-up {
+    animation: slideInUp 0.3s ease-in-out;
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInLeft {
+    from { transform: translateX(-100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInUp {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+/* Enhanced Focus States */
+.enhanced-focus:focus {
+    outline: none;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
+    border-color: #007bff;
+}
+
+/* Enhanced Disabled States */
+.enhanced-disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* Enhanced Success States */
+.enhanced-success {
+    color: #28a745;
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+}
+
+/* Enhanced Error States */
+.enhanced-error {
+    color: #721c24;
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+}
+
+/* Enhanced Warning States */
+.enhanced-warning {
+    color: #856404;
+    background-color: #fff3cd;
+    border-color: #ffeaa7;
+}

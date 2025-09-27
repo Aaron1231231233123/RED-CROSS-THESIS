@@ -726,7 +726,7 @@ class PhysicalExaminationModal {
             const result = await makeApiCall('../../assets/php_func/process_physical_examination.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
+                body: JSON.stringify({ ...data, needs_review: false })
             });
             if (result && result.success) {
                 const donorId = (this.screeningData && (this.screeningData.donor_form_id || this.screeningData.donor_id)) || window.__peLastDonorId || null;

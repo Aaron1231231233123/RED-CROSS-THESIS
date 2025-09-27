@@ -526,4 +526,70 @@ console.log('Declaration form modal content loaded with screening data');
 
 // Functions are now defined in the main dashboard scope
 // showDeclarationConfirmation and confirmDeclarationSubmission are available globally
+// Safe fallbacks in case the parent page didn't define them
+if (typeof window.printDeclaration !== 'function') {
+    window.printDeclaration = function() {
+        if (window.print) {
+            window.print();
+        }
+    };
+}
+
+if (typeof window.submitDeclarationForm !== 'function') {
+    window.submitDeclarationForm = function(event) {
+        try {
+            if (event && typeof event.preventDefault === 'function') {
+                event.preventDefault();
+            }
+
+            var form = document.getElementById('modalDeclarationForm');
+            if (!form) {
+                alert('Form not found. Please try again.');
+                return;
+            }
+
+            var actionInput = document.getElementById('modalDeclarationAction');
+            if (actionInput) {
+                actionInput.value = 'complete';
+            }
+
+            var formData = new FormData(form);
+
+            // Include screening data if provided by screening modal
+            if (window.currentScreeningData) {
+                try {
+                    formData.append('screening_data', JSON.stringify(window.currentScreeningData));
+                } catch (_) {}
+            }
+
+            // Path is relative to dashboards using this modal (e.g., public/Dashboards/*)
+            fetch('../../src/views/forms/declaration-form-process.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(function(response) {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok: ' + response.status);
+                }
+                return response.json().catch(function() { return {}; });
+            })
+            .then(function(data) {
+                if (data && data.success) {
+                    alert('Registration completed successfully!');
+                    window.location.reload();
+                } else {
+                    var message = (data && data.message) ? data.message : 'Unknown error occurred';
+                    alert('Error: ' + message);
+                }
+            })
+            .catch(function(error) {
+                console.error('Declaration submit failed:', error);
+                alert('Submission failed. Please try again.');
+            });
+        } catch (err) {
+            console.error('Unexpected error submitting declaration:', err);
+            alert('Unexpected error. Please try again.');
+        }
+    };
+}
 </script> 

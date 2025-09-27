@@ -3,7 +3,7 @@
 include_once '../../assets/conn/db_conn.php';
 
 // Light HTTP caching to improve TTFB on slow links (HTML only, app data still fresh)
-header('Cache-Control: public, max-age=180');
+header('Cache-Control: public, max-age=300, stale-while-revalidate=60');
 header('Vary: Accept-Encoding');
 
 // Get the status parameter from URL
@@ -13,7 +13,7 @@ $error = null;
 $pageTitle = "All Donors";
 
 // File cache (short TTL) to avoid recomputing merged arrays repeatedly while keeping data complete
-$cacheTtlSeconds = 90; // very short; guarantees frequent refresh but smoother navigation
+$cacheTtlSeconds = 180; // short TTL improves responsiveness while reducing recomputation
 $cacheKey = 'donations_list_' . ($status ?: 'all');
 $cacheFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . $cacheKey . '.json';
 $useCache = false;
@@ -114,7 +114,7 @@ if (!is_array($donations)) {
 $startTime = microtime(true);
 
 // Pagination settings
-$itemsPerPage = 50; // show more per page to reduce traversals
+$itemsPerPage = 10; // optimize initial render and navigation performance
 $totalItems = count($donations);
 $totalPages = ceil($totalItems / $itemsPerPage);
 $currentPage = isset($_GET['page']) ? intval($_GET['page']) : 1;
@@ -160,6 +160,11 @@ function calculateAge($birthdate) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Enhanced Modal Styles -->
+    <link href="../../assets/css/medical-history-approval-modals.css" rel="stylesheet">
+    <link href="../../assets/css/defer-donor-modal.css" rel="stylesheet">
+    <link href="../../assets/css/screening-form-modal.css" rel="stylesheet">
+    <link href="../../assets/css/enhanced-modal-styles.css" rel="stylesheet">
     <style>
 /* General Body Styling */
 body {
@@ -167,6 +172,368 @@ body {
     margin: 0;
     padding: 0;
     font-family: Arial, sans-serif;
+}
+
+/* Modal z-index fixes */
+.modal-backdrop { z-index: 1055 !important; }
+#medicalHistoryApprovalModal, #medicalHistoryDeclineModal { z-index: 1060 !important; }
+#deferDonorModal { z-index: 1065 !important; }
+#screeningFormModal { z-index: 1070 !important; }
+#physicalExaminationModal { z-index: 1075 !important; }
+#bloodCollectionModal { z-index: 1080 !important; }
+#phlebotomistBloodCollectionDetailsModal { z-index: 1085 !important; }
+/* Ensure confirmation modals sit above screening */
+#submitMedicalHistoryConfirmModal, #initialScreeningConfirmationModal { z-index: 1090 !important; }
+
+.modal-content { pointer-events: auto !important; }
+.modal-content * { pointer-events: auto !important; }
+
+/* Fix modal backdrop stacking issues */
+.modal-backdrop.show {
+    z-index: 1055 !important;
+}
+
+/* Ensure proper modal stacking */
+.modal.show {
+    z-index: 1060 !important;
+}
+
+/* Fix for multiple modals */
+.modal-backdrop + .modal {
+    z-index: 1061 !important;
+}
+
+/* Specific fixes for workflow modals */
+#donorModal { z-index: 1050 !important; }
+#donorModal + .modal-backdrop { z-index: 1049 !important; }
+
+/* Physical Examination Modal Step Visibility */
+.physical-step-content { 
+    display: none; 
+}
+.physical-step-content.active { 
+    display: block; 
+}
+
+/* Physical Examination Progress Indicator */
+.physical-progress-container { 
+    padding: 1rem 1.5rem 0.5rem; 
+    background: #fff; 
+}
+.physical-progress-steps { 
+    display: flex; 
+    gap: 10px; 
+}
+.physical-step { 
+    display: flex; 
+    align-items: center; 
+    gap: 6px; 
+    opacity: 0.6; 
+    cursor: pointer;
+}
+.physical-step.active { 
+    opacity: 1; 
+    font-weight: 600; 
+}
+.physical-step.completed { 
+    opacity: 1; 
+}
+.physical-step-number { 
+    width: 26px; 
+    height: 26px; 
+    border-radius: 50%; 
+    background: #e9ecef; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    font-weight: 600; 
+    font-size: 12px;
+}
+.physical-step.active .physical-step-number, 
+.physical-step.completed .physical-step-number { 
+    background: #b22222; 
+    color: #fff; 
+}
+.physical-progress-line { 
+    height: 4px; 
+    background: #f1f3f5; 
+    border-radius: 2px; 
+    margin: 8px 0 0; 
+    position: relative; 
+    overflow: hidden; 
+}
+.physical-progress-fill { 
+    height: 100%; 
+    width: 0; 
+    background: #b22222; 
+    transition: width .3s ease; 
+}
+
+/* Physical Examination Form Styles */
+.physical-modal-form .modal-body {
+    padding: 1.5rem;
+    min-height: 400px;
+}
+
+.physical-step-inner h4 {
+    color: #b22222;
+    margin-bottom: 0.5rem;
+}
+
+.physical-step-inner .text-muted {
+    margin-bottom: 1.5rem;
+}
+
+/* Blood Bag Selection Styles */
+.physical-blood-bag-section {
+    margin-top: 1rem;
+}
+
+.physical-blood-bag-options {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.physical-option-card {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: white;
+    min-width: 120px;
+}
+
+.physical-option-card:hover {
+    border-color: #b22222;
+    background: #f8f9fa;
+}
+
+.physical-option-card input[type="radio"] {
+    display: none;
+}
+
+.physical-option-card input[type="radio"]:checked + .physical-option-content {
+    color: #b22222;
+}
+
+.physical-option-card:has(input[type="radio"]:checked) {
+    border-color: #b22222;
+    background: #fff5f5;
+}
+
+.physical-option-content {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+}
+
+.physical-option-content i {
+    font-size: 1.2rem;
+}
+
+/* Examination Report Styles */
+.examination-report {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-top: 1rem;
+}
+
+.report-header {
+    border-bottom: 2px solid #b22222;
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.report-title h5 {
+    color: #b22222;
+    margin-bottom: 0.5rem;
+}
+
+.report-meta {
+    display: flex;
+    gap: 2rem;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.report-section {
+    margin-bottom: 1.5rem;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #b22222;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+}
+
+.section-header i {
+    font-size: 1.1rem;
+}
+
+.vital-signs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.vital-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.vital-label {
+    font-weight: 500;
+    color: #495057;
+}
+
+.vital-value {
+    color: #b22222;
+    font-weight: 600;
+}
+
+.vital-unit {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.examination-findings {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.finding-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.finding-label {
+    font-weight: 500;
+    color: #495057;
+    min-width: 150px;
+}
+
+.finding-value {
+    color: #b22222;
+    font-weight: 600;
+}
+
+.assessment-content {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.assessment-result, .assessment-collection {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.result-label, .collection-label {
+    font-weight: 500;
+    color: #495057;
+}
+
+.result-value, .collection-value {
+    color: #28a745;
+    font-weight: 600;
+}
+
+.report-signature {
+    border-top: 1px solid #dee2e6;
+    padding-top: 1rem;
+    margin-top: 1.5rem;
+}
+
+.signature-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.physician-name {
+    color: #b22222;
+    font-weight: 600;
+}
+
+.signature-note {
+    color: #6c757d;
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+/* Navigation Buttons */
+.physical-nav-buttons {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.physical-defer-btn {
+    margin-right: auto;
+}
+
+.physical-next-btn, .physical-submit-btn {
+    margin-left: auto;
+}
+
+/* Step Navigation Hover Effects */
+.physical-step:hover {
+    opacity: 0.8;
+    transform: translateY(-1px);
+    transition: all 0.2s ease;
+}
+
+/* Form Validation Styles */
+.is-invalid {
+    border-color: #dc3545 !important;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+}
+
+.is-valid {
+    border-color: #28a745 !important;
+    box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25) !important;
+}
+
+/* Physical Examination Modal Specific Styles */
+#physicalExaminationModal .modal-dialog {
+    max-width: 900px;
+}
+
+#physicalExaminationModal .modal-body {
+    min-height: 500px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+/* Progress Indicator Responsive */
+@media (max-width: 768px) {
+    .physical-progress-steps {
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+    
+    .physical-step {
+        font-size: 0.9rem;
+    }
+    
+    .physical-step-number {
+        width: 22px;
+        height: 22px;
+        font-size: 11px;
+    }
 }
 /* Reduce Left Margin for Main Content */
 main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
@@ -1187,7 +1554,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
             <!-- Modal Header -->
-            <div class="modal-header bg-danger text-white">
+            <div class="modal-header modern-header">
                 <h4 class="modal-title w-100"><i class="fas fa-user me-2"></i> Donor Information</h4>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="font-size: 1.5rem;"></button>
             </div>
@@ -1653,40 +2020,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     </div>
 </div>
 
-<!-- Blood Collection Modal -->
-<div class="modal fade" id="bloodCollectionModal" tabindex="-1" aria-labelledby="bloodCollectionModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered">
-        <div class="modal-content">
-            <!-- Modal Header -->
-            <div class="modal-header bg-danger text-white">
-                <h4 class="modal-title w-100"><i class="fas fa-tint me-2"></i> Blood Collection</h4>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="font-size: 1.5rem;"></button>
-            </div>
-
-            <!-- Modal Body -->
-            <div class="modal-body">
-                <div id="bloodCollectionContent">
-                    <div class="text-center">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p>Loading blood collection form...</p>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Modal Footer -->
-            <div class="modal-footer" style="background-color: #f8f9fa; border-top: 1px solid #e0e0e0;">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-2"></i>Close
-                </button>
-                <button type="button" class="btn btn-success" id="completeBloodCollectionBtn">
-                    <i class="fas fa-check me-2"></i>Complete Collection
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- Blood Collection Modal is included below from shared staff modal to avoid duplication/conflicts -->
 
 <!-- Edit Donor Modal -->
 <div class="modal fade" id="editDonorForm" tabindex="-1" aria-labelledby="editDonorFormLabel" aria-hidden="true">
@@ -2117,28 +2451,55 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         eligibility: eligibility
                     });
 
+                    // Derive blood type from donor, fallback to eligibility
+                    const derivedBloodType = safe(donor.blood_type || eligibility.blood_type);
+
                     const header = `
-                        <div class="donor-header-section mb-4">
-                            <div class="donor-header-card">
-                                <div class="donor-header-content">
-                                    <div class="donor-name-section">
-                                        <h3 class="donor-name">${safe(donor.surname)}, ${safe(donor.first_name)} ${safe(donor.middle_name)}</h3>
-                                        <div class="donor-badges">
-                                            <span class="donor-badge age-badge">${safe(donor.age)} years</span>
-                                            <span class="donor-badge gender-badge">${safe(donor.sex)}</span>
-                                            <span class="donor-badge blood-badge">${safe(donor.blood_type)}</span>
-                                        </div>
-                                    </div>
-                                    <div class="donor-id-section">
-                                        <div class="donor-id-label">Donor ID: ${safe(donor.donor_id)}</div>
-                                    </div>
+                        <div class="donor-header-wireframe">
+                            <div class="donor-header-left">
+                                <h3 class="donor-name-wireframe">${safe(donor.surname)}, ${safe(donor.first_name)} ${safe(donor.middle_name)}</h3>
+                                <div class="donor-age-gender">${safe(donor.age)}, ${safe(donor.sex)}</div>
+                            </div>
+                            <div class="donor-header-right">
+                                <div class="donor-id-wireframe">Donor ID ${safe(donor.donor_id)}</div>
+                                <div class="donor-blood-type">${derivedBloodType}</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Donor Information Section -->
+                        <div class="section-wireframe">
+                            <h6 class="section-title">Donor Information:</h6>
+                            <div class="form-fields-grid">
+                                <div class="form-field">
+                                    <label>Birthdate</label>
+                                    <input type="text" class="form-control form-control-sm donor-info-input" value="${safe(donor.birthdate)}" disabled>
+                                </div>
+                                <div class="form-field">
+                                    <label>Address</label>
+                                    <input type="text" class="form-control form-control-sm donor-info-input" value="${safe(donor.permanent_address || donor.current_address || donor.office_address || donor.address_line || donor.address)}" disabled>
+                                </div>
+                                <div class="form-field">
+                                    <label>Mobile Number</label>
+                                    <input type="text" class="form-control form-control-sm donor-info-input" value="${safe(donor.mobile || donor.mobile_number || donor.contact_number || donor.phone)}" disabled>
+                                </div>
+                                <div class="form-field">
+                                    <label>Civil Status</label>
+                                    <input type="text" class="form-control form-control-sm donor-info-input" value="${safe(donor.civil_status)}" disabled>
+                                </div>
+                                <div class="form-field">
+                                    <label>Nationality</label>
+                                    <input type="text" class="form-control form-control-sm donor-info-input" value="${safe(donor.nationality)}" disabled>
+                                </div>
+                                <div class="form-field">
+                                    <label>Occupation</label>
+                                    <input type="text" class="form-control form-control-sm donor-info-input" value="${safe(donor.occupation)}" disabled>
                                 </div>
                             </div>
                         </div>`;
 
-                    const section = (title, rows) => `
+                    const section = (title, rows, headerColor = 'bg-danger') => `
                         <div class="card mb-3 shadow-sm" style="border:none">
-                            <div class="card-header bg-light py-2 px-3" style="border:none">
+                            <div class="card-header ${headerColor} text-white py-2 px-3" style="border:none">
                                 <h6 class="mb-0" style="font-weight:600;">${title}</h6>
                             </div>
                             <div class="card-body py-2 px-3">
@@ -2176,24 +2537,24 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         }
                         
                         return `
-                        <table class="table table-sm align-middle mb-0">
-                            <thead>
-                                <tr class="bg-danger text-white">
-                                    <th class="text-start">Medical History</th>
-                                    <th class="text-center">Initial Screening</th>
-                                    <th class="text-center" style="width:90px">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td class="text-center">${badge(interviewerMedical)}</td>
-                                    <td class="text-center">${badge(interviewerScreening)}</td>
-                                    <td class="text-center">
-                                        ${actionButton}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>`;
+                        <div class="donor-role-table">
+                            <table class="table align-middle mb-2">
+                                <thead>
+                                    <tr>
+                                        <th class="text-center">Medical History</th>
+                                        <th class="text-center">Initial Screening</th>
+                                        <th class="text-end">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="text-center status-cell">${badge(interviewerMedical)}</td>
+                                        <td class="text-center status-cell">${badge(interviewerScreening)}</td>
+                                        <td class="text-end action-cell">${actionButton}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>`;
                     })();
 
                     const physicianRows = (() => {
@@ -2214,37 +2575,38 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                         (physicianMedical.toLowerCase() !== 'pending' && physicianMedical !== '' && physicianMedical !== '-') &&
                                                         (physicianPhysical.toLowerCase() !== 'pending' && physicianPhysical !== '' && physicianPhysical !== '-');
                         
-                        // Determine action button based on status - single button for combined physician workflow
+                        // Determine action button based on status – always open Medical History view for physicians
+                        // This mirrors the interviewer modal but without submit; shows Approve/Decline when applicable
                         let actionButton = '';
                         if (!interviewerCompleted) {
                             actionButton = `<button type=\"button\" class=\"btn btn-sm btn-outline-secondary circular-btn\" title=\"Complete Interviewer Phase First\" disabled><i class=\"fas fa-lock\"></i></button>`;
-                        } else if (isPendingPhysicianWork) {
-                            actionButton = `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"Edit Physician Review\" onclick=\"editPhysicianWorkflow('${donor.donor_id || ''}')\"><i class=\"fas fa-pen\"></i></button>`;
-                        } else if (isCompletedPhysicianWork) {
-                            actionButton = `<button type=\"button\" class=\"btn btn-sm btn-outline-success circular-btn\" title=\"View Physician Details\" onclick=\"viewPhysicianDetails('${donor.donor_id || ''}')\"><i class=\"fas fa-eye\"></i></button>`;
                         } else {
-                            actionButton = `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"View Details\" onclick=\"viewPhysicianDetails('${donor.donor_id || ''}')\"><i class=\"fas fa-eye\"></i></button>`;
+                            const btnTitle = isPendingPhysicianWork ? 'Review Medical History' : 'View Medical History';
+                            const btnClass = isPendingPhysicianWork ? 'btn-outline-primary' : 'btn-outline-success';
+                            const icon = isPendingPhysicianWork ? 'fa-pen' : 'fa-eye';
+                            // Open compact physician MH preview that does NOT follow interviewer flow
+                            actionButton = `<button type=\"button\" class=\"btn btn-sm ${btnClass} circular-btn\" title=\"${btnTitle}\" onclick=\"openPhysicianMedicalPreview('${donor.donor_id || ''}')\"><i class=\"fas ${icon}\"></i></button>`;
                         }
                         
                         return `
-                        <table class="table table-sm align-middle mb-0">
-                            <thead>
-                                <tr class="bg-danger text-white">
-                                    <th class="text-start">Medical History Approval</th>
-                                    <th class="text-center">Physical Examination</th>
-                                    <th class="text-center" style="width:90px">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td class="text-center">${badge(physicianMedical)}</td>
-                                    <td class="text-center">${badge(physicianPhysical)}</td>
-                                    <td class="text-center">
-                                        ${actionButton}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>`;
+                        <div class="donor-role-table">
+                            <table class="table align-middle mb-2">
+                                <thead>
+                                    <tr>
+                                        <th class="text-center">Medical History</th>
+                                        <th class="text-center">Physical Examination</th>
+                                        <th class="text-end">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="text-center status-cell">${badge(physicianMedical)}</td>
+                                        <td class="text-center status-cell">${badge(physicianPhysical)}</td>
+                                        <td class="text-end action-cell">${actionButton}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>`;
                     })();
 
                     const phlebRows = (() => {
@@ -2286,22 +2648,22 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         }
                         
                         return `
-                        <table class="table table-sm align-middle mb-0">
-                            <thead>
-                                <tr class="bg-danger text-white">
-                                    <th class="text-start">Blood Collection Status</th>
-                                    <th class="text-center" style="width:90px">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td class="text-center">${badge(phlebStatus)}</td>
-                                    <td class="text-center">
-                                        ${actionButton}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>`;
+                        <div class="donor-role-table">
+                            <table class="table align-middle mb-2">
+                                <thead>
+                                    <tr>
+                                        <th class="text-center">Blood Collection Status</th>
+                                        <th class="text-end">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="text-center status-cell">${badge(phlebStatus)}</td>
+                                        <td class="text-end action-cell">${actionButton}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>`;
                     })();
 
                     const cta = '';
@@ -2347,10 +2709,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
                     const html = `
                         ${header}
-                        ${donorInfoSection}
-                        ${section('Interviewer', interviewerRows)}
-                        ${section('Physician', physicianRows)}
-                        ${section('Phlebotomist', phlebRows)}
+                        ${section('Interviewer', interviewerRows, 'bg-danger')}
+                        ${section('Physician', physicianRows, 'bg-danger')}
+                        ${section('Phlebotomist', phlebRows, 'bg-danger')}
                         ${cta}
                     `;
                     
@@ -2441,12 +2802,36 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             border-bottom: 1px solid #e9ecef;
                         }
                         
-                        .table thead th {
-                            background-color: #dc3545;
-                            color: white;
-                            font-weight: 600;
-                            border: none;
+                        .table thead th { background: transparent; color: #111827; font-weight: 700; border: none; }
+                        /* Role tables (wireframe look) */
+                        .donor-role-table .table { border-collapse: separate; border-spacing: 0; }
+                        .donor-role-table .table thead th {
+                            background: transparent !important;
+                            color: #212529;
+                            font-weight: 700;
+                            border-top: 1px solid #e9ecef;
+                            border-right: 1px solid #e9ecef;
+                            border-left: 1px solid #e9ecef;
+                            border-bottom: 1px solid #e9ecef;
                         }
+                        .donor-role-table .table tbody td {
+                            border-right: 1px solid #e9ecef;
+                            border-left: 1px solid #e9ecef;
+                            border-bottom: 1px solid #e9ecef;
+                        }
+                        .donor-role-table .status-cell { vertical-align: middle; color:#111827; }
+                        .donor-role-table .action-cell { vertical-align: middle; white-space: nowrap; width: 1%; }
+                        .donor-role-table .action-cell .circular-btn { transform: scale(0.9); }
+                        .donor-info-input[disabled] {
+                            background:#f1f3f5; border:1px solid #e9ecef; border-radius:8px; color:#495057;
+                        }
+                        /* Stronger, consistent text colors */
+                        .donor-header-wireframe .donor-name-wireframe { color:#111827; }
+                        .donor-age-gender { color:#111827; }
+                        .donor-id-wireframe { color:#111827; }
+                        .donor-blood-type { color:#dc3545; font-weight:700; }
+                        .section-title { color:#111827; }
+                        .donor-info-label { color:#111827; font-weight:600; }
                         
                         .btn-outline-primary {
                             border-color: #007bff;
@@ -2478,6 +2863,22 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         
                         .circular-btn i {
                             font-size: 12px;
+                        }
+                        
+                        /* Role section card styling to match the second modal's clean blocks */
+                        .role-section-card {
+                            background: #ffffff;
+                            border: 1px solid #e9ecef;
+                            border-radius: 8px;
+                            padding: 12px 12px 4px;
+                            margin-bottom: 12px;
+                        }
+                        .role-section-card .mb-2 { color: #495057; }
+                        /* Donor info inputs styling */
+                        .donor-info-title { font-weight:700; color:#212529; }
+                        .donor-info-label { color:#6c757d; font-weight:600; letter-spacing:.2px; }
+                        .donor-info-input[disabled] {
+                            background:#f1f3f5; border:1px solid #e9ecef; border-radius:8px; color:#495057;
                         }
                     `;
                     document.head.appendChild(styleEl);
@@ -2602,6 +3003,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     // Medical History approval/decline modals
     include_once '../../src/views/modals/medical-history-approval-modals.php';
     include_once '../../src/views/modals/physical-examination-modal.php';
+    // Interviewer confirmation modals
+    include_once '../../src/views/modals/interviewer-confirmation-modals.php';
     // Screening modal (staff compact modal)
     if (file_exists('../../src/views/forms/staff_donor_initial_screening_form_modal.php')) {
         include_once '../../src/views/forms/staff_donor_initial_screening_form_modal.php';
@@ -2610,19 +3013,67 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     if (file_exists('../../src/views/modals/defer-donor-modal.php')) {
         include_once '../../src/views/modals/defer-donor-modal.php';
     }
+    // Blood collection modal
+    if (file_exists('../../src/views/modals/blood-collection-modal.php')) {
+        include_once '../../src/views/modals/blood-collection-modal.php';
+    }
     ?>
 
     <!-- Staff modal styles/scripts for admin context -->
     <link rel="stylesheet" href="../../assets/css/medical-history-approval-modals.css">
+     <link rel="stylesheet" href="../../assets/css/physical-examination-modal.css">
+     <!-- Enhanced JavaScript files -->
+    <script src="../../assets/js/enhanced-workflow-manager.js"></script>
+    <script src="../../assets/js/enhanced-data-handler.js"></script>
+    <script src="../../assets/js/enhanced-validation-system.js"></script>
+    <script src="../../assets/js/unified-staff-workflow-system.js"></script>
+    <!-- Project scripts that power these modals -->
     <script src="../../assets/js/medical-history-approval.js"></script>
-    <script src="../../assets/js/physical_examination_modal.js"></script>
-    <script src="../../assets/js/initial-screening-defer-button.js"></script>
     <script src="../../assets/js/defer_donor_modal.js"></script>
+    <script src="../../assets/js/initial-screening-defer-button.js"></script>
+    <script src="../../assets/js/screening_form_modal.js"></script>
+     <script>
+     // Safety shim: ensure makeApiCall exists for modules (physician PE handler uses it)
+     if (typeof window.makeApiCall !== 'function') {
+         window.makeApiCall = async function(url, options = {}) {
+             try {
+                 const isFormData = options.body instanceof FormData;
+                 const fetchOptions = {
+                     method: options.method || 'GET',
+                     headers: {
+                         'Content-Type': 'application/json',
+                         ...(options.headers || {})
+                     },
+                     ...options
+                 };
+                 if (isFormData) { try { delete fetchOptions.headers['Content-Type']; } catch(_) {} }
+                 const response = await fetch(url, fetchOptions);
+                 const contentType = response.headers.get('content-type') || '';
+                 const data = contentType.includes('application/json') ? (await response.json().catch(()=>null)) : (await response.text());
+                 if (!response.ok) {
+                     const errMsg = (data && data.message) ? data.message : `HTTP error! status: ${response.status}`;
+                     throw new Error(errMsg);
+                 }
+                 return data;
+             } catch (error) {
+                 return { success: false, message: error?.message || 'Network error' };
+             }
+         };
+     }
+     </script>
+    <script src="../../assets/js/physical_examination_modal.js"></script>
     <script src="../../assets/js/blood_collection_modal.js"></script>
+    <script src="../../assets/js/phlebotomist_blood_collection_details_modal.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             try { if (typeof initializeMedicalHistoryApproval === 'function') initializeMedicalHistoryApproval(); } catch (e) {}
+            
+            // Initialize enhanced workflow system if available
+            if (typeof UnifiedStaffWorkflowSystem !== 'undefined') {
+                window.unifiedSystem = new UnifiedStaffWorkflowSystem();
+                console.log('Unified Staff Workflow System initialized for dashboard');
+            }
         });
 
         window.openInterviewerScreening = function(donor) {
@@ -3073,8 +3524,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
         // Verify function is properly attached
         console.log('openPhysicianCombinedWorkflow function defined:', typeof window.openPhysicianCombinedWorkflow);
+        console.log('=== SCRIPT BLOCK RUNNING - BEFORE FUNCTION DEFINITION ===');
 
         // Function to open medical history modal (staff style)
+        console.log('=== DEFINING openMedicalHistoryModal FUNCTION ===');
         function openMedicalHistoryModal(donorId) {
             // Prevent multiple instances
             if (window.isOpeningMedicalHistory) {
@@ -3093,9 +3546,19 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             
             // Show the medical history modal
             const modal = document.getElementById('medicalHistoryModal');
+            console.log('Medical history modal element:', modal);
             if (modal) {
+                console.log('Showing medical history modal for donor:', donorId);
                 modal.style.display = 'flex';
                 modal.classList.add('show');
+                
+                // Debug: Check modal state after showing
+                setTimeout(() => {
+                    console.log('Modal classes after show:', modal.className);
+                    console.log('Modal style after show:', modal.style.display);
+                    console.log('Modal computed style:', window.getComputedStyle(modal).display);
+                    console.log('Modal computed opacity:', window.getComputedStyle(modal).opacity);
+                }, 100);
                 
                 // Fetch medical history content from the physical dashboard specific file
                 fetch(`../../src/views/forms/medical-history-physical-modal-content.php?donor_id=${donorId}`)
@@ -3127,6 +3590,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             }
                         });
                         
+                        // Check if this is part of the interviewer workflow
+                        if (window.currentInterviewerDonorId) {
+                            // Add interviewer workflow buttons
+                            addInterviewerWorkflowButtons(donorId);
+                        }
+                        
                         // After loading content, generate the questions
                         if (typeof generateMedicalHistoryQuestions === 'function') {
                             generateMedicalHistoryQuestions();
@@ -3145,6 +3614,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 window.isOpeningMedicalHistory = false;
             }
         }
+
+        // Make function globally accessible
+        console.log('=== ASSIGNING FUNCTION TO WINDOW ===');
+        console.log('Function exists before assignment:', typeof openMedicalHistoryModal);
+        window.openMedicalHistoryModal = openMedicalHistoryModal;
+        console.log('openMedicalHistoryModal function assigned to window:', typeof window.openMedicalHistoryModal);
+        console.log('=== FUNCTION ASSIGNMENT COMPLETE ===');
 
         // Function to close medical history modal
         function closeMedicalHistoryModal() {
@@ -4479,34 +4955,995 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     </script>
 
     <script>
+        // Test if JavaScript is running
+        console.log('=== JAVASCRIPT LOADED ===');
+        
         // Role-based edit functions for donor information modal
         window.editMedicalHistory = function(donorId) {
+            console.log('=== INTERVIEWER WORKFLOW STARTED ===');
             console.log('Editing medical history for donor:', donorId);
-            // Open medical history modal for editing
-            if (typeof window.openAdminMedicalHistory === 'function') {
-                window.openAdminMedicalHistory({ donor_id: donorId });
+            
+            // Store the donor ID for the workflow
+            window.currentInterviewerDonorId = donorId;
+            console.log('Stored donor ID:', window.currentInterviewerDonorId);
+            
+            // Check if confirmation modal exists
+            const confirmModalElement = document.getElementById('processMedicalHistoryConfirmModal');
+            console.log('Confirmation modal element:', confirmModalElement);
+            
+            if (confirmModalElement) {
+                // Show confirmation modal first
+                const confirmModal = new bootstrap.Modal(confirmModalElement);
+                console.log('Showing confirmation modal');
+                confirmModal.show();
             } else {
-                alert('Medical history editing not available');
+                console.error('Confirmation modal not found!');
             }
         };
 
         window.editInitialScreening = function(donorId) {
             console.log('Editing initial screening for donor:', donorId);
-            // Open screening modal for editing
-            if (typeof window.openScreeningModal === 'function') {
-                window.openScreeningModal({ donor_id: donorId });
-            } else {
-                alert('Initial screening editing not available');
-            }
+            
+            // Store the donor ID for the workflow
+            window.currentInterviewerDonorId = donorId;
+            
+            // Show confirmation modal first
+            const confirmModal = new bootstrap.Modal(document.getElementById('submitMedicalHistoryConfirmModal'));
+            confirmModal.show();
         };
 
         window.editPhysicianWorkflow = function(donorId) {
             console.log('Editing physician workflow for donor:', donorId);
             
-            // Open medical history approval modal directly (like staff dashboard)
-            // Don't close the Donor Information modal - show medical history modal on top
-            openMedicalHistoryApprovalModal(donorId);
+            // Check if this is a new or returning donor
+            // For now, we'll check if there's existing medical history data
+            const isReturningDonor = checkIfReturningDonor(donorId);
+            
+            if (isReturningDonor) {
+                // For returning donors, show approval status first
+                showReturningDonorApprovalStatus(donorId);
+            } else {
+                // For new donors, show medical history approval first
+                showMedicalHistoryApproval(donorId);
+            }
         };
+
+        // Open interviewer Medical History modal and rebind its footer to Approve/Decline flow
+        window.openPhysicianMH = function(donorId) {
+            try {
+                if (!donorId) return;
+                window.currentInterviewerDonorId = donorId;
+                // Use existing interviewer entry to launch MH modal
+                if (typeof window.editMedicalHistory === 'function') {
+                    window.editMedicalHistory(donorId);
+                } else {
+                    // Fallback: open admin MH loader
+                    if (typeof window.openAdminMedicalHistory === 'function') {
+                        window.openAdminMedicalHistory({ donor_id: donorId });
+                    }
+                }
+
+                // After content loads, hide submit/next and add decision buttons
+                const rebind = function(){
+                    try {
+                        const container = document.getElementById('medicalHistoryModalAdminContent') || document.getElementById('medicalHistoryModalContent');
+                        if (!container) { setTimeout(rebind, 200); return; }
+                        const nextBtn = container.querySelector('#nextButton');
+                        const prevBtn = container.querySelector('#prevButton');
+                        if (nextBtn) nextBtn.style.display = 'none';
+                        if (prevBtn) prevBtn.style.display = 'none';
+                        let footerHost = container.querySelector('#physician-mh-actions');
+                        if (!footerHost) {
+                            footerHost = document.createElement('div');
+                            footerHost.id = 'physician-mh-actions';
+                            footerHost.className = 'd-flex justify-content-end gap-2 mt-3';
+                            container.appendChild(footerHost);
+                        }
+                        footerHost.innerHTML = '';
+                        const declineBtn = document.createElement('button');
+                        declineBtn.type = 'button';
+                        declineBtn.className = 'btn btn-danger';
+                        declineBtn.innerHTML = '<i class="fas fa-ban me-2"></i>Decline';
+                        declineBtn.onclick = function(){ if (typeof showMedicalHistoryDeclineModal === 'function') showMedicalHistoryDeclineModal(donorId); };
+                        const approveBtn = document.createElement('button');
+                        approveBtn.type = 'button';
+                        approveBtn.className = 'btn btn-success';
+                        approveBtn.innerHTML = '<i class="fas fa-check me-2"></i>Approve';
+                        approveBtn.onclick = function(){ physicianApproveMedicalHistory(donorId); };
+                        footerHost.appendChild(declineBtn);
+                        footerHost.appendChild(approveBtn);
+                    } catch(_) {}
+                };
+                setTimeout(rebind, 400);
+            } catch(_) {}
+        };
+
+        // Compact Medical History preview (physician) using the existing admin modal container
+        window.openPhysicianMedicalPreview = function(donorId){
+            try {
+                if (!donorId) return;
+                // Reuse the admin MH modal shell to avoid duplicate IDs and layout conflicts
+                // Also hide the Donor Details modal first to prevent stacking/layout issues
+                try { const dd = bootstrap.Modal.getInstance(document.getElementById('donorDetailsModal')); if (dd) dd.hide(); } catch(_) {}
+
+                // First, check current medical_approval to decide which UI to show
+                (async () => {
+                    // Default to unknown; only treat as Approved when explicitly returned
+                    let status = '';
+                    try {
+                        const vr = await fetch(`../../assets/php_func/get_medical_history.php?donor_id=${encodeURIComponent(donorId)}`);
+                        if (vr && vr.ok) {
+                            const vj = await vr.json().catch(()=>null);
+                            const mh = vj && (vj.medical_history || vj.data || vj);
+                            const val = mh && (mh.medical_approval || mh.status || '');
+                            status = String(val || '').trim().toLowerCase();
+                        }
+                    } catch(_) { status = ''; }
+
+                    if (!status || status === 'pending' || status === '-') {
+                        // Not yet decided -> show MH form preview for decision
+                        return renderPhysicianMHPreview(donorId);
+                    }
+                    if (status === 'approved') {
+                        // Already approved -> show success then allow proceed
+                        const success = document.getElementById('medicalHistoryApprovalModal');
+                        if (success) {
+                            const bm = new bootstrap.Modal(success);
+                            bm.show();
+                            const proceedBtn = success.querySelector('#proceedToPhysicalExamBtn') || success.querySelector('[data-action="proceed-to-physical"]') || success.querySelector('.btn-primary, .btn-success');
+                            if (proceedBtn) {
+                                const handler = function(){ try { bm.hide(); } catch(_) {} proceedToPE(donorId); proceedBtn.removeEventListener('click', handler); };
+                                proceedBtn.addEventListener('click', handler);
+                            }
+                            return;
+                        }
+                        return proceedToPE(donorId);
+                    }
+                    // Declined or any other value (e.g., 'not approved', 'not approve', 'disapproved')
+                    try { const declined = document.getElementById('medicalHistoryDeclinedModal'); if (declined) (new bootstrap.Modal(declined)).show(); } catch(_) {}
+                    try { setTimeout(()=>window.location.reload(), 800); } catch(_) {}
+                })();
+
+                function renderPhysicianMHPreview(donorId){
+                const modalEl = document.getElementById('medicalHistoryModalAdmin');
+                const contentEl = document.getElementById('medicalHistoryModalAdminContent');
+                if (!modalEl || !contentEl) return;
+
+                // Reset body/backdrops to avoid stacked artifacts
+                try { document.querySelectorAll('.modal-backdrop').forEach(b => b.remove()); } catch(_) {}
+                try { document.body.classList.remove('modal-open'); document.body.style.overflow=''; document.body.style.paddingRight=''; } catch(_) {}
+
+                const bs = new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: true, focus: true });
+                bs.show();
+                contentEl.innerHTML = '<div class="d-flex justify-content-center my-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+
+                // Load interviewer MH form content (same markup used by interviewer), read-only preview
+                fetch(`../../src/views/forms/medical-history-modal-content.php?donor_id=${encodeURIComponent(donorId)}`)
+                    .then(r => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
+                    .then(html => {
+                        contentEl.innerHTML = html;
+                        // Execute any script tags embedded in the loaded content so questions/data render
+                        try {
+                            const scripts = contentEl.querySelectorAll('script');
+                            scripts.forEach(script => {
+                                const s = document.createElement('script');
+                                if (script.type) s.type = script.type;
+                                if (script.src) { s.src = script.src; } else { s.textContent = script.textContent || ''; }
+                                document.head.appendChild(s);
+                                // remove after executing to avoid duplicates
+                                setTimeout(() => { try { document.head.removeChild(s); } catch(_) {} }, 0);
+                            });
+                        } catch(_) {}
+
+                        // If the content relies on a generator, call it
+                        try { if (typeof generateMedicalHistoryQuestions === 'function') generateMedicalHistoryQuestions(); } catch(_) {}
+                        // Hide Edit/Next controls from interviewer UI for physician preview
+                        try {
+                            const nextBtn = contentEl.querySelector('#nextButton');
+                            const prevBtn = contentEl.querySelector('#prevButton');
+                            if (nextBtn) nextBtn.style.display = 'none';
+                            if (prevBtn) prevBtn.style.display = 'none';
+                            contentEl.querySelectorAll('button').forEach(btn => {
+                                const t = (btn.textContent || '').trim().toLowerCase();
+                                if (t === 'edit' || t === 'next' || t.startsWith('next')) { btn.style.display = 'none'; }
+                            });
+                        } catch(_) {}
+
+                        // Install decision buttons in the dedicated modal footer to avoid layout shifts
+                        const footerHost = document.getElementById('medicalHistoryModalAdminFooter');
+                        if (footerHost) footerHost.innerHTML = '';
+                        const declineBtn = document.createElement('button');
+                        declineBtn.type = 'button';
+                        declineBtn.className = 'btn btn-danger';
+                        declineBtn.innerHTML = '<i class="fas fa-ban me-2"></i>Decline';
+                        declineBtn.onclick = function(){
+                            try {
+                                const modal = document.getElementById('medicalHistoryDeclineModal');
+                                if (modal) {
+                                    const bm = new bootstrap.Modal(modal);
+                                    bm.show();
+                                    const submit = document.getElementById('submitDeclineBtn');
+                                    if (submit) {
+                                        const handler = function(){
+                                            const reasonEl = document.getElementById('declineReason');
+                                            const reason = reasonEl ? reasonEl.value : '';
+                                            physicianDeclineMedicalHistory(donorId, reason);
+                                            submit.removeEventListener('click', handler);
+                                        };
+                                        submit.addEventListener('click', handler);
+                                    }
+                                    return;
+                                }
+                            } catch(_) {}
+                            physicianDeclineMedicalHistory(donorId);
+                        };
+                        const approveBtn = document.createElement('button');
+                        approveBtn.type = 'button';
+                        approveBtn.className = 'btn btn-success';
+                        approveBtn.innerHTML = '<i class="fas fa-check me-2"></i>Approve';
+                        approveBtn.onclick = function(){ physicianApproveMedicalHistory(donorId); };
+                        if (footerHost) { footerHost.appendChild(declineBtn); footerHost.appendChild(approveBtn); }
+                    })
+                    .catch(err => {
+                        contentEl.innerHTML = `<div class="alert alert-danger">Failed to load Medical History: ${err.message}</div>`;
+                    });
+                }
+            } catch(_) {}
+        };
+
+        // Physician-specific API actions (clean, no extra confirmation)
+        async function physicianApproveMedicalHistory(donorId){
+            try {
+                if (!donorId) return;
+                const res = await fetch('../../assets/php_func/update_medical_history.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ donor_id: donorId, medical_approval: 'Approved', updated_at: new Date().toISOString() })
+                });
+                const json = await res.json().catch(() => null);
+                if (!json || !json.success) throw new Error((json && json.message) || 'Approval failed');
+                // Verify DB state then show appropriate modal, after hiding MH preview
+                let approved = true;
+                try {
+                    const verify = await fetch(`../../assets/php_func/get_medical_history.php?donor_id=${encodeURIComponent(donorId)}`);
+                    if (verify && verify.ok) {
+                        const vjson = await verify.json().catch(()=>null);
+                        const mh = vjson && (vjson.medical_history || vjson.data || vjson);
+                        const val = mh && (mh.medical_approval || mh.status);
+                        approved = String(val || '').toLowerCase() === 'approved';
+                    }
+                } catch(_) { approved = true; }
+
+                hideAdminMHModalThen(function(){
+                    try {
+                        if (approved) {
+                            const success = document.getElementById('medicalHistoryApprovalModal');
+                            if (success) {
+                                const bm = new bootstrap.Modal(success);
+                                bm.show();
+                                const proceedBtn = success.querySelector('#proceedToPhysicalExamBtn') || success.querySelector('[data-action="proceed-to-physical"]') || success.querySelector('.btn-primary, .btn-success');
+                                if (proceedBtn) {
+                                    const handler = function(){
+                                        try { bm.hide(); } catch(_) {}
+                                        proceedToPE(donorId);
+                                        proceedBtn.removeEventListener('click', handler);
+                                    };
+                                    proceedBtn.addEventListener('click', handler);
+                                }
+                                return;
+                            }
+                        } else {
+                            const declined = document.getElementById('medicalHistoryDeclinedModal');
+                            if (declined) { (new bootstrap.Modal(declined)).show(); return; }
+                        }
+                        // Fallbacks
+                        proceedToPE(donorId);
+                    } catch(_) { proceedToPE(donorId); }
+                });
+            } catch(e) {
+                alert('Failed to approve medical history: ' + e.message);
+            }
+        }
+
+        async function physicianDeclineMedicalHistory(donorId){
+            try {
+                if (!donorId) return;
+                const reason = prompt('Enter reason for decline:');
+                if (!reason) return;
+                const res = await fetch('../../assets/php_func/update_medical_history.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ donor_id: donorId, medical_approval: 'Declined', disapproval_reason: reason, updated_at: new Date().toISOString() })
+                });
+                const json = await res.json().catch(() => null);
+                if (!json || !json.success) throw new Error((json && json.message) || 'Decline failed');
+                hideAdminMHModalThen(function(){
+                    try {
+                        const declined = document.getElementById('medicalHistoryDeclinedModal');
+                        if (declined) { (new bootstrap.Modal(declined)).show(); return; }
+                    } catch(_) {}
+                    try { window.location.reload(); } catch(_) {}
+                });
+            } catch(e) {
+                alert('Failed to decline medical history: ' + e.message);
+            }
+        }
+
+        // UI helper: hide admin MH modal and then run a callback
+        function hideAdminMHModalThen(cb){
+            try {
+                const el = document.getElementById('medicalHistoryModalAdmin');
+                const inst = el ? bootstrap.Modal.getInstance(el) : null;
+                if (inst) {
+                    el.addEventListener('hidden.bs.modal', function h(){
+                        try { document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove()); } catch(_) {}
+                        try { document.body.classList.remove('modal-open'); document.body.style.overflow=''; document.body.style.paddingRight=''; } catch(_) {}
+                        el.removeEventListener('hidden.bs.modal', h);
+                        if (typeof cb === 'function') cb();
+                    }, { once: true });
+                    inst.hide();
+                } else {
+                    try { document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove()); } catch(_) {}
+                    try { document.body.classList.remove('modal-open'); document.body.style.overflow=''; document.body.style.paddingRight=''; } catch(_) {}
+                    if (typeof cb === 'function') cb();
+                }
+            } catch(_) { if (typeof cb === 'function') cb(); }
+        }
+
+        // Proceed to Physical Examination (physician path)
+        function proceedToPE(donorId){
+            try {
+                if (window.physicalExaminationModal && typeof window.physicalExaminationModal.openModal === 'function') {
+                    window.physicalExaminationModal.openModal({ donor_id: donorId });
+                } else {
+                    window.location.href = `../../src/views/forms/physical-examination-form.php?donor_id=${encodeURIComponent(donorId)}`;
+                }
+            } catch(_) {
+                window.location.href = `../../src/views/forms/physical-examination-form.php?donor_id=${encodeURIComponent(donorId)}`;
+            }
+        }
+        
+        // Function to check if donor is returning
+        function checkIfReturningDonor(donorId) {
+            // This would typically check the database for existing medical history
+            // For now, we'll use a simple check based on donor ID pattern
+            // In real implementation, you'd make an API call
+            return donorId && donorId.toString().length > 3; // Simple heuristic
+        }
+        
+        // Function to show returning donor approval status
+        function showReturningDonorApprovalStatus(donorId) {
+            // Create a custom modal to show approval status
+            const approvalStatusModal = document.createElement('div');
+            approvalStatusModal.className = 'modal fade';
+            approvalStatusModal.id = 'returningDonorApprovalModal';
+            approvalStatusModal.innerHTML = `
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header bg-success text-white">
+                            <h5 class="modal-title">
+                                <i class="fas fa-check-circle me-2"></i>
+                                Donor Previously Approved
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body text-center">
+                            <div class="mb-3">
+                                <i class="fas fa-user-check text-success" style="font-size: 3rem;"></i>
+                            </div>
+                            <h5 class="mb-3">Medical History Previously Approved</h5>
+                            <p class="text-muted mb-4">
+                                This returning donor has already been approved for medical history. 
+                                You can now proceed to the physical examination.
+                            </p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-success" id="proceedToPhysicalExamReturning">
+                                <i class="fas fa-arrow-right me-2"></i>Proceed to Physical Examination
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(approvalStatusModal);
+            
+            // Use safe modal show
+            showModalSafely('returningDonorApprovalModal').then(() => {
+                // Handle proceed to physical examination
+                document.getElementById('proceedToPhysicalExamReturning').addEventListener('click', function() {
+                    hideModalSafely('returningDonorApprovalModal').then(() => {
+                        // Clean up the modal element
+                        document.body.removeChild(approvalStatusModal);
+                        // Show physical examination
+                        showPhysicalExamination(donorId);
+                    });
+                });
+            });
+        }
+        
+        // Function to show medical history approval for new donors
+        function showMedicalHistoryApproval(donorId) {
+            showModalSafely('medicalHistoryApprovalModal').then(() => {
+                // Set up event listener for when medical history is approved
+                const handleApproval = function(event) {
+                    if (event.detail && event.detail.donorId === donorId) {
+                        // Close medical history modal safely
+                        hideModalSafely('medicalHistoryApprovalModal').then(() => {
+                            // Show physical examination modal after cleanup
+                            showPhysicalExamination(donorId);
+                        });
+                        
+                        // Remove the event listener
+                        document.removeEventListener('medicalHistoryApproved', handleApproval);
+                    }
+                };
+                
+                document.addEventListener('medicalHistoryApproved', handleApproval);
+                
+                // Also set up direct button handler for the medical history approval modal
+                setupMedicalHistoryApprovalButtonHandler(donorId);
+            });
+        }
+        
+        // Function to set up button handler for medical history approval modal
+        function setupMedicalHistoryApprovalButtonHandler(donorId) {
+            // Wait for the modal to be fully loaded
+            setTimeout(() => {
+                const modal = document.getElementById('medicalHistoryApprovalModal');
+                if (modal) {
+                    // Find the "Proceed to Physical Examination" button
+                    const proceedButton = modal.querySelector('button[data-action="proceed-to-physical"]') || 
+                                       Array.from(modal.querySelectorAll('button')).find(btn => 
+                                           btn.textContent.includes('Proceed to Physical Examination'));
+                    
+                    if (proceedButton) {
+                        console.log('Found proceed button in medical history approval modal');
+                        proceedButton.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            console.log('Proceed to Physical Examination clicked');
+                            
+                            // Close the medical history approval modal
+                            const medicalModal = bootstrap.Modal.getInstance(modal);
+                            if (medicalModal) {
+                                medicalModal.hide();
+                            }
+                            
+                            // Show physical examination modal after a short delay
+                            setTimeout(() => {
+                                showPhysicalExamination(donorId);
+                            }, 500);
+                        });
+                    } else {
+                        console.log('Proceed button not found in medical history approval modal');
+                    }
+                }
+            }, 500);
+        }
+        
+        // Function to show physical examination
+        function showPhysicalExamination(donorId) {
+            const screeningData = {
+                donor_form_id: donorId,
+                screening_id: 'SCRN-' + donorId + '-001',
+                has_pending_exam: true,
+                type: 'screening'
+            };
+            
+            // Store the donor ID for the modal
+            window.currentDonorId = donorId;
+            
+            if (window.physicalExaminationModal && typeof window.physicalExaminationModal.openModal === 'function') {
+                // Use the existing modal system
+                window.physicalExaminationModal.openModal(screeningData);
+            } else {
+                // Use safe modal show and initialize step functionality
+                showModalSafely('physicalExaminationModal', 200).then(() => {
+                    console.log('Physical examination modal opened safely');
+                    // Initialize the physical examination modal functionality
+                    initializePhysicalExaminationModal(donorId, screeningData);
+                });
+            }
+        }
+        
+        // Function to initialize physical examination modal functionality
+        function initializePhysicalExaminationModal(donorId, screeningData) {
+            // Set up the form data
+            const donorIdField = document.getElementById('physical-donor-id');
+            const screeningIdField = document.getElementById('physical-screening-id');
+            
+            if (donorIdField) donorIdField.value = donorId;
+            if (screeningIdField) screeningIdField.value = screeningData.screening_id;
+            
+            // Initialize step functionality
+            let currentStep = 1;
+            const totalSteps = 4;
+            
+            // Show only the first step
+            document.querySelectorAll('.physical-step-content').forEach((step, index) => {
+                step.classList.remove('active');
+                if (index === 0) {
+                    step.classList.add('active');
+                }
+            });
+            
+            // Update progress indicator
+            updatePhysicalProgressIndicator(currentStep, totalSteps);
+            
+            // Set up navigation buttons
+            setupPhysicalNavigationButtons(currentStep, totalSteps, donorId);
+            
+            // Set up form validation
+            setupPhysicalFormValidation();
+        }
+        
+        // Function to update progress indicator
+        function updatePhysicalProgressIndicator(currentStep, totalSteps) {
+            // Update step indicators
+            document.querySelectorAll('.physical-step').forEach((step, index) => {
+                step.classList.remove('active', 'completed');
+                if (index + 1 < currentStep) {
+                    step.classList.add('completed');
+                } else if (index + 1 === currentStep) {
+                    step.classList.add('active');
+                }
+            });
+            
+            // Update progress bar
+            const progressFill = document.querySelector('.physical-progress-fill');
+            if (progressFill) {
+                const progress = ((currentStep - 1) / (totalSteps - 1)) * 100;
+                progressFill.style.width = progress + '%';
+            }
+        }
+        
+        // Function to setup navigation buttons
+        function setupPhysicalNavigationButtons(currentStep, totalSteps, donorId) {
+            const prevBtn = document.querySelector('.physical-prev-btn');
+            const nextBtn = document.querySelector('.physical-next-btn');
+            const submitBtn = document.querySelector('.physical-submit-btn');
+            const deferBtn = document.querySelector('.physical-defer-btn');
+            
+            // Show/hide buttons based on current step
+            if (prevBtn) {
+                prevBtn.style.display = currentStep > 1 ? 'inline-block' : 'none';
+            }
+            
+            if (nextBtn) {
+                nextBtn.style.display = currentStep < totalSteps ? 'inline-block' : 'none';
+            }
+            
+            if (submitBtn) {
+                submitBtn.style.display = currentStep === totalSteps ? 'inline-block' : 'none';
+            }
+            
+            // Set up event listeners and data attributes
+            if (nextBtn) {
+                nextBtn.dataset.currentStep = currentStep;
+                nextBtn.onclick = () => {
+                    if (validateCurrentStep(currentStep)) {
+                        goToNextStep(currentStep, totalSteps, donorId);
+                    }
+                };
+            }
+            
+            if (prevBtn) {
+                prevBtn.dataset.currentStep = currentStep;
+                prevBtn.onclick = () => {
+                    goToPreviousStep(currentStep, totalSteps, donorId);
+                };
+            }
+            
+            if (submitBtn) {
+                submitBtn.onclick = () => {
+                    submitPhysicalExamination(donorId);
+                };
+            }
+            
+            if (deferBtn) {
+                deferBtn.onclick = () => {
+                    deferPhysicalExamination(donorId);
+                };
+            }
+        }
+        
+        // Function to validate current step
+        function validateCurrentStep(step) {
+            const currentStepElement = document.getElementById(`physical-step-${step}`);
+            if (!currentStepElement) return true;
+            
+            const requiredFields = currentStepElement.querySelectorAll('input[required], select[required], textarea[required]');
+            let isValid = true;
+            
+            requiredFields.forEach(field => {
+                if (!field.value.trim()) {
+                    field.classList.add('is-invalid');
+                    isValid = false;
+                } else {
+                    field.classList.remove('is-invalid');
+                }
+            });
+            
+            return isValid;
+        }
+        
+        // Function to go to next step
+        function goToNextStep(currentStep, totalSteps, donorId) {
+            if (currentStep < totalSteps) {
+                const newStep = currentStep + 1;
+                
+                // Hide current step
+                const currentStepElement = document.getElementById(`physical-step-${currentStep}`);
+                if (currentStepElement) {
+                    currentStepElement.classList.remove('active');
+                }
+                
+                // Show next step
+                const nextStepElement = document.getElementById(`physical-step-${newStep}`);
+                if (nextStepElement) {
+                    nextStepElement.classList.add('active');
+                }
+                
+                // Update progress
+                updatePhysicalProgressIndicator(newStep, totalSteps);
+                setupPhysicalNavigationButtons(newStep, totalSteps, donorId);
+                
+                // Update summary if on review step
+                if (newStep === totalSteps) {
+                    updatePhysicalExaminationSummary();
+                }
+            }
+        }
+        
+        // Function to go to previous step
+        function goToPreviousStep(currentStep, totalSteps, donorId) {
+            if (currentStep > 1) {
+                const newStep = currentStep - 1;
+                
+                // Hide current step
+                const currentStepElement = document.getElementById(`physical-step-${currentStep}`);
+                if (currentStepElement) {
+                    currentStepElement.classList.remove('active');
+                }
+                
+                // Show previous step
+                const prevStepElement = document.getElementById(`physical-step-${newStep}`);
+                if (prevStepElement) {
+                    prevStepElement.classList.add('active');
+                }
+                
+                // Update progress
+                updatePhysicalProgressIndicator(newStep, totalSteps);
+                setupPhysicalNavigationButtons(newStep, totalSteps, donorId);
+            }
+        }
+        
+        // Function to update summary
+        function updatePhysicalExaminationSummary() {
+            // Update vital signs
+            const bloodPressure = document.getElementById('physical-blood-pressure')?.value || '-';
+            const pulseRate = document.getElementById('physical-pulse-rate')?.value || '-';
+            const bodyTemp = document.getElementById('physical-body-temp')?.value || '-';
+            
+            document.getElementById('summary-blood-pressure').textContent = bloodPressure;
+            document.getElementById('summary-pulse-rate').textContent = pulseRate;
+            document.getElementById('summary-body-temp').textContent = bodyTemp;
+            
+            // Update examination findings
+            const genAppearance = document.getElementById('physical-gen-appearance')?.value || '-';
+            const skin = document.getElementById('physical-skin')?.value || '-';
+            const heent = document.getElementById('physical-heent')?.value || '-';
+            const heartLungs = document.getElementById('physical-heart-lungs')?.value || '-';
+            
+            document.getElementById('summary-gen-appearance').textContent = genAppearance;
+            document.getElementById('summary-skin').textContent = skin;
+            document.getElementById('summary-heent').textContent = heent;
+            document.getElementById('summary-heart-lungs').textContent = heartLungs;
+            
+            // Update blood bag selection
+            const bloodBagType = document.querySelector('input[name="blood_bag_type"]:checked')?.value || '-';
+            document.getElementById('summary-blood-bag').textContent = bloodBagType;
+        }
+        
+        // Function to submit physical examination
+        function submitPhysicalExamination(donorId) {
+            console.log('Submitting physical examination for donor via physician handler:', donorId);
+            try {
+                if (window.physicalExaminationModal && typeof window.physicalExaminationModal.submitForm === 'function') {
+                    // Delegate to the same submit flow used by physician staff
+                    window.physicalExaminationModal.submitForm();
+                    return;
+                }
+            } catch (e) { console.warn('Delegated submit failed, falling back:', e); }
+
+            // Fallback: click the visible submit button in the modal
+            try {
+                const btn = document.querySelector('#physicalExaminationModal .physical-submit-btn');
+                if (btn) { btn.click(); return; }
+            } catch (_) {}
+
+            alert('Submit handler not available. Please ensure physical_examination_modal.js is loaded.');
+        }
+        
+        // Function to defer physical examination
+        function deferPhysicalExamination(donorId) {
+            console.log('Deferring physical examination for donor:', donorId);
+            
+            // Show defer donor modal
+            showModalSafely('deferDonorModal');
+        }
+        
+        // Function to setup form validation
+        function setupPhysicalFormValidation() {
+            // Add real-time validation for required fields
+            document.querySelectorAll('#physicalExaminationModal input[required], #physicalExaminationModal select[required], #physicalExaminationModal textarea[required]').forEach(field => {
+                field.addEventListener('blur', function() {
+                    if (this.value.trim()) {
+                        this.classList.remove('is-invalid');
+                        this.classList.add('is-valid');
+                    } else {
+                        this.classList.remove('is-valid');
+                        this.classList.add('is-invalid');
+                    }
+                });
+            });
+        }
+        
+        // Global event listener for physical examination modal navigation
+        document.addEventListener('click', function(event) {
+            // Handle Next button clicks
+            if (event.target.classList.contains('physical-next-btn')) {
+                event.preventDefault();
+                const currentStep = parseInt(event.target.dataset.currentStep) || 1;
+                const totalSteps = 4;
+                const donorId = window.currentDonorId;
+                
+                if (validateCurrentStep(currentStep)) {
+                    goToNextStep(currentStep, totalSteps, donorId);
+                }
+            }
+            
+            // Handle Previous button clicks
+            if (event.target.classList.contains('physical-prev-btn')) {
+                event.preventDefault();
+                const currentStep = parseInt(event.target.dataset.currentStep) || 1;
+                const totalSteps = 4;
+                const donorId = window.currentDonorId;
+                
+                goToPreviousStep(currentStep, totalSteps, donorId);
+            }
+            
+            // Handle Submit button clicks
+            if (event.target.classList.contains('physical-submit-btn')) {
+                event.preventDefault();
+                const donorId = window.currentDonorId;
+                submitPhysicalExamination(donorId);
+            }
+            
+            // Handle Defer button clicks
+            if (event.target.classList.contains('physical-defer-btn')) {
+                event.preventDefault();
+                const donorId = window.currentDonorId;
+                deferPhysicalExamination(donorId);
+            }
+        });
+        
+        // Function to trigger medical history approved event
+        function triggerMedicalHistoryApproved(donorId) {
+            const event = new CustomEvent('medicalHistoryApproved', {
+                detail: { donorId: donorId }
+            });
+            document.dispatchEvent(event);
+        }
+        
+        // Enhanced function to clean up modal backdrops
+        function cleanupModalBackdrops() {
+            // Remove show class from all modal backdrops first
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            backdrops.forEach(backdrop => {
+                backdrop.classList.remove('show', 'fade');
+                // Remove the backdrop after a short delay to allow fade out
+                setTimeout(() => {
+                    if (backdrop.parentNode) {
+                        backdrop.remove();
+                    }
+                }, 150);
+            });
+            
+            // Remove modal-open class from body
+            document.body.classList.remove('modal-open');
+            
+            // Reset body padding and overflow
+            document.body.style.paddingRight = '';
+            document.body.style.overflow = '';
+            
+            // Force remove any remaining backdrops after cleanup
+            setTimeout(() => {
+                const remainingBackdrops = document.querySelectorAll('.modal-backdrop');
+                remainingBackdrops.forEach(backdrop => {
+                    if (backdrop.parentNode) {
+                        backdrop.remove();
+                    }
+                });
+            }, 300);
+        }
+        
+        // Function to safely show a modal with proper cleanup
+        function showModalSafely(modalId, delay = 0) {
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    // Clean up any existing backdrops first
+                    cleanupModalBackdrops();
+                    
+                    // Show the modal
+                    const modalElement = document.getElementById(modalId);
+                    if (modalElement) {
+                        const modal = new bootstrap.Modal(modalElement, {
+                            backdrop: true,
+                            keyboard: true,
+                            focus: true
+                        });
+                        modal.show();
+                        resolve(modal);
+                    } else {
+                        console.error('Modal not found:', modalId);
+                        resolve(null);
+                    }
+                }, delay);
+            });
+        }
+        
+        // Function to safely hide a modal with proper cleanup
+        function hideModalSafely(modalId) {
+            return new Promise((resolve) => {
+                const modalElement = document.getElementById(modalId);
+                if (modalElement) {
+                    const modal = bootstrap.Modal.getInstance(modalElement);
+                    if (modal) {
+                        modal.hide();
+                        
+                        // Clean up after modal is hidden
+                        modalElement.addEventListener('hidden.bs.modal', function cleanup() {
+                            cleanupModalBackdrops();
+                            modalElement.removeEventListener('hidden.bs.modal', cleanup);
+                            resolve();
+                        }, { once: true });
+                    } else {
+                        cleanupModalBackdrops();
+                        resolve();
+                    }
+                } else {
+                    cleanupModalBackdrops();
+                    resolve();
+                }
+            });
+        }
+        
+        // Add event listener for modal cleanup
+        document.addEventListener('hidden.bs.modal', function(event) {
+            // Immediately remove show class from backdrops
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            backdrops.forEach(backdrop => {
+                backdrop.classList.remove('show');
+            });
+            
+            // Small delay to ensure proper cleanup
+            setTimeout(() => {
+                cleanupModalBackdrops();
+            }, 100);
+        });
+        
+        // Also listen for modal hide events
+        document.addEventListener('hide.bs.modal', function(event) {
+            // Remove show class immediately when modal starts hiding
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            backdrops.forEach(backdrop => {
+                backdrop.classList.remove('show');
+            });
+        });
+        
+        // Periodic cleanup to catch any lingering backdrops
+        setInterval(() => {
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            if (backdrops.length > 0) {
+                console.log('Found lingering modal backdrops, cleaning up...');
+                // First remove show class from any visible backdrops
+                backdrops.forEach(backdrop => {
+                    if (backdrop.classList.contains('show')) {
+                        backdrop.classList.remove('show');
+                        console.log('Removed show class from backdrop');
+                    }
+                });
+                cleanupModalBackdrops();
+            }
+        }, 2000); // Check every 2 seconds
+        
+        // Add cleanup on page visibility change
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') {
+                cleanupModalBackdrops();
+            }
+        });
+        
+        // Immediate fix for show class removal
+        function removeShowClassFromBackdrops() {
+            const backdrops = document.querySelectorAll('.modal-backdrop.show');
+            backdrops.forEach(backdrop => {
+                backdrop.classList.remove('show');
+                console.log('Immediately removed show class from backdrop');
+            });
+        }
+        
+        // Run immediate cleanup every 500ms to catch show classes quickly
+        setInterval(removeShowClassFromBackdrops, 500);
+        
+        // Add event listeners for medical history approval buttons
+        document.addEventListener('DOMContentLoaded', function() {
+            // Listen for medical history approval button clicks
+            document.addEventListener('click', function(event) {
+                // Check if it's an approval button in the medical history modal
+                if (event.target.matches('#medicalHistoryApprovalModal .btn-success, #medicalHistoryApprovalModal .btn-primary')) {
+                    const donorId = window.currentDonorId || window.currentDetailsDonorId;
+                    if (donorId) {
+                        // Trigger the medical history approved event
+                        setTimeout(() => {
+                            triggerMedicalHistoryApproved(donorId);
+                        }, 1000); // Give time for the approval animation to show
+                    }
+                }
+                
+                // Check if it's the "Proceed to Physical Examination" button in the medical history approval modal
+                if (event.target.closest('#medicalHistoryApprovalModal') && 
+                    (event.target.textContent.includes('Proceed to Physical Examination') || 
+                     event.target.matches('[data-action="proceed-to-physical"]'))) {
+                    const donorId = window.currentDonorId || window.currentDetailsDonorId;
+                    if (donorId) {
+                        console.log('Proceed to Physical Examination clicked in medical history approval modal');
+                        event.preventDefault();
+                        event.stopPropagation();
+                        
+                        // Close the medical history approval modal
+                        const medicalModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryApprovalModal'));
+                        if (medicalModal) {
+                            medicalModal.hide();
+                        }
+                        
+                        // Show physical examination modal after a short delay
+                        setTimeout(() => {
+                            showPhysicalExamination(donorId);
+                        }, 500);
+                    }
+                }
+            });
+        });
+        
+        // Additional global event listener for any dynamically loaded modals
+        document.addEventListener('click', function(event) {
+            // Check for any button with "Proceed to Physical Examination" text
+            if (event.target.textContent && event.target.textContent.includes('Proceed to Physical Examination')) {
+                const modal = event.target.closest('.modal');
+                if (modal && modal.id === 'medicalHistoryApprovalModal') {
+                    const donorId = window.currentDonorId || window.currentDetailsDonorId;
+                    if (donorId) {
+                        console.log('Global handler: Proceed to Physical Examination clicked');
+                        event.preventDefault();
+                        event.stopPropagation();
+                        
+                        // Close the medical history approval modal
+                        const medicalModal = bootstrap.Modal.getInstance(modal);
+                        if (medicalModal) {
+                            medicalModal.hide();
+                        }
+                        
+                        // Show physical examination modal after a short delay
+                        setTimeout(() => {
+                            showPhysicalExamination(donorId);
+                        }, 500);
+                    }
+                }
+            }
+        });
 
         // Function to open medical history approval modal (similar to staff dashboard)
         function openMedicalHistoryApprovalModal(donorId) {
@@ -4555,13 +5992,26 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             loadMedicalHistoryContent(donorId);
         }
 
-        // Function to load medical history content
-        function loadMedicalHistoryContent(donorId) {
+        // Make the existing function globally accessible
+        window.openMedicalHistoryApprovalModal = openMedicalHistoryApprovalModal;
+
+        // Function to load medical history content for interviewer workflow
+        function loadMedicalHistoryContentForInterviewer(donorId) {
             const modalContent = document.getElementById('medicalHistoryModalContent');
             if (!modalContent) return;
 
-            // Fetch medical history content from the standalone modal
-            fetch(`../../src/views/forms/medical-history-modal.php?donor_id=${encodeURIComponent(donorId)}`)
+            // Show loading state
+            modalContent.innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading medical history...</p>
+                </div>
+            `;
+
+            // Fetch medical history content from the correct endpoint (same as preview-staff-donor-submission.php)
+            fetch(`../../src/views/forms/medical-history-modal-content.php?donor_id=${encodeURIComponent(donorId)}`)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
@@ -4590,22 +6040,133 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         }
                     });
                     
-                    // Initialize medical history approval functionality
-                    if (typeof initializeMedicalHistoryApproval === 'function') {
-                        initializeMedicalHistoryApproval();
+                    // Add interviewer workflow buttons
+                    console.log('Adding interviewer workflow buttons to medical history modal');
+                    addInterviewerWorkflowButtons(donorId);
+
+                    // Intercept medical history form submission for interviewer workflow
+                    try {
+                        const formEl = document.getElementById('modalMedicalHistoryForm');
+                        if (formEl) {
+                            // Ensure we do not attach duplicate listeners
+                            if (!formEl.__interviewerSubmitHooked) {
+                                formEl.addEventListener('submit', function(e){
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const formData = new FormData(formEl);
+                                    if (!formData.get('action')) formData.set('action', 'next');
+                                    // Fallback donor_id
+                                    if (!formData.get('donor_id') && donorId) {
+                                        formData.set('donor_id', donorId);
+                                    }
+                                    fetch('../../src/views/forms/medical-history-process.php', { method: 'POST', body: formData })
+                                        .then(r => r.json())
+                                        .then(res => {
+                                            if (res && res.success) {
+                                                // Close custom medical history modal
+                                                try { closeMedicalHistoryModal(); } catch(_) {}
+                                                // Ensure any screening modal is not shown yet
+                                                try {
+                                                    const sEl = document.getElementById('screeningFormModal');
+                                                    if (sEl && window.bootstrap) {
+                                                        const sm = window.bootstrap.Modal.getInstance(sEl);
+                                                        if (sm) { sm.hide(); }
+                                                    }
+                                                } catch(_) {}
+
+                                                // After close animation, show confirmation to proceed
+                                                setTimeout(() => {
+                                                    const confirmEl = document.getElementById('submitMedicalHistoryConfirmModal');
+                                                    if (confirmEl && window.bootstrap) {
+                                                        // Persist donorId on the modal for reliable retrieval on click
+                                                        try { confirmEl.dataset.donorId = String(donorId || window.currentInterviewerDonorId || ''); } catch(_) {}
+                                                        const m = window.bootstrap.Modal.getInstance(confirmEl) || new window.bootstrap.Modal(confirmEl);
+                                                        m.show();
+                                                    }
+                                                }, 350);
+                                            } else {
+                                                console.error('Medical history save failed:', res);
+                                            }
+                                        })
+                                        .catch(err => console.error('Submit error (interviewer MH):', err));
+                                });
+                                formEl.__interviewerSubmitHooked = true;
+                            }
+                        } else {
+                            console.warn('modalMedicalHistoryForm not found in interviewer MH content');
+                        }
+                    } catch (hookErr) {
+                        console.warn('Could not attach interviewer submit hook:', hookErr);
                     }
-                    
-                    // Hide the submit button and show approve/decline buttons instead
-                    const submitBtn = document.getElementById('nextButton');
-                    if (submitBtn) {
-                        submitBtn.style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('Error loading medical history content:', error);
+                    modalContent.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Error loading medical history. Please try again.
+                        </div>
+                    `;
+                });
+        }
+
+        // Function to load medical history content
+        function loadMedicalHistoryContent(donorId) {
+            const modalContent = document.getElementById('medicalHistoryModalContent');
+            if (!modalContent) return;
+
+            // Fetch medical history content from the correct endpoint (same as preview-staff-donor-submission.php)
+            fetch(`../../src/views/forms/medical-history-modal-content.php?donor_id=${encodeURIComponent(donorId)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
                     }
+                    return response.text();
+                })
+                .then(html => {
+                    // Update modal content
+                    modalContent.innerHTML = html;
                     
-                    // Add approve/decline buttons to the modal footer
-                    const modalFooter = document.querySelector('#medicalHistoryModal .modal-footer');
-                    if (modalFooter) {
-                        // Check if buttons already exist
-                        if (!document.getElementById('approveMedicalHistoryBtn')) {
+                    // Execute any script tags in the loaded content
+                    const scripts = modalContent.querySelectorAll('script');
+                    scripts.forEach(script => {
+                        try {
+                            const newScript = document.createElement('script');
+                            if (script.type) newScript.type = script.type;
+                            if (script.src) {
+                                newScript.src = script.src;
+                            } else {
+                                newScript.textContent = script.textContent;
+                            }
+                            document.head.appendChild(newScript);
+                            document.head.removeChild(newScript);
+                        } catch (e) {
+                            console.warn('Error executing script:', e);
+                        }
+                    });
+                    
+                    // Check if this is part of the interviewer workflow
+                    if (window.currentInterviewerDonorId) {
+                        console.log('Adding interviewer workflow buttons to medical history modal');
+                        // Add interviewer workflow buttons instead of approve/decline
+                        addInterviewerWorkflowButtons(donorId);
+                    } else {
+                        // Initialize medical history approval functionality for staff workflow
+                        if (typeof initializeMedicalHistoryApproval === 'function') {
+                            initializeMedicalHistoryApproval();
+                        }
+                        
+                        // Hide the submit button and show approve/decline buttons instead
+                        const submitBtn = document.getElementById('nextButton');
+                        if (submitBtn) {
+                            submitBtn.style.display = 'none';
+                        }
+                        
+                        // Add approve/decline buttons to the modal footer (only for staff workflow)
+                        const modalFooter = document.querySelector('#medicalHistoryModal .modal-footer');
+                        if (modalFooter) {
+                            // Check if buttons already exist
+                            if (!document.getElementById('approveMedicalHistoryBtn')) {
                             const approveBtn = document.createElement('button');
                             approveBtn.className = 'btn btn-success me-2';
                             approveBtn.innerHTML = '<i class="fas fa-check me-2"></i>Approve Medical History';
@@ -4635,6 +6196,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 handleMedicalHistoryApproval(donorId, 'decline');
                             });
                         }
+                    }
                     }
                     
                     // Force admin flow initialization
@@ -4779,33 +6341,32 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
         window.editBloodCollection = function(donorId) {
             console.log('Editing blood collection for donor:', donorId);
-            // Open blood collection form for editing
-            // Set session variables for the form
-            fetch('../../assets/php_func/set_donor_session.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    donor_id: donorId,
-                    action: 'set_donor_session'
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-            window.location.href = `../../src/views/forms/blood-collection-form.php?donor_id=${encodeURIComponent(donorId)}`;
-                } else {
-                    console.error('Failed to set donor session:', data.message);
-                    alert('Error: Failed to prepare blood collection form. Please try again.');
+            try {
+                if (window.bloodCollectionModal && typeof window.bloodCollectionModal.openModal === 'function') {
+                    window.bloodCollectionModal.openModal({ donor_id: donorId });
+                    return;
                 }
-            })
-            .catch(error => {
-                console.error('Error setting donor session:', error);
-                // Fallback to direct redirect
-                window.location.href = `../../src/views/forms/blood-collection-form.php?donor_id=${encodeURIComponent(donorId)}`;
-            });
+            } catch (e) { console.warn('bloodCollectionModal.openModal not available, falling back', e); }
+            // Fallback: open the modal without prefill if the instance is unavailable
+            showModalSafely('bloodCollectionModal');
         };
+
+        // Provide a confirmation handler used by blood_collection_modal.js
+        // In admin context we submit directly to avoid a missing confirmation modal
+        if (typeof window.showCollectionCompleteModal !== 'function') {
+            window.showCollectionCompleteModal = function() {
+                try {
+                    if (window.bloodCollectionModal && typeof window.bloodCollectionModal.submitForm === 'function') {
+                        window.bloodCollectionModal.submitForm();
+                    }
+                } catch (e) { console.error('Submit handler not available', e); }
+            };
+        }
+
+        // Align success handler name with the staff implementation
+        if (typeof window.showDonationSuccessModal !== 'function' && typeof window.showBloodCollectionCompleted === 'function') {
+            window.showDonationSuccessModal = window.showBloodCollectionCompleted;
+        }
 
         window.viewInterviewerDetails = function(donorId) {
             console.log('Viewing interviewer details for donor:', donorId);
@@ -5040,6 +6601,470 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             console.log('Testing Donor Details Modal with donor ID:', donorId);
             window.viewInterviewerDetails(donorId);
         };
+
+        // Test function to directly test interviewer medical history workflow
+        window.testOpenMedicalHistory = function(donorId = '123') {
+            console.log('=== TESTING INTERVIEWER MEDICAL HISTORY WORKFLOW ===');
+            console.log('Testing with donor ID:', donorId);
+            console.log('loadMedicalHistoryContentForInterviewer type:', typeof loadMedicalHistoryContentForInterviewer);
+            
+            // Set the interviewer workflow flag
+            window.currentInterviewerDonorId = donorId;
+            
+            // Check if we have the medical history modal element
+            const medicalHistoryModal = document.getElementById('medicalHistoryModal');
+            if (medicalHistoryModal) {
+                console.log('Found medical history modal, opening it for interviewer workflow');
+                
+                // Reset modal state
+                medicalHistoryModal.removeAttribute('style');
+                medicalHistoryModal.className = 'medical-history-modal';
+                
+                // Show the modal
+                medicalHistoryModal.style.display = 'flex';
+                setTimeout(() => medicalHistoryModal.classList.add('show'), 10);
+                
+                // Load the medical history content for interviewer workflow
+                loadMedicalHistoryContentForInterviewer(donorId);
+            } else {
+                console.error('Medical history modal not found!');
+            }
+        };
+
+        // Test function for interviewer workflow
+        window.testInterviewerWorkflow = function(donorId = '123') {
+            console.log('=== TESTING INTERVIEWER WORKFLOW ===');
+            console.log('Testing with donor ID:', donorId);
+            
+            // Test if modal exists
+            const modal = document.getElementById('processMedicalHistoryConfirmModal');
+            console.log('Confirmation modal:', modal);
+            
+            // Test if button exists
+            const button = document.getElementById('interviewerProceedToMedicalHistoryBtn');
+            console.log('Interviewer proceed button:', button);
+            
+            // Test if we can show the modal
+            if (modal) {
+                const bootstrapModal = new bootstrap.Modal(modal);
+                bootstrapModal.show();
+                console.log('Modal shown successfully');
+                
+                // Wait for modal to be fully shown, then test button
+                setTimeout(() => {
+                    const button = document.getElementById('interviewerProceedToMedicalHistoryBtn');
+                    console.log('Button after modal shown:', button);
+                    console.log('Button disabled:', button?.disabled);
+                    console.log('Button style:', button?.style.display);
+                    console.log('Button computed style:', button ? window.getComputedStyle(button).display : 'N/A');
+                    
+                    if (button) {
+                        // Check if button is actually visible and clickable
+                        const rect = button.getBoundingClientRect();
+                        console.log('Button position:', rect);
+                        console.log('Button z-index:', window.getComputedStyle(button).zIndex);
+                        console.log('Button pointer-events:', window.getComputedStyle(button).pointerEvents);
+                        
+                        // Force make button clickable
+                        button.style.pointerEvents = 'auto';
+                        button.style.zIndex = '9999';
+                        button.style.position = 'relative';
+                        console.log('Forced button to be clickable');
+                        
+                        // Check for overlapping elements
+                        const elementsAtPoint = document.elementsFromPoint(rect.left + rect.width/2, rect.top + rect.height/2);
+                        console.log('Elements at button center:', elementsAtPoint);
+                        
+                        // Check for modal backdrops
+                        const backdrops = document.querySelectorAll('.modal-backdrop');
+                        console.log('Modal backdrops:', backdrops);
+                        backdrops.forEach((backdrop, index) => {
+                            console.log(`Backdrop ${index}:`, {
+                                zIndex: window.getComputedStyle(backdrop).zIndex,
+                                display: window.getComputedStyle(backdrop).display,
+                                position: window.getComputedStyle(backdrop).position
+                            });
+                        });
+                        
+                        // Test if we can trigger click programmatically
+                        console.log('Testing programmatic click...');
+                        button.click();
+                    }
+                }, 500);
+            } else {
+                console.error('Modal not found!');
+            }
+        };
+
+        // Interviewer Workflow Functions
+        console.log('About to set up DOM ready listener');
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('=== DOM CONTENT LOADED ===');
+            console.log('DOM Content Loaded - Setting up interviewer workflow');
+            
+            // Test if button exists
+            const proceedBtn = document.getElementById('interviewerProceedToMedicalHistoryBtn');
+            console.log('Interviewer proceed button found:', proceedBtn);
+            
+            // Add a simple test event listener first
+            if (proceedBtn) {
+                console.log('Adding simple test listener to button');
+                proceedBtn.addEventListener('click', function() {
+                    console.log('SIMPLE TEST: Button clicked!');
+                });
+                
+                // Also try mousedown and mouseup events
+                proceedBtn.addEventListener('mousedown', function() {
+                    console.log('MOUSEDOWN: Button mousedown!');
+                });
+                
+                proceedBtn.addEventListener('mouseup', function() {
+                    console.log('MOUSEUP: Button mouseup!');
+                });
+                
+                // Check button properties
+                console.log('Button properties:', {
+                    disabled: proceedBtn.disabled,
+                    style: proceedBtn.style.cssText,
+                    className: proceedBtn.className,
+                    offsetWidth: proceedBtn.offsetWidth,
+                    offsetHeight: proceedBtn.offsetHeight,
+                    clientWidth: proceedBtn.clientWidth,
+                    clientHeight: proceedBtn.clientHeight
+                });
+            }
+            
+            // Handle Process Medical History Confirmation
+            if (proceedBtn) {
+                console.log('Adding event listener to proceed button');
+                proceedBtn.addEventListener('click', function(event) {
+                    console.log('=== PROCEED BUTTON CLICKED ===');
+                    console.log('Event:', event);
+                    console.log('Button element:', this);
+                    
+                    try {
+                        const donorId = window.currentInterviewerDonorId;
+                        console.log('Proceed to medical history clicked, donor ID:', donorId);
+                if (!donorId) {
+                    console.error('No donor ID available for medical history processing');
+                    return;
+                }
+                
+                // Close confirmation modal
+                const confirmModal = bootstrap.Modal.getInstance(document.getElementById('processMedicalHistoryConfirmModal'));
+                confirmModal.hide();
+                
+                // Open medical history modal with donor data using existing function
+                console.log('Calling openMedicalHistoryModal with donor ID:', donorId);
+                
+                // Test if modal element exists and can be shown
+                const testModal = document.getElementById('medicalHistoryModal');
+                console.log('Test modal element:', testModal);
+                if (testModal) {
+                    console.log('Modal classes before:', testModal.className);
+                    console.log('Modal style before:', testModal.style.display);
+                }
+                
+                        // For interviewer workflow, we need to open the medical history form (not approval modal)
+                        console.log('Opening medical history form for interviewer workflow');
+                        
+                        // Check if we have the medical history modal element
+                        const medicalHistoryModal = document.getElementById('medicalHistoryModal');
+                        if (medicalHistoryModal) {
+                            console.log('Found medical history modal, opening it');
+                            
+                            // Reset modal state
+                            medicalHistoryModal.removeAttribute('style');
+                            medicalHistoryModal.className = 'medical-history-modal';
+                            
+                            // Show the modal
+                            medicalHistoryModal.style.display = 'flex';
+                            setTimeout(() => medicalHistoryModal.classList.add('show'), 10);
+                            
+                            // Load the medical history content for interviewer workflow
+                            loadMedicalHistoryContentForInterviewer(donorId);
+                        } else {
+                            console.error('Medical history modal not found!');
+                        }
+                    } catch (error) {
+                        console.error('Error in proceed button handler:', error);
+                    }
+                });
+            } else {
+                console.error('Proceed button not found!');
+            }
+            
+            // Handle Submit Medical History Confirmation (Interviewer-specific button)
+            const screeningBtn = document.getElementById('interviewerProceedToInitialScreeningBtn') || document.getElementById('proceedToInitialScreeningBtn');
+            console.log('Screening button found:', screeningBtn);
+            if (screeningBtn) {
+                screeningBtn.addEventListener('click', function() {
+                // Prefer donorId stored on the confirmation modal; fallback to global
+                const confirmEl = document.getElementById('submitMedicalHistoryConfirmModal');
+                const donorId = (confirmEl && confirmEl.dataset && confirmEl.dataset.donorId) ? confirmEl.dataset.donorId : window.currentInterviewerDonorId;
+                if (!donorId) {
+                    console.error('No donor ID available for screening');
+                    return;
+                }
+                
+                // Close confirmation modal and open screening shortly after
+                try {
+                    const cm = bootstrap.Modal.getInstance(confirmEl) || new bootstrap.Modal(confirmEl);
+                    cm.hide();
+                } catch(_) {}
+                setTimeout(() => { openScreeningFormForInterviewer(donorId); }, 220);
+                });
+            } else {
+                console.error('Screening button not found!');
+            }
+            
+            // Handle Print Declaration Form
+            const printBtn = document.getElementById('printDeclarationFormBtn');
+            console.log('Print button found:', printBtn);
+            if (printBtn) {
+                printBtn.addEventListener('click', function() {
+                const donorId = window.currentInterviewerDonorId;
+                if (!donorId) {
+                    console.error('No donor ID available for declaration form');
+                    return;
+                }
+                
+                // Close success modal
+                const successModal = bootstrap.Modal.getInstance(document.getElementById('screeningSubmittedSuccessModal'));
+                successModal.hide();
+                
+                // Open declaration form modal
+                openDeclarationFormForInterviewer(donorId);
+                });
+            } else {
+                console.error('Print button not found!');
+            }
+        });
+
+
+        // Function to add interviewer workflow buttons to medical history modal
+        function addInterviewerWorkflowButtons(donorId) {
+            const modalContent = document.getElementById('medicalHistoryModalContent');
+            
+            // Find the form or add buttons after the content
+            const existingButtons = modalContent.querySelector('.modal-footer, .form-actions, .button-group');
+            if (existingButtons) {
+                // Add interviewer-specific buttons
+                const interviewerButtons = document.createElement('div');
+                interviewerButtons.className = 'interviewer-workflow-buttons mt-3';
+                interviewerButtons.innerHTML = `
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary" onclick="closeMedicalHistoryModal()">
+                            <i class="fas fa-times me-1"></i>Cancel
+                        </button>
+                        <button type="button" class="btn btn-danger" onclick="proceedToInitialScreening('${donorId}')">
+                            <i class="fas fa-arrow-right me-1"></i>Proceed to Initial Screening
+                        </button>
+                    </div>
+                `;
+                existingButtons.appendChild(interviewerButtons);
+            } else {
+                // Add buttons at the end of the content
+                const buttonsDiv = document.createElement('div');
+                buttonsDiv.className = 'interviewer-workflow-buttons mt-3';
+                buttonsDiv.innerHTML = `
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary" onclick="closeMedicalHistoryModal()">
+                            <i class="fas fa-times me-1"></i>Cancel
+                        </button>
+                        <button type="button" class="btn btn-danger" onclick="proceedToInitialScreening('${donorId}')">
+                            <i class="fas fa-arrow-right me-1"></i>Proceed to Initial Screening
+                        </button>
+                    </div>
+                `;
+                modalContent.appendChild(buttonsDiv);
+            }
+        }
+
+        // Function to proceed to initial screening from medical history
+        function proceedToInitialScreening(donorId) {
+            console.log('Proceeding to initial screening:', donorId);
+            
+            // Close medical history modal using the custom modal system
+            closeMedicalHistoryModal();
+            
+            // Wait for modal to close, then show confirmation modal for initial screening
+            setTimeout(() => {
+                const confirmModal = new bootstrap.Modal(document.getElementById('submitMedicalHistoryConfirmModal'));
+                confirmModal.show();
+            }, 350);
+        }
+
+        // Function to open screening form for interviewer workflow
+        function openScreeningFormForInterviewer(donorId) {
+            console.log('Opening screening form for interviewer workflow:', donorId);
+            
+            // Set donor ID in the form
+            const form = document.getElementById('screeningForm');
+            if (form) {
+                const donorIdInput = form.querySelector('input[name="donor_id"]');
+                if (donorIdInput) {
+                    donorIdInput.value = donorId;
+                }
+            }
+            
+            // Show the screening modal
+            const modal = document.getElementById('screeningFormModal');
+            if (modal) {
+                const bootstrapModal = new bootstrap.Modal(modal);
+                bootstrapModal.show();
+                
+                // Initialize screening form functionality
+                setTimeout(() => {
+                    if (typeof window.initializeScreeningForm === 'function') {
+                        window.initializeScreeningForm();
+                    }
+                }, 300);
+            }
+        }
+
+        // Function to open declaration form for interviewer workflow
+        function openDeclarationFormForInterviewer(donorId) {
+            console.log('Opening declaration form for interviewer workflow:', donorId);
+            
+            const modal = document.getElementById('declarationFormModal');
+            if (!modal) {
+                console.error('Declaration form modal not found');
+                return;
+            }
+            
+            // Show the modal
+            const bootstrapModal = new bootstrap.Modal(modal);
+            bootstrapModal.show();
+            
+            // Load declaration form content
+            const modalContent = document.getElementById('declarationFormModalContent');
+            modalContent.innerHTML = `
+                <div class="d-flex justify-content-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            `;
+            
+            // Fetch declaration form content
+            fetch(`../../src/views/forms/declaration-form-modal-content.php?donor_id=${donorId}`)
+                .then(response => response.text())
+                .then(data => {
+                    modalContent.innerHTML = data;
+                    
+                    // Ensure print function is available
+                    window.printDeclaration = function() {
+                        const printWindow = window.open('', '_blank');
+                        const content = document.querySelector('.declaration-header')?.outerHTML + 
+                                       document.querySelector('.donor-info')?.outerHTML + 
+                                       document.querySelector('.declaration-content')?.outerHTML + 
+                                       document.querySelector('.signature-section')?.outerHTML;
+                        
+                        printWindow.document.write(`
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <title>Declaration Form</title>
+                                <style>
+                                    body { font-family: Arial, sans-serif; margin: 20px; }
+                                    .declaration-header { text-align: center; margin-bottom: 20px; }
+                                    .donor-info, .declaration-content, .signature-section { margin-bottom: 20px; }
+                                    .signature-box { border: 1px solid #000; height: 50px; margin: 10px 0; }
+                                    @media print { body { margin: 0; } }
+                                </style>
+                            </head>
+                            <body>
+                                ${content || 'Declaration form content not available'}
+                            </body>
+                            </html>
+                        `);
+                        printWindow.document.close();
+                        printWindow.print();
+                    };
+
+                    // Ensure submit function is available globally since inline scripts won't execute on innerHTML
+                    window.submitDeclarationForm = function(event) {
+                        try {
+                            if (event && typeof event.preventDefault === 'function') {
+                                event.preventDefault();
+                            }
+
+                            const form = document.getElementById('modalDeclarationForm');
+                            if (!form) {
+                                alert('Form not found. Please try again.');
+                                return;
+                            }
+
+                            const actionInput = document.getElementById('modalDeclarationAction');
+                            if (actionInput) {
+                                actionInput.value = 'complete';
+                            }
+
+                            const formData = new FormData(form);
+
+                            // Include screening data if available from previous step
+                            if (window.currentScreeningData) {
+                                try {
+                                    formData.append('screening_data', JSON.stringify(window.currentScreeningData));
+                                } catch (_) {}
+                            }
+
+                            fetch('../../src/views/forms/declaration-form-process.php', {
+                                method: 'POST',
+                                body: formData
+                            })
+                            .then(function(response) {
+                                if (!response.ok) {
+                                    throw new Error('Network response was not ok: ' + response.status);
+                                }
+                                return response.json().catch(function() { return {}; });
+                            })
+                            .then(function(data) {
+                                if (data && data.success) {
+                                    alert('Registration completed successfully!');
+                                    window.location.reload();
+                                } else {
+                                    const message = (data && data.message) ? data.message : 'Unknown error occurred';
+                                    alert('Error: ' + message);
+                                }
+                            })
+                            .catch(function(error) {
+                                console.error('Declaration submit failed:', error);
+                                alert('Submission failed. Please try again.');
+                            });
+                        } catch (err) {
+                            console.error('Unexpected error submitting declaration:', err);
+                            alert('Unexpected error. Please try again.');
+                        }
+                    };
+                })
+                .catch(error => {
+                    console.error('Error loading declaration form:', error);
+                    modalContent.innerHTML = '<div class="alert alert-danger">Error loading declaration form. Please try again.</div>';
+                });
+        }
+
+        // Function to close medical history modal
+        function closeMedicalHistoryModal() {
+            const modal = document.getElementById('medicalHistoryModal');
+            if (modal) {
+                // Remove show class first
+                modal.classList.remove('show');
+                
+                // Hide the modal after transition
+                setTimeout(() => {
+                    modal.style.display = 'none';
+                    modal.removeAttribute('style');
+                    modal.className = 'medical-history-modal';
+                    
+                    // Reset the opening flag
+                    window.isOpeningMedicalHistory = false;
+                    
+                    console.log('Medical history modal closed');
+                }, 300);
+            }
+        }
 
     // View functions for wireframe action buttons
     window.viewMedicalHistory = function(donorId) {
@@ -5373,6 +7398,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 <div class="modal-body" id="medicalHistoryModalAdminContent">
                     <div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>
                 </div>
+                <div class="modal-footer border-0 justify-content-end" id="medicalHistoryModalAdminFooter"></div>
             </div>
         </div>
     </div>
@@ -5469,6 +7495,39 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         #donorDetailsModal .modal-body { 
             padding: 20px; 
         }
+
+        /* UI parity: success modal should match preview (medicalHistoryApprovalModal) */
+        #medicalHistoryApprovalModal .modal-dialog {
+            max-width: 560px;
+        }
+        #medicalHistoryApprovalModal .modal-content {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.25);
+        }
+        #medicalHistoryApprovalModal .modal-header {
+            background: linear-gradient(180deg, #2ecc71 0%, #27ae60 100%);
+            color: #fff;
+            border: 0;
+            border-radius: 12px 12px 0 0;
+        }
+        #medicalHistoryApprovalModal .modal-body {
+            padding: 28px 28px 12px 28px;
+        }
+        #medicalHistoryApprovalModal .modal-footer {
+            border: 0;
+            padding: 16px 28px 28px 28px;
+        }
+        #medicalHistoryApprovalModal .btn-primary {
+            background-color: #1e7bf2;
+            border-color: #1e7bf2;
+        }
+        #medicalHistoryApprovalModal .btn-secondary {
+            background-color: #6c757d;
+            border-color: #6c757d;
+        }
+        #medicalHistoryApprovalModal { z-index: 1065; }
+        .modal-backdrop.show { z-index: 1060; }
         
         /* Modern Modal Styles */
         .modern-modal {

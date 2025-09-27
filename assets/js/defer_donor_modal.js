@@ -94,10 +94,20 @@ function initializeDeferModal() {
         if (allValid) {
             submitBtn.style.backgroundColor = '#b22222';
             submitBtn.style.borderColor = '#b22222';
+            submitBtn.style.color = 'white';
         } else {
             submitBtn.style.backgroundColor = '#6c757d';
             submitBtn.style.borderColor = '#6c757d';
+            submitBtn.style.color = 'white';
         }
+        
+        console.log('Defer submit button state updated:', {
+            reasonValid,
+            deferralTypeValid,
+            durationValid,
+            allValid,
+            disabled: submitBtn.disabled
+        });
     }
 
     // Handle deferral type change

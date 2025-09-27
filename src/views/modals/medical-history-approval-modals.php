@@ -1,23 +1,23 @@
 <?php
 /**
- * Medical History Approval Modals
- * This file contains the HTML structure for medical history approval and decline modals
- * Used in the medical history review process
+ * Enhanced Medical History Approval Modals
+ * This file contains the enhanced HTML structure for medical history approval and decline modals
+ * Used in the medical history review process with improved UX and workflow management
  */
 ?>
 
-<!-- Medical History Approval Success Modal -->
-<div class="modal fade" id="medicalHistoryApprovalModal" tabindex="-1" aria-labelledby="medicalHistoryApprovalModalLabel" aria-hidden="true">
+<!-- Enhanced Medical History Approval Success Modal -->
+<div class="modal fade enhanced-modal" id="medicalHistoryApprovalModal" tabindex="-1" aria-labelledby="medicalHistoryApprovalModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border-radius: 15px 15px 0 0;">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white;">
                 <h5 class="modal-title" id="medicalHistoryApprovalModalLabel">
                     <i class="fas fa-check-circle me-2"></i>
                     Medical History Approved
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body py-4">
+            <div class="modal-body">
                 <div class="text-center">
                     <div class="mb-3">
                         <i class="fas fa-check-circle text-success" style="font-size: 3rem;"></i>
@@ -27,13 +27,15 @@
                     <p class="text-muted mb-0">The donor can now proceed to the next step in the evaluation process.</p>
                 </div>
             </div>
-            <div class="modal-footer border-0 justify-content-center">
-                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-2"></i>Close
-                </button>
-                <button type="button" class="btn btn-primary px-4" id="proceedToPhysicalExamBtn">
-                    <i class="fas fa-arrow-right me-2"></i>Proceed to Physical Examination
-                </button>
+            <div class="modal-footer">
+                <div class="workflow-nav-buttons w-100">
+                    <button type="button" class="btn enhanced-btn enhanced-btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>Close
+                    </button>
+                    <button type="button" class="btn enhanced-btn enhanced-btn-primary" id="proceedToPhysicalExamBtn">
+                        <i class="fas fa-arrow-right me-2"></i>Proceed to Physical Examination
+                    </button>
+                </div>
             </div>
         </div>
     </div>

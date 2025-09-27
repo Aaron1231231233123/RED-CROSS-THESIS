@@ -31,23 +31,32 @@ require_once '../conn/db_conn.php';
 
 // Helper function to format data for Supabase
 function formatPhysicalExamDataForSupabase($post_data) {
-    $status = isset($post_data['status']) && is_string($post_data['status']) && trim($post_data['status']) !== ''
-        ? trim($post_data['status'])
-        : 'Pending';
-    return [
+    // Do not include a generic "status" column; Supabase table may not have it
+    // Only include columns that exist in physical_examination schema
+    $remarks = strval(trim($post_data['remarks']));
+    $bodyTemp = floatval($post_data['body_temp']);
+    $payload = [
         'donor_id' => intval($post_data['donor_id']),
         'blood_pressure' => strval($post_data['blood_pressure']),
         'pulse_rate' => intval($post_data['pulse_rate']),
-        'body_temp' => number_format(floatval($post_data['body_temp']), 1),
+        'body_temp' => $bodyTemp,
         'gen_appearance' => strval(trim($post_data['gen_appearance'])),
         'skin' => strval(trim($post_data['skin'])),
         'heent' => strval(trim($post_data['heent'])),
         'heart_and_lungs' => strval(trim($post_data['heart_and_lungs'])),
-        'remarks' => strval(trim($post_data['remarks'])),
+        'remarks' => $remarks,
         'blood_bag_type' => strval(trim($post_data['blood_bag_type'])),
         'reason' => isset($post_data['reason']) ? strval(trim($post_data['reason'])) : '',
-        'status' => $status
+        // Ensure review flag is explicitly sent for schemas that require it
+        'needs_review' => isset($post_data['needs_review']) ? (bool)$post_data['needs_review'] : false
     ];
+    return $payload;
+}
+
+// Validate UUID v4 (or general UUID) format
+function isValidUuid($value) {
+    if (!is_string($value)) return false;
+    return (bool)preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $value);
 }
 
 function getPhysicianName($user_id) {
@@ -170,7 +179,10 @@ try {
     
     // Add screening_id if available
     if ($screening_id) {
-        $physical_exam_data['screening_id'] = $screening_id;
+        // Only include screening_id if it is a valid UUID to avoid 22P02
+        if (isValidUuid($screening_id)) {
+            $physical_exam_data['screening_id'] = $screening_id;
+        }
     }
     
     if ($should_update) {
@@ -204,7 +216,8 @@ try {
         'apikey: ' . SUPABASE_API_KEY,
         'Authorization: Bearer ' . SUPABASE_API_KEY,
         'Content-Type: application/json',
-        'Prefer: return=minimal'
+        // Ask PostgREST to return error body to aid diagnostics
+        'Prefer: return=representation'
     ]);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($physical_exam_data));
     
@@ -215,8 +228,8 @@ try {
     if ($response === false) {
         throw new Exception('Failed to submit physical examination data');
     }
-    
-    if (($should_update && $http_code >= 200 && $http_code < 300) || (!$should_update && $http_code === 201)) {
+
+    if (($should_update && $http_code >= 200 && $http_code < 300) || (!$should_update && ($http_code === 201 || $http_code === 200))) {
         // Get the physical_exam_id for blood collection updates
         if (!$should_update) {
             // For new records, get the created physical_exam_id
@@ -272,7 +285,9 @@ try {
             ]);
         }
     } else {
-        throw new Exception("Failed to submit physical examination. HTTP Code: $http_code");
+        // Bubble up PostgREST error details
+        $errBody = $response;
+        throw new Exception("Failed to submit physical examination. HTTP Code: $http_code | Body: $errBody");
     }
     
 } catch (Exception $e) {

@@ -827,12 +827,19 @@ document.addEventListener('DOMContentLoaded', function() {
             screeningModalInstance.hide();
         }
         
-        // Show declaration form modal with confirmation (no data submission yet)
-        if (window.showDeclarationFormModal) {
-            window.showDeclarationFormModal(window.currentDonorData.donor_id);
+        // Show success modal for interviewer workflow
+        if (window.currentInterviewerDonorId) {
+            // This is part of the interviewer workflow
+            const successModal = new bootstrap.Modal(document.getElementById('screeningSubmittedSuccessModal'));
+            successModal.show();
         } else {
-            // Fallback: show success message
-            showAlert('Screening data saved! Please proceed to declaration form.', 'success');
+            // Fallback for other workflows: show declaration form modal
+            if (window.showDeclarationFormModal) {
+                window.showDeclarationFormModal(window.currentDonorData.donor_id);
+            } else {
+                // Fallback: show success message
+                showAlert('Screening data saved! Please proceed to declaration form.', 'success');
+            }
         }
         
         // Reset button state

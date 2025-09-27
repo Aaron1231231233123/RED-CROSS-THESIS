@@ -269,6 +269,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $log_message = "[" . date('Y-m-d H:i:s') . "] Extracted screening_id: " . $screening_id . "\n";
                             file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         }
+
+                        // Mark screening as completed: needs_review = false
+                        $log_message = "[" . date('Y-m-d H:i:s') . "] Marking screening_form.needs_review=false for donor " . $donor_id . "\n";
+                        file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
+
+                        $sf_complete_data = [
+                            'needs_review' => false,
+                            'updated_at' => date('Y-m-d H:i:s')
+                        ];
+
+                        $sf_ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?donor_form_id=eq.' . $donor_id);
+                        curl_setopt($sf_ch, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($sf_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+                        curl_setopt($sf_ch, CURLOPT_POSTFIELDS, json_encode($sf_complete_data));
+                        curl_setopt($sf_ch, CURLOPT_HTTPHEADER, [
+                            'apikey: ' . SUPABASE_API_KEY,
+                            'Authorization: Bearer ' . SUPABASE_API_KEY,
+                            'Content-Type: application/json',
+                            'Prefer: return=representation'
+                        ]);
+                        $sf_resp = curl_exec($sf_ch);
+                        $sf_code = curl_getinfo($sf_ch, CURLINFO_HTTP_CODE);
+                        curl_close($sf_ch);
+                        $log_message = "[" . date('Y-m-d H:i:s') . "] Screening needs_review update HTTP: " . $sf_code . " Response: " . $sf_resp . "\n";
+                        file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         
                         // Update medical_history needs_review to false and medical_approval to 'Not Approved'
                         $medical_update_data = [

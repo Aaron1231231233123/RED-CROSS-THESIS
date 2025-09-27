@@ -12,11 +12,39 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
     <link href="../../assets/css/medical-history-approval-modals.css" rel="stylesheet">
     <link href="../../assets/css/defer-donor-modal.css" rel="stylesheet">
+    <link href="../../assets/css/screening-form-modal.css" rel="stylesheet">
+    <link href="../../assets/css/enhanced-modal-styles.css" rel="stylesheet">
     <style>
         body { padding: 24px; }
         .demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
         .card { border-radius: 10px; border: 1px solid #e5e7eb; }
         .card-header { font-weight: 700; background: #f8f9fa; }
+        
+        /* Fix modal backdrop z-index issues */
+        .modal-backdrop {
+            z-index: 1055 !important;
+        }
+        
+        #screeningFormModal {
+            z-index: 1060 !important;
+        }
+        
+        #screeningFormModal .modal-dialog {
+            z-index: 1061 !important;
+        }
+        
+        #screeningFormModal .modal-content {
+            z-index: 1062 !important;
+        }
+        
+        /* Ensure modal content is clickable */
+        .modal-content {
+            pointer-events: auto !important;
+        }
+        
+        .modal-content * {
+            pointer-events: auto !important;
+        }
     </style>
 </head>
 <body>
@@ -53,6 +81,11 @@
     ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Enhanced JavaScript files -->
+    <script src="../../assets/js/enhanced-workflow-manager.js"></script>
+    <script src="../../assets/js/enhanced-data-handler.js"></script>
+    <script src="../../assets/js/enhanced-validation-system.js"></script>
+    <script src="../../assets/js/unified-staff-workflow-system.js"></script>
     <!-- Project scripts that power these modals -->
     <script src="../../assets/js/medical-history-approval.js"></script>
     <script src="../../assets/js/defer_donor_modal.js"></script>
@@ -81,6 +114,28 @@
             if(donorId) donorId.value = 'demo-donor-uuid-1234';
         }
 
+        // Debug function to check defer modal state
+        function debugDeferModal() {
+            console.log('=== DEFER MODAL DEBUG ===');
+            console.log('Modal element:', document.getElementById('deferDonorModal'));
+            console.log('Form element:', document.getElementById('deferDonorForm'));
+            console.log('Submit button:', document.getElementById('submitDeferral'));
+            console.log('Disapproval reason:', document.getElementById('disapprovalReason'));
+            console.log('Deferral type select:', document.getElementById('deferralTypeSelect'));
+            console.log('Initialize function available:', typeof initializeDeferModal);
+            
+            const submitBtn = document.getElementById('submitDeferral');
+            if (submitBtn) {
+                console.log('Submit button state:', {
+                    disabled: submitBtn.disabled,
+                    backgroundColor: submitBtn.style.backgroundColor,
+                    borderColor: submitBtn.style.borderColor,
+                    color: submitBtn.style.color
+                });
+            }
+            console.log('=== END DEBUG ===');
+        }
+
         document.getElementById('btnShowApprove')?.addEventListener('click', function(){
             showModalById('medicalHistoryApprovalModal');
         });
@@ -92,11 +147,38 @@
         document.getElementById('btnShowDefer')?.addEventListener('click', function(){
             seedDeferForm();
             showModalById('deferDonorModal');
+            // Initialize defer modal functionality after modal is shown
+            setTimeout(() => {
+                debugDeferModal(); // Debug the modal state
+                if (typeof initializeDeferModal === 'function') {
+                    initializeDeferModal();
+                    console.log('Defer modal initialized');
+                } else {
+                    console.error('initializeDeferModal function not found');
+                }
+            }, 300);
         });
 
         document.getElementById('btnShowScreening')?.addEventListener('click', function(){
             seedScreeningForm();
             showModalById('screeningFormModal');
+            // Initialize screening modal functionality after modal is shown
+            setTimeout(() => {
+                // Fix modal backdrop z-index issue
+                const modal = document.getElementById('screeningFormModal');
+                const backdrop = document.querySelector('.modal-backdrop');
+                
+                if (modal && backdrop) {
+                    // Set proper z-index values
+                    modal.style.zIndex = '1060';
+                    backdrop.style.zIndex = '1055';
+                    console.log('Fixed modal backdrop z-index');
+                }
+                
+                if (typeof window.initializeScreeningForm === 'function') {
+                    window.initializeScreeningForm();
+                }
+            }, 300);
         });
     })();
     </script>

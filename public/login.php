@@ -1,4 +1,7 @@
-<?php 
+<?php
+// Brief client cache to speed login page paint
+header('Cache-Control: public, max-age=120, stale-while-revalidate=60');
+header('Vary: Accept-Encoding');
 session_start(); 
 require '../assets/conn/db_conn.php';
 
