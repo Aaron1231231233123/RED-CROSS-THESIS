@@ -203,9 +203,50 @@ body {
     z-index: 1061 !important;
 }
 
-/* Specific fixes for workflow modals */
-#donorModal { z-index: 1050 !important; }
-#donorModal + .modal-backdrop { z-index: 1049 !important; }
+/* Specific fixes for donor modal only */
+#donorModal { 
+    z-index: 1060 !important; 
+}
+#donorModal + .modal-backdrop { 
+    z-index: 1055 !important; 
+}
+
+/* Fix donor modal backdrop interaction issues */
+#donorModal.modal.show {
+    z-index: 1060 !important;
+}
+
+/* Make donor modal backdrop non-interactive to prevent click blocking */
+#donorModal + .modal-backdrop.show {
+    z-index: 1055 !important;
+    pointer-events: none !important;
+}
+
+/* Alternative: Target backdrop when donor modal is open */
+body:has(#donorModal.show) .modal-backdrop {
+    pointer-events: none !important;
+    z-index: 1055 !important;
+}
+
+/* Specific fix for donor modal backdrop fade class */
+.modal-backdrop.fade.show {
+    pointer-events: none !important;
+}
+
+/* Override for donor modal specifically */
+#donorModal ~ .modal-backdrop.fade.show {
+    pointer-events: none !important;
+    z-index: 1055 !important;
+}
+
+/* Ensure donor modal content is clickable */
+#donorModal .modal-content {
+    pointer-events: auto !important;
+    z-index: 1061 !important;
+}
+#donorModal .modal-content * {
+    pointer-events: auto !important;
+}
 
 /* Physical Examination Modal Step Visibility */
 .physical-step-content { 
@@ -922,11 +963,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 /* Add these modal styles in your CSS */
 .modal-backdrop {
     background-color: rgba(0, 0, 0, 0.5);
-    z-index: 9998;
+    z-index: 1055 !important;
 }
 
 .modal {
-    z-index: 9999;
+    z-index: 1060 !important;
 }
 
 .modal-dialog {
@@ -1404,54 +1445,279 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             $statusClass = '';
                                             $displayStatus = $status;
                                             
-                                            // Handle different status types
+                                            // PRIORITY CHECK: Look for ANY decline/deferral status anywhere in the workflow
+                                            // Use the same logic as the donor information modal for consistency
+                                            $donorId = $donation['donor_id'] ?? null;
+                                            if ($donorId) {
+                                                $hasDeclineDeferStatus = false;
+                                                $declineDeferType = '';
+                                                
+                                                // 1. Check eligibility table first (most authoritative)
+                                                $eligibilityCurl = curl_init(SUPABASE_URL . '/rest/v1/eligibility?donor_id=eq.' . $donorId . '&order=created_at.desc&limit=1');
+                                                curl_setopt($eligibilityCurl, CURLOPT_RETURNTRANSFER, true);
+                                                curl_setopt($eligibilityCurl, CURLOPT_HTTPHEADER, [
+                                                    'apikey: ' . SUPABASE_API_KEY,
+                                                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                                    'Content-Type: application/json'
+                                                ]);
+                                                $eligibilityResponse = curl_exec($eligibilityCurl);
+                                                $eligibilityHttpCode = curl_getinfo($eligibilityCurl, CURLINFO_HTTP_CODE);
+                                                curl_close($eligibilityCurl);
+                                                
+                                                if ($eligibilityHttpCode === 200) {
+                                                    $eligibilityData = json_decode($eligibilityResponse, true) ?: [];
+                                                    if (!empty($eligibilityData)) {
+                                                        $eligibilityStatus = strtolower($eligibilityData[0]['status'] ?? '');
+                                                        
+                                                        // Check for decline/deferral in eligibility table
+                                                        if (in_array($eligibilityStatus, ['declined', 'refused'])) {
+                                                            $hasDeclineDeferStatus = true;
+                                                            $declineDeferType = 'Declined';
+                                                        } elseif (in_array($eligibilityStatus, ['deferred', 'ineligible'])) {
+                                                            $hasDeclineDeferStatus = true;
+                                                            $declineDeferType = 'Deferred';
+                                                        } elseif ($eligibilityStatus === 'approved' || $eligibilityStatus === 'eligible') {
+                                                            $status = 'Approved';
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                // 2. Check screening form for decline status
+                                                if (!$hasDeclineDeferStatus) {
+                                                    $screeningCurl = curl_init(SUPABASE_URL . '/rest/v1/screening_form?donor_form_id=eq.' . $donorId . '&disapproval_reason=not.is.null&select=disapproval_reason&order=created_at.desc&limit=1');
+                                                    curl_setopt($screeningCurl, CURLOPT_RETURNTRANSFER, true);
+                                                    curl_setopt($screeningCurl, CURLOPT_HTTPHEADER, [
+                                                        'apikey: ' . SUPABASE_API_KEY,
+                                                        'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                                        'Content-Type: application/json'
+                                                    ]);
+                                                    $screeningResponse = curl_exec($screeningCurl);
+                                                    $screeningHttpCode = curl_getinfo($screeningCurl, CURLINFO_HTTP_CODE);
+                                                    curl_close($screeningCurl);
+                                                    
+                                                    if ($screeningHttpCode === 200) {
+                                                        $screeningData = json_decode($screeningResponse, true) ?: [];
+                                                        if (!empty($screeningData)) {
+                                                            $hasDeclineDeferStatus = true;
+                                                            $declineDeferType = 'Declined';
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                // 3. Check physical examination for deferral/decline status
+                                                if (!$hasDeclineDeferStatus) {
+                                                    $physicalCurl = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?donor_id=eq.' . $donorId . '&or=(remarks.eq.Temporarily%20Deferred,remarks.eq.Permanently%20Deferred,remarks.eq.Declined,remarks.eq.Refused)&select=remarks&order=created_at.desc&limit=1');
+                                                    curl_setopt($physicalCurl, CURLOPT_RETURNTRANSFER, true);
+                                                    curl_setopt($physicalCurl, CURLOPT_HTTPHEADER, [
+                                                        'apikey: ' . SUPABASE_API_KEY,
+                                                        'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                                        'Content-Type: application/json'
+                                                    ]);
+                                                    $physicalResponse = curl_exec($physicalCurl);
+                                                    $physicalHttpCode = curl_getinfo($physicalCurl, CURLINFO_HTTP_CODE);
+                                                    curl_close($physicalCurl);
+                                                    
+                                                    if ($physicalHttpCode === 200) {
+                                                        $physicalData = json_decode($physicalResponse, true) ?: [];
+                                                        if (!empty($physicalData)) {
+                                                            $remarks = $physicalData[0]['remarks'] ?? '';
+                                                            if (in_array($remarks, ['Temporarily Deferred', 'Permanently Deferred'])) {
+                                                                $hasDeclineDeferStatus = true;
+                                                                $declineDeferType = 'Deferred';
+                                                            } elseif (in_array($remarks, ['Declined', 'Refused'])) {
+                                                                $hasDeclineDeferStatus = true;
+                                                                $declineDeferType = 'Declined';
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                // 4. Check medical history for decline status
+                                                if (!$hasDeclineDeferStatus) {
+                                                    $medicalCurl = curl_init(SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $donorId . '&medical_approval=eq.Not%20Approved&select=medical_approval&order=created_at.desc&limit=1');
+                                                    curl_setopt($medicalCurl, CURLOPT_RETURNTRANSFER, true);
+                                                    curl_setopt($medicalCurl, CURLOPT_HTTPHEADER, [
+                                                        'apikey: ' . SUPABASE_API_KEY,
+                                                        'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                                        'Content-Type: application/json'
+                                                    ]);
+                                                    $medicalResponse = curl_exec($medicalCurl);
+                                                    $medicalHttpCode = curl_getinfo($medicalCurl, CURLINFO_HTTP_CODE);
+                                                    curl_close($medicalCurl);
+                                                    
+                                                    if ($medicalHttpCode === 200) {
+                                                        $medicalData = json_decode($medicalResponse, true) ?: [];
+                                                        if (!empty($medicalData)) {
+                                                            $hasDeclineDeferStatus = true;
+                                                            $declineDeferType = 'Declined';
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                // If donor has ANY decline/deferral status, set it immediately
+                                                if ($hasDeclineDeferStatus) {
+                                                    $status = $declineDeferType;
+                                                } else {
+                                                    // If no decline/deferral status found, determine based on section completion
+                                                    // Get donor workflow data
+                                                    $medicalCurl = curl_init(SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $donorId . '&select=medical_approval,needs_review&order=created_at.desc&limit=1');
+                                                    curl_setopt($medicalCurl, CURLOPT_RETURNTRANSFER, true);
+                                                    curl_setopt($medicalCurl, CURLOPT_HTTPHEADER, [
+                                                        'apikey: ' . SUPABASE_API_KEY,
+                                                        'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                                        'Content-Type: application/json'
+                                                    ]);
+                                                    $medicalResponse = curl_exec($medicalCurl);
+                                                    $medicalHttpCode = curl_getinfo($medicalCurl, CURLINFO_HTTP_CODE);
+                                                    curl_close($medicalCurl);
+                                                    
+                                                    $screeningCurl = curl_init(SUPABASE_URL . '/rest/v1/screening_form?donor_form_id=eq.' . $donorId . '&select=needs_review,disapproval_reason&order=created_at.desc&limit=1');
+                                                    curl_setopt($screeningCurl, CURLOPT_RETURNTRANSFER, true);
+                                                    curl_setopt($screeningCurl, CURLOPT_HTTPHEADER, [
+                                                        'apikey: ' . SUPABASE_API_KEY,
+                                                        'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                                        'Content-Type: application/json'
+                                                    ]);
+                                                    $screeningResponse = curl_exec($screeningCurl);
+                                                    $screeningHttpCode = curl_getinfo($screeningCurl, CURLINFO_HTTP_CODE);
+                                                    curl_close($screeningCurl);
+                                                    
+                                                    $physicalCurl = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?donor_id=eq.' . $donorId . '&select=needs_review,remarks&order=created_at.desc&limit=1');
+                                                    curl_setopt($physicalCurl, CURLOPT_RETURNTRANSFER, true);
+                                                    curl_setopt($physicalCurl, CURLOPT_HTTPHEADER, [
+                                                        'apikey: ' . SUPABASE_API_KEY,
+                                                        'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                                        'Content-Type: application/json'
+                                                    ]);
+                                                    $physicalResponse = curl_exec($physicalCurl);
+                                                    $physicalHttpCode = curl_getinfo($physicalCurl, CURLINFO_HTTP_CODE);
+                                                    curl_close($physicalCurl);
+                                                    
+                                                    // Check Interviewer Section (Medical History + Initial Screening)
+                                                    $interviewerSectionCompleted = false;
+                                                    $medicalHistoryCompleted = false;
+                                                    $screeningCompleted = false;
+                                                    
+                                                    // Check Medical History completion
+                                                    if ($medicalHttpCode === 200) {
+                                                        $medicalData = json_decode($medicalResponse, true) ?: [];
+                                                        if (!empty($medicalData)) {
+                                                            $medicalApproval = $medicalData[0]['medical_approval'] ?? '';
+                                                            $medNeeds = $medicalData[0]['needs_review'] ?? null;
+                                                            if (in_array($medicalApproval, ['Approved', 'Not Approved']) && $medNeeds !== true) {
+                                                                $medicalHistoryCompleted = true;
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    // Check Initial Screening completion
+                                                    if ($screeningHttpCode === 200) {
+                                                        $screeningData = json_decode($screeningResponse, true) ?: [];
+                                                        if (!empty($screeningData)) {
+                                                            $screenNeeds = $screeningData[0]['needs_review'] ?? null;
+                                                            $disapprovalReason = $screeningData[0]['disapproval_reason'] ?? '';
+                                                            if ($screenNeeds !== true && empty($disapprovalReason)) {
+                                                                $screeningCompleted = true;
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    // Interviewer section is completed if both MH and Screening are completed
+                                                    $interviewerSectionCompleted = $medicalHistoryCompleted && $screeningCompleted;
+                                                    
+                                                    // Check Physician Section (Medical History + Physical Examination)
+                                                    $physicianSectionCompleted = false;
+                                                    $physicalExaminationCompleted = false;
+                                                    
+                                                    // Check Physical Examination completion
+                                                    if ($physicalHttpCode === 200) {
+                                                        $physicalData = json_decode($physicalResponse, true) ?: [];
+                                                        if (!empty($physicalData)) {
+                                                            $physNeeds = $physicalData[0]['needs_review'] ?? null;
+                                                            $remarks = $physicalData[0]['remarks'] ?? '';
+                                                            if ($physNeeds !== true && !empty($remarks) && 
+                                                                !in_array($remarks, ['Pending', 'Temporarily Deferred', 'Permanently Deferred', 'Declined', 'Refused'])) {
+                                                                $physicalExaminationCompleted = true;
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    // Physician section is completed if both MH and Physical Examination are completed
+                                                    $physicianSectionCompleted = $medicalHistoryCompleted && $physicalExaminationCompleted;
+                                                    
+                                                    // Determine status based on section completion
+                                                    if (!$interviewerSectionCompleted) {
+                                                        // Interviewer section not completed - MH and/or Initial Screening pending
+                                                        $status = 'Pending (Screening)';
+                                                    } elseif (!$physicianSectionCompleted) {
+                                                        // Interviewer section completed but Physician section not completed - MH and/or Physical Examination pending
+                                                        $status = 'Pending (Examination)';
+                                                    } else {
+                                                        // Both sections completed - ready for collection
+                                                        $status = 'Pending (Collection)';
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Normalize status display - map various statuses to standard ones
                                             switch($status) {
                                                 case 'Pending (Screening)':
                                                     $statusClass = 'bg-warning';
+                                                    $displayStatus = 'Pending (Screening)';
                                                     break;
                                                 case 'Pending (Examination)':
                                                 case 'Pending (Physical Examination)':
                                                     $statusClass = 'bg-info';
+                                                    $displayStatus = 'Pending (Examination)';
                                                     break;
                                                 case 'Pending (Collection)':
                                                     $statusClass = 'bg-primary';
-                                                    break;
-                                                case 'Pending (New)':
-                                                    $statusClass = 'bg-info';
+                                                    $displayStatus = 'Pending (Collection)';
                                                     break;
                                                 case 'Approved':
                                                     $statusClass = 'bg-success';
+                                                    $displayStatus = 'Approved';
                                                     break;
                                                 case 'Declined':
+                                                case 'declined':
+                                                case 'refused':
                                                     $statusClass = 'bg-danger';
+                                                    $displayStatus = 'Declined';
                                                     break;
                                                 case 'Temporarily Deferred':
-                                                    $statusClass = 'bg-warning';
-                                                    break;
                                                 case 'Permanently Deferred':
-                                                    $statusClass = 'bg-danger';
+                                                case 'deferred':
+                                                case 'ineligible':
+                                                    $statusClass = 'bg-warning';
+                                                    $displayStatus = 'Deferred';
                                                     break;
                                                 default:
                                                     $statusClass = 'bg-warning';
+                                                    $displayStatus = 'Pending (Screening)';
                                             }
                                             ?>
                                             <span class="badge <?php echo $statusClass; ?>"><?php echo htmlspecialchars($displayStatus); ?></span>
                                         </td>
                                         <td>
                                             <?php
-                                            $status = $donation['status_text'] ?? 'Pending (Screening)';
-                                            if (in_array($status, ['Pending (Screening)', 'Pending (Examination)', 'Pending (Physical Examination)', 'Pending (Collection)'])) {
+                                            // Use the same status that was determined above (including eligibility table check)
+                                            $normalizedStatus = $status;
+                                            if (in_array($status, ['Pending (Examination)', 'Pending (Physical Examination)'])) {
+                                                $normalizedStatus = 'Pending (Examination)';
+                                            } elseif (in_array($status, ['Temporarily Deferred', 'Permanently Deferred', 'Deferred'])) {
+                                                $normalizedStatus = 'Deferred';
+                                            }
+                                            
+                                            // Determine if status is pending (shows Edit) or completed (shows View)
+                                            $isPending = in_array($normalizedStatus, ['Pending (Screening)', 'Pending (Examination)', 'Pending (Collection)']);
+                                            
+                                            if ($isPending) {
                                                 // Show edit button for pending statuses
                                                 echo '<button type="button" class="btn btn-warning btn-sm edit-donor" data-donor-id="' . htmlspecialchars($donation['donor_id'] ?? '') . '" data-eligibility-id="' . htmlspecialchars($donation['eligibility_id'] ?? '') . '">';
                                                 echo '<i class="fas fa-edit"></i>';
                                                 echo '</button>';
-                                            } elseif ($status === 'Pending (New)') {
-                                                // Show edit button that opens donor information modal instead of starting process
-                                                echo '<button type="button" class="btn btn-warning btn-sm edit-donor" data-donor-id="' . htmlspecialchars($donation['donor_id'] ?? '') . '" data-eligibility-id="' . htmlspecialchars($donation['eligibility_id'] ?? '') . '">';
-                                                echo '<i class="fas fa-edit"></i>';
-                                                echo '</button>';
                                             } else {
-                                                // Show view button for completed statuses (Approved, Declined, Temporarily Deferred, Permanently Deferred)
+                                                // Show view button for completed statuses (Approved, Declined, Deferred)
                                                 echo '<button type="button" class="btn btn-info btn-sm view-donor" data-donor-id="' . htmlspecialchars($donation['donor_id'] ?? '') . '" data-eligibility-id="' . htmlspecialchars($donation['eligibility_id'] ?? '') . '">';
                                                 echo '<i class="fas fa-eye"></i>';
                                                 echo '</button>';
@@ -2274,8 +2540,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             });
             document.getElementById('searchCategory').addEventListener('change', searchDonations);
             
-            // Initialize all modals
-            const donorModal = new bootstrap.Modal(document.getElementById('donorModal'));
+            // Initialize donor modal with proper backdrop configuration
+            const donorModal = new bootstrap.Modal(document.getElementById('donorModal'), {
+                backdrop: true,
+                keyboard: true,
+                focus: true
+            });
             const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
                 backdrop: 'static',
                 keyboard: false
@@ -2536,6 +2806,26 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             actionButton = `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"View Details\" onclick=\"viewInterviewerDetails('${safe(donor.donor_id,'')}')\"><i class=\"fas fa-eye\"></i></button>`;
                         }
                         
+                        // Create status display with stage information
+                        const getStatusDisplay = (status, stage) => {
+                            const statusLower = String(status || '').toLowerCase();
+                            if (statusLower.includes('permanently deferred')) {
+                                return `<span class="badge bg-danger">${stage} - Permanently Deferred</span>`;
+                            } else if (statusLower.includes('temporarily deferred')) {
+                                return `<span class="badge bg-warning text-dark">${stage} - Temporarily Deferred</span>`;
+                            } else if (statusLower.includes('refused')) {
+                                return `<span class="badge bg-danger">${stage} - Refused</span>`;
+                            } else if (statusLower.includes('declined') || statusLower.includes('defer') || statusLower.includes('not approved')) {
+                                return `<span class="badge bg-danger">${stage} - ${status}</span>`;
+                            } else if (statusLower.includes('pending')) {
+                                return `<span class="badge bg-warning text-dark">${status}</span>`;
+                            } else if (statusLower.includes('accepted') || statusLower.includes('approved') || statusLower.includes('completed') || statusLower.includes('passed') || statusLower.includes('successful')) {
+                                return `<span class="badge bg-success">${status}</span>`;
+                            } else {
+                                return badge(status);
+                            }
+                        };
+                        
                         return `
                         <div class="donor-role-table">
                             <table class="table align-middle mb-2">
@@ -2548,8 +2838,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td class="text-center status-cell">${badge(interviewerMedical)}</td>
-                                        <td class="text-center status-cell">${badge(interviewerScreening)}</td>
+                                        <td class="text-center status-cell">${getStatusDisplay(interviewerMedical, 'MH')}</td>
+                                        <td class="text-center status-cell">${getStatusDisplay(interviewerScreening, 'Initial Screening')}</td>
                                         <td class="text-end action-cell">${actionButton}</td>
                                     </tr>
                                 </tbody>
@@ -2588,6 +2878,26 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             actionButton = `<button type=\"button\" class=\"btn btn-sm ${btnClass} circular-btn\" title=\"${btnTitle}\" onclick=\"openPhysicianMedicalPreview('${donor.donor_id || ''}')\"><i class=\"fas ${icon}\"></i></button>`;
                         }
                         
+                        // Create status display with stage information for physician
+                        const getStatusDisplay = (status, stage) => {
+                            const statusLower = String(status || '').toLowerCase();
+                            if (statusLower.includes('permanently deferred')) {
+                                return `<span class="badge bg-danger">${stage} - Permanently Deferred</span>`;
+                            } else if (statusLower.includes('temporarily deferred')) {
+                                return `<span class="badge bg-warning text-dark">${stage} - Temporarily Deferred</span>`;
+                            } else if (statusLower.includes('refused')) {
+                                return `<span class="badge bg-danger">${stage} - Refused</span>`;
+                            } else if (statusLower.includes('declined') || statusLower.includes('defer') || statusLower.includes('not approved')) {
+                                return `<span class="badge bg-danger">${stage} - ${status}</span>`;
+                            } else if (statusLower.includes('pending')) {
+                                return `<span class="badge bg-warning text-dark">${status}</span>`;
+                            } else if (statusLower.includes('accepted') || statusLower.includes('approved') || statusLower.includes('completed') || statusLower.includes('passed')) {
+                                return `<span class="badge bg-success">${status}</span>`;
+                            } else {
+                                return badge(status);
+                            }
+                        };
+                        
                         return `
                         <div class="donor-role-table">
                             <table class="table align-middle mb-2">
@@ -2600,8 +2910,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td class="text-center status-cell">${badge(physicianMedical)}</td>
-                                        <td class="text-center status-cell">${badge(physicianPhysical)}</td>
+                                        <td class="text-center status-cell">${getStatusDisplay(physicianMedical, 'MH')}</td>
+                                        <td class="text-center status-cell">${getStatusDisplay(physicianPhysical, 'Physical Exam')}</td>
                                         <td class="text-end action-cell">${actionButton}</td>
                                     </tr>
                                 </tbody>
@@ -2647,6 +2957,26 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             actionButton = `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"View Details\" onclick=\"viewPhlebotomistDetails('${donor.donor_id || ''}')\"><i class=\"fas fa-eye\"></i></button>`;
                         }
                         
+                        // Create status display with stage information for phlebotomist
+                        const getStatusDisplay = (status, stage) => {
+                            const statusLower = String(status || '').toLowerCase();
+                            if (statusLower.includes('permanently deferred')) {
+                                return `<span class="badge bg-danger">${stage} - Permanently Deferred</span>`;
+                            } else if (statusLower.includes('temporarily deferred')) {
+                                return `<span class="badge bg-warning text-dark">${stage} - Temporarily Deferred</span>`;
+                            } else if (statusLower.includes('refused')) {
+                                return `<span class="badge bg-danger">${stage} - Refused</span>`;
+                            } else if (statusLower.includes('declined') || statusLower.includes('defer') || statusLower.includes('not approved')) {
+                                return `<span class="badge bg-danger">${stage} - ${status}</span>`;
+                            } else if (statusLower.includes('pending')) {
+                                return `<span class="badge bg-warning text-dark">${status}</span>`;
+                            } else if (statusLower.includes('accepted') || statusLower.includes('approved') || statusLower.includes('completed') || statusLower.includes('passed')) {
+                                return `<span class="badge bg-success">${status}</span>`;
+                            } else {
+                                return badge(status);
+                            }
+                        };
+                        
                         return `
                         <div class="donor-role-table">
                             <table class="table align-middle mb-2">
@@ -2658,7 +2988,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td class="text-center status-cell">${badge(phlebStatus)}</td>
+                                        <td class="text-center status-cell">${getStatusDisplay(phlebStatus, 'Blood Collection')}</td>
                                         <td class="text-end action-cell">${actionButton}</td>
                                     </tr>
                                 </tbody>
@@ -2707,8 +3037,70 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <hr class="my-3" />
                     `;
 
+                    // Create status summary section
+                    const getOverallStatus = () => {
+                        const statusLower = String(eligibilityStatus || '').toLowerCase();
+                        const interviewerMedicalLower = String(interviewerMedical || '').toLowerCase();
+                        const interviewerScreeningLower = String(interviewerScreening || '').toLowerCase();
+                        const physicianMedicalLower = String(physicianMedical || '').toLowerCase();
+                        const physicianPhysicalLower = String(physicianPhysical || '').toLowerCase();
+                        const phlebStatusLower = String(phlebStatus || '').toLowerCase();
+                        
+                        // Check for declined/deferred/refused status in each stage based on specific column checks
+                        if (interviewerMedicalLower.includes('declined') || interviewerMedicalLower.includes('defer') || interviewerMedicalLower.includes('refused') || interviewerMedicalLower.includes('not approved')) {
+                            return { status: 'Declined/Not Approved', stage: 'MH', color: 'danger' };
+                        }
+                        if (interviewerScreeningLower.includes('declined') || interviewerScreeningLower.includes('defer') || interviewerScreeningLower.includes('refused') || interviewerScreeningLower.includes('not approved')) {
+                            return { status: 'Declined/Not Approved', stage: 'Initial Screening', color: 'danger' };
+                        }
+                        if (physicianMedicalLower.includes('declined') || physicianMedicalLower.includes('defer') || physicianMedicalLower.includes('refused') || physicianMedicalLower.includes('not approved')) {
+                            return { status: 'Declined/Not Approved', stage: 'MH', color: 'danger' };
+                        }
+                        if (physicianPhysicalLower.includes('permanently deferred')) {
+                            return { status: 'Permanently Deferred', stage: 'Physical Exam', color: 'danger' };
+                        }
+                        if (physicianPhysicalLower.includes('temporarily deferred')) {
+                            return { status: 'Temporarily Deferred', stage: 'Physical Exam', color: 'warning' };
+                        }
+                        if (physicianPhysicalLower.includes('refused')) {
+                            return { status: 'Refused', stage: 'Physical Exam', color: 'danger' };
+                        }
+                        if (physicianPhysicalLower.includes('declined') || physicianPhysicalLower.includes('defer') || physicianPhysicalLower.includes('not approved')) {
+                            return { status: 'Declined/Not Approved', stage: 'Physical Exam', color: 'danger' };
+                        }
+                        if (phlebStatusLower.includes('declined') || phlebStatusLower.includes('defer') || phlebStatusLower.includes('refused') || phlebStatusLower.includes('not approved')) {
+                            return { status: 'Declined/Not Approved', stage: 'Blood Collection', color: 'danger' };
+                        }
+                        if (statusLower === 'approved' || statusLower === 'eligible') {
+                            return { status: 'Approved', stage: 'All Stages', color: 'success' };
+                        }
+                        if (statusLower === 'pending') {
+                            return { status: 'Pending', stage: 'In Progress', color: 'warning' };
+                        }
+                        return { status: eligibilityStatus || 'Unknown', stage: 'Unknown', color: 'secondary' };
+                    };
+                    
+                    const overallStatus = getOverallStatus();
+                    const statusSummary = `
+                        <div class="card mb-3" style="border-left: 4px solid var(--bs-${overallStatus.color});">
+                            <div class="card-body py-2 px-3">
+                                <div class="row align-items-center">
+                                    <div class="col-md-8">
+                                        <h6 class="mb-1" style="font-weight: 600; color: #212529;">Overall Status</h6>
+                                        <span class="badge bg-${overallStatus.color} me-2">${overallStatus.status}</span>
+                                        <small class="text-muted">${overallStatus.stage}</small>
+                                    </div>
+                                    <div class="col-md-4 text-end">
+                                        <small class="text-muted">Eligibility ID: ${safe(eligibility.eligibility_id, 'N/A')}</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
                     const html = `
                         ${header}
+                        ${statusSummary}
                         ${section('Interviewer', interviewerRows, 'bg-danger')}
                         ${section('Physician', physicianRows, 'bg-danger')}
                         ${section('Phlebotomist', phlebRows, 'bg-danger')}
@@ -7527,7 +7919,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             border-color: #6c757d;
         }
         #medicalHistoryApprovalModal { z-index: 1065; }
-        .modal-backdrop.show { z-index: 1060; }
+        .modal-backdrop.show { z-index: 1055; }
         
         /* Modern Modal Styles */
         .modern-modal {

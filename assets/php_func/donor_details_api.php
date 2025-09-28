@@ -207,6 +207,76 @@ function fetchEligibilityRecord($eligibilityId) {
         ];
     }
     
+    // If eligibility_id starts with "deferred_", this is a deferred donor from physical examination
+    if ($eligibilityId && strpos($eligibilityId, 'deferred_') === 0) {
+        error_log("Handling deferred eligibility record");
+        
+        // Extract the physical exam ID from the format "deferred_[physical_exam_id]"
+        $physicalExamId = substr($eligibilityId, strlen('deferred_'));
+        error_log("Extracted physical exam ID: $physicalExamId");
+        
+        $bloodType = "Unknown";
+        $donationType = "Unknown";
+        
+        // First try to get the physical exam record to get more details
+        if (is_numeric($physicalExamId)) {
+            $physicalExamData = fetchPhysicalExamData($physicalExamId);
+            
+            // If we have physical exam data, extract what we can
+            if ($physicalExamData) {
+                error_log("Found physical exam data for ID: $physicalExamId");
+                $remarks = $physicalExamData['remarks'] ?? '';
+                $disapprovalReason = $physicalExamData['disapproval_reason'] ?? '';
+                
+                // Some physical exam records might have blood type or donation type
+                if (!empty($physicalExamData['blood_type'])) {
+                    $bloodType = $physicalExamData['blood_type'];
+                    error_log("Found blood type from physical exam: $bloodType");
+                }
+                
+                if (!empty($physicalExamData['donation_type'])) {
+                    $donationType = $physicalExamData['donation_type'];
+                    error_log("Found donation type from physical exam: $donationType");
+                }
+            }
+        }
+        
+        // If we still don't have blood type or donation type, try looking in the screening form
+        if ($bloodType === "Unknown" || $donationType === "Unknown") {
+            $screeningData = fetchScreeningDataByDonorId($donor_id);
+            
+            if ($screeningData) {
+                error_log("Found screening data for donor ID: $donor_id");
+                
+                if (!empty($screeningData['blood_type']) && $bloodType === "Unknown") {
+                    $bloodType = $screeningData['blood_type'];
+                    error_log("Found blood type from screening: $bloodType");
+                }
+                
+                if (!empty($screeningData['donation_type']) && $donationType === "Unknown") {
+                    $donationType = $screeningData['donation_type'];
+                    error_log("Found donation type from screening: $donationType");
+                }
+            }
+        }
+        
+        // Return the deferred eligibility record with all available information
+        error_log("Returning deferred eligibility record with blood_type: $bloodType, donation_type: $donationType");
+        return [
+            'eligibility_id' => $eligibilityId,
+            'status' => 'deferred',
+            'blood_type' => $bloodType,
+            'donation_type' => $donationType,
+            'start_date' => date('Y-m-d'),
+            'end_date' => null,
+            // Explicitly set these fields to null for deferred donors
+            'blood_bag_type' => null,
+            'amount_collected' => null,
+            'donor_reaction' => null,
+            'management_done' => null
+        ];
+    }
+    
     // Otherwise, fetch from the eligibility table
     error_log("Fetching from eligibility table for ID: $eligibilityId");
     $curl = curl_init();
@@ -353,15 +423,66 @@ try {
             ? 'Completed' : 'Pending';
     }
     if (!isset($derived['screening_status'])) {
-        $derived['screening_status'] = $hasScreening ? 'Passed' : 'Pending';
+        // Check screening status based on disapproval_reason column
+        $screeningStatus = 'Pending';
+        if ($hasScreening && $screeningLatest) {
+            // Check if there's a disapproval reason
+            if (!empty($screeningLatest['disapproval_reason']) && trim($screeningLatest['disapproval_reason']) !== '') {
+                $screeningStatus = 'Declined/Not Approved';
+            } else {
+                $screeningStatus = 'Passed';
+            }
+        }
+        $derived['screening_status'] = $screeningStatus;
     }
 
     // Physician statuses - check if physical examination is completed based on remarks
     if (!isset($derived['review_status'])) {
-        // Check if there's a completed physical examination based on remarks
-        $hasCompletedPhysical = false;
-        
-        // First try to find by physical_exam_id if available
+        // Check if this is a deferred donor from the declined module
+        if (isset($eligibilityInfo['status']) && $eligibilityInfo['status'] === 'deferred') {
+            // For deferred donors, we need to get the actual remarks from the physical examination
+            $physicalStatus = 'Pending';
+            $hasPhysicalData = false;
+            
+            // Try to get the physical exam ID from the eligibility_id
+            if (isset($eligibilityInfo['eligibility_id']) && strpos($eligibilityInfo['eligibility_id'], 'deferred_') === 0) {
+                $physicalExamId = substr($eligibilityInfo['eligibility_id'], strlen('deferred_'));
+                
+                try {
+                    $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=remarks&physical_exam_id=eq.' . urlencode($physicalExamId));
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                        'apikey: ' . SUPABASE_API_KEY,
+                        'Authorization: Bearer ' . SUPABASE_API_KEY,
+                        'Accept: application/json'
+                    ]);
+                    $resp = curl_exec($ch);
+                    $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+                    
+                    if ($http === 200) {
+                        $arr = json_decode($resp, true);
+                        if (!empty($arr) && isset($arr[0]['remarks'])) {
+                            $remarks = $arr[0]['remarks'];
+                            $hasPhysicalData = true;
+                            // Use the actual remarks value for deferred donors
+                            $physicalStatus = $remarks;
+                            error_log("Deferred donor physical status: " . $physicalStatus);
+                        }
+                    }
+                } catch (Exception $e) {
+                    error_log("Error checking deferred donor physical examination remarks: " . $e->getMessage());
+                }
+            }
+            
+            $derived['review_status'] = $physicalStatus;
+            $derived['physical_status'] = $physicalStatus;
+        } else {
+            // Regular physical examination status checking
+            $physicalStatus = 'Pending';
+            $hasPhysicalData = false;
+            
+            // First try to find by physical_exam_id if available
         if (isset($derived['physical_exam_id']) && !empty($derived['physical_exam_id'])) {
             try {
                 $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=remarks&physical_exam_id=eq.' . urlencode($derived['physical_exam_id']));
@@ -379,14 +500,24 @@ try {
                     $arr = json_decode($resp, true);
                     if (!empty($arr) && isset($arr[0]['remarks'])) {
                         $remarks = $arr[0]['remarks'];
-                        // Physical examination is completed if remarks is not empty and not 'Pending'
-                        $hasCompletedPhysical = !empty($remarks) && $remarks !== 'Pending';
-                        error_log("Physical examination check (review_status) - Physical Exam ID: " . $derived['physical_exam_id'] . ", Remarks: " . $remarks . ", Completed: " . ($hasCompletedPhysical ? 'true' : 'false'));
-                    } else {
-                        error_log("Physical examination check (review_status) - No remarks found for Physical Exam ID: " . $derived['physical_exam_id']);
+                        $hasPhysicalData = true;
+                        // Check specific enum values for physical examination status
+                        if ($remarks === 'Accepted') {
+                            $physicalStatus = 'Accepted';
+                        } elseif ($remarks === 'Temporarily Deferred') {
+                            $physicalStatus = 'Temporarily Deferred';
+                        } elseif ($remarks === 'Permanently Deferred') {
+                            $physicalStatus = 'Permanently Deferred';
+                        } elseif ($remarks === 'Refused') {
+                            $physicalStatus = 'Refused';
+                        } elseif (!empty($remarks) && trim($remarks) !== '' && $remarks !== 'Pending') {
+                            // Fallback for any other non-empty values
+                            $physicalStatus = 'Declined/Not Approved';
+                        } else {
+                            $physicalStatus = 'Pending';
+                        }
+                        error_log("Physical examination check (review_status) - Physical Exam ID: " . $derived['physical_exam_id'] . ", Remarks: " . $remarks . ", Status: " . $physicalStatus);
                     }
-                } else {
-                    error_log("Physical examination check (review_status) - HTTP Error: " . $http . " for Physical Exam ID: " . $derived['physical_exam_id']);
                 }
             } catch (Exception $e) {
                 error_log("Error checking physical examination remarks (review_status): " . $e->getMessage());
@@ -394,7 +525,7 @@ try {
         }
         
         // If not found by physical_exam_id, try to find by donor_id
-        if (!$hasCompletedPhysical) {
+        if (!$hasPhysicalData) {
             try {
                 $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=remarks&donor_id=eq.' . urlencode($donor_id) . '&order=created_at.desc&limit=1');
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -411,26 +542,37 @@ try {
                     $arr = json_decode($resp, true);
                     if (!empty($arr) && isset($arr[0]['remarks'])) {
                         $remarks = $arr[0]['remarks'];
-                        // Physical examination is completed if remarks is not empty and not 'Pending'
-                        $hasCompletedPhysical = !empty($remarks) && $remarks !== 'Pending';
-                        error_log("Physical examination check (review_status by donor_id) - Donor ID: " . $donor_id . ", Remarks: " . $remarks . ", Completed: " . ($hasCompletedPhysical ? 'true' : 'false'));
-                    } else {
-                        error_log("Physical examination check (review_status by donor_id) - No remarks found for Donor ID: " . $donor_id);
+                        $hasPhysicalData = true;
+                        // Check specific enum values for physical examination status
+                        if ($remarks === 'Accepted') {
+                            $physicalStatus = 'Accepted';
+                        } elseif ($remarks === 'Temporarily Deferred') {
+                            $physicalStatus = 'Temporarily Deferred';
+                        } elseif ($remarks === 'Permanently Deferred') {
+                            $physicalStatus = 'Permanently Deferred';
+                        } elseif ($remarks === 'Refused') {
+                            $physicalStatus = 'Refused';
+                        } elseif (!empty($remarks) && trim($remarks) !== '' && $remarks !== 'Pending') {
+                            // Fallback for any other non-empty values
+                            $physicalStatus = 'Declined/Not Approved';
+                        } else {
+                            $physicalStatus = 'Pending';
+                        }
+                        error_log("Physical examination check (review_status by donor_id) - Donor ID: " . $donor_id . ", Remarks: " . $remarks . ", Status: " . $physicalStatus);
                     }
-                } else {
-                    error_log("Physical examination check (review_status by donor_id) - HTTP Error: " . $http . " for Donor ID: " . $donor_id);
                 }
             } catch (Exception $e) {
                 error_log("Error checking physical examination remarks by donor_id (review_status): " . $e->getMessage());
             }
         }
         
-        $derived['review_status'] = ($statusLower === 'approved' || $statusLower === 'eligible' || $statusLower === 'declined' || $hasCompletedPhysical)
-            ? 'Completed' : 'Pending';
+        $derived['review_status'] = $physicalStatus;
+        }
     }
     if (!isset($derived['physical_status'])) {
-        // Check if there's a completed physical examination based on remarks
-        $hasCompletedPhysical = false;
+        // Check physical examination status based on remarks column
+        $physicalStatus = 'Pending';
+        $hasPhysicalData = false;
         
         // First try to find by physical_exam_id if available
         if (isset($derived['physical_exam_id']) && !empty($derived['physical_exam_id'])) {
@@ -450,14 +592,24 @@ try {
                     $arr = json_decode($resp, true);
                     if (!empty($arr) && isset($arr[0]['remarks'])) {
                         $remarks = $arr[0]['remarks'];
-                        // Physical examination is completed if remarks is not empty and not 'Pending'
-                        $hasCompletedPhysical = !empty($remarks) && $remarks !== 'Pending';
-                        error_log("Physical examination check (physical_status) - Physical Exam ID: " . $derived['physical_exam_id'] . ", Remarks: " . $remarks . ", Completed: " . ($hasCompletedPhysical ? 'true' : 'false'));
-                    } else {
-                        error_log("Physical examination check (physical_status) - No remarks found for Physical Exam ID: " . $derived['physical_exam_id']);
+                        $hasPhysicalData = true;
+                        // Check specific enum values for physical examination status
+                        if ($remarks === 'Accepted') {
+                            $physicalStatus = 'Accepted';
+                        } elseif ($remarks === 'Temporarily Deferred') {
+                            $physicalStatus = 'Temporarily Deferred';
+                        } elseif ($remarks === 'Permanently Deferred') {
+                            $physicalStatus = 'Permanently Deferred';
+                        } elseif ($remarks === 'Refused') {
+                            $physicalStatus = 'Refused';
+                        } elseif (!empty($remarks) && trim($remarks) !== '' && $remarks !== 'Pending') {
+                            // Fallback for any other non-empty values
+                            $physicalStatus = 'Declined/Not Approved';
+                        } else {
+                            $physicalStatus = 'Pending';
+                        }
+                        error_log("Physical examination check (physical_status) - Physical Exam ID: " . $derived['physical_exam_id'] . ", Remarks: " . $remarks . ", Status: " . $physicalStatus);
                     }
-                } else {
-                    error_log("Physical examination check (physical_status) - HTTP Error: " . $http . " for Physical Exam ID: " . $derived['physical_exam_id']);
                 }
             } catch (Exception $e) {
                 error_log("Error checking physical examination remarks (physical_status): " . $e->getMessage());
@@ -465,7 +617,7 @@ try {
         }
         
         // If not found by physical_exam_id, try to find by donor_id
-        if (!$hasCompletedPhysical) {
+        if (!$hasPhysicalData) {
             try {
                 $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=remarks&donor_id=eq.' . urlencode($donor_id) . '&order=created_at.desc&limit=1');
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -482,27 +634,36 @@ try {
                     $arr = json_decode($resp, true);
                     if (!empty($arr) && isset($arr[0]['remarks'])) {
                         $remarks = $arr[0]['remarks'];
-                        // Physical examination is completed if remarks is not empty and not 'Pending'
-                        $hasCompletedPhysical = !empty($remarks) && $remarks !== 'Pending';
-                        error_log("Physical examination check (physical_status by donor_id) - Donor ID: " . $donor_id . ", Remarks: " . $remarks . ", Completed: " . ($hasCompletedPhysical ? 'true' : 'false'));
-                    } else {
-                        error_log("Physical examination check (physical_status by donor_id) - No remarks found for Donor ID: " . $donor_id);
+                        $hasPhysicalData = true;
+                        // Check specific enum values for physical examination status
+                        if ($remarks === 'Accepted') {
+                            $physicalStatus = 'Accepted';
+                        } elseif ($remarks === 'Temporarily Deferred') {
+                            $physicalStatus = 'Temporarily Deferred';
+                        } elseif ($remarks === 'Permanently Deferred') {
+                            $physicalStatus = 'Permanently Deferred';
+                        } elseif ($remarks === 'Refused') {
+                            $physicalStatus = 'Refused';
+                        } elseif (!empty($remarks) && trim($remarks) !== '' && $remarks !== 'Pending') {
+                            // Fallback for any other non-empty values
+                            $physicalStatus = 'Declined/Not Approved';
+                        } else {
+                            $physicalStatus = 'Pending';
+                        }
+                        error_log("Physical examination check (physical_status by donor_id) - Donor ID: " . $donor_id . ", Remarks: " . $remarks . ", Status: " . $physicalStatus);
                     }
-                } else {
-                    error_log("Physical examination check (physical_status by donor_id) - HTTP Error: " . $http . " for Donor ID: " . $donor_id);
                 }
             } catch (Exception $e) {
                 error_log("Error checking physical examination remarks by donor_id (physical_status): " . $e->getMessage());
             }
         }
         
-        $derived['physical_status'] = ($statusLower === 'approved' || $statusLower === 'eligible' || $statusLower === 'declined' || $hasCompletedPhysical)
-            ? 'Completed' : 'Pending';
+        $derived['physical_status'] = $physicalStatus;
     }
 
     // Phlebotomist status: attempt to compute from blood_collection
     if (!isset($derived['collection_status']) || $derived['collection_status'] === '-' || empty($derived['collection_status'])) {
-        $collection_status = '-';
+        $collection_status = 'Pending';
         $blood_collection_id = $derived['blood_collection_id'] ?? null;
         $screening_id = $derived['screening_id'] ?? null;
         $physical_exam_id = $derived['physical_exam_id'] ?? null;
@@ -526,7 +687,8 @@ try {
                     $arr = json_decode($resp, true);
                     if (!empty($arr)) {
                         if (isset($arr[0]['is_successful'])) {
-                            $collection_status = $arr[0]['is_successful'] ? 'Successful' : 'Unsuccessful';
+                            // Check is_successful column - if false, consider it disapproved
+                            $collection_status = $arr[0]['is_successful'] ? 'Successful' : 'Declined/Not Approved';
                         } elseif (isset($arr[0]['needs_review']) && $arr[0]['needs_review'] === true) {
                             $collection_status = 'Pending';
                         }
@@ -545,7 +707,8 @@ try {
                     $arr = json_decode($resp, true);
                     if (!empty($arr)) {
                         if (isset($arr[0]['is_successful'])) {
-                            $collection_status = $arr[0]['is_successful'] ? 'Successful' : 'Unsuccessful';
+                            // Check is_successful column - if false, consider it disapproved
+                            $collection_status = $arr[0]['is_successful'] ? 'Successful' : 'Declined/Not Approved';
                         } elseif (isset($arr[0]['needs_review']) && $arr[0]['needs_review'] === true) {
                             $collection_status = 'Pending';
                         }
@@ -564,7 +727,8 @@ try {
                     $arr = json_decode($resp, true);
                     if (!empty($arr)) {
                         if (isset($arr[0]['is_successful'])) {
-                            $collection_status = $arr[0]['is_successful'] ? 'Successful' : 'Unsuccessful';
+                            // Check is_successful column - if false, consider it disapproved
+                            $collection_status = $arr[0]['is_successful'] ? 'Successful' : 'Declined/Not Approved';
                         } elseif (isset($arr[0]['needs_review']) && $arr[0]['needs_review'] === true) {
                             $collection_status = 'Pending';
                         }

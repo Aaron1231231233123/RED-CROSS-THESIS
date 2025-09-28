@@ -28,14 +28,143 @@ function debug_log($message) {
     }
 }
 
+// Function to get declined/deferred donor IDs (reusable)
+function getDeclinedDeferredDonorIds() {
+    $declinedDeferredIds = [];
+    
+    try {
+        // 1. Check eligibility table for declined/deferred status
+        $eligibilityResponse = supabaseRequest("eligibility?or=(status.eq.declined,status.eq.deferred,status.eq.refused,status.eq.ineligible)&select=donor_id,status");
+        
+        if (isset($eligibilityResponse['data']) && is_array($eligibilityResponse['data'])) {
+            foreach ($eligibilityResponse['data'] as $eligibility) {
+                $donorId = $eligibility['donor_id'] ?? null;
+                if ($donorId) {
+                    $declinedDeferredIds[$donorId] = $eligibility['status'] ?? '';
+                }
+            }
+        }
+        
+        // 2. Check screening form for declined status
+        $screeningResponse = supabaseRequest("screening_form?disapproval_reason=not.is.null&select=donor_form_id");
+        
+        if (isset($screeningResponse['data']) && is_array($screeningResponse['data'])) {
+            foreach ($screeningResponse['data'] as $screening) {
+                $donorId = $screening['donor_form_id'] ?? null;
+                if ($donorId) {
+                    $declinedDeferredIds[$donorId] = 'declined';
+                }
+            }
+        }
+        
+        // 3. Check physical examination for deferral/decline status
+        $physicalResponse = supabaseRequest("physical_examination?or=(remarks.eq.Temporarily%20Deferred,remarks.eq.Permanently%20Deferred,remarks.eq.Declined,remarks.eq.Refused)&select=donor_id,remarks");
+        
+        if (isset($physicalResponse['data']) && is_array($physicalResponse['data'])) {
+            foreach ($physicalResponse['data'] as $exam) {
+                $donorId = $exam['donor_id'] ?? null;
+                if ($donorId) {
+                    $remarks = $exam['remarks'] ?? '';
+                    if (in_array($remarks, ['Temporarily Deferred', 'Permanently Deferred'])) {
+                        $declinedDeferredIds[$donorId] = 'deferred';
+                    } elseif (in_array($remarks, ['Declined', 'Refused'])) {
+                        $declinedDeferredIds[$donorId] = 'declined';
+                    }
+                }
+            }
+        }
+        
+        // 4. Check medical history for decline status
+        $medicalResponse = supabaseRequest("medical_history?medical_approval=eq.Not%20Approved&select=donor_id");
+        
+        if (isset($medicalResponse['data']) && is_array($medicalResponse['data'])) {
+            foreach ($medicalResponse['data'] as $medical) {
+                $donorId = $medical['donor_id'] ?? null;
+                if ($donorId) {
+                    $declinedDeferredIds[$donorId] = 'declined';
+                }
+            }
+        }
+        
+    } catch (Exception $e) {
+        debug_log("Error getting declined/deferred donor IDs: " . $e->getMessage());
+    }
+    
+    return $declinedDeferredIds;
+}
+
 try {
     debug_log("Starting donation_declined.php");
     
     $declinedDonations = [];
     
-    // STEP 1: Get declined donors from screening_form table (disapproval_reason is not null)
+    // STEP 1: Get declined/deferred donors from eligibility table (primary source)
     $limit = isset($GLOBALS['DONATION_LIMIT']) ? intval($GLOBALS['DONATION_LIMIT']) : 100;
     $offset = isset($GLOBALS['DONATION_OFFSET']) ? intval($GLOBALS['DONATION_OFFSET']) : 0;
+    $eligibilityResponse = supabaseRequest("eligibility?or=(status.eq.declined,status.eq.deferred,status.eq.refused,status.eq.ineligible)&select=eligibility_id,donor_id,status,disapproval_reason,created_at&order=created_at.desc&limit={$limit}&offset={$offset}");
+    
+    if (isset($eligibilityResponse['data']) && is_array($eligibilityResponse['data'])) {
+        debug_log("Found " . count($eligibilityResponse['data']) . " declined/deferred eligibility records");
+        
+        // Extract all donor IDs for batch processing
+        $donorIds = array_column($eligibilityResponse['data'], 'donor_id');
+        $donorIds = array_filter($donorIds); // Remove empty values
+        
+        if (!empty($donorIds)) {
+            // Batch API call for donor information
+            $donorIdsParam = implode(',', $donorIds);
+            $donorResponse = supabaseRequest("donor_form?donor_id=in.(" . $donorIdsParam . ")&select=donor_id,surname,first_name,middle_name,birthdate,age,sex");
+            
+            // Create lookup array for donor data
+            $donorLookup = [];
+            if (isset($donorResponse['data']) && is_array($donorResponse['data'])) {
+                foreach ($donorResponse['data'] as $donor) {
+                    $donorLookup[$donor['donor_id']] = $donor;
+                }
+                debug_log("Created donor lookup with " . count($donorLookup) . " donors");
+            }
+            
+            // Process eligibility records
+            foreach ($eligibilityResponse['data'] as $eligibility) {
+                $donorId = $eligibility['donor_id'] ?? null;
+                if (!$donorId || !isset($donorLookup[$donorId])) {
+                    debug_log("Skipping eligibility record with no donor_id or missing donor info: " . $donorId);
+                    continue;
+                }
+                
+                $donor = $donorLookup[$donorId];
+                $status = strtolower($eligibility['status'] ?? '');
+                $disapprovalReason = $eligibility['disapproval_reason'] ?? '';
+                
+                // Determine status text based on eligibility status
+                $statusText = 'Declined';
+                if (in_array($status, ['deferred', 'ineligible'])) {
+                    $statusText = 'Deferred';
+                } elseif ($status === 'refused') {
+                    $statusText = 'Declined';
+                }
+                
+                // Create record for declined/deferred donor
+                $declinedDonations[] = [
+                    'eligibility_id' => $eligibility['eligibility_id'],
+                    'donor_id' => $donorId,
+                    'surname' => $donor['surname'] ?? '',
+                    'first_name' => $donor['first_name'] ?? '',
+                    'middle_name' => $donor['middle_name'] ?? '',
+                    'rejection_source' => 'Eligibility',
+                    'rejection_reason' => $disapprovalReason,
+                    'rejection_date' => date('M d, Y', strtotime($eligibility['created_at'] ?? 'now')),
+                    'remarks_status' => ucfirst($status),
+                    'status' => $status,
+                    'status_text' => $statusText
+                ];
+                
+                debug_log("Added declined/deferred donor from eligibility: " . ($donor['surname'] ?? 'Unknown') . ", " . ($donor['first_name'] ?? 'Unknown') . " - " . $statusText);
+            }
+        }
+    }
+    
+    // STEP 2: Get declined donors from screening_form table (disapproval_reason is not null) - backup
     $screeningResponse = supabaseRequest("screening_form?disapproval_reason=not.is.null&select=screening_id,donor_form_id,disapproval_reason,created_at&order=created_at.desc&limit={$limit}&offset={$offset}");
     
     if (isset($screeningResponse['data']) && is_array($screeningResponse['data'])) {
@@ -141,8 +270,8 @@ try {
                 $rejectionReason = !empty($exam['reason']) ? 
                     $exam['reason'] : $remarks;
                 
-                // Determine if it's temporarily or permanently deferred
-                $statusText = ($remarks === 'Permanently Deferred') ? 'Permanently Deferred' : 'Temporarily Deferred';
+                // Normalize deferred status to just "Deferred" regardless of type
+                $statusText = 'Deferred';
                 
                 // Create record with all required fields
                 $declinedDonations[] = [
