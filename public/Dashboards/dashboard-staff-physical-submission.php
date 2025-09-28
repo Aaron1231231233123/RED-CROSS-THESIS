@@ -1817,26 +1817,6 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             margin-bottom: 1.25rem;
             color: #333;
         }
-         /* Loader Animation -- Modal Design */
-         .loading-spinner {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            border: 8px solid #ddd;
-            border-top: 8px solid #d9534f;
-            animation: rotateSpinner 1s linear infinite;
-            display: none;
-            z-index: 10000;
-            transform: translate(-50%, -50%);
-        }
-
-        @keyframes rotateSpinner {
-            0% { transform: translate(-50%, -50%) rotate(0deg); }
-            100% { transform: translate(-50%, -50%) rotate(360deg); }
-        }
         /* Note: Confirmation modal CSS has been removed as it's no longer needed */
 
         /* Observation text styling - clear and professional */
@@ -2287,9 +2267,6 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         <?php endif; ?>
                     </div>
                 </div>    
-                
-                <!-- Loading Spinner -->
-                <div class="loading-spinner" id="loadingSpinner"></div>
             </main>
         </div>
     </div>
@@ -2404,12 +2381,6 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 <div class="modal-body py-4">
                     <div id="donorProfileModalContent">
                         <!-- Content will be loaded dynamically -->
-                        <div class="text-center">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="mt-2">Loading donor profile...</p>
-                        </div>
                     </div>
                 </div>
                 <div class="modal-footer border-0" id="donorProfileFooter" style="display: none;">
@@ -2434,12 +2405,6 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             <div class="medical-modal-body">
                 <div id="medicalHistoryModalContent">
                     <!-- Content will be loaded dynamically -->
-                    <div class="text-center">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="mt-2">Loading medical history...</p>
-                    </div>
                 </div>
             </div>
         </div>

@@ -559,6 +559,7 @@ class PhysicalExaminationModal {
         const prevBtn = document.querySelector('.physical-prev-btn');
         const nextBtn = document.querySelector('.physical-next-btn');
         const submitBtn = document.querySelector('.physical-submit-btn');
+        const deferBtn = document.querySelector('.physical-defer-btn');
         
         if (prevBtn) prevBtn.style.display = this.currentStep === 1 ? 'none' : 'inline-block';
         if (nextBtn) nextBtn.style.display = this.currentStep === this.totalSteps ? 'none' : 'inline-block';
@@ -568,6 +569,10 @@ class PhysicalExaminationModal {
             } else {
                 submitBtn.style.display = this.currentStep === this.totalSteps ? 'inline-block' : 'none';
             }
+        }
+        // Hide defer button on stage 4 (Review step)
+        if (deferBtn) {
+            deferBtn.style.display = this.currentStep === 4 ? 'none' : 'inline-block';
         }
     }
     
@@ -868,7 +873,6 @@ class PhysicalExaminationModal {
             data.status = 'Pending';
             // Set remarks to Accepted upon physician approval/submit
             data.remarks = 'Accepted';
-            data.is_accepted_examination = true;
             const result = await makeApiCall('../../assets/php_func/process_physical_examination.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

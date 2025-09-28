@@ -48,7 +48,7 @@ function formatPhysicalExamDataForSupabase($post_data) {
         'blood_bag_type' => strval(trim($post_data['blood_bag_type'])),
         'reason' => isset($post_data['reason']) ? strval(trim($post_data['reason'])) : '',
         // Ensure review flag is explicitly sent for schemas that require it
-        'needs_review' => isset($post_data['needs_review']) ? (bool)$post_data['needs_review'] : false
+        'needs_review' => isset($post_data['needs_review']) ? (bool)$post_data['needs_review'] : true
     ];
     return $payload;
 }
