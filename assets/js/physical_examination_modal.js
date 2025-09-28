@@ -866,13 +866,13 @@ class PhysicalExaminationModal {
                 data.screening_id = this.screeningData.screening_id;
             }
             data.status = 'Pending';
-            // Set remarks to Pending upon physician approval/submit
-            data.remarks = 'Pending';
+            // Set remarks to Accepted upon physician approval/submit
+            data.remarks = 'Accepted';
             data.is_accepted_examination = true;
             const result = await makeApiCall('../../assets/php_func/process_physical_examination.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...data, needs_review: false })
+                body: JSON.stringify(data)
             });
             if (result && result.success) {
                 const donorId = (this.screeningData && (this.screeningData.donor_form_id || this.screeningData.donor_id)) || window.__peLastDonorId || null;
