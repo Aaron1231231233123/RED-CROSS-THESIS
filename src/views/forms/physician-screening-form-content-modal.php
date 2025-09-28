@@ -204,14 +204,20 @@
         // Resolve donor id robustly from multiple sources
         function resolveDonorId(){
             try {
+                // Priority 1: Form input
                 const direct = (formEl && formEl.querySelector('input[name="donor_id"]')) ? formEl.querySelector('input[name="donor_id"]').value : '';
                 if (direct) return direct;
-            } catch(_) {}
-            try { if (window.currentDonorData && window.currentDonorData.donor_id) return window.currentDonorData.donor_id; } catch(_) {}
-            try { if (window.lastDonorProfileContext && window.lastDonorProfileContext.donorId) return window.lastDonorProfileContext.donorId; } catch(_) {}
-            try { if (window.currentDonorId) return window.currentDonorId; } catch(_) {}
-            try { if (window.lastDonorProfileContext && window.lastDonorProfileContext.screeningData && window.lastDonorProfileContext.screeningData.donor_form_id) return window.lastDonorProfileContext.screeningData.donor_form_id; } catch(_) {}
-            return '';
+                
+                // Priority 2: Current donor data
+                if (window.currentDonorData?.donor_id) return window.currentDonorData.donor_id;
+                if (window.currentDonorId) return window.currentDonorId;
+                
+                // Priority 3: Last donor profile context
+                if (window.lastDonorProfileContext?.donorId) return window.lastDonorProfileContext.donorId;
+                if (window.lastDonorProfileContext?.screeningData?.donor_form_id) return window.lastDonorProfileContext.screeningData.donor_form_id;
+                
+                return '';
+            } catch(_) { return ''; }
         }
 
         // Normalize and check Approved state from medicalByDonor
@@ -488,26 +494,21 @@
                         if (++c >= max) clearInterval(t);
                     }, 150);
                 } catch(_) {}
-                // Deduplicate backdrops: keep only the newest one for this modal
-                try {
-                    const backs = Array.from(document.querySelectorAll('.modal-backdrop'));
-                    // If multiple backdrops exist, remove older ones and keep the last Bootstrap-created backdrop
-                    if (backs.length > 1) {
-                        backs.slice(0, -1).forEach(function(b){ b.remove(); });
-                    }
-                    // Ensure body state is correct
-                    document.body.classList.add('modal-open');
-                    document.body.style.overflow = 'hidden';
-                } catch(_) {}
+                // Let Bootstrap handle backdrop management naturally
+                // No need for aggressive backdrop deduplication
             });
 
-            // On hide, clean any stray backdrops
+            // On hide, only clean up if no other modals are open
             modalEl.addEventListener('hidden.bs.modal', function(){
                 try {
-                    document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); });
-                    document.body.classList.remove('modal-open');
-                    document.body.style.overflow = '';
-                    document.body.style.paddingRight = '';
+                    // Only clean up if no other modals are currently open
+                    const otherModals = document.querySelectorAll('.modal.show:not(#screeningFormModal)');
+                    if (otherModals.length === 0) {
+                        document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); });
+                        document.body.classList.remove('modal-open');
+                        document.body.style.overflow = '';
+                        document.body.style.paddingRight = '';
+                    }
                 } catch(_) {}
             });
 
@@ -518,6 +519,7 @@
                     try { window.__physApproveActive = true; } catch(_) {}
                     const donorId = (formEl.querySelector('input[name="donor_id"]').value) || (window.lastDonorProfileContext && window.lastDonorProfileContext.donorId) || '';
                     if (!donorId) {
+                        try { window.__physApproveActive = false; } catch(_) {}
                         if (window.customConfirm) window.customConfirm('Unable to resolve donor. Please close and reopen this record.', function(){});
                         return;
                     }
@@ -534,7 +536,20 @@
                                 if (!json || !json.success) {
                                     if (window.customConfirm) window.customConfirm('Failed to approve Medical History.', function(){});
                                 } else {
-                                    if (window.customConfirm) window.customConfirm('Medical History approved successfully.', function(){});
+                                    // Success - close modal and redirect to donor profile
+                                    try {
+                                        const sEl = document.getElementById('screeningFormModal');
+                                        if (sEl) {
+                                            const sInst = bootstrap.Modal.getInstance(sEl) || new bootstrap.Modal(sEl);
+                                            try { sInst.hide(); } catch(_) {}
+                                            try { sEl.classList.remove('show'); sEl.style.display='none'; sEl.setAttribute('aria-hidden','true'); } catch(_) {}
+                                        }
+                                        // Only remove backdrops if no other modals are open
+                                        const otherModals = document.querySelectorAll('.modal.show:not(#screeningFormModal)');
+                                        if (otherModals.length === 0) {
+                                            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                                        }
+                                    } catch(_) {}
                                 }
                             } catch(_) {
                                 if (window.customConfirm) window.customConfirm('Network error while approving Medical History.', function(){});
@@ -542,18 +557,12 @@
                             // Release guard after confirm completes
                             try { window.__physApproveActive = false; } catch(_) {}
                             // Ensure donor profile context and refresh on reopen
-                            try { window.lastDonorProfileContext = { donorId: donorId, screeningData: { donor_form_id: donorId } }; } catch(_) {}
-                            try { refreshDonorProfileModal({ donorId, screeningData: { donor_form_id: donorId } }); } catch(_) {}
-                            // Close the Initial Screening modal after approval
-                            // Close this physician screening modal if still visible
-                            try {
-                                const sEl = document.getElementById('screeningFormModal');
-                                if (sEl) {
-                                    const sInst = bootstrap.Modal.getInstance(sEl) || new bootstrap.Modal(sEl);
-                                    try { sInst.hide(); } catch(_) {}
-                                    try { sEl.classList.remove('show'); sEl.style.display='none'; sEl.setAttribute('aria-hidden','true'); } catch(_) {}
-                                }
+                            try { 
+                                window.lastDonorProfileContext = { donorId: donorId, screeningData: { donor_form_id: donorId } }; 
+                                refreshDonorProfileModal({ donorId, screeningData: { donor_form_id: donorId } }); 
                             } catch(_) {}
+                            // Don't close modal immediately - let the success confirmation handle it
+                            // The modal will be closed after the user confirms the success message
                             try { if (window.hideProcessingModal) window.hideProcessingModal(); } catch(_) {}
                         });
                     } else {
@@ -562,16 +571,22 @@
                             fetch('../../public/api/update-medical-approval.php', {
                                 method: 'POST',
                                 body: new URLSearchParams({ donor_id: donorId, medical_approval: 'Approved' })
+                            }).then(() => {
+                                // Close modal and redirect to donor profile
+                                try {
+                                    const sEl = document.getElementById('screeningFormModal');
+                                    if (sEl) {
+                                        const sInst = bootstrap.Modal.getInstance(sEl) || new bootstrap.Modal(sEl);
+                                        try { sInst.hide(); } catch(_) {}
+                                        try { sEl.classList.remove('show'); sEl.style.display='none'; sEl.setAttribute('aria-hidden','true'); } catch(_) {}
+                                    }
+                                    // Only remove backdrops if no other modals are open
+                                    const otherModals = document.querySelectorAll('.modal.show:not(#screeningFormModal)');
+                                    if (otherModals.length === 0) {
+                                        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                                    }
+                                } catch(_) {}
                             });
-                            // Force close screening in fallback as well
-                            try {
-                                const sEl = document.getElementById('screeningFormModal');
-                                if (sEl) {
-                                    const sInst = bootstrap.Modal.getInstance(sEl) || new bootstrap.Modal(sEl);
-                                    try { sInst.hide(); } catch(_) {}
-                                    try { sEl.classList.remove('show'); sEl.style.display='none'; sEl.setAttribute('aria-hidden','true'); } catch(_) {}
-                                }
-                            } catch(_) {}
                         }
                         try { window.__physApproveActive = false; } catch(_) {}
                     }

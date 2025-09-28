@@ -2833,7 +2833,7 @@ $donor_history = $unique_donor_history;
                     const proceedButton = getProceedButton();
                     if (proceedButton && proceedButton.style) {
                         proceedButton.style.display = 'inline-block';
-                        proceedButton.textContent = 'Review Medical History';
+                        proceedButton.textContent = 'Proceed to Medical History';
                     }
                     // Hide mark button for non-returning/new-medical flow
                     if (markReviewFromMain) markReviewFromMain.style.display = 'none';
@@ -3246,8 +3246,18 @@ $donor_history = $unique_donor_history;
                         const hasNeedsReview = currentDonorId && medicalByDonor[currentDonorId] && medicalByDonor[currentDonorId].needs_review;
                         const showReview = allowProcessing || currentStage === 'medical_review' || hasNeedsReview;
                         proceedButton.style.display = showReview ? 'inline-block' : 'none';
-                        proceedButton.textContent = 'Review Medical History';
+                        proceedButton.textContent = 'Proceed to Medical History';
                     }
+            // Hide Mark for Medical Review button when needs_review is already true
+            try {
+                const markBtn = document.getElementById('markReviewFromMain');
+                const hasNeedsReviewFlag = currentDonorId && medicalByDonor[currentDonorId] && medicalByDonor[currentDonorId].needs_review === true;
+                if (markBtn && hasNeedsReviewFlag) {
+                    markBtn.style.display = 'none';
+                    markBtn.style.visibility = 'hidden';
+                    markBtn.style.opacity = '0';
+                }
+            } catch (_) {}
                 } catch (e) {}
             }
             
@@ -3463,19 +3473,13 @@ $donor_history = $unique_donor_history;
                 }
                 
                 // Bind physical examination modal proceed button
-                const physicalProceedButton = document.getElementById('proceedToMedicalHistoryFromPhysical');
-                if (physicalProceedButton && physicalProceedButton.addEventListener) {
-                    physicalProceedButton.addEventListener('click', function() {
-                        // Hide physical examination modal
-                        const physicalModal = bootstrap.Modal.getInstance(document.getElementById('physicalExaminationModal'));
-                        if (physicalModal) {
-                            physicalModal.hide();
-                        }
-                        
-                        // Proceed to medical history modal
-                        proceedToMedicalHistoryModal();
-                    });
-                }
+                // Remove duplicate proceed button from Physical Examination modal footer if present
+                try {
+                    const dupBtn = document.getElementById('proceedToMedicalHistoryFromPhysical');
+                    if (dupBtn && dupBtn.parentNode) {
+                        dupBtn.parentNode.removeChild(dupBtn);
+                    }
+                } catch (_) {}
             }, 100);
 
             // Ensure backdrops are cleaned up when key modals are closed
@@ -5205,6 +5209,16 @@ $donor_history = $unique_donor_history;
             const markReviewButton = document.getElementById('markReviewFromMain');
             if (!markReviewButton) return;
             
+            // Immediate hide when medical_history.needs_review is already true (from preloaded dataset)
+            try {
+                if (window.medicalByDonor && medicalByDonor[donorId] && medicalByDonor[donorId].needs_review === true) {
+                    markReviewButton.style.display = 'none';
+                    markReviewButton.style.visibility = 'hidden';
+                    markReviewButton.style.opacity = '0';
+                    return; // No further checks needed
+                }
+            } catch (_) {}
+            
             // Get eligibility status from the API
             fetch('../../assets/php_func/get_donor_eligibility_status.php?donor_id=' + donorId)
                 .then(response => response.json())
@@ -5275,7 +5289,7 @@ $donor_history = $unique_donor_history;
                 const proceedButton = document.getElementById('proceedToMedicalHistory');
                 if (proceedButton && proceedButton.style) {
                     proceedButton.style.display = 'inline-block';
-                    proceedButton.textContent = 'Review Medical History';
+                    proceedButton.textContent = 'Proceed to Medical History';
                 }
                 // Hide mark-for-review button in this flow
                 const markReviewFromMain = document.getElementById('markReviewFromMain');

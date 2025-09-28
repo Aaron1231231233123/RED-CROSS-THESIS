@@ -11,8 +11,8 @@ class DeliveryTracker {
         
         // Build the API URL with parameters
         $url = $this->baseUrl . "?api_key=" . $this->apiKey . 
-               "&start=" . $originLon . "," . $originLat .
-               "&end=" . $destLon . "," . $destLat;
+        "&start=" . $originLon . "," . $originLat .
+        "&end=" . $destLon . "," . $destLat;
 
         // Initialize cURL session
         $ch = curl_init();

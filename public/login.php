@@ -19,7 +19,7 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
-    if ($method === 'POST' || $method === 'PUT' || $method === 'DELETE' || $method === 'PATCH') {
+    if ($method === 'POST' || $method === 'PUT' || $method === 'DELETE') {
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
         if ($data !== null) {
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
@@ -36,8 +36,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = trim($_POST['email']);
     $password = trim($_POST['password']);
 
-    // Fetch user from Supabase including role_id and is_active status
-    $query = "users?email=eq.$email&select=user_id,email,password_hash,role_id,is_active";
+    // Fetch user from Supabase including role_id
+    $query = "users?email=eq.$email&select=user_id,email,password_hash,role_id";
     $users = supabaseRequest($query, "GET");
 
     if (!empty($users)) {
@@ -45,42 +45,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         // Verify password
         if (password_verify($password, $user['password_hash'])) {
-            // Check if user account is active
-            if (isset($user['is_active']) && !$user['is_active']) {
-                $deactivated_user = true;
-                error_log("Deactivated user attempted login: " . $user['email']); // Debug log
-                // Don't proceed with login, just show the modal
-                // No redirect, let the page render with the modal
-                // Don't execute the redirect logic below
-            } else {
-                $_SESSION['user_id'] = $user['user_id'];
-                $_SESSION['email'] = $user['email'];
-                $_SESSION['role_id'] = $user['role_id'];
+            $_SESSION['user_id'] = $user['user_id'];
+            $_SESSION['email'] = $user['email'];
+            $_SESSION['role_id'] = $user['role_id'];
 
-                error_log("User logged in - Role ID: " . $_SESSION['role_id']); // Debug log
+            error_log("User logged in - Role ID: " . $_SESSION['role_id']); // Debug log
 
-                // Update last_login_at timestamp
-                try {
-                    $currentTime = date('Y-m-d H:i:s');
-                    error_log("Attempting to update last_login_at to: " . $currentTime . " for user: " . $user['user_id']);
-                    
-                    $updateLoginTime = supabaseRequest("users?user_id=eq." . $user['user_id'], 'PATCH', [
-                        'last_login_at' => $currentTime
-                    ]);
-                    
-                    // Log the response for debugging
-                    error_log("Last login update response: " . json_encode($updateLoginTime));
-                    
-                    if (isset($updateLoginTime['data']) && !empty($updateLoginTime['data'])) {
-                        error_log("Successfully updated last_login_at for user: " . $user['user_id']);
-                    } else {
-                        error_log("Failed to update last_login_at: " . json_encode($updateLoginTime));
-                    }
-                } catch (Exception $e) {
-                    error_log("Error updating last_login_at: " . $e->getMessage());
-                }
-
-                // Redirect based on role
+            // Redirect based on role
             switch ($_SESSION['role_id']) {
                 case 1:
                     header("Location: Dashboards/dashboard-Inventory-System.php");
@@ -125,8 +96,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     error_log("Invalid role ID: " . $_SESSION['role_id']); // Debug log
                     header("Location: index.php");
             }
-                exit();
-            }
+            exit();
         } else {
             $error_message = "Invalid email or password.";
         }
@@ -143,10 +113,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Blood Management System</title>
-    <!-- Bootstrap CSS for Modal -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         /* General Reset */
         * {
@@ -555,35 +521,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     </style>
 </head>
 <body>
-    <!-- Deactivated User Modal -->
-    <?php if (isset($deactivated_user) && $deactivated_user): ?>
-    <div id="deactivatedModal" class="modal fade show" tabindex="-1" style="display: block; background-color: rgba(0,0,0,0.5);">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        Account Deactivated
-                    </h5>
-                </div>
-                <div class="modal-body text-center py-4">
-                    <div class="mb-3">
-                        <i class="fas fa-user-times text-danger" style="font-size: 3rem;"></i>
-                    </div>
-                    <h6 class="text-danger mb-3">You have been deactivated</h6>
-                    <p class="text-muted">Contact the Admin for reactivation</p>
-                </div>
-                <div class="modal-footer justify-content-center">
-                    <button type="button" class="btn btn-danger" onclick="redirectToLogin()">
-                        <i class="fas fa-sign-in-alt me-2"></i>
-                        Return to Login
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-    <?php endif; ?>
-
     <div class="login-container">
         <div class="login-form">
             <div class="system-title">
@@ -653,11 +590,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     </div>
 
     <script>
-        // Redirect to login page
-        function redirectToLogin() {
-            window.location.href = 'login.php';
-        }
-
         // Password visibility toggle
         function togglePassword() {
             const passwordInput = document.getElementById('password');
@@ -705,7 +637,5 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             }
         });
     </script>
-    <!-- Bootstrap JS for Modal -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

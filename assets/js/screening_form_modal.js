@@ -12,16 +12,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Centralized modal cleanup function
     function cleanupModalBackdrops() {
-        // Remove all modal backdrops
-        const backdrops = document.querySelectorAll('.modal-backdrop');
-        backdrops.forEach(backdrop => backdrop.remove());
-        
-        // Remove modal-open class and restore body styles
-        document.body.classList.remove('modal-open');
-        document.body.style.overflow = '';
-        document.body.style.paddingRight = '';
-        
-        console.log('Modal backdrops cleaned up');
+        // Only remove backdrops if no other modals are open
+        const otherModals = document.querySelectorAll('.modal.show:not(#screeningFormModal)');
+        if (otherModals.length === 0) {
+            // Remove all modal backdrops
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            backdrops.forEach(backdrop => backdrop.remove());
+            
+            // Remove modal-open class and restore body styles
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+            
+            console.log('Modal backdrops cleaned up');
+        }
     }
 
     // Centralized modal close function

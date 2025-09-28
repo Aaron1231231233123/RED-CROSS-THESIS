@@ -60,6 +60,7 @@ class PhysicalExaminationModal {
     }
     
     async openModal(screeningData) {
+        console.log('[PE DEBUG] openModal called with screeningData:', screeningData);
         this.screeningData = screeningData;
         this.resetForm();
         this.isReadonly = false;
@@ -74,12 +75,140 @@ class PhysicalExaminationModal {
         }
         
         const modalEl = document.getElementById('physicalExaminationModal');
+        console.log('[PE DEBUG] Modal element found:', modalEl);
+        
+        // CRITICAL FIX: Ensure modal is fully hidden before showing to prevent duplicate backdrops
+        try {
+            const existingInstance = bootstrap.Modal.getInstance(modalEl);
+            if (existingInstance) {
+                existingInstance.hide();
+                console.log('[PE DEBUG] Hid existing Bootstrap modal instance before showing.');
+            }
+            // Also ensure classes are removed manually as a fallback
+            modalEl.classList.remove('show');
+            modalEl.style.display = 'none';
+            modalEl.setAttribute('aria-hidden', 'true');
+            modalEl.removeAttribute('aria-modal');
+            modalEl.removeAttribute('role');
+            console.log('[PE DEBUG] Manually ensured modal element is hidden before showing.');
+        } catch(e) {
+            console.error('[PE DEBUG] Error ensuring modal is hidden before show:', e);
+        }
+        
         const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        console.log('[PE DEBUG] Bootstrap modal instance:', modal);
+        
+        // Check existing backdrops before showing
+        const existingBackdrops = document.querySelectorAll('.modal-backdrop');
+        console.log('[PE DEBUG] Existing backdrops before show:', existingBackdrops.length, existingBackdrops);
+        
+        // Ensure proper z-index before showing
+        try {
+            modalEl.style.zIndex = '1065';
+            const dlg = modalEl.querySelector('.modal-dialog');
+            if (dlg) dlg.style.zIndex = '1066';
+            console.log('[PE DEBUG] Set modal z-index: modal=1065, dialog=1066');
+        } catch(e) {
+            console.error('[PE DEBUG] Error setting z-index:', e);
+        }
+        
+        console.log('[PE DEBUG] About to call modal.show()');
         modal.show();
+        
+        // Monitor backdrop creation immediately after show
+        setTimeout(() => {
+            try {
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                console.log('[PE DEBUG] Backdrops after show (10ms):', backdrops.length, backdrops);
+                if (backdrops.length > 0) {
+                    // Set z-index for all backdrops to ensure proper layering
+                    backdrops.forEach((backdrop, index) => {
+                        backdrop.style.zIndex = '1064';
+                        console.log(`[PE DEBUG] Set backdrop ${index} z-index to 1064`);
+                    });
+                    // If duplicate backdrops exist, keep the last one and remove earlier ones
+                    if (backdrops.length > 1) {
+                        const toRemove = Array.from(backdrops).slice(0, -1);
+                        toRemove.forEach((el, idx) => { try { el.remove(); } catch(_) {} });
+                        console.log('[PE DEBUG] Removed duplicate backdrops:', toRemove.length);
+                    }
+                }
+            } catch(e) {
+                console.error('[PE DEBUG] Error in backdrop z-index fix:', e);
+            }
+        }, 10);
+        
+        // Additional monitoring
+        setTimeout(() => {
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            console.log('[PE DEBUG] Backdrops after show (100ms):', backdrops.length, backdrops);
+            backdrops.forEach((backdrop, index) => {
+                console.log(`[PE DEBUG] Backdrop ${index}: z-index=${backdrop.style.zIndex}, classList=${backdrop.classList.toString()}`);
+            });
+            // Dedupe again in case another listener added one late
+            if (backdrops.length > 1) {
+                const toRemove = Array.from(backdrops).slice(0, -1);
+                toRemove.forEach((el, idx) => { try { el.remove(); } catch(_) {} });
+                console.log('[PE DEBUG] Late removal of duplicate backdrops:', toRemove.length);
+            }
+        }, 100);
         
         this.currentStep = 1;
         this.updateProgressIndicator();
         this.showStep(1);
+        
+        // Add event listener to track when modal is actually shown
+        modalEl.addEventListener('shown.bs.modal', function() {
+            console.log('[PE DEBUG] Modal shown event triggered');
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            console.log('[PE DEBUG] Backdrops on shown event:', backdrops.length, backdrops);
+            backdrops.forEach((backdrop, index) => {
+                console.log(`[PE DEBUG] Shown backdrop ${index}: z-index=${backdrop.style.zIndex}, classList=${backdrop.classList.toString()}`);
+            });
+            
+            // Ensure all backdrops have correct z-index
+            backdrops.forEach((backdrop, index) => {
+                if (backdrop.style.zIndex !== '1064') {
+                    backdrop.style.zIndex = '1064';
+                    console.log(`[PE DEBUG] Fixed backdrop ${index} z-index to 1064 on shown event`);
+                }
+            });
+        }, { once: true });
+
+        // When PE modal closes (X button or otherwise), return to donor profile modal
+        const onHidden = () => {
+            try {
+                const dpEl = document.getElementById('donorProfileModal');
+                if (dpEl) {
+                    const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
+                    dp.show();
+                    // Refresh with last context if available
+                    setTimeout(() => {
+                        try {
+                            if (window.lastDonorProfileContext && typeof refreshDonorProfileModal === 'function') {
+                                refreshDonorProfileModal(window.lastDonorProfileContext);
+                            }
+                        } catch(_) {}
+                    }, 100);
+                }
+                // Clean backdrops only if no other modals are open
+                setTimeout(() => {
+                    try {
+                        const anyOpen = document.querySelector('.modal.show');
+                        if (!anyOpen) {
+                            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                            document.body.classList.remove('modal-open');
+                            document.body.style.overflow = '';
+                            document.body.style.paddingRight = '';
+                        }
+                    } catch(_) {}
+                }, 50);
+            } catch(_) {}
+            // Detach once
+            try { modalEl.removeEventListener('hidden.bs.modal', onHiddenCapture, true); } catch(_) {}
+        };
+        const onHiddenCapture = () => onHidden();
+        modalEl.addEventListener('hidden.bs.modal', onHiddenCapture, true);
         // Re-assert prefilled blood bag shortly after show to avoid race with layout/render
         try {
             const reapply = () => { if (this.formData && this.formData.__bagPrefill) { this.setBloodBagSelection(this.formData.__bagPrefill); } };
@@ -100,20 +229,37 @@ class PhysicalExaminationModal {
             if (donorId) {
                 // Try both sources. Prefer fallback (returns physical_exam) because it's what your console shows
                 const exam = await this.getLatestExamWithFallback(donorId) || await this.fetchExistingPhysicalExamination(donorId);
+                console.log('[PE DEBUG] Exam record found:', !!exam);
+                console.log('[PE DEBUG] Exam has physical_exam_id:', !!exam?.physical_exam_id);
                 const getState = (ex) => {
                     if (!ex) return '';
-                    const val = (ex.remarks != null ? ex.remarks : (ex.status != null ? ex.status : '')).toString();
-                    return String(val).trim().toLowerCase();
+                    // Prefer remarks (PE column). If absent, use pe_remarks from combined payload.
+                    // If still absent, use medical_approval (from combined/eligibility flow), then status.
+                    let source = 'remarks';
+                    let raw = ex.remarks;
+                    if (raw == null) { source = 'pe_remarks'; raw = ex.pe_remarks; }
+                    if (raw == null) { source = 'medical_approval'; raw = ex.medical_approval; }
+                    if (raw == null) { source = 'status'; raw = ex.status; }
+                    const norm = String(raw ?? '').trim().toLowerCase();
+                    console.log('[PE DEBUG] State source:', source, 'value:', norm);
+                    return norm;
                 };
                 const st = getState(exam);
-                // Treat any not-pending as terminal; be resilient to variants
-                const terminal = (!!st && st !== 'pending') || /accepted/.test(st) || /refus/.test(st) || /defer/.test(st) || /declin/.test(st);
+                console.log('[PE DEBUG] Exam data:', exam);
+                console.log('[PE DEBUG] remarks column value:', String(exam?.remarks ?? '').toLowerCase());
+                console.log('[PE DEBUG] All exam fields:', Object.keys(exam || {}));
+                console.log('[PE DEBUG] remarks field type:', typeof exam?.remarks, 'value:', exam?.remarks);
+                console.log('[PE DEBUG] Remarks value:', st);
+                // Treat any not-pending as terminal
+                const terminal = (!!st && st !== 'pending');
+                console.log('[PE DEBUG] Is terminal (should prefill):', terminal);
                 if (terminal || window.forcePhysicalReadonly) {
                     this.hideReviewStage();
                     this.applyReadonlyMode();
                 }
                 // Perform explicit prefill ONLY when terminal (readonly)
                 if (exam && (terminal || window.forcePhysicalReadonly)) {
+                    console.log('[PE DEBUG] Prefilling form with exam data');
                     const valOf = (keys) => {
                         for (const k of keys) { if (exam[k] != null && exam[k] !== '') return exam[k]; }
                         return '';
@@ -153,18 +299,18 @@ class PhysicalExaminationModal {
     }
 
     async getLatestExamWithFallback(donorId){
+        // Prefer the direct physical_examination row first so we get true PE columns
         try {
-            // Primary endpoint
-            const a = await makeApiCall(`../../assets/php_func/fetch_physical_examination_info.php?donor_id=${donorId}`);
-            if (a && a.success && a.data) return a.data;
+            const primary = await makeApiCall(`../api/get-physical-examination.php?donor_id=${donorId}`);
+            if (primary) {
+                if (primary.physical_exam) return primary.physical_exam;
+                if (primary.success && primary.data) return primary.data;
+            }
         } catch(_) {}
         try {
-            // Fallback endpoint used elsewhere in project
-            const b = await makeApiCall(`../api/get-physical-examination.php?donor_id=${donorId}`);
-            if (b) {
-                if (b.physical_exam) return b.physical_exam;
-                if (b.success && b.data) return b.data;
-            }
+            // Fallback: combined donor/screening/medical view
+            const fallback = await makeApiCall(`../../assets/php_func/fetch_physical_examination_info.php?donor_id=${donorId}`);
+            if (fallback && fallback.success && fallback.data) return fallback.data;
         } catch(_) {}
         return null;
     }
@@ -207,8 +353,8 @@ class PhysicalExaminationModal {
             setVal('physical-body-temp', exam.temperature || exam.body_temp || document.getElementById('physical-body-temp')?.value);
 
             // Blood bag type (robust normalization) — only prefill when terminal
-            const st = (exam.status || exam.remarks || '').toString().trim().toLowerCase();
-            const terminal = (!!st && st !== 'pending') || /accepted/.test(st) || /refus/.test(st) || /defer/.test(st) || /declin/.test(st);
+            const st = (exam.remarks || exam.pe_remarks || exam.medical_approval || exam.status || '').toString().trim().toLowerCase();
+            const terminal = (!!st && st !== 'pending');
             if (terminal || this.isReadonly || window.forcePhysicalReadonly) {
                 this.setBloodBagSelection(exam.blood_bag_type);
             } else {
@@ -720,8 +866,8 @@ class PhysicalExaminationModal {
                 data.screening_id = this.screeningData.screening_id;
             }
             data.status = 'Pending';
-            // Set remarks to Accepted upon physician approval/submit
-            data.remarks = 'Accepted';
+            // Set remarks to Pending upon physician approval/submit
+            data.remarks = 'Pending';
             data.is_accepted_examination = true;
             const result = await makeApiCall('../../assets/php_func/process_physical_examination.php', {
                 method: 'POST',
@@ -730,12 +876,27 @@ class PhysicalExaminationModal {
             });
             if (result && result.success) {
                 const donorId = (this.screeningData && (this.screeningData.donor_form_id || this.screeningData.donor_id)) || window.__peLastDonorId || null;
-                this.showAcceptedThenReturn(donorId, this.screeningData);
+                // Show minimalist success modal (no buttons), then redirect
+                await this.showTransientResultModal({
+                    title: 'Accepted',
+                    message: 'The donor is medically cleared for donation.',
+                    variant: 'success',
+                    durationMs: 1800
+                });
+                this.redirectToDonorProfile(donorId, this.screeningData);
             } else {
-                throw new Error((result && result.message) || 'Submission failed');
+                const errMsg = (result && (result.message || result.error)) || 'Submission failed';
+                await this.showTransientResultModal({
+                    title: 'Submission Error',
+                    message: errMsg,
+                    variant: 'error',
+                    durationMs: 2200
+                });
+                throw new Error(errMsg);
             }
         } catch (error) {
             console.error('Submission error:', error);
+            // Also toast for visibility
             this.showToast('Error: ' + error.message, 'error');
         } finally {
             if (submitBtn) {
@@ -745,78 +906,58 @@ class PhysicalExaminationModal {
         }
     }
 
-    showAcceptedThenReturn(donorId, screeningData) {
-        console.log('[PE] showAcceptedThenReturn called with donorId:', donorId);
-        try { 
-            window.__peSuccessActive = true; 
-            window.__mhSuccessActive = false; // Clear medical history success state
-        } catch(_) {}
-        try {
-            const modal = document.getElementById('physicalExaminationModal');
-            if (modal) {
-                const modalInstance = bootstrap.Modal.getInstance(modal);
-                if (modalInstance) {
-                    modalInstance.hide();
-                } else {
-                    // Fallback to manual closing
-                    modal.classList.remove('show');
-                    setTimeout(() => { modal.style.display = 'none'; }, 250);
+    // Create and show a simple, buttonless transient modal (returns after it hides)
+    showTransientResultModal({ title = '', message = '', variant = 'info', durationMs = 1500 } = {}) {
+        return new Promise((resolve) => {
+            try {
+                let el = document.getElementById('peTransientModal');
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'peTransientModal';
+                    el.className = 'modal fade';
+                    el.innerHTML = `
+                        <div class="modal-dialog modal-dialog-centered" style="max-width: 520px;">
+                            <div class="modal-content" style="border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+                                <div class="modal-header" id="peTransientHeader" style="background: #b22222; color: #fff;">
+                                    <h5 class="modal-title" id="peTransientTitle"></h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body" id="peTransientBody"></div>
+                            </div>
+                        </div>`;
+                    document.body.appendChild(el);
                 }
-            }
-        } catch(_) {}
-        if (donorId) {
-            try { 
-                window.lastDonorProfileContext = { donorId: String(donorId), screeningData: screeningData }; 
-                window.__peLastDonorId = String(donorId);
-            } catch(_) {}
-        }
-        const successEl = document.getElementById('physicalExamAcceptedModal');
-        if (!successEl) { 
-            this.reopenDonorProfileAfterSuccess(donorId, screeningData); 
-            return; 
-        }
-        const m = new bootstrap.Modal(successEl);
-        try {
-            successEl.style.zIndex = '20010';
-            const dlg = successEl.querySelector('.modal-dialog');
-            if (dlg) dlg.style.zIndex = '20011';
-            setTimeout(() => {
-                const backs = document.querySelectorAll('.modal-backdrop');
-                if (backs.length) backs[backs.length - 1].style.zIndex = '20005';
-            }, 10);
-        } catch(_) {}
-        
-        // Set up single finalize function to prevent duplicate calls
-        let finalized = false;
-        const finalize = () => { 
-            if (finalized) {
-                console.log('[PE] Finalize already called, skipping');
-                return;
-            }
-            finalized = true;
-            console.log('[PE] Finalizing success modal');
-            try { m.hide(); } catch(e) { console.warn('[PE] Error hiding modal:', e); } 
-            this.reopenDonorProfileAfterSuccess(donorId, screeningData); 
-        };
-        
-        // Listen for modal hidden event (user closes with X or outside click)
-        successEl.addEventListener('hidden.bs.modal', () => {
-            console.log('[PE] Success modal hidden event triggered');
-            finalize();
-        }, { once: true });
-        
-        // Auto-close after 3 seconds (only if not already finalized)
-        setTimeout(() => {
-            if (!finalized) {
-                console.log('[PE] Auto-closing success modal after 3 seconds');
-                finalize(); // Call finalize directly instead of m.hide()
-            }
-        }, 3000);
-        
-        m.show();
+                const titleEl = el.querySelector('#peTransientTitle');
+                const bodyEl = el.querySelector('#peTransientBody');
+                const headerEl = el.querySelector('#peTransientHeader');
+                if (titleEl) titleEl.textContent = title || '';
+                if (bodyEl) bodyEl.textContent = message || '';
+                if (headerEl) {
+                    // Simple variants
+                    headerEl.style.background = (variant === 'success') ? '#b22222' : (variant === 'error' ? '#8b0000' : '#6c757d');
+                }
+                const m = bootstrap.Modal.getOrCreateInstance(el, { backdrop: 'static', keyboard: true });
+                // Ensure on top of PE modal
+                try {
+                    el.style.zIndex = '20020';
+                    const dlg = el.querySelector('.modal-dialog');
+                    if (dlg) dlg.style.zIndex = '20021';
+                } catch(_) {}
+                // Auto hide after duration
+                el.addEventListener('shown.bs.modal', function onShow(){
+                    el.removeEventListener('shown.bs.modal', onShow);
+                    setTimeout(() => { try { m.hide(); } catch(_) {} }, Math.max(800, durationMs));
+                });
+                el.addEventListener('hidden.bs.modal', function onHidden(){
+                    el.removeEventListener('hidden.bs.modal', onHidden);
+                    resolve();
+                });
+                m.show();
+            } catch(_) { resolve(); }
+        });
     }
-
-    reopenDonorProfileAfterSuccess(donorId, screeningData) {
+    // Simplified redirect to donor profile (no reload)
+    redirectToDonorProfile(donorId, screeningData) {
         console.log('[PE] reopenDonorProfileAfterSuccess called with donorId:', donorId);
         try { 
             window.__peSuccessActive = false; 
@@ -831,12 +972,14 @@ class PhysicalExaminationModal {
                     if (modalInstance) modalInstance.hide();
                 } catch(_) {}
             });
-            // Remove all backdrops
-            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
-            // Reset body state
-            document.body.classList.remove('modal-open');
-            document.body.style.overflow = '';
-            document.body.style.paddingRight = '';
+            // Only remove backdrops if no other modals are open
+            const otherModals = document.querySelectorAll('.modal.show:not(#physicalExaminationModal)');
+            if (otherModals.length === 0) {
+                document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+            }
         } catch(_) {}
         
         // Store context for reopening
@@ -848,44 +991,24 @@ class PhysicalExaminationModal {
             } catch(_) {}
         }
         
-        // Use the same robust reopening system as medical history modal
-        console.log('[PE] Using robust reopening system like medical history modal');
-        
-        // Robust reopen with retries (same as medical history)
-        let attempts = 0;
-        const tryOpen = () => {
-            attempts++;
-            const donorId = (ctx && (ctx.donorId || (ctx.screeningData && (ctx.screeningData.donor_form_id || ctx.screeningData.donor_id))))
-                             || window.__peLastDonorId
-                             || (window.currentPhysicalExaminationData && window.currentPhysicalExaminationData.donor_id);
-            console.log('[PE] Reopen attempt', attempts, 'donorId=', donorId);
-            if (!donorId) return;
-            const dataArg = (ctx && ctx.screeningData) ? ctx.screeningData : { donor_form_id: donorId };
-            if (typeof window.openDonorProfileModal === 'function') { 
-                try { 
-                    window.openDonorProfileModal(dataArg); 
-                    console.log('[PE] Successfully reopened donor profile via openDonorProfileModal');
-                    return; 
-                } catch(err) { 
-                    console.warn('[PE] openDonorProfileModal error', err); 
-                } 
+        // Hide PE modal, then show donor profile directly
+        try { window.__peRedirecting = true; } catch(_) {}
+        try {
+            const pe = document.getElementById('physicalExaminationModal');
+            if (pe) {
+                const inst = bootstrap.Modal.getInstance(pe) || bootstrap.Modal.getOrCreateInstance(pe);
+                try { inst.hide(); } catch(_) {}
             }
-            if (typeof window.__origOpenDonorProfile === 'function') { 
-                try { 
-                    window.__origOpenDonorProfile(dataArg); 
-                    console.log('[PE] Successfully reopened donor profile via __origOpenDonorProfile');
-                    return; 
-                } catch(err) { 
-                    console.warn('[PE] __origOpenDonorProfile error', err); 
-                } 
-            }
-            if (this.forceShowDonorProfileElement()) { 
-                console.log('[PE] Forced Donor Profile element visible'); 
-                return; 
-            }
-            if (attempts < 20) setTimeout(tryOpen, 150);
-        };
-        setTimeout(tryOpen, 80);
+        } catch(_) {}
+        setTimeout(() => {
+            const dpEl = document.getElementById('donorProfileModal');
+            if (!dpEl) return;
+            const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
+            dp.show();
+            // Refresh content after show
+            setTimeout(() => { try { refreshDonorProfileModal(ctx); } catch(_) {} }, 120);
+            try { window.__peRedirecting = false; } catch(_) {}
+        }, 120);
     }
     
     forceShowDonorProfileElement() {
@@ -900,7 +1023,7 @@ class PhysicalExaminationModal {
             document.body.classList.add('modal-open');
             const backdrop = document.createElement('div');
             backdrop.className = 'modal-backdrop fade show';
-            backdrop.style.zIndex = '1040';
+            backdrop.style.zIndex = '1064';
             document.body.appendChild(backdrop);
             return true;
         } catch(_) {

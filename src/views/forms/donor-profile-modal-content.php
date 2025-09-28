@@ -319,37 +319,6 @@ if ($donor_info && isset($donor_info['birthdate'])) {
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
-.eligibility-section {
-    background: white;
-    border-radius: 10px;
-    padding: 25px;
-    margin-top: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.eligibility-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 25px;
-    align-items: end;
-}
-
-.eligibility-select {
-    padding: 12px 15px;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    font-size: 1rem;
-    background-color: white;
-    color: #495057;
-    width: 100%;
-    transition: border-color 0.2s;
-}
-
-.eligibility-select:focus {
-    outline: none;
-    border-color: #b22222;
-    box-shadow: 0 0 0 0.2rem rgba(178, 34, 34, 0.15);
-}
 
 @media (max-width: 768px) {
     .header-content {
@@ -365,15 +334,12 @@ if ($donor_info && isset($donor_info['birthdate'])) {
         grid-template-columns: 1fr;
     }
     
-    .eligibility-grid {
-        grid-template-columns: 1fr;
-    }
     
     .donor-profile-content {
         padding: 15px;
     }
     
-    .section-container, .donor-profile-header, .eligibility-section {
+    .section-container, .donor-profile-header {
         padding: 20px;
     }
 }
@@ -549,40 +515,22 @@ if ($donor_info && isset($donor_info['birthdate'])) {
         </table>
     </div>
 
-    <!-- Type of Donation & Eligibility Status Section -->
-    <div class="eligibility-section">
-        <div class="eligibility-grid">
-            <input type="hidden" id="dp-donor-id-flag" value="<?php echo htmlspecialchars($donor_id); ?>">
-            <input type="hidden" id="pe-remarks-flag" value="<?php echo htmlspecialchars(strtolower($physical_exam_info['remarks'] ?? '')); ?>">
-            <?php 
-                $peNeedsReview = isset($physical_exam_info['needs_review']) && (
-                    $physical_exam_info['needs_review'] === true ||
-                    $physical_exam_info['needs_review'] === 1 ||
-                    $physical_exam_info['needs_review'] === '1' ||
-                    (is_string($physical_exam_info['needs_review']) && in_array(strtolower(trim($physical_exam_info['needs_review'])), ['true','t','yes','y'], true))
-                );
-            ?>
-            <input type="hidden" id="pe-needs-review-flag" value="<?php echo $peNeedsReview ? '1' : '0'; ?>">
-            <div class="form-group">
-                <label class="form-label">Type of Donation</label>
-                <input type="text" class="form-input" value="<?php echo htmlspecialchars($screening_info['donation_type'] ?? 'N/A'); ?>" readonly>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Eligibility Status</label>
-                <?php 
-                    $mhApprovedFlag = ($medical_history_info && isset($medical_history_info['medical_approval']) && strtolower(trim($medical_history_info['medical_approval'])) === 'approved');
-                    // Backend gate: dropdown enabled only when PE remarks/status is Accepted
-                    $peRemarksForGate = strtolower(trim($physical_exam_info['remarks'] ?? ''));
-                    $peAcceptedFlag = ($peRemarksForGate === 'accepted');
-                    $eligibilityEnabled = ($mhApprovedFlag && $peAcceptedFlag);
-                ?>
-                <select class="eligibility-select" id="eligibilityStatus" <?php echo $eligibilityEnabled ? '' : 'disabled'; ?> data-enabled="<?php echo $eligibilityEnabled ? '1' : '0'; ?>">
-                    <option value="approve">Approve to Donate</option>
-                    <option value="defer">Defer</option>
-                    <option value="decline">Decline</option>
-                </select>
-            </div>
-        </div>
+    <!-- Hidden fields for functionality -->
+    <div style="display: none;">
+        <input type="hidden" id="dp-donor-id-flag" value="<?php echo htmlspecialchars($donor_id); ?>">
+        <input type="hidden" id="pe-remarks-flag" value="<?php echo htmlspecialchars(strtolower($physical_exam_info['remarks'] ?? '')); ?>">
+        <?php 
+            $peNeedsReview = isset($physical_exam_info['needs_review']) && (
+                $physical_exam_info['needs_review'] === true ||
+                $physical_exam_info['needs_review'] === 1 ||
+                $physical_exam_info['needs_review'] === '1' ||
+                (is_string($physical_exam_info['needs_review']) && in_array(strtolower(trim($physical_exam_info['needs_review'])), ['true','t','yes','y'], true))
+            );
+        ?>
+        <input type="hidden" id="pe-needs-review-flag" value="<?php echo $peNeedsReview ? '1' : '0'; ?>">
+        <!-- Default values: Type of Donation = "walk-in", Eligibility Status = "Approve to Donate" -->
+        <input type="hidden" id="default-donation-type" value="walk-in">
+        <input type="hidden" id="default-eligibility-status" value="approve">
     </div>
 </div>
 
@@ -590,68 +538,39 @@ if ($donor_info && isset($donor_info['birthdate'])) {
 <script>
     (function(){
         try {
-            // NUCLEAR OPTION: Completely override Bootstrap modal behavior
+            // Optimized modal behavior - only prevent problematic styles
             document.addEventListener('DOMContentLoaded', function() {
-                // Override Bootstrap's modal behavior before it can affect the page
-                const originalAddClass = Element.prototype.classList.add;
-                Element.prototype.classList.add = function(...classes) {
-                    if (classes.includes('modal-open')) {
-                        // Prevent modal-open class from being added to body
-                        return;
-                    }
-                    return originalAddClass.apply(this, classes);
-                };
-                
-                const originalSetAttribute = Element.prototype.setAttribute;
-                Element.prototype.setAttribute = function(name, value) {
-                    if (name === 'style' && this === document.body) {
-                        // Prevent body style changes
-                        if (value.includes('padding-right')) {
-                            value = value.replace(/padding-right[^;]*;?/g, '');
+                // Clean up any existing modal state only once on load
+                function initialCleanup() {
+                    try {
+                        // Only clean up if no modals are currently open
+                        const anyOpen = document.querySelector('.modal.show');
+                        if (!anyOpen) {
+                            document.body.classList.remove('modal-open');
+                            document.body.style.overflow = '';
+                            document.body.style.paddingRight = '';
+                            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
                         }
-                    }
-                    return originalSetAttribute.call(this, name, value);
-                };
-                
-                // Also prevent any existing modal-open class
-                if (document.body.classList.contains('modal-open')) {
-                    document.body.classList.remove('modal-open');
+                    } catch(_) {}
                 }
                 
-                // Force dashboard header positioning
-                const dashboardHeader = document.querySelector('.dashboard-home-header');
-                if (dashboardHeader) {
-                    dashboardHeader.style.position = 'static';
-                    dashboardHeader.style.left = 'auto';
-                    dashboardHeader.style.right = 'auto';
-                    dashboardHeader.style.top = 'auto';
-                    dashboardHeader.style.zIndex = 'auto';
-                }
+                // Initial cleanup only
+                initialCleanup();
+                
+                // Clean up on page unload
+                window.addEventListener('beforeunload', function() {
+                    try {
+                        document.body.classList.remove('modal-open');
+                        document.body.style.overflow = '';
+                        document.body.style.paddingRight = '';
+                        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                    } catch(_) {}
+                });
             });
             
-            const select = document.getElementById('eligibilityStatus');
             const proceedBtn = document.getElementById('proceedToPhysicalBtn');
             const mhApproved = <?php echo $mhApprovedFlag ? 'true' : 'false'; ?>;
             const peAccepted = <?php echo $peAcceptedFlag ? 'true' : 'false'; ?>;
-
-            function showRequirementAlert() {
-                const message = 'Eligibility Status can be set only when:\n\n' +
-                                '• Medical History is Approved, and\n' +
-                                '• Physical Examination status is Pending.';
-                if (window.customConfirm) {
-                    window.customConfirm(message, function(){});
-                } else {
-                    alert(message);
-                }
-            }
-
-            if (select) {
-                // Disable unless MH Approved and PE Accepted
-                if (!peAccepted || !mhApproved) {
-                    select.disabled = true;
-                }
-                select.title = 'Enabled only when Medical is Approved and Physical Examination is Accepted';
-            }
             if (proceedBtn) {
                 // Only allow Confirm when PE is Accepted (backend rule)
                 if (!peAccepted) {

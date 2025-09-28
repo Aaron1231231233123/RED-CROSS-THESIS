@@ -337,6 +337,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             'donor_id' => $donor_id, // Use donor_id (not donor_form_id) for physical_examination table
                             'screening_id' => $screening_id, // Use the actual screening_id UUID from screening form response
                             'needs_review' => true,
+                            'remarks' => 'Pending', // Set remarks to Pending for enum compatibility
                             'updated_at' => date('Y-m-d H:i:s') // Only updated_at for every transaction
                         ];
                         

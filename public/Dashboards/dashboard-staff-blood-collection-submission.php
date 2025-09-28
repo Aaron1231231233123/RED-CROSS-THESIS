@@ -534,8 +534,8 @@ foreach ($display_records as $index => $record) {
             table-layout: fixed;
         }
         
-        .dashboard-staff-tables th:nth-child(8),
-        .dashboard-staff-tables td:nth-child(8) {
+        .dashboard-staff-tables th:nth-child(7),
+        .dashboard-staff-tables td:nth-child(7) {
             width: 120px;
         }
 
@@ -1812,7 +1812,6 @@ foreach ($display_records as $index => $record) {
                                     <th>Donor ID</th>
                                     <th>Surname</th>
                                     <th>First Name</th>
-                                    <th>Screening Status</th>
                                     <th>Collection Status</th>
                                     <th>Phlebotomist</th>
                                     <th style="text-align: center;">Action</th>
@@ -1936,9 +1935,6 @@ foreach ($display_records as $index => $record) {
                                                 </button>";
                                         }
                                         
-                                        // Screening status is always completed since these are physical examination records
-                                        $screening_status = '<span class="badge bg-success">Completed</span>';
-                                        
                                         // Determine collection status - simplified logic to match action buttons
                                         if ($needs_review) {
                                             // If needs_review is true, show "Not Started" (matches Collect button)
@@ -1975,7 +1971,6 @@ foreach ($display_records as $index => $record) {
                                             <td>" . htmlspecialchars($display_number) . "</td>
                                             <td>{$surname}</td>
                                             <td>{$first_name}</td>
-                                            <td>{$screening_status}</td>
                                             <td>{$collection_status}</td>
                                             <td>{$phlebotomist}</td>
                                             <td style=\"text-align: center;\">
@@ -1985,7 +1980,7 @@ foreach ($display_records as $index => $record) {
                                         $counter++;
                                     }
                                 } else {
-                                    echo '<tr><td colspan="8" class="text-center text-muted">No records found for current filter</td></tr>';
+                                    echo '<tr><td colspan="7" class="text-center text-muted">No records found for current filter</td></tr>';
                                 }
                                 ?>
                             </tbody>

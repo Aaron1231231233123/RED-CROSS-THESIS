@@ -118,17 +118,21 @@ if ($http_code === 200) {
         // Hard teardown utility made available to the dashboard as well
         function hardTeardownOverlays() {
             try {
-                // Remove all Bootstrap backdrops
-                document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); });
-                // Remove any custom confirm/info overlays
-                const sc = document.getElementById('simpleCustomModal');
-                if (sc) sc.remove();
-                const sci = document.getElementById('simpleCustomModalInfo');
-                if (sci) sci.remove();
-                // Reset body state
-                document.body.classList.remove('modal-open');
-                document.body.style.overflow = '';
-                document.body.style.paddingRight = '';
+                // Only remove backdrops if no other modals are currently open
+                const otherModals = document.querySelectorAll('.modal.show:not(#medicalHistoryModal)');
+                if (otherModals.length === 0) {
+                    // Remove all Bootstrap backdrops
+                    document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); });
+                    // Reset body state
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+                }
+                // Remove any custom confirm/info overlays (these are always safe to remove)
+                ['simpleCustomModal', 'simpleCustomModalInfo'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.remove();
+                });
                 // Force-hide any other Bootstrap modals that might still be flagged visible
                 document.querySelectorAll('.modal.show').forEach(function(m){
                     m.classList.remove('show');
@@ -145,16 +149,14 @@ if ($http_code === 200) {
             try {
                 const el = e.target.closest('button, a');
                 if (!el) return;
+                
                 const txt = (el.textContent || '').trim().toLowerCase();
                 const isApprove = el.classList.contains('approve-medical-history-btn') || txt === 'approve' || txt === 'approve medical history';
                 const isDecline = el.classList.contains('decline-medical-history-btn') || txt === 'decline';
-                if (isApprove || isDecline) {
-                    // Defer slightly to allow any immediate UI updates, then teardown overlays
-                    setTimeout(hardTeardownOverlays, 50);
-                }
-                // Any close button inside MH
                 const isDismiss = el.hasAttribute('data-bs-dismiss') && el.getAttribute('data-bs-dismiss') === 'modal';
-                if (isDismiss) {
+                
+                if (isApprove || isDecline || isDismiss) {
+                    // Defer slightly to allow any immediate UI updates, then teardown overlays
                     setTimeout(hardTeardownOverlays, 50);
                 }
             } catch(_) {}
@@ -169,13 +171,17 @@ if ($http_code === 200) {
             } catch(_) {}
         }, { capture: true });
 
-        // When the MH modal shows, dedupe backdrops (keep last Bootstrap one)
+        // When the MH modal shows, only dedupe backdrops if no other modals are open
         document.addEventListener('shown.bs.modal', function(ev){
             try {
                 if (ev && ev.target && ev.target.id === 'medicalHistoryModal') {
-                    const backs = Array.from(document.querySelectorAll('.modal-backdrop'));
-                    if (backs.length > 1) backs.slice(0, -1).forEach(function(b){ b.remove(); });
-                    document.body.classList.add('modal-open');
+                    // Only dedupe backdrops if no other modals are currently open
+                    const otherModals = document.querySelectorAll('.modal.show:not(#medicalHistoryModal)');
+                    if (otherModals.length === 0) {
+                        const backs = Array.from(document.querySelectorAll('.modal-backdrop'));
+                        if (backs.length > 1) backs.slice(0, -1).forEach(function(b){ b.remove(); });
+                        document.body.classList.add('modal-open');
+                    }
                 }
             } catch(_) {}
         }, { capture: true });
