@@ -33,17 +33,20 @@ try {
     if (!$useCache) {
         switch ($status) {
         case 'pending':
+            $donations = []; // Clear donations array first
             include_once 'module/donation_pending.php';
             $donations = $pendingDonations ?? [];
             $pageTitle = "Pending Donations";
             break;
         case 'approved':
+            $donations = []; // Clear donations array first
             include_once 'module/donation_approved.php';
             $donations = $approvedDonations ?? [];
             $pageTitle = "Approved Donations";
             break;
         case 'declined':
         case 'deferred':
+            $donations = []; // Clear donations array first
             include_once 'module/donation_declined.php';
             $donations = $declinedDonations ?? [];
             $pageTitle = "Declined/Deferred Donations";
@@ -1445,10 +1448,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             $statusClass = '';
                                             $displayStatus = $status;
                                             
-                                            // PRIORITY CHECK: Look for ANY decline/deferral status anywhere in the workflow
-                                            // Use the same logic as the donor information modal for consistency
-                                            $donorId = $donation['donor_id'] ?? null;
-                                            if ($donorId) {
+                                            // Only run status determination logic for 'all' status or when status is not specifically set
+                                            // Skip this logic when using specific modules (approved, declined, pending) as they already have correct status
+                                            $filterStatus = $_GET['status'] ?? 'all';
+                                            if ($filterStatus === 'all') {
+                                                // PRIORITY CHECK: Look for ANY decline/deferral status anywhere in the workflow
+                                                // Use the same logic as the donor information modal for consistency
+                                                $donorId = $donation['donor_id'] ?? null;
+                                                if ($donorId) {
                                                 $hasDeclineDeferStatus = false;
                                                 $declineDeferType = '';
                                                 
@@ -1593,8 +1600,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                     $physicalHttpCode = curl_getinfo($physicalCurl, CURLINFO_HTTP_CODE);
                                                     curl_close($physicalCurl);
                                                     
-                                                    // Check Interviewer Section (Medical History + Initial Screening)
-                                                    $interviewerSectionCompleted = false;
+                                                    // PENDING STATUS DETERMINATION LOGIC (Same as donation_pending.php)
+                                                    // Based on user specifications for 3 pending statuses
+                                                    
+                                                    // 1. PENDING (SCREENING) - New donors or MH + Initial Screening not completed
                                                     $medicalHistoryCompleted = false;
                                                     $screeningCompleted = false;
                                                     
@@ -1622,41 +1631,71 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                         }
                                                     }
                                                     
-                                                    // Interviewer section is completed if both MH and Screening are completed
-                                                    $interviewerSectionCompleted = $medicalHistoryCompleted && $screeningCompleted;
-                                                    
-                                                    // Check Physician Section (Medical History + Physical Examination)
-                                                    $physicianSectionCompleted = false;
-                                                    $physicalExaminationCompleted = false;
-                                                    
-                                                    // Check Physical Examination completion
-                                                    if ($physicalHttpCode === 200) {
-                                                        $physicalData = json_decode($physicalResponse, true) ?: [];
-                                                        if (!empty($physicalData)) {
-                                                            $physNeeds = $physicalData[0]['needs_review'] ?? null;
-                                                            $remarks = $physicalData[0]['remarks'] ?? '';
-                                                            if ($physNeeds !== true && !empty($remarks) && 
-                                                                !in_array($remarks, ['Pending', 'Temporarily Deferred', 'Permanently Deferred', 'Declined', 'Refused'])) {
-                                                                $physicalExaminationCompleted = true;
+                                                    // If MH and Initial Screening are not both completed -> Pending (Screening)
+                                                    if (!$medicalHistoryCompleted || !$screeningCompleted) {
+                                                        $status = 'Pending (Screening)';
+                                                    } else {
+                                                        // 2. PENDING (EXAMINATION) - MH approval and Physical Examination process
+                                                        $physicalExaminationCompleted = false;
+                                                        
+                                                        // Check Physical Examination completion
+                                                        if ($physicalHttpCode === 200) {
+                                                            $physicalData = json_decode($physicalResponse, true) ?: [];
+                                                            if (!empty($physicalData)) {
+                                                                $physNeeds = $physicalData[0]['needs_review'] ?? null;
+                                                                $remarks = $physicalData[0]['remarks'] ?? '';
+                                                                if ($physNeeds !== true && !empty($remarks) && 
+                                                                    !in_array($remarks, ['Pending', 'Temporarily Deferred', 'Permanently Deferred', 'Declined', 'Refused'])) {
+                                                                    $physicalExaminationCompleted = true;
+                                                                }
+                                                            }
+                                                        }
+                                                        
+                                                        // If Physical Examination is not completed -> Pending (Examination)
+                                                        if (!$physicalExaminationCompleted) {
+                                                            $status = 'Pending (Examination)';
+                                                        } else {
+                                                            // 3. PENDING (COLLECTION) - Blood Collection Status is "Yet to be collected"
+                                                            $bloodCollectionCompleted = false;
+                                                            
+                                                            // Check if blood collection is completed
+                                                            $collectionCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?donor_id=eq.' . $donorId . '&select=needs_review,collection_status&order=created_at.desc&limit=1');
+                                                            curl_setopt($collectionCurl, CURLOPT_RETURNTRANSFER, true);
+                                                            curl_setopt($collectionCurl, CURLOPT_HTTPHEADER, [
+                                                                'apikey: ' . SUPABASE_API_KEY,
+                                                                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                                                'Content-Type: application/json'
+                                                            ]);
+                                                            $collectionResponse = curl_exec($collectionCurl);
+                                                            $collectionHttpCode = curl_getinfo($collectionCurl, CURLINFO_HTTP_CODE);
+                                                            curl_close($collectionCurl);
+                                                            
+                                                            if ($collectionHttpCode === 200) {
+                                                                $collectionData = json_decode($collectionResponse, true) ?: [];
+                                                                if (!empty($collectionData)) {
+                                                                    $collNeeds = $collectionData[0]['needs_review'] ?? null;
+                                                                    $collectionStatus = $collectionData[0]['collection_status'] ?? '';
+                                                                    if ($collNeeds !== true && !empty($collectionStatus) && 
+                                                                        !in_array($collectionStatus, ['Pending', 'Incomplete', 'Failed', 'Yet to be collected'])) {
+                                                                        $bloodCollectionCompleted = true;
+                                                                    }
+                                                                }
+                                                            }
+                                                            
+                                                            if ($bloodCollectionCompleted) {
+                                                                // All stages completed successfully - donor is approved
+                                                                $status = 'Approved';
+                                                            } else {
+                                                                // Blood collection is "Yet to be collected" -> Pending (Collection)
+                                                                $status = 'Pending (Collection)';
                                                             }
                                                         }
                                                     }
-                                                    
-                                                    // Physician section is completed if both MH and Physical Examination are completed
-                                                    $physicianSectionCompleted = $medicalHistoryCompleted && $physicalExaminationCompleted;
-                                                    
-                                                    // Determine status based on section completion
-                                                    if (!$interviewerSectionCompleted) {
-                                                        // Interviewer section not completed - MH and/or Initial Screening pending
-                                                        $status = 'Pending (Screening)';
-                                                    } elseif (!$physicianSectionCompleted) {
-                                                        // Interviewer section completed but Physician section not completed - MH and/or Physical Examination pending
-                                                        $status = 'Pending (Examination)';
-                                                    } else {
-                                                        // Both sections completed - ready for collection
-                                                        $status = 'Pending (Collection)';
-                                                    }
                                                 }
+                                            }
+                                            } else {
+                                                // For specific modules (approved, declined, pending), use the status from the module
+                                                // The status is already correctly set by the module
                                             }
                                             
                                             // Normalize status display - map various statuses to standard ones

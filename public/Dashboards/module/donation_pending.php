@@ -29,46 +29,59 @@ try {
         }
     }
     
-    // OPTIMIZATION 2: Fetch minimal related process tables to compute current pending status
-    // Include needs_review flags from each stage to drive pending status logic
-    $screeningResponse = supabaseRequest("screening_form?select=screening_id,donor_form_id,needs_review,created_at");
-    $medicalResponse   = supabaseRequest("medical_history?select=donor_id,needs_review,updated_at");
-    $physicalResponse  = supabaseRequest("physical_examination?select=donor_id,needs_review,created_at");
-    $collectionResponse = supabaseRequest("blood_collection?select=screening_id,needs_review,start_time");
+    // OPTIMIZATION 2: Fetch related process tables with status fields for accurate status determination
+    // Include status fields from each stage to determine accurate pending status
+    $screeningResponse = supabaseRequest("screening_form?select=screening_id,donor_form_id,needs_review,disapproval_reason,created_at");
+    $medicalResponse   = supabaseRequest("medical_history?select=donor_id,needs_review,medical_approval,updated_at");
+    $physicalResponse  = supabaseRequest("physical_examination?select=donor_id,needs_review,remarks,created_at");
+    $collectionResponse = supabaseRequest("blood_collection?select=screening_id,needs_review,collection_status,start_time");
 
-    // Build lookup maps
+    // Build lookup maps with status fields
     $screeningByDonorId = [];
     if (isset($screeningResponse['data']) && is_array($screeningResponse['data'])) {
         foreach ($screeningResponse['data'] as $row) {
             if (!empty($row['donor_form_id'])) {
                 $screeningByDonorId[$row['donor_form_id']] = [
                     'screening_id' => $row['screening_id'] ?? null,
-                    'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null
+                    'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
+                    'disapproval_reason' => $row['disapproval_reason'] ?? null
                 ];
             }
         }
     }
-    $physicalByDonorId = [];
-    $medicalNeedsByDonorId = [];
+    
+    $medicalByDonorId = [];
     if (isset($medicalResponse['data']) && is_array($medicalResponse['data'])) {
         foreach ($medicalResponse['data'] as $row) {
             if (!empty($row['donor_id'])) {
-                $medicalNeedsByDonorId[$row['donor_id']] = isset($row['needs_review']) ? (bool)$row['needs_review'] : null;
+                $medicalByDonorId[$row['donor_id']] = [
+                    'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
+                    'medical_approval' => $row['medical_approval'] ?? null
+                ];
             }
         }
     }
+    
+    $physicalByDonorId = [];
     if (isset($physicalResponse['data']) && is_array($physicalResponse['data'])) {
         foreach ($physicalResponse['data'] as $row) {
             if (!empty($row['donor_id'])) {
-                $physicalByDonorId[$row['donor_id']] = isset($row['needs_review']) ? (bool)$row['needs_review'] : null;
+                $physicalByDonorId[$row['donor_id']] = [
+                    'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
+                    'remarks' => $row['remarks'] ?? null
+                ];
             }
         }
     }
+    
     $collectionByScreeningId = [];
     if (isset($collectionResponse['data']) && is_array($collectionResponse['data'])) {
         foreach ($collectionResponse['data'] as $row) {
             if (!empty($row['screening_id'])) {
-                $collectionByScreeningId[$row['screening_id']] = isset($row['needs_review']) ? (bool)$row['needs_review'] : null;
+                $collectionByScreeningId[$row['screening_id']] = [
+                    'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
+                    'collection_status' => $row['collection_status'] ?? null
+                ];
             }
         }
     }
@@ -184,11 +197,10 @@ try {
                     continue; // Skip this donor - they have a final decline/deferral status
                 }
                 
-                // ACCURATE STATUS DETERMINATION BASED ON SECTION COMPLETION
-                // Use the same logic as the donor information modal for consistency
+                // PENDING STATUS DETERMINATION LOGIC
+                // Based on user specifications for 3 pending statuses
                 
-                // Check Interviewer Section (Medical History + Initial Screening)
-                $interviewerSectionCompleted = false;
+                // 1. PENDING (SCREENING) - New donors or MH + Initial Screening not completed
                 $medicalHistoryCompleted = false;
                 $screeningCompleted = false;
                 
@@ -198,7 +210,8 @@ try {
                     if (is_array($medRecord)) {
                         $medicalApproval = $medRecord['medical_approval'] ?? '';
                         $medNeeds = $medRecord['needs_review'] ?? null;
-                        // Medical History is completed if it has approval status and doesn't need review
+                        // Medical History is completed if it has approval status (Approved or Not Approved)
+                        // and doesn't need review
                         if (in_array($medicalApproval, ['Approved', 'Not Approved']) && $medNeeds !== true) {
                             $medicalHistoryCompleted = true;
                         }
@@ -212,46 +225,95 @@ try {
                         $screenNeeds = $screen['needs_review'] ?? null;
                         $disapprovalReason = $screen['disapproval_reason'] ?? '';
                         // Screening is completed if it doesn't need review and has no disapproval reason
+                        // (disapproval_reason being empty means it was approved)
                         if ($screenNeeds !== true && empty($disapprovalReason)) {
                             $screeningCompleted = true;
                         }
                     }
                 }
                 
-                // Interviewer section is completed if both MH and Screening are completed
-                $interviewerSectionCompleted = $medicalHistoryCompleted && $screeningCompleted;
-                
-                // Check Physician Section (Medical History + Physical Examination)
-                $physicianSectionCompleted = false;
-                $physicalExaminationCompleted = false;
-                
-                // Check Physical Examination completion
-                if (isset($physicalByDonorId[$donorId])) {
-                    $phys = $physicalByDonorId[$donorId];
-                    if (is_array($phys)) {
-                        $physNeeds = $phys['needs_review'] ?? null;
-                        $remarks = $phys['remarks'] ?? '';
-                        // Physical examination is completed if it doesn't need review and has valid remarks
-                        if ($physNeeds !== true && !empty($remarks) && 
-                            !in_array($remarks, ['Pending', 'Temporarily Deferred', 'Permanently Deferred', 'Declined', 'Refused'])) {
-                            $physicalExaminationCompleted = true;
+                // If MH and Initial Screening are not both completed -> Pending (Screening)
+                if (!$medicalHistoryCompleted || !$screeningCompleted) {
+                    $statusLabel = 'Pending (Screening)';
+                } else {
+                    // 2. PENDING (EXAMINATION) - MH approval and Physical Examination process
+                    $physicalExaminationCompleted = false;
+                    
+                    // Check Physical Examination completion
+                    if (isset($physicalByDonorId[$donorId])) {
+                        $phys = $physicalByDonorId[$donorId];
+                        if (is_array($phys)) {
+                            $physNeeds = $phys['needs_review'] ?? null;
+                            $remarks = $phys['remarks'] ?? '';
+                            // Physical examination is completed if it doesn't need review and has valid remarks
+                            // Valid remarks include: 'Accepted', 'Approved', 'Completed', etc.
+                            // Invalid remarks include: 'Pending', 'Temporarily Deferred', 'Permanently Deferred', 'Declined', 'Refused'
+                            if ($physNeeds !== true && !empty($remarks) && 
+                                !in_array($remarks, ['Pending', 'Temporarily Deferred', 'Permanently Deferred', 'Declined', 'Refused'])) {
+                                $physicalExaminationCompleted = true;
+                            }
                         }
                     }
-                }
-                
-                // Physician section is completed if both MH and Physical Examination are completed
-                $physicianSectionCompleted = $medicalHistoryCompleted && $physicalExaminationCompleted;
-                
-                // Determine status based on section completion
-                if (!$interviewerSectionCompleted) {
-                    // Interviewer section not completed - MH and/or Initial Screening pending
-                    $statusLabel = 'Pending (Screening)';
-                } elseif (!$physicianSectionCompleted) {
-                    // Interviewer section completed but Physician section not completed - MH and/or Physical Examination pending
-                    $statusLabel = 'Pending (Examination)';
-                } else {
-                    // Both sections completed - ready for collection
-                    $statusLabel = 'Pending (Collection)';
+                    
+                    // If Physical Examination is not completed -> Pending (Examination)
+                    if (!$physicalExaminationCompleted) {
+                        $statusLabel = 'Pending (Examination)';
+                    } else {
+                        // 3. PENDING (COLLECTION) - Blood Collection Status is "Yet to be collected"
+                        $bloodCollectionCompleted = false;
+                        
+                        // First check if we have collection data in our lookup
+                        $screeningId = null;
+                        if (isset($screeningByDonorId[$donorId])) {
+                            $screeningId = $screeningByDonorId[$donorId]['screening_id'] ?? null;
+                        }
+                        
+                        if ($screeningId && isset($collectionByScreeningId[$screeningId])) {
+                            $collectionData = $collectionByScreeningId[$screeningId];
+                            $collNeeds = $collectionData['needs_review'] ?? null;
+                            $collectionStatus = $collectionData['collection_status'] ?? '';
+                            
+                            // Blood collection is completed if it doesn't need review and has a valid status
+                            // Valid statuses: 'Completed', 'Success', 'Approved', etc.
+                            // Invalid statuses: 'Pending', 'Incomplete', 'Failed', 'Yet to be collected'
+                            if ($collNeeds !== true && !empty($collectionStatus) && 
+                                !in_array($collectionStatus, ['Pending', 'Incomplete', 'Failed', 'Yet to be collected'])) {
+                                $bloodCollectionCompleted = true;
+                            }
+                        } else {
+                            // Fallback: Check blood collection directly if not in lookup
+                            $collectionCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?donor_id=eq.' . $donorId . '&select=needs_review,collection_status&order=created_at.desc&limit=1');
+                            curl_setopt($collectionCurl, CURLOPT_RETURNTRANSFER, true);
+                            curl_setopt($collectionCurl, CURLOPT_HTTPHEADER, [
+                                'apikey: ' . SUPABASE_API_KEY,
+                                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                'Content-Type: application/json'
+                            ]);
+                            $collectionResponse = curl_exec($collectionCurl);
+                            $collectionHttpCode = curl_getinfo($collectionCurl, CURLINFO_HTTP_CODE);
+                            curl_close($collectionCurl);
+                            
+                            if ($collectionHttpCode === 200) {
+                                $collectionData = json_decode($collectionResponse, true) ?: [];
+                                if (!empty($collectionData)) {
+                                    $collNeeds = $collectionData[0]['needs_review'] ?? null;
+                                    $collectionStatus = $collectionData[0]['collection_status'] ?? '';
+                                    if ($collNeeds !== true && !empty($collectionStatus) && 
+                                        !in_array($collectionStatus, ['Pending', 'Incomplete', 'Failed', 'Yet to be collected'])) {
+                                        $bloodCollectionCompleted = true;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if ($bloodCollectionCompleted) {
+                            // All stages completed successfully - donor is approved (should not appear in pending)
+                            continue; // Skip this donor - they're approved, not pending
+                        } else {
+                            // Blood collection is "Yet to be collected" -> Pending (Collection)
+                            $statusLabel = 'Pending (Collection)';
+                        }
+                    }
                 }
             }
 

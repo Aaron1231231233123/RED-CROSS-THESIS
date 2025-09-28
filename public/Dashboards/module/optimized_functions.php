@@ -137,8 +137,10 @@ function addPerformanceHeaders($executionTime, $recordCount, $moduleName) {
     // Performance logging
     error_log("$moduleName - Records found: $recordCount in " . round($executionTime, 3) . " seconds");
     
-    // Add caching headers for browser caching
-    header('Cache-Control: public, max-age=300'); // Cache for 5 minutes
-    header('Expires: ' . gmdate('D, d M Y H:i:s \G\M\T', time() + 300));
+    // Only add headers if they haven't been sent yet
+    if (!headers_sent()) {
+        header('Cache-Control: public, max-age=300'); // Cache for 5 minutes
+        header('Expires: ' . gmdate('D, d M Y H:i:s \G\M\T', time() + 300));
+    }
 }
 ?>
