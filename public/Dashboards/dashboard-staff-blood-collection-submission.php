@@ -1748,9 +1748,6 @@ foreach ($display_records as $index => $record) {
                 <h4 class="header-title">Phlebotomist Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
             </div>
             <div class="header-right">
-                <button class="register-btn" onclick="showConfirmationModal()">
-                    Register Donor
-                </button>
                 <a href="../../assets/php_func/logout.php" class="logout-btn">
                     <i class="fas fa-sign-out-alt"></i> Logout
                 </a>

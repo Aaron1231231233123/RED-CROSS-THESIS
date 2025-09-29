@@ -185,7 +185,8 @@ function handleApproveClick(e) {
                         try { mh.hide(); } catch(_) {}
                         setTimeout(() => {
                             try { mhEl.classList.remove('show'); mhEl.style.display = 'none'; mhEl.setAttribute('aria-hidden','true'); } catch(_) {}
-                            try { document.querySelectorAll('.modal-backdrop').forEach(b => b.remove()); } catch(_) {}
+                            // Avoid manual backdrop removal; Bootstrap handles this
+                            try { /* no-op */ } catch(_) {}
                             try { document.body.classList.remove('modal-open'); document.body.style.overflow = ''; document.body.style.paddingRight = ''; } catch(_) {}
                         }, 40);
                     }
@@ -1439,7 +1440,7 @@ function showConfirmApproveModal(onConfirm) {
                     // Hard cleanup to ensure it's fully closed
                     setTimeout(() => {
                         try { mhEl.classList.remove('show'); mhEl.style.display = 'none'; mhEl.setAttribute('aria-hidden','true'); } catch(_) {}
-                        try { document.querySelectorAll('.modal-backdrop').forEach(b => b.remove()); } catch(_) {}
+                        try { /* keep backdrop for other modals if present */ } catch(_) {}
                         try { document.body.classList.remove('modal-open'); document.body.style.overflow = ''; document.body.style.paddingRight = ''; } catch(_) {}
                     }, 40);
                 }
@@ -1737,7 +1738,7 @@ function showApprovedThenReturn(donorId, screeningData) {
             }
         });
         // Remove all backdrops so success gets a fresh, topmost one
-        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+        // Do not force-remove all backdrops; rely on Bootstrap lifecycle
         // Make sure body is ready for one active modal
         document.body.classList.add('modal-open');
         document.body.style.overflow = 'hidden';
@@ -1778,7 +1779,7 @@ function showApprovedThenReturn(donorId, screeningData) {
                 }
             });
             // Remove all backdrops
-            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+            // Keep any active backdrops; don't remove globally
             document.body.classList.remove('modal-open');
             document.body.style.overflow = '';
             document.body.style.paddingRight = '';

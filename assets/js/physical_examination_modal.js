@@ -65,6 +65,15 @@ class PhysicalExaminationModal {
         this.resetForm();
         this.isReadonly = false;
         
+        // Ensure any parent modal (e.g., donor profile) is closed before showing PE to avoid stacked backdrops
+        try {
+            const dpEl = document.getElementById('donorProfileModal');
+            if (dpEl && dpEl.classList.contains('show')) {
+                const dpInst = bootstrap.Modal.getInstance(dpEl) || bootstrap.Modal.getOrCreateInstance(dpEl, { backdrop: 'static', keyboard: false });
+                try { dpInst.hide(); } catch(_) {}
+            }
+        } catch(_) {}
+
         // Pre-populate donor information
         if (screeningData) {
             document.getElementById('physical-donor-id').value = screeningData.donor_form_id || '';
@@ -77,81 +86,13 @@ class PhysicalExaminationModal {
         const modalEl = document.getElementById('physicalExaminationModal');
         console.log('[PE DEBUG] Modal element found:', modalEl);
         
-        // CRITICAL FIX: Ensure modal is fully hidden before showing to prevent duplicate backdrops
-        try {
-            const existingInstance = bootstrap.Modal.getInstance(modalEl);
-            if (existingInstance) {
-                existingInstance.hide();
-                console.log('[PE DEBUG] Hid existing Bootstrap modal instance before showing.');
-            }
-            // Also ensure classes are removed manually as a fallback
-            modalEl.classList.remove('show');
-            modalEl.style.display = 'none';
-            modalEl.setAttribute('aria-hidden', 'true');
-            modalEl.removeAttribute('aria-modal');
-            modalEl.removeAttribute('role');
-            console.log('[PE DEBUG] Manually ensured modal element is hidden before showing.');
-        } catch(e) {
-            console.error('[PE DEBUG] Error ensuring modal is hidden before show:', e);
-        }
-        
-        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        // Show via Bootstrap only; do not manually toggle classes/backdrops
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
         console.log('[PE DEBUG] Bootstrap modal instance:', modal);
-        
-        // Check existing backdrops before showing
-        const existingBackdrops = document.querySelectorAll('.modal-backdrop');
-        console.log('[PE DEBUG] Existing backdrops before show:', existingBackdrops.length, existingBackdrops);
-        
-        // Ensure proper z-index before showing
-        try {
-            modalEl.style.zIndex = '1065';
-            const dlg = modalEl.querySelector('.modal-dialog');
-            if (dlg) dlg.style.zIndex = '1066';
-            console.log('[PE DEBUG] Set modal z-index: modal=1065, dialog=1066');
-        } catch(e) {
-            console.error('[PE DEBUG] Error setting z-index:', e);
-        }
         
         console.log('[PE DEBUG] About to call modal.show()');
         modal.show();
-        
-        // Monitor backdrop creation immediately after show
-        setTimeout(() => {
-            try {
-                const backdrops = document.querySelectorAll('.modal-backdrop');
-                console.log('[PE DEBUG] Backdrops after show (10ms):', backdrops.length, backdrops);
-                if (backdrops.length > 0) {
-                    // Set z-index for all backdrops to ensure proper layering
-                    backdrops.forEach((backdrop, index) => {
-                        backdrop.style.zIndex = '1064';
-                        console.log(`[PE DEBUG] Set backdrop ${index} z-index to 1064`);
-                    });
-                    // If duplicate backdrops exist, keep the last one and remove earlier ones
-                    if (backdrops.length > 1) {
-                        const toRemove = Array.from(backdrops).slice(0, -1);
-                        toRemove.forEach((el, idx) => { try { el.remove(); } catch(_) {} });
-                        console.log('[PE DEBUG] Removed duplicate backdrops:', toRemove.length);
-                    }
-                }
-            } catch(e) {
-                console.error('[PE DEBUG] Error in backdrop z-index fix:', e);
-            }
-        }, 10);
-        
-        // Additional monitoring
-        setTimeout(() => {
-            const backdrops = document.querySelectorAll('.modal-backdrop');
-            console.log('[PE DEBUG] Backdrops after show (100ms):', backdrops.length, backdrops);
-            backdrops.forEach((backdrop, index) => {
-                console.log(`[PE DEBUG] Backdrop ${index}: z-index=${backdrop.style.zIndex}, classList=${backdrop.classList.toString()}`);
-            });
-            // Dedupe again in case another listener added one late
-            if (backdrops.length > 1) {
-                const toRemove = Array.from(backdrops).slice(0, -1);
-                toRemove.forEach((el, idx) => { try { el.remove(); } catch(_) {} });
-                console.log('[PE DEBUG] Late removal of duplicate backdrops:', toRemove.length);
-            }
-        }, 100);
+        // No manual backdrop management; rely on Bootstrap stacking
         
         this.currentStep = 1;
         this.updateProgressIndicator();
@@ -180,7 +121,7 @@ class PhysicalExaminationModal {
             try {
                 const dpEl = document.getElementById('donorProfileModal');
                 if (dpEl) {
-                    const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
+                    const dp = bootstrap.Modal.getOrCreateInstance(dpEl, { backdrop: 'static', keyboard: false });
                     dp.show();
                     // Refresh with last context if available
                     setTimeout(() => {
@@ -196,7 +137,7 @@ class PhysicalExaminationModal {
                     try {
                         const anyOpen = document.querySelector('.modal.show');
                         if (!anyOpen) {
-                            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                            // Let Bootstrap manage backdrops; avoid manual removal to prevent missing overlays
                             document.body.classList.remove('modal-open');
                             document.body.style.overflow = '';
                             document.body.style.paddingRight = '';
@@ -570,9 +511,15 @@ class PhysicalExaminationModal {
                 submitBtn.style.display = this.currentStep === this.totalSteps ? 'inline-block' : 'none';
             }
         }
-        // Hide defer button on stage 4 (Review step)
+        // Defer visibility rules
+        // Readonly mode: hide Defer at all times
+        // Editable mode: show except on step 4 (Review)
         if (deferBtn) {
-            deferBtn.style.display = this.currentStep === 4 ? 'none' : 'inline-block';
+            if (this.isReadonly) {
+                deferBtn.style.display = 'none';
+            } else {
+                deferBtn.style.display = this.currentStep === 4 ? 'none' : 'inline-block';
+            }
         }
     }
     
@@ -979,7 +926,7 @@ class PhysicalExaminationModal {
             // Only remove backdrops if no other modals are open
             const otherModals = document.querySelectorAll('.modal.show:not(#physicalExaminationModal)');
             if (otherModals.length === 0) {
-                document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                // Avoid force-removing backdrops globally
                 document.body.classList.remove('modal-open');
                 document.body.style.overflow = '';
                 document.body.style.paddingRight = '';

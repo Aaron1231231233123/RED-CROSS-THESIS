@@ -1882,13 +1882,11 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             border-top: 1px solid #e9ecef;
             padding: 16px 20px;
         }
-        /* Ensure backdrop is visible and does not block inputs */
+        /* Ensure backdrop is visible and ALWAYS behind active modals */
+        .modal-backdrop { z-index: 1064 !important; }
         .modal-backdrop.show { opacity: .5 !important; }
         #screeningFormModal * { pointer-events: auto; }
-        /* Ensure screening modal has proper backdrop */
-        #screeningFormModal .modal-backdrop {
-            z-index: 1064 !important;
-        }
+        /* Remove scoped backdrop z-index (backdrops are appended to <body>) */
         
         /* Physical Examination Modal - ensure proper z-index layering */
         #physicalExaminationModal {
@@ -1946,9 +1944,6 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 <h4 class="physician-header-title-unique">Physician Dashboard <span class="physician-header-date-unique"><?php echo date('l, M d, Y'); ?></span></h4>
             </div>
             <div class="physician-header-right-unique">
-                <button class="physician-register-btn-unique" onclick="showConfirmationModal()">
-                    Register Donor
-                </button>
                 <a href="../../assets/php_func/logout.php" class="physician-logout-btn-unique">
                     <i class="fas fa-sign-out-alt"></i> Logout
                 </a>
@@ -2293,8 +2288,8 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         </div>
     </div>
 
-    <!-- Loading Modal -->
-    <div class="modal" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" style="z-index: 20000;">
+    <!-- Loading Modal (backdrop-free) -->
+    <div class="modal" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="false" data-bs-keyboard="false" style="z-index: 20000;">
         <div class="modal-dialog modal-dialog-centered" style="z-index: 20001;">
             <div class="modal-content" style="background: transparent; border: none; box-shadow: none;">
                 <div class="modal-body text-center">
@@ -2464,10 +2459,11 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 // Check if modal instance already exists to prevent multiple instances
                 let modal = bootstrap.Modal.getInstance(el);
                 if (!modal) {
-                    // Use static backdrop for screening modal to avoid accidental closes
-                    const opts = (modalId === 'screeningFormModal') ? { backdrop: 'static', keyboard: false, focus: true } : {};
+                    // Use static backdrop for key modals to ensure backdrop is present
+                    const needsStaticBackdrop = (modalId === 'screeningFormModal' || modalId === 'donorProfileModal');
+                    const opts = needsStaticBackdrop ? { backdrop: 'static', keyboard: false, focus: true } : {};
                     // Ensure attributes reflect options (helps with third-party triggers)
-                    if (modalId === 'screeningFormModal') {
+                    if (needsStaticBackdrop) {
                         try { el.setAttribute('data-bs-backdrop', 'static'); } catch(_) {}
                         try { el.setAttribute('data-bs-keyboard', 'false'); } catch(_) {}
                     }
@@ -2502,8 +2498,8 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             // Hide confirmation modal
             ModalManager.hide('confirmationModal');
 
-            // Show loading modal
-            ModalManager.show('loadingModal');
+            // Show loading spinner (singleton, no backdrop)
+            if (window.showProcessingModal) { window.showProcessingModal('Loading donor form...'); }
 
             // Redirect after a short delay to show loading animation
             setTimeout(() => {
@@ -2849,13 +2845,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                         sEl.style.display = 'none';
                                         sEl.setAttribute('aria-hidden','true');
                                     }
-                                    // Remove only screening modal backdrops, not all backdrops
-                                    document.querySelectorAll('.modal-backdrop').forEach(b => {
-                                        // Only remove backdrops that are not needed for other modals
-                                        if (!document.querySelector('.modal.show:not(#screeningFormModal)')) {
-                                            b.remove();
-                                        }
-                                    });
+                                    // Do not remove global backdrops; Bootstrap will handle lifecycle
                                 } catch(_) {}
                             }, 100);
                             
@@ -3058,8 +3048,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                             try { sInst.hide(); } catch(_) {}
                             try { sEl.classList.remove('show'); sEl.style.display='none'; sEl.setAttribute('aria-hidden','true'); } catch(_) {}
                         }
-                        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
-                        document.body.classList.add('modal-open');
+                        // Do not remove or alter global backdrops here; let Bootstrap manage them
                     } catch(_) {}
                 });
             } catch(_) {}
@@ -3082,9 +3071,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                             console.log('[DASHBOARD DEBUG] Backdrops during cleanup:', backdrops.length, backdrops);
                             
                             if (otherModals.length === 0) {
-                                console.log('[DASHBOARD DEBUG] No other modals open, cleaning up backdrops');
-                                // Only clean up if no other modals are open
-                                document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                                console.log('[DASHBOARD DEBUG] No other modals open, leaving backdrops to Bootstrap');
                                 document.body.classList.remove('modal-open');
                                 document.body.style.overflow = '';
                                 document.body.style.paddingRight = '';
@@ -3217,11 +3204,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 try { (bootstrap.Modal.getInstance(sEl) || new bootstrap.Modal(sEl)).hide(); } catch(_) {}
                 // Hard close styles/attributes
                 try { sEl.classList.remove('show'); sEl.style.display = 'none'; sEl.setAttribute('aria-hidden','true'); } catch(_) {}
-                // Only remove backdrops if no other modals are open
+                // Normalize body state only; let Bootstrap manage backdrops
                 try { 
                     const otherModals = document.querySelectorAll('.modal.show:not(#screeningFormModal)');
                     if (otherModals.length === 0) {
-                        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
                         document.body.classList.remove('modal-open');
                         document.body.style.overflow='';
                         document.body.style.paddingRight='';
@@ -3265,7 +3251,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     try { modal.hide(); } catch(_) {}
                     setTimeout(() => {
                         try { modalEl.classList.remove('show'); modalEl.style.display = 'none'; modalEl.setAttribute('aria-hidden','true'); } catch(_) {}
-                        try { document.querySelectorAll('.modal-backdrop').forEach(b => b.remove()); } catch(_) {}
+                        try { /* leave backdrops to Bootstrap */ } catch(_) {}
                         try { document.body.classList.remove('modal-open'); document.body.style.overflow = ''; document.body.style.paddingRight = ''; } catch(_) {}
                     }, 50);
                 }
@@ -3276,8 +3262,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         function forcePageReload(delay = 1000) {
             setTimeout(() => {
                 try {
-                    // Clean up any remaining modal states
-                    document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                    // Clean up any remaining modal states (without removing backdrops)
                     document.body.classList.remove('modal-open');
                     document.body.style.overflow = '';
                     document.body.style.paddingRight = '';
@@ -3312,10 +3297,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         console.log('[GLOBAL DEBUG] Cleanup check - anyOpen:', anyOpen?.id, 'backdrops:', backdrops.length);
                         
                         if (!anyOpen) {
-                            console.log('[GLOBAL DEBUG] No modals open, cleaning up backdrops');
-                            // Remove all backdrops
-                            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
-                            // Reset body state
+                            console.log('[GLOBAL DEBUG] No modals open, normalizing body only');
                             document.body.classList.remove('modal-open');
                             document.body.style.overflow = '';
                             document.body.style.paddingRight = '';
@@ -3487,7 +3469,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         try {
                             const otherModals = document.querySelectorAll('.modal.show:not(#physicalExaminationModal)');
                             if (otherModals.length === 0) {
-                                document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); });
+                                // Do not remove backdrops; just normalize body
                                 document.body.classList.remove('modal-open');
                                 document.body.style.overflow = '';
                                 document.body.style.paddingRight = '';
@@ -3545,7 +3527,6 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         try {
                             const otherModals = document.querySelectorAll('.modal.show:not(#physicalExaminationModal)');
                             if (otherModals.length === 0) {
-                                document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); });
                                 document.body.classList.remove('modal-open');
                                 document.body.style.overflow = '';
                                 document.body.style.paddingRight = '';
@@ -3798,8 +3779,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     const backdrops = document.querySelectorAll('.modal-backdrop');
                     console.log('[DASHBOARD DEBUG] Backdrops before cleanup (100ms):', backdrops.length, backdrops);
                     if (otherModals.length === 0) {
-                        console.log('[DASHBOARD DEBUG] No other modals open, removing backdrops');
-                        document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); });
+                        console.log('[DASHBOARD DEBUG] No other modals open, normalizing body only');
                         document.body.classList.remove('modal-open');
                         document.body.style.overflow = '';
                         document.body.style.paddingRight = '';
@@ -3916,8 +3896,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 // Only remove backdrops if no modals are currently open
                 const openModals = document.querySelectorAll('.modal.show');
                 if (openModals.length === 0) {
-                    // Remove only stray Bootstrap backdrops that sometimes persist
-                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                    // Do not remove backdrops here
                 }
 
                 // Do NOT mutate or hide any .modal elements here. That can break
@@ -3979,8 +3958,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     try { sInst.hide(); } catch(_) {}
                     try { sEl.classList.remove('show'); sEl.style.display='none'; sEl.setAttribute('aria-hidden','true'); } catch(_) {}
                 }
-                // Remove any stale backdrops from other modals to prevent stacking issues
-                document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                // Normalize body only
                 document.body.classList.remove('modal-open');
                 document.body.style.overflow='';
                 document.body.style.paddingRight='';
@@ -4066,7 +4044,6 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 
                 // Clean up any Bootstrap backdrops that might have been created
                 try {
-                    document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); });
                     document.body.classList.remove('modal-open');
                     document.body.style.overflow = '';
                     document.body.style.paddingRight = '';
@@ -5165,7 +5142,11 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 // Only remove backdrops if no other modals are currently open
                 const otherModals = document.querySelectorAll('.modal.show:not(#screeningFormModal)');
                 if (otherModals.length === 0) {
-                    document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); });
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+                }
+                if (otherModals.length === 0) {
                     document.body.classList.remove('modal-open');
                     document.body.style.overflow = '';
                     document.body.style.paddingRight = '';
@@ -5189,21 +5170,13 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 window.__screeningOpenAt = now;
             } catch(_) {}
 
-            // Show the screening form modal
-            ModalManager.show('screeningFormModal');
-            // Ensure proper stacking order so backdrop never overlays the dialog
+            // Show the screening form modal using Bootstrap (avoid custom backdrops)
             try {
                 const modalEl = document.getElementById('screeningFormModal');
                 if (modalEl) {
-                    modalEl.style.zIndex = '1065';
-                    const dlg = modalEl.querySelector('.modal-dialog');
-                    if (dlg) dlg.style.zIndex = '1066';
+                    const inst = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
+                    inst.show();
                 }
-                // Let Bootstrap handle backdrop management naturally
-                // No need for aggressive backdrop sweeping
-
-                // Allow normal closing behavior without reasserting visibility or blocking hide events
-                // (Removed previous close-guard logic to prevent inconsistent close behavior.)
             } catch(_) {}
             
             // Set the donor ID in the screening form
@@ -5220,70 +5193,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
 
 
         
-        // Add loading functionality for data processing
-        function showProcessingModal(message = 'Processing physical examination data...') {
-            const loadingText = document.querySelector('#loadingModal p');
-            if (loadingText) {
-                loadingText.textContent = message;
-            }
-            // Prevent a secondary scrollbar while loader is visible
-            try {
-                const htmlEl = document.documentElement;
-                const bodyEl = document.body;
-                if (htmlEl && !htmlEl.getAttribute('data-prev-overflow')) {
-                    htmlEl.setAttribute('data-prev-overflow', htmlEl.style.overflow || '');
-                    htmlEl.style.overflow = 'hidden';
-                }
-                if (bodyEl && !bodyEl.getAttribute('data-prev-overflow')) {
-                    bodyEl.setAttribute('data-prev-overflow', bodyEl.style.overflow || '');
-                    bodyEl.style.overflow = 'hidden';
-                }
-            } catch(_) {}
-            const inst = ModalManager.show('loadingModal');
-            // Ensure loader/backdrop are above other modals
-            try {
-                setTimeout(() => {
-                    const lm = document.getElementById('loadingModal');
-                    if (lm) {
-                        lm.style.zIndex = '20000';
-                        const dlg = lm.querySelector('.modal-dialog');
-                        if (dlg) dlg.style.zIndex = '20001';
-                    }
-                    // Do not elevate Bootstrap backdrop above functional modals
-                    // Let each modal manage its own stacking context
-                }, 10);
-            } catch(_) {}
-        }
-        
-        function hideProcessingModal() {
-            ModalManager.hide('loadingModal');
-            // Restore original overflow to avoid lingering dual scrollbars
-            try {
-                const htmlEl = document.documentElement;
-                const bodyEl = document.body;
-                if (htmlEl) {
-                    const prev = htmlEl.getAttribute('data-prev-overflow');
-                    if (prev !== null) { htmlEl.style.overflow = prev; }
-                    htmlEl.removeAttribute('data-prev-overflow');
-                }
-                if (bodyEl) {
-                    const prevB = bodyEl.getAttribute('data-prev-overflow');
-                    if (prevB !== null) { bodyEl.style.overflow = prevB; }
-                    bodyEl.removeAttribute('data-prev-overflow');
-                }
-            } catch(_) {}
-            // Ensure any loading backdrop is removed if no other modals need it
-            try {
-                const anyOpen = document.querySelector('.modal.show');
-                if (!anyOpen) {
-                    document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
-                }
-            } catch(_) {}
-        }
-        
-        // Make functions globally available
-        window.showProcessingModal = showProcessingModal;
-        window.hideProcessingModal = hideProcessingModal;
+        // Loading spinner handled by global singleton at bottom of file (no backdrop)
         
         // Show loading when physical examination forms are submitted
         document.addEventListener('submit', function(e) {
@@ -5583,6 +5493,27 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
     </script>
 </body>
 </html>
+<script>
+(function(){
+    try {
+        // Ensure loading modal (if present) is backdrop-free and singleton
+        let __loadingModalInstance = null;
+        window.showProcessingModal = function(message){
+            try {
+                const el = document.getElementById('loadingModal');
+                if (!el) return;
+                if (!__loadingModalInstance) __loadingModalInstance = bootstrap.Modal.getOrCreateInstance(el, { backdrop: false, keyboard: false });
+                const p = el.querySelector('p');
+                if (p && typeof message === 'string' && message.length) p.textContent = message;
+                __loadingModalInstance.show();
+            } catch(_) {}
+        };
+        window.hideProcessingModal = function(){
+            try { if (__loadingModalInstance) __loadingModalInstance.hide(); } catch(_) {}
+        };
+    } catch(_) {}
+})();
+</script>
 <?php
 // Flush output buffer
 ob_end_flush();

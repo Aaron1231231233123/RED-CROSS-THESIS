@@ -79,6 +79,12 @@ if ($donor_info && isset($donor_info['birthdate'])) {
     $today = new DateTime();
     $age = $today->diff($birthdate)->y;
 }
+// Flags used by footer/proceed logic
+$mhApprovedFlag = ($medical_history_info && isset($medical_history_info['medical_approval']) && strtolower(trim((string)$medical_history_info['medical_approval'])) === 'approved');
+$peAcceptedFlag = false;
+if ($physical_exam_info && isset($physical_exam_info['remarks'])) {
+    $peAcceptedFlag = (strcasecmp((string)$physical_exam_info['remarks'], 'Accepted') === 0);
+}
 ?>
 
 <style>
@@ -538,57 +544,23 @@ if ($donor_info && isset($donor_info['birthdate'])) {
 <script>
     (function(){
         try {
-            // Optimized modal behavior - only prevent problematic styles
-            document.addEventListener('DOMContentLoaded', function() {
-                // Clean up any existing modal state only once on load
-                function initialCleanup() {
-                    try {
-                        // Only clean up if no modals are currently open
-                        const anyOpen = document.querySelector('.modal.show');
-                        if (!anyOpen) {
-                            document.body.classList.remove('modal-open');
-                            document.body.style.overflow = '';
-                            document.body.style.paddingRight = '';
-                            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
-                        }
-                    } catch(_) {}
-                }
-                
-                // Initial cleanup only
-                initialCleanup();
-                
-                // Clean up on page unload
-                window.addEventListener('beforeunload', function() {
-                    try {
-                        document.body.classList.remove('modal-open');
-                        document.body.style.overflow = '';
-                        document.body.style.paddingRight = '';
-                        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
-                    } catch(_) {}
-                });
-            });
-            
             const proceedBtn = document.getElementById('proceedToPhysicalBtn');
             const mhApproved = <?php echo $mhApprovedFlag ? 'true' : 'false'; ?>;
             const peAccepted = <?php echo $peAcceptedFlag ? 'true' : 'false'; ?>;
             if (proceedBtn) {
-                // Only allow Confirm when PE is Accepted (backend rule)
                 if (!peAccepted) {
                     try {
-                        // Hide the actual Confirm button and also its container if present
                         proceedBtn.style.display = 'none';
                         proceedBtn.classList.add('d-none');
                         const footer = proceedBtn.closest('.modal-footer');
                         if (footer) { footer.style.display = 'none'; footer.classList.add('d-none'); }
                     } catch(_) {}
                 }
-                // Note: Footer confirm button click handling is managed by the dashboard's bindProceedToPhysicalButton function
-                // This ensures consistent behavior and prevents duplicate event handlers
             }
-        } catch (err) { /* noop */ }
+            // Backdrop/body lifecycle is managed by the parent dashboard. Avoid touching it here to prevent flicker.
+        } catch (_) { /* noop */ }
     })();
-    
-    // Note: Footer confirm button functionality is handled by the dashboard's advanceToCollection function
+    // Footer confirm button functionality is handled by the dashboard's functions
 </script>
 
 <!-- Footer confirmation modals are included in the main dashboard -->

@@ -1,7 +1,7 @@
 <!-- Screening Form Modal (Physician Copy) -->
-<div class="modal fade" id="screeningFormModal" tabindex="-1" aria-labelledby="screeningFormModalLabel" aria-hidden="true">
+<div class="modal fade" id="screeningFormModal" tabindex="-1" aria-labelledby="screeningFormModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-lg" style="max-width: 900px; margin: 2.25rem auto;">
-        <div class="modal-content screening-modal-content" style="position: relative; z-index: 1060; pointer-events: auto;">
+        <div class="modal-content screening-modal-content" style="position: relative; z-index: 1066; pointer-events: auto;">
             <div class="modal-header screening-modal-header">
                 <div class="d-flex align-items-center">
                     <div class="screening-modal-icon me-3">
@@ -498,13 +498,11 @@
                 // No need for aggressive backdrop deduplication
             });
 
-            // On hide, only clean up if no other modals are open
+            // On hide, only normalize body; do not remove global backdrops
             modalEl.addEventListener('hidden.bs.modal', function(){
                 try {
-                    // Only clean up if no other modals are currently open
                     const otherModals = document.querySelectorAll('.modal.show:not(#screeningFormModal)');
                     if (otherModals.length === 0) {
-                        document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); });
                         document.body.classList.remove('modal-open');
                         document.body.style.overflow = '';
                         document.body.style.paddingRight = '';
@@ -544,11 +542,7 @@
                                             try { sInst.hide(); } catch(_) {}
                                             try { sEl.classList.remove('show'); sEl.style.display='none'; sEl.setAttribute('aria-hidden','true'); } catch(_) {}
                                         }
-                                        // Only remove backdrops if no other modals are open
-                                        const otherModals = document.querySelectorAll('.modal.show:not(#screeningFormModal)');
-                                        if (otherModals.length === 0) {
-                                            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
-                                        }
+                                        // Leave backdrop management to Bootstrap
                                     } catch(_) {}
                                 }
                             } catch(_) {
@@ -572,7 +566,7 @@
                                 method: 'POST',
                                 body: new URLSearchParams({ donor_id: donorId, medical_approval: 'Approved' })
                             }).then(() => {
-                                // Close modal and redirect to donor profile
+                                    // Close modal and redirect to donor profile
                                 try {
                                     const sEl = document.getElementById('screeningFormModal');
                                     if (sEl) {
@@ -580,11 +574,7 @@
                                         try { sInst.hide(); } catch(_) {}
                                         try { sEl.classList.remove('show'); sEl.style.display='none'; sEl.setAttribute('aria-hidden','true'); } catch(_) {}
                                     }
-                                    // Only remove backdrops if no other modals are open
-                                    const otherModals = document.querySelectorAll('.modal.show:not(#screeningFormModal)');
-                                    if (otherModals.length === 0) {
-                                        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
-                                    }
+                                        // Leave backdrop management to Bootstrap
                                 } catch(_) {}
                             });
                         }
