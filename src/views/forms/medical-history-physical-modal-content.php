@@ -756,7 +756,6 @@ if ($http_code === 200) {
     <div class="footer-left"></div>
     <div class="footer-right">
         <button class="prev-button" id="modalPrevButton" style="display: none;">&#8592; Previous</button>
-        <button class="edit-button" id="modalEditButton" style="margin-right: 10px;">Edit</button>
         <?php
         // Resolve screening_id with proper fallbacks
         $screening_id = null;
@@ -824,7 +823,11 @@ if ($http_code === 200) {
                 data-donor-id="<?php echo htmlspecialchars($donor_id); ?>">
             <i class="fas fa-check-circle me-2"></i>Approve
         </button>
-        <button class="next-button" id="modalNextButton">Next →</button>
+        <?php
+            // Button label is role-aware: interviewer proceeds to Initial Screening; physician proceeds to PE (handled at dashboard level)
+            $nextLabel = (isset($_SESSION['user_staff_role']) && strtolower($_SESSION['user_staff_role']) === 'interviewer') ? 'Proceed to Initial Screening' : 'Next →';
+        ?>
+        <button class="next-button" id="modalNextButton"><?php echo $nextLabel; ?></button>
     </div>
 </div>
 
@@ -838,312 +841,54 @@ if ($http_code === 200) {
 </script>
  
 <script>
-// Enhanced Edit Button Functionality
-function initializeEditFunctionality() {
-    console.log('=== EDIT FUNCTIONALITY INITIALIZATION START ===');
-    const editButton = document.getElementById('modalEditButton');
-    
-    if (editButton) {
-        console.log('✅ Edit button found, initializing functionality...');
-        
-        // Remove any existing event listeners
-        editButton.replaceWith(editButton.cloneNode(true));
-        const newEditButton = document.getElementById('modalEditButton');
-        
-        newEditButton.addEventListener('click', function() {
-            console.log('🎯 Edit button clicked - starting to enable fields...');
-            
-            // Enable editing of form fields
+// Force full read-only mode for Medical History modal (physician dashboard)
+(function(){
+    function enforceReadonly(){
+        try {
             const form = document.getElementById('modalMedicalHistoryForm');
-            const radioButtons = form.querySelectorAll('input[type="radio"]');
-            const selectFields = form.querySelectorAll('select.remarks-input');
-            const textInputs = form.querySelectorAll('input[type="text"], textarea');
-            
-            console.log('Found radio buttons:', radioButtons.length);
-            console.log('Found select fields:', selectFields.length);
-            console.log('Found text inputs:', textInputs.length);
-            
-            // Enable all form inputs
-            radioButtons.forEach(input => {
-                input.disabled = false;
-                input.readOnly = false;
-                console.log('Enabled radio button:', input.name);
+            if (!form) return;
+            form.querySelectorAll('input, select, textarea').forEach(function(el){
+                if (el.closest('.modal-footer')) return;
+                el.disabled = true;
+                el.setAttribute('aria-readonly','true');
             });
-            
-            selectFields.forEach(input => {
-                input.disabled = false;
-                input.readOnly = false;
-                console.log('Enabled select field:', input.name);
-            });
-            
-            textInputs.forEach(input => {
-                input.disabled = false;
-                input.readOnly = false;
-                console.log('Enabled text input:', input.name);
-            });
-            
-            // Change button text to indicate editing mode
-            newEditButton.textContent = 'Save';
-            newEditButton.classList.remove('edit-button');
-            newEditButton.classList.add('save-button');
-            
-            // Add save functionality
-            newEditButton.onclick = function() {
-                console.log('Save button clicked');
-                showSaveConfirmationModal();
-            };
-        });
-    } else {
-        console.log('❌ Edit button not found - checking DOM...');
-        console.log('Available buttons:', document.querySelectorAll('button').length);
-        console.log('Modal content:', document.getElementById('medicalHistoryModalContent')?.innerHTML?.substring(0, 200));
+        } catch(_) {}
     }
-    console.log('=== EDIT FUNCTIONALITY INITIALIZATION END ===');
-}
-
-function saveEditedData() {
-    const form = document.getElementById('modalMedicalHistoryForm');
-    const formData = new FormData(form);
-    
-    // Add action for saving
-    formData.append('action', 'save_edit');
-    
-    console.log('Saving edited data...');
-    
-    // Submit the form data
-    fetch('../../src/views/forms/medical-history-process.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Show success message using unified custom modal
-            if (window.customConfirm) {
-                window.customConfirm('Medical history data saved successfully!', function() {
-                    // Just close the modal, no additional action needed
-                });
-            } else {
-                alert('Medical history data saved successfully!');
-            }
-            
-            // Reset button to edit mode
-            const editButton = document.getElementById('modalEditButton');
-            editButton.textContent = 'Edit';
-            editButton.classList.remove('save-button');
-            editButton.classList.add('edit-button');
-            
-            // Disable form fields again (respect original disabled state)
-            const radioButtons = form.querySelectorAll('input[type="radio"]');
-            const selectFields = form.querySelectorAll('select.remarks-input');
-            const textInputs = form.querySelectorAll('input[type="text"], textarea');
-            
-            radioButtons.forEach(input => {
-                const wasOriginallyDisabled = input.getAttribute('data-originally-disabled') === 'true';
-                input.disabled = wasOriginallyDisabled;
-                input.readOnly = wasOriginallyDisabled;
-            });
-            
-            selectFields.forEach(input => {
-                const wasOriginallyDisabled = input.getAttribute('data-originally-disabled') === 'true';
-                input.disabled = wasOriginallyDisabled;
-                input.readOnly = wasOriginallyDisabled;
-            });
-            
-            textInputs.forEach(input => {
-                const wasOriginallyDisabled = input.getAttribute('data-originally-disabled') === 'true';
-                input.disabled = wasOriginallyDisabled;
-                input.readOnly = wasOriginallyDisabled;
-            });
-        } else {
-            // Show error modal
-            showErrorModal('Error updating data: ' + (data.message || 'Unknown error occurred'));
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        // Show error modal
-        showErrorModal('An error occurred while saving the data. Please try again.');
-    });
-}
-
-// Initialize when DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeEditFunctionality);
-} else {
-    initializeEditFunctionality();
-}
-
-// Initialize when the modal content is dynamically loaded
-if (typeof window !== 'undefined') {
-    window.initializeEditFunctionality = initializeEditFunctionality;
-}
+    enforceReadonly();
+    setTimeout(enforceReadonly, 150);
+    setTimeout(enforceReadonly, 400);
+    try {
+        const target = document.getElementById('medicalHistoryModalContent') || document.body;
+        const mo = new MutationObserver(() => enforceReadonly());
+        mo.observe(target, { childList:true, subtree:true });
+        window.__mhReadonlyObserver = mo;
+    } catch(_) {}
+})();
 </script>
 
-<!-- Save Confirmation Modal -->
-<div class="modal fade" id="saveConfirmationModal" tabindex="-1" aria-labelledby="saveConfirmationModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
-                <h5 class="modal-title" id="saveConfirmationModalLabel">
-                    <i class="fas fa-save me-2"></i>
-                    Confirm Save
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body py-4">
-                <p class="mb-0" style="font-size: 1.1rem;">Are you sure you want to save the medical history data?</p>
-            </div>
-            <div class="modal-footer border-0">
-                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn px-4" style="background-color: #b22222; border-color: #b22222; color: white;" id="confirmSaveBtn">Yes, Save</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Error Modal -->
-<div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
-                <h5 class="modal-title" id="errorModalLabel">
-                    <i class="fas fa-exclamation-triangle me-2"></i>
-                    Error
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body py-4">
-                <p class="mb-0" style="font-size: 1.1rem;" id="errorMessage">An error occurred while saving the data.</p>
-            </div>
-            <div class="modal-footer border-0">
-                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <script>
-// Function to show save confirmation modal
-function showSaveConfirmationModal() {
-    const saveConfirmationModal = new bootstrap.Modal(document.getElementById('saveConfirmationModal'));
-    saveConfirmationModal.show();
-}
-
-// Function to show error modal
-function showErrorModal(message) {
-    const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
-    const errorMessage = document.getElementById('errorMessage');
-    if (errorMessage) {
-        errorMessage.textContent = message;
-    }
-    errorModal.show();
-}
-
-// Update the save button click handler to show confirmation first
-function bindConfirmSaveHandler() {
-    const confirmSaveBtn = document.getElementById('confirmSaveBtn');
-    if (!confirmSaveBtn) return;
-    // Replace existing handlers to avoid duplicates
-    const newBtn = confirmSaveBtn.cloneNode(true);
-    confirmSaveBtn.parentNode.replaceChild(newBtn, confirmSaveBtn);
-    newBtn.addEventListener('click', function() {
-        const saveConfirmationModal = bootstrap.Modal.getInstance(document.getElementById('saveConfirmationModal'));
-        if (saveConfirmationModal) {
-            saveConfirmationModal.hide();
-        }
-        saveEditedData();
-    });
-}
-
-// Bind immediately (content is already in DOM when this script runs)
-bindConfirmSaveHandler();
-
-// Also re-bind whenever the modal is shown (in case the DOM was re-rendered)
-const saveConfirmEl = document.getElementById('saveConfirmationModal');
-if (saveConfirmEl) {
-    saveConfirmEl.addEventListener('shown.bs.modal', bindConfirmSaveHandler);
-}
-
-// Override the save button click to show confirmation first
-function initializeSaveConfirmation() {
-    const saveButton = document.getElementById('modalEditButton');
-    if (saveButton && saveButton.textContent === 'Save') {
-        saveButton.onclick = function() {
-            console.log('Save button clicked - showing confirmation');
-            showSaveConfirmationModal();
-        };
-    }
-}
-
-// Call this after the edit functionality is initialized
-setTimeout(initializeSaveConfirmation, 100);
-
-// Initialize medical history approval functionality
+// Initialize approval buttons only (no edit/save in physician view)
 setTimeout(() => {
     if (typeof initializeMedicalHistoryApproval === 'function') {
         initializeMedicalHistoryApproval();
-    } else {
-        console.log('Medical history approval functions not loaded yet');
     }
-    
-    // Initialize physician-specific approval functionality
-    initializePhysicianApprovalButtons();
+    (function(){
+        const declineButtons = document.querySelectorAll('.decline-medical-history-btn');
+        declineButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const declineModal = new bootstrap.Modal(document.getElementById('medicalHistoryDeclineModal'));
+                declineModal.show();
+            });
+        });
+        const approveButtons = document.querySelectorAll('.approve-medical-history-btn');
+        approveButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const approveModal = new bootstrap.Modal(document.getElementById('medicalHistoryApproveConfirmModal'));
+                approveModal.show();
+            });
+        });
+    })();
 }, 200);
-
-// Initialize physician approval buttons
-function initializePhysicianApprovalButtons() {
-    console.log('Initializing physician approval buttons...');
-    
-    // Handle decline button
-    const declineButtons = document.querySelectorAll('.decline-medical-history-btn');
-    declineButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const donorId = this.getAttribute('data-donor-id');
-            console.log('Decline button clicked for donor:', donorId);
-            
-            // Show decline confirmation modal
-            const declineModal = new bootstrap.Modal(document.getElementById('medicalHistoryDeclineModal'));
-            declineModal.show();
-        });
-    });
-    
-    // Handle approve button
-    const approveButtons = document.querySelectorAll('.approve-medical-history-btn');
-    approveButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const donorId = this.getAttribute('data-donor-id');
-            console.log('Approve button clicked for donor:', donorId);
-            
-            // Show approve confirmation modal
-            const approveModal = new bootstrap.Modal(document.getElementById('medicalHistoryApproveConfirmModal'));
-            approveModal.show();
-        });
-    });
-    
-    console.log('Physician approval buttons initialized');
-}
-
-// Debug: Check modal loading status
-setTimeout(() => {
-    const declineModal = document.getElementById('medicalHistoryDeclineModal');
-    const approvalModal = document.getElementById('medicalHistoryApprovalModal');
-    
-    const declineStatus = document.getElementById('declineModalStatus');
-    const approvalStatus = document.getElementById('approvalModalStatus');
-    
-    if (declineStatus) {
-        declineStatus.textContent = declineModal ? 'Found' : 'Not Found';
-        declineStatus.style.color = declineModal ? 'green' : 'red';
-    }
-    
-    if (approvalStatus) {
-        approvalStatus.textContent = approvalModal ? 'Found' : 'Not Found';
-        approvalStatus.style.color = approvalModal ? 'green' : 'red';
-    }
-    
-    console.log('Modal Debug - Decline:', declineModal, 'Approval:', approvalModal);
-}, 500);
 </script>
 
 <!-- Medical History Approval Modals are included in the parent dashboard. Avoid duplicate includes here to prevent ID conflicts. -->

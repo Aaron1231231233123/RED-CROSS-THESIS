@@ -2414,7 +2414,7 @@ $donor_history = $unique_donor_history;
                     <p>Donor approved for donation and forwarded to physician for physical examination. Proceed to print the donor declaration form and hand it to the donor.</p>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-success" id="confirmProcessingBtn">Initial Screening</button>
+                    <button type="button" class="btn btn-success" id="confirmProcessingBtn">Yes, proceed</button>
                 </div>
             </div>
         </div>
@@ -2703,120 +2703,163 @@ $donor_history = $unique_donor_history;
                         // Mark for review handler
                         if (markReturningReviewBtn) {
                             markReturningReviewBtn.onclick = () => {
-                                fetch('../../assets/php_func/update_needs_review.php', {
-                                    method: 'POST',
-                                    headers: { 'Accept': 'application/json' },
-                                    body: new URLSearchParams({ donor_id: donorId })
-                                })
-                                .then(r => r.json())
-                                .then(res => {
-                                    if (res && res.success) {
-                                        returningInfoModal.hide();
-                                        // Use custom modal instead of browser alert
-                                        if (window.customConfirm) {
-                                            window.customConfirm('Marked for Medical Review.', function() {
-                                                // Refresh to apply resorting by date/priority
-                                                window.location.reload();
-                                            });
-                                        } else {
-                                            alert('Marked for Medical Review.');
-                                            // Refresh to apply resorting by date/priority
-                                            window.location.reload();
-                                        }
-                                        // Optionally update UI label to Returning (Medical)
-                                        const row = document.querySelector(`tr[data-donor-id="${donorId}"]`);
-                                        if (row) {
-                                            const donorTypeCell = row.querySelector('td:nth-child(6)');
-                                            if (donorTypeCell && donorTypeCell.textContent.toLowerCase().includes('returning')) {
-                                                donorTypeCell.textContent = 'Returning (Medical)';
-                                                row.setAttribute('data-donor-type', 'Returning (Medical)');
+                                const confirmMsg = 'This action will mark the donor for Medical Review and move them back to the medical stage for reassessment. Do you want to proceed?';
+                                if (window.customConfirm) {
+                                    window.customConfirm(confirmMsg, function() {
+                                        fetch('../../assets/php_func/update_needs_review.php', {
+                                            method: 'POST',
+                                            headers: { 'Accept': 'application/json' },
+                                            body: new URLSearchParams({ donor_id: donorId })
+                                        })
+                                        .then(r => r.json())
+                                        .then(res => {
+                                            if (res && res.success) {
+                                                returningInfoModal.hide();
+                                                // Silent success + refresh without opening another modal
+                                                // Show centered success modal (auto-closes, no buttons)
+                                                try {
+                                                    const existing = document.getElementById('successAutoModal');
+                                                    if (existing) existing.remove();
+                                                    const successHTML = `
+                                                        <div id="successAutoModal" style="
+                                                            position: fixed;
+                                                            top: 0;
+                                                            left: 0;
+                                                            width: 100%;
+                                                            height: 100%;
+                                                            background: rgba(0,0,0,0.5);
+                                                            z-index: 99999;
+                                                            display: flex;
+                                                            align-items: center;
+                                                            justify-content: center;
+                                                        ">
+                                                            <div style="
+                                                                background: #ffffff;
+                                                                border-radius: 10px;
+                                                                max-width: 520px;
+                                                                width: 90%;
+                                                                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                                                                overflow: hidden;
+                                                            ">
+                                                                <div style="
+                                                                    background: #9c0000;
+                                                                    color: white;
+                                                                    padding: 14px 18px;
+                                                                    font-weight: 700;
+                                                                ">Marked</div>
+                                                                <div style="padding: 22px;">
+                                                                    <p style="margin: 0;">The donor is medically cleared for donation.</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>`;
+                                                    document.body.insertAdjacentHTML('beforeend', successHTML);
+                                                } catch(_) {}
+                                                setTimeout(() => { 
+                                                    const m = document.getElementById('successAutoModal');
+                                                    if (m) m.remove();
+                                                    window.location.href = window.location.pathname + '?page=1'; 
+                                                }, 1800);
+                                                const row = document.querySelector(`tr[data-donor-id="${donorId}"]`);
+                                                if (row) {
+                                                    const donorTypeCell = row.querySelector('td:nth-child(6)');
+                                                    if (donorTypeCell && donorTypeCell.textContent.toLowerCase().includes('returning')) {
+                                                        donorTypeCell.textContent = 'Returning (Medical)';
+                                                        row.setAttribute('data-donor-type', 'Returning (Medical)');
+                                                    }
+                                                }
+                                            } else {
+                                                window.customConfirm('Failed to mark for review.', function() {});
                                             }
-                                        }
-                                        // Refresh to apply resorting by date/priority
-                                        // window.location.reload(); // Moved to modal callback
-                                    } else {
-                                        // Use custom modal instead of browser alert
-                                        if (window.customConfirm) {
-                                            window.customConfirm('Failed to mark for review.', function() {
-                                                // Just close the modal, no additional action needed
-                                            });
-                                        } else {
-                                            alert('Failed to mark for review.');
-                                        }
-                                    }
-                                })
-                                .catch(() => {
-                                    // Use custom modal instead of browser alert
-                                    if (window.customConfirm) {
-                                        window.customConfirm('Failed to mark for review.', function() {
-                                            // Just close the modal, no additional action needed
+                                        })
+                                        .catch(() => {
+                                            window.customConfirm('Failed to mark for review.', function() {});
                                         });
-                                    } else {
-                                        alert('Failed to mark for review.');
-                                    }
-                                });
+                                    });
+                                }
                             };
                         }
                         // Enable main modal mark button only for returning
                         if (markReviewFromMain) {
                             // Don't force display here - let button control logic handle it
                             markReviewFromMain.onclick = () => {
-                                fetch('../../assets/php_func/update_needs_review.php', {
-                                    method: 'POST',
-                                    headers: { 'Accept': 'application/json' },
-                                    body: new URLSearchParams({ donor_id: donorId })
-                                })
-                                .then(r => r.json())
-                                .then(res => {
-                                    if (res && res.success) {
-                                        // Use custom modal instead of browser alert
-                                        if (window.customConfirm) {
-                                            window.customConfirm('Marked for Medical Review.', function() {
-                                                // Refresh to apply resorting by date/priority
-                                                window.location.reload();
-                                            });
-                                        } else {
-                                            alert('Marked for Medical Review.');
-                                            // Refresh to apply resorting by date/priority
-                                            window.location.reload();
-                                        }
-                                        const row = document.querySelector(`tr[data-donor-id="${donorId}"]`);
-                                        if (row) {
-                                            const donorTypeCell = row.querySelector('td:nth-child(6)');
-                                            if (donorTypeCell && donorTypeCell.textContent.toLowerCase().includes('returning')) {
-                                                donorTypeCell.textContent = 'Returning (Medical)';
-                                                row.setAttribute('data-donor-type', 'Returning (Medical)');
+                                const confirmMsg = 'This action will mark the donor for Medical Review and return them to the medical stage for reassessment. Do you want to proceed?';
+                                if (window.customConfirm) {
+                                    window.customConfirm(confirmMsg, function() {
+                                        fetch('../../assets/php_func/update_needs_review.php', {
+                                            method: 'POST',
+                                            headers: { 'Accept': 'application/json' },
+                                            body: new URLSearchParams({ donor_id: donorId })
+                                        })
+                                        .then(r => r.json())
+                                        .then(res => {
+                                            if (res && res.success) {
+                                                // Silent success + refresh without opening another modal
+                                                // Show centered success modal (auto-closes, no buttons)
+                                                try {
+                                                    const existing = document.getElementById('successAutoModal');
+                                                    if (existing) existing.remove();
+                                                    const successHTML = `
+                                                        <div id="successAutoModal" style="
+                                                            position: fixed;
+                                                            top: 0;
+                                                            left: 0;
+                                                            width: 100%;
+                                                            height: 100%;
+                                                            background: rgba(0,0,0,0.5);
+                                                            z-index: 99999;
+                                                            display: flex;
+                                                            align-items: center;
+                                                            justify-content: center;
+                                                        ">
+                                                            <div style="
+                                                                background: #ffffff;
+                                                                border-radius: 10px;
+                                                                max-width: 520px;
+                                                                width: 90%;
+                                                                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                                                                overflow: hidden;
+                                                            ">
+                                                                <div style="
+                                                                    background: #9c0000;
+                                                                    color: white;
+                                                                    padding: 14px 18px;
+                                                                    font-weight: 700;
+                                                                ">Marked</div>
+                                                                <div style="padding: 22px;">
+                                                                    <p style="margin: 0;">The donor is medically cleared for donation.</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>`;
+                                                    document.body.insertAdjacentHTML('beforeend', successHTML);
+                                                } catch(_) {}
+                                                setTimeout(() => { 
+                                                    const m = document.getElementById('successAutoModal');
+                                                    if (m) m.remove();
+                                                    window.location.href = window.location.pathname + '?page=1'; 
+                                                }, 1800);
+                                                const row = document.querySelector(`tr[data-donor-id="${donorId}"]`);
+                                                if (row) {
+                                                    const donorTypeCell = row.querySelector('td:nth-child(6)');
+                                                    if (donorTypeCell && donorTypeCell.textContent.toLowerCase().includes('returning')) {
+                                                        donorTypeCell.textContent = 'Returning (Medical)';
+                                                        row.setAttribute('data-donor-type', 'Returning (Medical)');
+                                                    }
+                                                    const dateCell = row.querySelector('td:nth-child(2)');
+                                                    if (dateCell && res.updated_at) {
+                                                        const d = new Date(res.updated_at);
+                                                        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                                                        dateCell.textContent = d.toLocaleDateString('en-US', options);
+                                                    }
+                                                }
+                                            } else {
+                                                window.customConfirm('Failed to mark for review.', function() {});
                                             }
-                                            const dateCell = row.querySelector('td:nth-child(2)');
-                                            if (dateCell && res.updated_at) {
-                                                const d = new Date(res.updated_at);
-                                                const options = { year: 'numeric', month: 'long', day: 'numeric' };
-                                                dateCell.textContent = d.toLocaleDateString('en-US', options);
-                                            }
-                                        }
-                                        // Refresh to apply resorting by date/priority
-                                        // window.location.reload(); // Moved to modal callback
-                                    } else {
-                                        // Use custom modal instead of browser alert
-                                        if (window.customConfirm) {
-                                            window.customConfirm('Failed to mark for review.', function() {
-                                                // Just close the modal, no additional action needed
-                                            });
-                                        } else {
-                                            alert('Failed to mark for review.');
-                                        }
-                                    }
-                                })
-                                .catch(() => {
-                                    // Use custom modal instead of browser alert
-                                    if (window.customConfirm) {
-                                        window.customConfirm('Failed to mark for review.', function() {
-                                            // Just close the modal, no additional action needed
+                                        })
+                                        .catch(() => {
+                                            window.customConfirm('Failed to mark for review.', function() {});
                                         });
-                                    } else {
-                                        alert('Failed to mark for review.');
-                                    }
-                                });
+                                    });
+                                }
                             };
                         }
                         return;
@@ -4661,7 +4704,7 @@ $donor_history = $unique_donor_history;
                             align-items: center;
                         ">
                             <h5 style="margin: 0; font-weight: bold;">
-                                Submit Medical History
+                                Confirm Action
                             </h5>
                             <button onclick="closeSimpleModal()" style="
                                 background: none;
@@ -4673,7 +4716,15 @@ $donor_history = $unique_donor_history;
                         </div>
                         <div style="padding: 20px;">
                             <p style="font-size: 14px; line-height: 1.5; margin-bottom: 20px; color: #333;">${message}</p>
-                            <div style="text-align: right;">
+                            <div style="text-align: right; display: flex; gap: 10px; justify-content: flex-end;">
+                                <button onclick="closeSimpleModal()" style="
+                                    background: #6c757d;
+                                    color: white;
+                                    border: none;
+                                    padding: 8px 20px;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                    font-size: 14px;">Cancel</button>
                                 <button onclick="confirmSimpleModal()" style="
                                     background: #9c0000;
                                     color: white;
@@ -4682,7 +4733,7 @@ $donor_history = $unique_donor_history;
                                     border-radius: 4px;
                                     cursor: pointer;
                                     font-size: 14px;
-                                ">Initial Screening</button>
+                                ">Yes, proceed</button>
                             </div>
                         </div>
                     </div>

@@ -8,7 +8,7 @@
 
 <!-- Physical Examination Modal -->
 <div class="modal fade" id="physicalExaminationModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-lg" style="max-width:1100px; width:95%;">
         <div class="modal-content" style="border: none; border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden;">
             <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-bottom: none;">
                 <h5 class="modal-title"><i class="fas fa-stethoscope me-2"></i>Physical Examination Form</h5>
@@ -26,12 +26,11 @@
                     <div class="physical-step-number">2</div>
                     <div class="physical-step-label">Examination</div>
                 </div>
+                <!-- Blood Bag step is kept in code but hidden for physician flow -->
+
+                <!-- Review is now visual Stage 3 -->
                 <div class="physical-step" data-step="3">
                     <div class="physical-step-number">3</div>
-                    <div class="physical-step-label">Blood Bag</div>
-                </div>
-                <div class="physical-step" data-step="4">
-                    <div class="physical-step-number">4</div>
                     <div class="physical-step-label">Review</div>
                 </div>
             </div>
@@ -136,8 +135,8 @@
                 </div>
             </div>
 
-            <!-- Step 3: Blood Bag Selection -->
-            <div class="modal-body physical-step-content" id="physical-step-3">
+            <!-- Step 3: Blood Bag Selection (kept for future use; hidden in physician flow) -->
+            <div class="modal-body physical-step-content" id="physical-step-3" style="display:none;">
                 <div class="physical-step-inner">
                     <h4>Step 3: Blood Bag Selection</h4>
                     <p class="text-muted">Please select the appropriate blood bag type</p>
@@ -170,7 +169,7 @@
                 </div>
             </div>
 
-            <!-- Step 4: Review and Submit -->
+            <!-- Review and Submit (visual Stage 3) -->
             <div class="modal-body physical-step-content" id="physical-step-4">
                 <div class="physical-step-inner">
                     <h4>Step 4: Review & Submit</h4>

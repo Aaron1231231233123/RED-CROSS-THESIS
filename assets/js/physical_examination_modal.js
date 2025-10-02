@@ -2,7 +2,7 @@
 class PhysicalExaminationModal {
     constructor() {
         this.currentStep = 1;
-        this.totalSteps = 4; // Steps: 1 Vital, 2 Exam, 3 Blood Bag, 4 Review
+        this.totalSteps = 3; // Steps now: 1 Vital, 2 Exam, 3 Review (Blood Bag removed)
         this.formData = {};
         this.screeningData = null;
         this.isReadonly = false; // prevents submit visibility when terminal state
@@ -99,7 +99,7 @@ class PhysicalExaminationModal {
         this.showStep(1);
         
         // Add event listener to track when modal is actually shown
-        modalEl.addEventListener('shown.bs.modal', function() {
+        modalEl.addEventListener('shown.bs.modal', () => {
             console.log('[PE DEBUG] Modal shown event triggered');
             const backdrops = document.querySelectorAll('.modal-backdrop');
             console.log('[PE DEBUG] Backdrops on shown event:', backdrops.length, backdrops);
@@ -114,7 +114,48 @@ class PhysicalExaminationModal {
                     console.log(`[PE DEBUG] Fixed backdrop ${index} z-index to 1064 on shown event`);
                 }
             });
+
+            // Visually hide the Blood Bag stage and renumber Review to step 3
+            try {
+                // Hide the indicator whose label reads "Blood Bag" (keep code intact for future use)
+                const indicators = Array.from(document.querySelectorAll('.physical-step'));
+                const step3Indicator = indicators.find(el => /blood\s*bag/i.test(el.textContent || '')) || document.querySelector('.physical-step[data-step="3"]');
+                const step3Content = document.getElementById('physical-step-3');
+                if (step3Indicator) {
+                    // NOTE: Hidden by physician flow — step 3 (Blood Bag) is removed; Review becomes step 3. (UI hidden only)
+                    step3Indicator.style.display = 'none';
+                }
+                if (step3Content) {
+                    // NOTE: Hidden by physician flow — Blood Bag content removed. (Code kept for future use)
+                    step3Content.style.display = 'none';
+                }
+                // Find Review indicator (usually data-step="4") and relabel to 3
+                let reviewIndicator = indicators.find(el => {
+                    try { return /review/i.test(el.textContent || ''); } catch(_) { return false; }
+                }) || document.querySelector('.physical-step[data-step="4"]');
+                if (reviewIndicator) {
+                    reviewIndicator.setAttribute('data-step', '3');
+                    const numEl = reviewIndicator.querySelector('.physical-step-number');
+                    if (numEl) numEl.textContent = '3';
+                }
+                // Extra hardening: scan progress steps for any stray node showing 'Blood Bag' and hide its closest step container
+                const progress = document.querySelector('.physical-progress-steps');
+                if (progress) {
+                    Array.from(progress.querySelectorAll('.physical-step')).forEach(step => {
+                        try { if (/blood\s*bag/i.test(step.textContent || '')) { step.style.display = 'none'; } } catch(_) {}
+                    });
+                }
+            } catch(e) { console.warn('[PE DEBUG] Failed to hide/renumber steps:', e); }
         }, { once: true });
+
+        // Widen modal for better review layout (UI only; does not alter logic)
+        try {
+            const dlg = modalEl.querySelector('.modal-dialog');
+            if (dlg) {
+                dlg.style.maxWidth = '1100px';
+                dlg.style.width = '95%';
+            }
+        } catch(_) {}
 
         // When PE modal closes (X button or otherwise), return to donor profile modal
         const onHidden = () => {
@@ -150,6 +191,20 @@ class PhysicalExaminationModal {
         };
         const onHiddenCapture = () => onHidden();
         modalEl.addEventListener('hidden.bs.modal', onHiddenCapture, true);
+        // Default blood bag to 'Single' and hide Blood Bag step (3)
+        try {
+            // NOTE: Default blood bag as 'Single' for submission/summary even if UI is hidden.
+            this.setBloodBagSelection('Single');
+            const root = document.getElementById('physicalExaminationModal');
+            if (root) {
+                const step3Content = document.getElementById('physical-step-3');
+                if (step3Content) { /* hidden by physician flow (UI only; code intact) */ step3Content.style.display = 'none'; }
+                // Prefer hiding by label to avoid mismatches
+                const indicators = Array.from(document.querySelectorAll('.physical-step'));
+                const bloodBagIndicator = indicators.find(el => /blood\s*bag/i.test(el.textContent || '')) || root.querySelector('.physical-step[data-step="3"]');
+                if (bloodBagIndicator) { /* hidden by physician flow (UI only; code intact) */ bloodBagIndicator.style.display = 'none'; }
+            }
+        } catch(_) {}
         // Re-assert prefilled blood bag shortly after show to avoid race with layout/render
         try {
             const reapply = () => { if (this.formData && this.formData.__bagPrefill) { this.setBloodBagSelection(this.formData.__bagPrefill); } };
@@ -449,11 +504,10 @@ class PhysicalExaminationModal {
         if (this.validateCurrentStep()) {
             if (this.currentStep < this.totalSteps) {
                 this.currentStep++;
+                // Review is now step 3
                 this.updateProgressIndicator();
                 this.showStep(this.currentStep);
-                
-                // Update summary if we're at the review step
-                if (this.currentStep === 4) {
+                if (this.currentStep === 3) {
                     this.updateSummary();
                 }
             }
@@ -463,6 +517,7 @@ class PhysicalExaminationModal {
     prevStep() {
         if (this.currentStep > 1) {
             this.currentStep--;
+            // Normal backward step; review is 3
             this.updateProgressIndicator();
             this.showStep(this.currentStep);
         }
@@ -470,11 +525,12 @@ class PhysicalExaminationModal {
     
     goToStep(step) {
         if (step >= 1 && step <= this.currentStep && step <= this.totalSteps) {
+            // Go directly to requested step (review is step 3)
             this.currentStep = step;
             this.updateProgressIndicator();
-            this.showStep(step);
+            this.showStep(this.currentStep);
             
-            if (step === 4) {
+            if (this.currentStep === 3) {
                 this.updateSummary();
             }
         }
@@ -486,8 +542,21 @@ class PhysicalExaminationModal {
             stepEl.classList.remove('active');
         });
         
-        // Show current step content
-        const currentStepEl = document.getElementById(`physical-step-${step}`);
+        // Stage 3 is now Review (keep Blood Bag code but hide its UI)
+        let targetId = `physical-step-${step}`;
+        if (step === 3) {
+            // Prefer showing the review content if present
+            const reviewEl = document.getElementById('physical-step-4');
+            if (reviewEl) {
+                targetId = 'physical-step-4';
+            }
+            // Ensure Blood Bag content (step 3) is hidden in UI
+            const bloodBagEl = document.getElementById('physical-step-3');
+            if (bloodBagEl) { /* physician flow: hide Blood Bag UI only */ bloodBagEl.style.display = 'none'; }
+        }
+        
+        // Show current step content (after remap)
+        const currentStepEl = document.getElementById(targetId);
         if (currentStepEl) {
             currentStepEl.classList.add('active');
         }
@@ -518,12 +587,24 @@ class PhysicalExaminationModal {
             if (this.isReadonly) {
                 deferBtn.style.display = 'none';
             } else {
-                deferBtn.style.display = this.currentStep === 4 ? 'none' : 'inline-block';
+                deferBtn.style.display = this.currentStep === this.totalSteps ? 'none' : 'inline-block';
             }
         }
     }
     
     updateProgressIndicator() {
+        // Always hide the Blood Bag progress stage (UI only; code kept for future use)
+        try {
+            const steps = document.querySelectorAll('#physicalExaminationModal .physical-progress-steps .physical-step');
+            steps.forEach(step => {
+                const label = step.querySelector('.physical-step-label');
+                const text = (label ? label.textContent : step.textContent) || '';
+                if (/\bBlood\s*Bag\b/i.test(text.trim())) {
+                    step.style.display = 'none';
+                }
+            });
+        } catch(_) {}
+
         for (let i = 1; i <= this.totalSteps; i++) {
             const step = document.querySelector(`.physical-step[data-step="${i}"]`);
             if (step) {
@@ -558,15 +639,7 @@ class PhysicalExaminationModal {
                 }
             });
             
-            // Additional step-specific validation
-            if (this.currentStep === 3) {
-                // Validate blood bag type selection (step 4 is now blood bag selection)
-                const bloodBagSelected = document.querySelector('input[name="blood_bag_type"]:checked');
-                if (!bloodBagSelected) {
-                    this.showToast('Please select a blood bag type', 'error');
-                    isValid = false;
-                }
-            }
+            // Step 3 removed; no extra validation
         }
         
         return isValid;
@@ -757,10 +830,11 @@ class PhysicalExaminationModal {
         // Auto-set remarks as "Accepted" since donor passed physical examination
         // (No UI element needed - this is handled automatically)
         
-        // Update blood bag type
+        // Update blood bag type (default to Single when hidden)
         const selectedBloodBag = document.querySelector('input[name="blood_bag_type"]:checked');
-        document.getElementById('summary-blood-bag').textContent = 
-            selectedBloodBag ? selectedBloodBag.value : 'Not selected';
+        const bagText = selectedBloodBag ? selectedBloodBag.value : 'Single';
+        const sumEl = document.getElementById('summary-blood-bag');
+        if (sumEl) sumEl.textContent = bagText;
     }
     
     async submitForm() {
@@ -813,6 +887,10 @@ class PhysicalExaminationModal {
             const formData = new FormData(document.getElementById('physicalExaminationForm'));
             const data = {};
             for (let [key, value] of formData.entries()) { data[key] = value; }
+            // Enforce default Single if missing
+            if (!data.blood_bag_type || String(data.blood_bag_type).trim().length === 0) {
+                data.blood_bag_type = 'Single';
+            }
             if (this.screeningData) {
                 data.donor_id = this.screeningData.donor_form_id;
                 data.screening_id = this.screeningData.screening_id;

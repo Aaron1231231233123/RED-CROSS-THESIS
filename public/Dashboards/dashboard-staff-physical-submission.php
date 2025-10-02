@@ -2405,6 +2405,30 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         </div>
     </div>
 
+    <!-- Proceed to Physical Examination Confirmation Modal (Physician flow) -->
+    <div class="modal fade" id="proceedToPEConfirmModal" tabindex="-1" aria-labelledby="proceedToPEConfirmModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 15px; border: none;">
+                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
+                    <h5 class="modal-title" id="proceedToPEConfirmModalLabel">
+                        <i class="fas fa-stethoscope me-2"></i>
+                        Proceed to Physical Examination?
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-4">
+                    <p class="mb-0" style="font-size: 1.1rem;">Medical History here is for viewing/review only. Continue to Physical Examination?</p>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn px-4" id="confirmProceedToPEBtn" style="background-color: #b22222; border-color: #b22222; color: white;">
+                        <i class="fas fa-arrow-right me-2"></i>Yes, Proceed
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Pass PHP data to JavaScript
         const medicalByDonor = <?php echo json_encode($medical_by_donor ?? []); ?>;
@@ -3444,68 +3468,44 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     })();
                 } catch(_) {}
                 physicalExamBtn.addEventListener('click', function() {
-                    
-                    
-                    // Clear any conflicting success states
+                    // Physician flow: open Medical History first, then proceed to Physical Examination
                     try {
                         window.__mhSuccessActive = false;
                         window.__peSuccessActive = false;
                     } catch(_) {}
-                    
+
                     // Close the current donor profile modal
                     try { window.allowDonorProfileHide = true; } catch(_) {}
-                    // Set flag to skip donor profile cleanup when transitioning to physical examination modal
                     try { window.skipDonorProfileCleanup = true; } catch(_) {}
                     cleanupModalState('donorProfileModal');
-                    
-                    // Save context so we can return to donor profile when physical modal closes
+
+                    // Save context so we can return to donor profile when needed
                     if (screeningData?.donor_form_id) {
-                        window.lastDonorProfileContext = { donorId: screeningData.donor_form_id, screeningData: screeningData };
+                        window.lastDonorProfileContext = { donorId: screeningData.donor_form_id, screeningData };
                     }
 
-                    // Wait for cleanup to complete before opening physical examination modal
+                    // Mark that MH was opened from Physician flow and cache screeningData for PE
+                    try {
+                        window.__openMHForPhysician = true;
+                        window.__physFlowScreeningData = screeningData;
+                    } catch(_) {}
+
+                    // Open Medical History modal for review first
                     setTimeout(() => {
-                        // Only clean up backdrops if no other modals are currently open
+                        const donorId = screeningData?.donor_form_id;
+                        if (!donorId) { alert('Unable to resolve donor.'); return; }
+                        openMedicalHistoryModal(donorId);
+                        // Normalize body if no other modals
                         try {
-                            const otherModals = document.querySelectorAll('.modal.show:not(#physicalExaminationModal)');
+                            const otherModals = document.querySelectorAll('.modal.show:not(#medicalHistoryModal)');
                             if (otherModals.length === 0) {
-                                // Do not remove backdrops; just normalize body
                                 document.body.classList.remove('modal-open');
                                 document.body.style.overflow = '';
                                 document.body.style.paddingRight = '';
                             }
                         } catch(_) {}
-                        
-                        // Open the physical examination modal
-                        if (window.physicalExaminationModal) {
-                            window.physicalExaminationModal.openModal(screeningData);
-                            
-                            // Ensure proper z-index layering after modal opens
-                            setTimeout(() => {
-                                try {
-                                    const modalEl = document.getElementById('physicalExaminationModal');
-                                    if (modalEl) {
-                                        modalEl.style.zIndex = '1065';
-                                        const dlg = modalEl.querySelector('.modal-dialog');
-                                        if (dlg) dlg.style.zIndex = '1066';
-                                    }
-                                    // Reset the skip cleanup flag
-                                    window.skipDonorProfileCleanup = false;
-                                } catch(_) {}
-                            }, 50);
-                            
-                            // Initialize defer button after modal opens
-                            if (typeof initializePhysicalExamDeferButton === 'function') {
-                                initializePhysicalExamDeferButton();
-                            }
-                            
-                            // Initialize medical history approval functionality
-                            if (typeof initializeMedicalHistoryApproval === 'function') {
-                                initializeMedicalHistoryApproval();
-                            }
-                        } else {
-                            alert("Error: Modal not properly initialized. Please refresh the page.");
-                        }
+                        // Reset skip cleanup after handoff
+                        try { window.skipDonorProfileCleanup = false; } catch(_) {}
                     }, 200);
                 });
             }
@@ -4783,42 +4783,44 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         approveBtn.type = 'button';
                         approveBtn.id = 'modalApproveButton';
                         approveBtn.className = 'btn btn-success';
-                        approveBtn.innerHTML = '<i class="fas fa-arrow-right me-2"></i>Proceed to Initial Screening';
+                        // Button label depends on caller flow: Interviewer vs Physician
+                        const isPhysFlow = (window.__openMHForPhysician === true);
+                        const label = isPhysFlow ? 'Proceed to Physical Examination' : 'Proceed to Initial Screening';
+                        approveBtn.innerHTML = '<i class="fas fa-arrow-right me-2"></i>' + label;
                         // Place the Approve button next to Next/Close button in the footer controls
                         if (nextButton && nextButton.parentNode) {
                             nextButton.parentNode.appendChild(approveBtn);
                         }
                     }
                     approveBtn.style.display = '';
-                    // Use the dashboard's confirmation system
+                    // Use the dashboard's confirmation system with role-aware behavior
                     approveBtn.onclick = function() { 
+                        const isPhysFlow = (window.__openMHForPhysician === true);
+                        const promptMsg = isPhysFlow
+                            ? 'Proceed to Physical Examination? (Medical History is for viewing; approval will be handled in the next step)'
+                            : 'Are you sure you want to proceed to Initial Screening?\n\nThis will mark Medical History as Approved and continue to Initial Screening.';
                         // Reset approval flags
                         try { 
                             window.__mhApproveConfirmed = false; 
                             window.__mhApproveFromPrimary = true; 
                             window.__mhApprovePending = true;
                         } catch(_) {}
-                        
-                        window.customConfirm('Proceed to Initial Screening? (Medical History will NOT be submitted here)', function(){
+                        const proceedHandler = function(){
                             try { window.__mhApproveConfirmed = true; } catch(_) {}
-                            // Cache Medical History form data for later submission at Screening approve
+                            // Cache Medical History form data for later submission at next step approve
                             try {
                                 const mhForm = document.getElementById('modalMedicalHistoryForm');
                                 if (mhForm) {
                                     const fd = new FormData(mhForm);
                                     const cache = {};
                                     fd.forEach((v, k) => { cache[k] = v; });
-                                    // Ensure required approve fields are set
                                     cache['action'] = 'approve';
                                     cache['medical_approval'] = 'Approved';
                                     if (!cache['donor_id'] && window.currentDonorId) cache['donor_id'] = window.currentDonorId;
                                     window.pendingMedicalApprovalData = cache;
                                 }
                             } catch(_) {}
-                            // Close MH modal and open Initial Screening without submitting MH
-                            try { window.__preventReturnToProfile = true; } catch(_) {}
-                            try { if (typeof closeMedicalHistoryModal === 'function') closeMedicalHistoryModal(); } catch(_) {}
-                            // Resolve donor id robustly from multiple sources
+                            // Resolve donor id
                             let donorId = null;
                             try {
                                 const donorIdEl = document.querySelector('#modalMedicalHistoryForm input[name="donor_id"]');
@@ -4833,21 +4835,58 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                     if (hint) donorId = hint.getAttribute('data-donor-id');
                                 } catch(_) {}
                             }
-                            if (!donorId) {
-                                
-                                try { window.customInfo && window.customInfo('Unable to resolve donor. Please reopen the donor and try again.'); } catch(_) {}
-                                return;
+                            if (!donorId) { try { window.customInfo && window.customInfo('Unable to resolve donor. Please reopen the donor and try again.'); } catch(_) {} return; }
+
+                            // Branch by flow
+                            if (isPhysFlow) {
+                                // Show dedicated PE confirmation modal, then open PE
+                                showProceedToPEConfirmModal(function(){
+                                    // Mark accepted to prevent MH auto-restore and DP auto-reopen
+                                    try { window.__peProceedAccepted = true; } catch(_) {}
+                                    try { window.__preventReturnToProfile = true; } catch(_) {}
+                                    try { window.__suppressReturnToProfile = true; } catch(_) {}
+                                    try { window.__physApproveActive = true; } catch(_) {}
+                                    // Close MH only after user confirms
+                                    try { if (typeof closeMedicalHistoryModal === 'function') closeMedicalHistoryModal(); } catch(_) {}
+                                    setTimeout(function(){
+                                        const sd = window.__physFlowScreeningData || { donor_form_id: donorId };
+                                        if (window.physicalExaminationModal) {
+                                            window.physicalExaminationModal.openModal(sd);
+                                            try { 
+                                                window.__openMHForPhysician = false; 
+                                                window.__physFlowScreeningData = null; 
+                                                window.__suppressReturnToProfile = false; 
+                                                window.__physApproveActive = false;
+                                            } catch(_) {}
+                                        } else {
+                                            alert('Error: Physical Examination modal not initialized.');
+                                        }
+                                    }, 150);
+                                });
+                            } else {
+                                // Interviewer flow → Screening
+                                // Close MH only after user confirms
+                                try { window.__preventReturnToProfile = true; } catch(_) {}
+                                try { if (typeof closeMedicalHistoryModal === 'function') closeMedicalHistoryModal(); } catch(_) {}
+                                setTimeout(function(){
+                                    try {
+                                        if (typeof showScreeningFormModal === 'function' && donorId) {
+                                            showScreeningFormModal(donorId);
+                                        } else if (typeof window.openScreeningModal === 'function' && donorId) {
+                                            window.openScreeningModal({ donor_id: donorId });
+                                        }
+                                    } catch(_) {}
+                                }, 200);
                             }
-                            setTimeout(function(){
-                                try {
-                                    if (typeof showScreeningFormModal === 'function' && donorId) {
-                                        showScreeningFormModal(donorId);
-                                    } else if (typeof window.openScreeningModal === 'function' && donorId) {
-                                        window.openScreeningModal({ donor_id: donorId });
-                                    }
-                                } catch(_) {}
-                            }, 200);
-                        });
+                        };
+
+                        if (isPhysFlow) {
+                            // Use the dedicated PE confirmation modal chain
+                            proceedHandler();
+                        } else {
+                            // Interviewer uses the existing confirm UI (explicit approval wording)
+                            window.customConfirm(promptMsg, proceedHandler);
+                        }
                     };
                 } else {
                     nextButton.innerHTML = 'Next →';
@@ -5455,6 +5494,57 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 }
             } catch(_) {}
         })();
+
+        // Physician proceed-to-PE confirm (Bootstrap modal wrapper)
+        function showProceedToPEConfirmModal(onConfirm){
+            try {
+                const el = document.getElementById('proceedToPEConfirmModal');
+                if (!el) { if (typeof window.customConfirm === 'function') { return window.customConfirm('Proceed to Physical Examination?', onConfirm); } else { if (confirm('Proceed to Physical Examination?')) onConfirm && onConfirm(); return; } }
+                // Replace any existing handler to avoid duplicate bindings
+                const btn = document.getElementById('confirmProceedToPEBtn');
+                if (btn) {
+                    const clone = btn.cloneNode(true);
+                    btn.parentNode.replaceChild(clone, btn);
+                    clone.addEventListener('click', function(){
+                        try { (bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el)).hide(); } catch(_) {}
+                        if (onConfirm) onConfirm();
+                    });
+                }
+                // When canceled/closed, ensure MH modal is visible again
+                try {
+                    el.addEventListener('hidden.bs.modal', function(ev){
+                        try {
+                            const mh = document.getElementById('medicalHistoryModal');
+                            const accepted = !!window.__peProceedAccepted;
+                            if (mh && !accepted) {
+                                // Re-show MH modal only if user cancelled
+                                mh.style.display = 'flex';
+                                setTimeout(() => mh.classList.add('show'), 10);
+                            }
+                            // Reset flag after handling
+                            try { window.__peProceedAccepted = false; } catch(_) {}
+                        } catch(_) {}
+                    }, { once: true });
+                } catch(_) {}
+                // Use static backdrop to ensure this modal sits above and backdrop is behind it
+                const m = bootstrap.Modal.getOrCreateInstance(el, { backdrop: 'static', keyboard: false });
+                // Ensure z-index is above table overlays/backdrops
+                try {
+                    el.style.zIndex = '20010';
+                    const dlg = el.querySelector('.modal-dialog');
+                    if (dlg) dlg.style.zIndex = '20011';
+                } catch(_) {}
+                // Normalize any lingering backdrops layering
+                setTimeout(() => {
+                    try {
+                        document.querySelectorAll('.modal-backdrop').forEach(b => { b.style.zIndex = '20005'; });
+                    } catch(_) {}
+                }, 10);
+                m.show();
+            } catch(_) {
+                if (typeof window.customConfirm === 'function') { window.customConfirm('Proceed to Physical Examination?', onConfirm); } else { if (confirm('Proceed to Physical Examination?')) onConfirm && onConfirm(); }
+            }
+        }
 
         // Link MH → Screening: after medical history approval completes, open Initial Screening
         (function(){

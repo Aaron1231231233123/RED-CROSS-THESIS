@@ -203,12 +203,10 @@
                 </form>
             </div>
             
-            <div class="modal-footer screening-modal-footer" style="justify-content: space-between; align-items: center; position: relative; z-index: 1061; background: white; border-top: 1px solid #dee2e6;">
-                <!-- Left side - Cancel button -->
-                <div>
-                    <button type="button" class="btn btn-outline-secondary" id="screeningCancelButton">
-                        <i class="fas fa-times me-1"></i>Cancel
-                    </button>
+            <div class="modal-footer screening-modal-footer" style="justify-content: flex-end; align-items: center; position: relative; z-index: 1061; background: white; border-top: 1px solid #dee2e6;">
+                <!-- Left side - Cancel button (removed) -->
+                <div style="display:none;">
+                    <button type="button" class="btn btn-outline-secondary" id="screeningCancelButton" style="display:none;" aria-hidden="true" tabindex="-1"></button>
                 </div>
                 
                 <!-- Right side - Action buttons -->
