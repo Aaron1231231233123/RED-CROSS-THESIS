@@ -824,6 +824,8 @@ $donor_history = $unique_donor_history;
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="../../assets/css/defer-donor-modal.css">
+    <script src="../../assets/js/account_interviewer_feedback_modal.js"></script>
+    <script src="../../assets/js/account_interviewer_error_modal.js"></script>
     <script src="../../assets/js/screening_form_modal.js"></script>
     <style>
         :root {
@@ -4515,113 +4517,119 @@ $donor_history = $unique_donor_history;
                         }, 500);
                     };
                     
-                    // Confirmation functions removed - using direct submission now
+                    // Re-introduce explicit confirmation: only proceed and close after user agrees
                     
                     // Ensure submit function is available globally
                     window.submitDeclarationForm = function(event) {
-                        
-                        // Process the declaration form
-                        const form = document.getElementById('modalDeclarationForm');
-                        if (!form) {
-                            // Use custom modal instead of browser alert
-                            if (window.customConfirm) {
-                                window.customConfirm('Form not found. Please try again.', function() {
-                                    // Just close the modal, no additional action needed
-                                });
-                            } else {
-                                alert('Form not found. Please try again.');
-                            }
-                            return;
-                        }
-                        
-                        document.getElementById('modalDeclarationAction').value = 'complete';
-                        
-                        // Prevent default form submission
+                        // Prevent default form submission immediately to keep modal open
                         if (event) {
                             event.preventDefault();
                         }
                         
-                        // Submit the form via AJAX
-                        const formData = new FormData(form);
-                        
-                        // Include screening data if available
-                        if (window.currentScreeningData) {
-                            formData.append('screening_data', JSON.stringify(window.currentScreeningData));
-                            formData.append('debug_log', 'Including screening data: ' + JSON.stringify(window.currentScreeningData));
-                        } else {
-                            formData.append('debug_log', 'No screening data available');
-                        }
-                        
-                        formData.append('debug_log', 'Submitting form data...');
-                        
-                        // Debug: Log what we're sending
-                        const debugFormData = new FormData();
-                        debugFormData.append('debug_log', 'FormData contents:');
-                        for (let [key, value] of formData.entries()) {
-                            debugFormData.append('debug_log', '  ' + key + ': ' + value);
-                        }
-                        fetch('../../src/views/forms/declaration-form-process.php', {
-                            method: 'POST',
-                            body: debugFormData
-                        }).catch(() => {});
-                        
-                        fetch('../../src/views/forms/declaration-form-process.php', {
-                            method: 'POST',
-                            body: formData
-                        })
-                        .then(response => {
-                            if (!response.ok) {
-                                throw new Error('Network response was not ok: ' + response.status);
-                            }
-                            return response.json();
-                        })
-                        .then(data => {
-                            if (data.success) {
-                                // Close declaration form modal
-                                const declarationModal = bootstrap.Modal.getInstance(document.getElementById('declarationFormModal'));
-                                if (declarationModal) {
-                                    declarationModal.hide();
-                                }
-                                
-                                // Show success message
+                        const proceedSubmission = function() {
+                            // Process the declaration form
+                            const form = document.getElementById('modalDeclarationForm');
+                            if (!form) {
                                 if (window.customConfirm) {
-                                    window.customConfirm('Registration completed successfully!', function() {
-                                        window.location.reload();
-                                    });
+                                    window.customConfirm('Form not found. Please try again.', function() {});
                                 } else {
-                                    alert('Registration completed successfully!');
-                                    window.location.reload();
+                                    alert('Form not found. Please try again.');
                                 }
-                            } else {
-                                // Show error message
-                                if (window.customConfirm) {
-                                    window.customConfirm('Error: ' + (data.message || 'Unknown error occurred'), function() {
-                                        // Just close the modal, no additional action needed
-                                    });
-                                } else {
-                                    alert('Error: ' + (data.message || 'Unknown error occurred'));
-                                }
+                                return;
                             }
-                        })
-                        .catch(error => {
-                            console.error('Error submitting declaration form:', error);
                             
-                            // Log error to server
-                            const errorFormData = new FormData();
-                            errorFormData.append('debug_log', 'JavaScript Error: ' + error.message);
+                            document.getElementById('modalDeclarationAction').value = 'complete';
+                            
+                            // Submit the form via AJAX
+                            const formData = new FormData(form);
+                            
+                            // Include screening data if available
+                            if (window.currentScreeningData) {
+                                formData.append('screening_data', JSON.stringify(window.currentScreeningData));
+                                formData.append('debug_log', 'Including screening data: ' + JSON.stringify(window.currentScreeningData));
+                            } else {
+                                formData.append('debug_log', 'No screening data available');
+                            }
+                            
+                            formData.append('debug_log', 'Submitting form data...');
+                            
+                            // Debug: Log what we're sending
+                            const debugFormData = new FormData();
+                            debugFormData.append('debug_log', 'FormData contents:');
+                            for (let [key, value] of formData.entries()) {
+                                debugFormData.append('debug_log', '  ' + key + ': ' + value);
+                            }
                             fetch('../../src/views/forms/declaration-form-process.php', {
                                 method: 'POST',
-                                body: errorFormData
+                                body: debugFormData
                             }).catch(() => {});
                             
-                            if (window.customConfirm) {
-                                window.customConfirm('An error occurred while processing the form: ' + error.message, function() {
-                                    // Just close the modal, no additional action needed
-                                });
-                            } else {
-                                alert('An error occurred while processing the form: ' + error.message);
+                            fetch('../../src/views/forms/declaration-form-process.php', {
+                                method: 'POST',
+                                body: formData
+                            })
+                            .then(response => {
+                                if (!response.ok) {
+                                    throw new Error('Network response was not ok: ' + response.status);
+                                }
+                                return response.json();
+                            })
+                            .then(data => {
+                                if (data.success) {
+                                    // Close declaration form modal ONLY after explicit confirmation (already given)
+                                    const declarationModal = bootstrap.Modal.getInstance(document.getElementById('declarationFormModal'));
+                                    if (declarationModal) {
+                                        declarationModal.hide();
+                                    }
+                                    
+                                    // Show success modal with requested copy and behavior
+                                    if (window.showSuccessModal) {
+                                        // Title should indicate forwarded to physician; content should not claim cleared
+                                        showSuccessModal('Submitted', 'The donor has been forwarded to the physician for physical examination.', { autoCloseMs: 1600, reloadOnClose: true });
+                                    } else {
+                                        // Fallback
+                                        alert('Submitted: The donor has been forwarded to the physician for physical examination.');
+                                        window.location.reload();
+                                    }
+                                } else {
+                                    // Show error modal (different styling)
+                                    const msg = 'Failed to complete registration. ' + (data.message || 'Please try again.');
+                                    if (window.showErrorModal) {
+                                        showErrorModal('Submission Failed', msg, { autoCloseMs: null, reloadOnClose: false });
+                                    } else {
+                                        alert(msg);
+                                    }
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error submitting declaration form:', error);
+                                
+                                // Log error to server
+                                const errorFormData = new FormData();
+                                errorFormData.append('debug_log', 'JavaScript Error: ' + error.message);
+                                fetch('../../src/views/forms/declaration-form-process.php', {
+                                    method: 'POST',
+                                    body: errorFormData
+                                }).catch(() => {});
+                                
+                                const emsg = 'An error occurred while processing the form: ' + error.message;
+                                if (window.showErrorModal) {
+                                    showErrorModal('Submission Error', emsg, { autoCloseMs: null, reloadOnClose: false });
+                                } else {
+                                    alert(emsg);
+                                }
+                            });
+                        };
+                        
+                        // Ask for explicit confirmation before proceeding
+                        const message = 'Are you sure you want to complete the registration?';
+                        if (window.customConfirm) {
+                            window.customConfirm(message, proceedSubmission);
+                        } else {
+                            if (confirm(message)) {
+                                proceedSubmission();
                             }
-                        });
+                        }
                     };
                 })
                 .catch(error => {
