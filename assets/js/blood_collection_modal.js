@@ -1,11 +1,10 @@
+
 class BloodCollectionModal {
     constructor() {
         this.modal = null;
         this.currentStep = 1;
         this.totalSteps = 5;
         this.bloodCollectionData = null;
-        this.cachedDonorData = null;
-        this.cachedPhysicalExamData = null;
         this.isSubmitting = false; // Prevent duplicate submissions
         this.init();
     }
@@ -31,12 +30,12 @@ class BloodCollectionModal {
     }
 
     setupEventListeners() {
-        // Navigation buttons (scoped to this modal)
-        const prevBtn = this.modal.querySelector('.blood-prev-btn');
-        const nextBtn = this.modal.querySelector('.blood-next-btn');
-        const submitBtn = this.modal.querySelector('.blood-submit-btn');
-        const cancelBtn = this.modal.querySelector('.blood-cancel-btn');
-        const closeBtn = this.modal.querySelector('.blood-close-btn');
+        // Navigation buttons
+        const prevBtn = document.querySelector('.blood-prev-btn');
+        const nextBtn = document.querySelector('.blood-next-btn');
+        const submitBtn = document.querySelector('.blood-submit-btn');
+        const cancelBtn = document.querySelector('.blood-cancel-btn');
+        const closeBtn = document.querySelector('.blood-close-btn');
 
         if (prevBtn) prevBtn.addEventListener('click', () => this.previousStep());
         if (nextBtn) nextBtn.addEventListener('click', () => this.nextStep());
@@ -63,7 +62,7 @@ class BloodCollectionModal {
         if (closeBtn) closeBtn.addEventListener('click', () => this.closeModal());
 
         // Step navigation
-        this.modal.querySelectorAll('.blood-step').forEach(step => {
+        document.querySelectorAll('.blood-step').forEach(step => {
             step.addEventListener('click', (e) => {
                 const stepNumber = parseInt(e.currentTarget.dataset.step);
                 if (stepNumber <= this.currentStep) {
@@ -73,10 +72,10 @@ class BloodCollectionModal {
         });
 
         // Modern bag option selection
-        this.modal.querySelectorAll('.bag-option input[type="radio"]').forEach(radio => {
+        document.querySelectorAll('.bag-option input[type="radio"]').forEach(radio => {
             radio.addEventListener('change', () => {
                 // Remove selected class from all bag options
-                this.modal.querySelectorAll('.bag-option').forEach(opt => {
+                document.querySelectorAll('.bag-option').forEach(opt => {
                     opt.classList.remove('selected');
                 });
                 
@@ -88,10 +87,10 @@ class BloodCollectionModal {
         });
 
         // Blood status option selection and reaction visibility
-        this.modal.querySelectorAll('input[name="is_successful"]').forEach(radio => {
+        document.querySelectorAll('input[name="is_successful"]').forEach(radio => {
             radio.addEventListener('change', () => {
                 // Remove selected class from all status options
-                this.modal.querySelectorAll('.blood-status-card').forEach(opt => {
+                document.querySelectorAll('.blood-status-card').forEach(opt => {
                     opt.classList.remove('selected');
                 });
                 
@@ -100,8 +99,8 @@ class BloodCollectionModal {
                     radio.closest('.blood-status-card').classList.add('selected');
                 }
                 
-                // Toggle donor reaction section when unsuccessful (value === 'false')
-                this.updateReactionVisibility(radio.value === 'false');
+                // Show/hide reaction management based on selection
+                this.updateReactionVisibility(radio.value === 'NO');
             });
         });
 
@@ -113,8 +112,8 @@ class BloodCollectionModal {
     }
 
     setupTimeValidation() {
-        const startTimeInput = this.modal.querySelector('#start_time');
-        const endTimeInput = this.modal.querySelector('#end_time');
+        const startTimeInput = document.getElementById('blood-start-time');
+        const endTimeInput = document.getElementById('blood-end-time');
 
         if (startTimeInput && endTimeInput) {
             // Validate end time is at least 5 minutes after start time
@@ -143,7 +142,7 @@ class BloodCollectionModal {
 
     initializeModernFormElements() {
         // Add click handlers for bag option labels
-        this.modal.querySelectorAll('.bag-option').forEach(option => {
+        document.querySelectorAll('.bag-option').forEach(option => {
             option.addEventListener('click', (e) => {
                 if (e.target.tagName !== 'INPUT') {
                     const radio = option.querySelector('input[type="radio"]');
@@ -156,7 +155,7 @@ class BloodCollectionModal {
         });
 
         // Add click handlers for blood status card labels
-        this.modal.querySelectorAll('.blood-status-card').forEach(option => {
+        document.querySelectorAll('.blood-status-card').forEach(option => {
             option.addEventListener('click', (e) => {
                 if (e.target.tagName !== 'INPUT') {
                     const radio = option.querySelector('input[type="radio"]');
@@ -170,18 +169,9 @@ class BloodCollectionModal {
     }
 
     updateReactionVisibility(showReaction) {
-        const reactionSection = this.modal.querySelector('#donorReactionSection');
-        const reactionTextarea = this.modal.querySelector('#donor_reaction');
+        const reactionSection = document.querySelector('.blood-reaction-section');
         if (reactionSection) {
             reactionSection.style.display = showReaction ? 'block' : 'none';
-        }
-        if (reactionTextarea) {
-            if (showReaction) {
-                reactionTextarea.setAttribute('required', 'required');
-            } else {
-                reactionTextarea.removeAttribute('required');
-                reactionTextarea.value = '';
-            }
         }
     }
 
@@ -197,15 +187,20 @@ class BloodCollectionModal {
         const sequence = timestamp + random;
         const serialNumber = `BC-${dateStr}-${sequence}`;
         
-        const serialInput = this.modal.querySelector('#unit_serial_number');
+        const serialInput = document.getElementById('blood-unit-serial');
         if (serialInput) {
             serialInput.value = serialNumber;
         }
-        // No separate serial display element in current HTML; skip optional update
+
+        // Also update the display in Step 1
+        const serialDisplay = document.getElementById('blood-unit-serial-display');
+        if (serialDisplay) {
+            serialDisplay.textContent = serialNumber;
+        }
     }
 
     openModal(collectionData) {
-        this.bloodCollectionData = collectionData || {};
+        this.bloodCollectionData = collectionData;
         this.currentStep = 1;
         
         // Reset submission flag when opening modal
@@ -216,11 +211,8 @@ class BloodCollectionModal {
         
         // Populate summary data
         this.populateSummary();
-
-        // Seed hidden context ids into the form if provided
-        this.seedContextIds(this.bloodCollectionData);
         
-        // Show modal (custom modal, not Bootstrap)
+        // Show modal
         this.modal.style.display = 'flex';
         setTimeout(() => {
             this.modal.classList.add('show');
@@ -232,68 +224,30 @@ class BloodCollectionModal {
         this.updateNavigationButtons();
     }
 
-    seedContextIds(context) {
-        try {
-            const setIf = (name, value) => {
-                const el = this.modal.querySelector(`#bloodCollectionForm input[name="${name}"]`);
-                if (el && value) el.value = value;
-            };
-            setIf('donor_id', context?.donor_id || '');
-            setIf('screening_id', context?.screening_id || '');
-            setIf('physical_exam_id', context?.physical_exam_id || '');
-        } catch (e) {
-            console.warn('Failed seeding context ids:', e);
-        }
-    }
-
     async populateSummary() {
         if (!this.bloodCollectionData) return;
 
         try {
-            // Use comprehensive API (aggregates donor, screening, physical exam, etc.)
-            const donorId = this.bloodCollectionData.donor_id;
-            if (!donorId) return;
+            // Fetch additional donor and physical exam data
+            const [donorResponse, physicalExamResponse] = await Promise.all([
+                fetch(`../../assets/php_func/get_donor_details.php?donor_id=${this.bloodCollectionData.donor_id}`),
+                fetch(`../../assets/php_func/get_physical_exam_details.php?physical_exam_id=${this.bloodCollectionData.physical_exam_id}`)
+            ]);
 
-            const response = await fetch(`../../assets/php_func/comprehensive_donor_details_api.php?donor_id=${encodeURIComponent(donorId)}`);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+            if (donorResponse.ok) {
+                const donorData = await donorResponse.json();
+                if (donorData.success) {
+                    this.populateDonorInfo(donorData.data);
+                }
             }
 
-            const data = await response.json();
-            if (data && !data.error) {
-                const donorForm = data.donor_form || null;
-                const screeningForm = data.screening_form || null;
-                const physicalExam = data.physical_examination || null;
-
-                this.cachedDonorData = donorForm;
-                // No longer prefilling from physical examination; rely on screening form for prefill
-
-                if (donorForm) {
-                    this.populateDonorInfo(donorForm);
+            if (physicalExamResponse.ok) {
+                const physicalData = await physicalExamResponse.json();
+                if (physicalData.success) {
+                    this.populatePhysicalExamInfo(physicalData.data);
                 }
-                // Prefer screening form values for prefill (blood_type, body_weight)
-                if (screeningForm && Object.keys(screeningForm).length) {
-                    this.seedCollectionDetailsFromData(screeningForm, null);
-                }
-                // Fallback to donor form if screening doesn't have values
-                if (donorForm) {
-                    this.seedCollectionDetailsFromData(donorForm, null);
-                }
-
-                // Seed hidden identifiers if missing (backend requires physical_exam_id)
-                try {
-                    const physId = physicalExam && (physicalExam.physical_exam_id || physicalExam.id);
-                    const screenId = screeningForm && (screeningForm.screening_id || screeningForm.id);
-                    const physEl = this.modal.querySelector('#bloodCollectionForm input[name="physical_exam_id"]');
-                    const scrEl = this.modal.querySelector('#bloodCollectionForm input[name="screening_id"]');
-                    if (physEl && !physEl.value && physId) physEl.value = String(physId);
-                    if (scrEl && !scrEl.value && screenId) scrEl.value = String(screenId);
-                    this.cachedPhysicalExamData = physicalExam || null;
-                } catch (_) {}
-            } else if (data && data.error) {
-                // Non-fatal; still allow manual entry
-                console.warn('Comprehensive API error:', data.error);
             }
+
         } catch (error) {
             console.error('Error fetching summary data:', error);
             this.showToast('Error loading summary data', 'error');
@@ -344,60 +298,23 @@ class BloodCollectionModal {
         console.log('Physical exam data available for reference:', physicalData);
     }
 
-    seedCollectionDetailsFromData(donorData, physicalData) {
-        try {
-            const bloodTypeInput = this.modal.querySelector('#blood_type');
-            const donorWeightInput = this.modal.querySelector('#donor_weight');
-            const collectionDateInput = this.modal.querySelector('#collection_date');
-
-            // Blood type from donor or screening/physical data
-            const bloodType = (physicalData && (physicalData.blood_type || physicalData.bloodType)) ||
-                              (donorData && (donorData.blood_type || donorData.bloodType));
-            if (bloodTypeInput && bloodType && !bloodTypeInput.value) {
-                bloodTypeInput.value = bloodType;
-            }
-
-            // Weight preference: physical exam > screening > donor
-            const weight = (physicalData && (physicalData.donor_weight || physicalData.weight || physicalData.body_weight)) ||
-                           (donorData && (donorData.weight || donorData.body_weight));
-            if (donorWeightInput && weight && !donorWeightInput.value) {
-                donorWeightInput.value = weight;
-            }
-
-            // Default collection date to today if empty
-            if (collectionDateInput && !collectionDateInput.value) {
-                const today = new Date().toISOString().split('T')[0];
-                collectionDateInput.value = today;
-            }
-        } catch (e) {
-            console.warn('Failed to seed collection details:', e);
-        }
-    }
-
     showStep(stepNumber) {
-        // Hide all steps and enforce display none to override inline styles
-        this.modal.querySelectorAll('.blood-step-content').forEach(step => {
+        // Hide all steps
+        document.querySelectorAll('.blood-step-content').forEach(step => {
             step.classList.remove('active');
-            step.style.display = 'none';
         });
-
-        // Show current step by matching data-step on step content
-        const currentStepContent = this.modal.querySelector(`.blood-step-content[data-step="${stepNumber}"]`);
+        
+        // Show current step
+        const currentStepContent = document.getElementById(`blood-step-${stepNumber}`);
         if (currentStepContent) {
             currentStepContent.classList.add('active');
-            currentStepContent.style.display = 'block';
         }
-
+        
         this.currentStep = stepNumber;
-
-        // Ensure Step 2 always shows prefills after it becomes active
-        if (this.currentStep === 2) {
-            this.seedCollectionDetailsFromData(this.cachedDonorData, this.cachedPhysicalExamData);
-        }
     }
 
     updateProgressIndicator() {
-        this.modal.querySelectorAll('.blood-step').forEach((step, index) => {
+        document.querySelectorAll('.blood-step').forEach((step, index) => {
             const stepNumber = index + 1;
             if (stepNumber < this.currentStep) {
                 step.classList.add('completed');
@@ -411,7 +328,7 @@ class BloodCollectionModal {
         });
 
         // Update progress bar
-        const progressFill = this.modal.querySelector('.blood-progress-fill');
+        const progressFill = document.querySelector('.blood-progress-fill');
         if (progressFill) {
             const percentage = ((this.currentStep - 1) / (this.totalSteps - 1)) * 100;
             progressFill.style.width = percentage + '%';
@@ -419,9 +336,9 @@ class BloodCollectionModal {
     }
 
     updateNavigationButtons() {
-        const prevBtn = this.modal.querySelector('.blood-prev-btn');
-        const nextBtn = this.modal.querySelector('.blood-next-btn');
-        const submitBtn = this.modal.querySelector('.blood-submit-btn');
+        const prevBtn = document.querySelector('.blood-prev-btn');
+        const nextBtn = document.querySelector('.blood-next-btn');
+        const submitBtn = document.querySelector('.blood-submit-btn');
 
         if (prevBtn) {
             prevBtn.style.display = this.currentStep > 1 ? 'inline-block' : 'none';
@@ -475,7 +392,7 @@ class BloodCollectionModal {
     }
 
     validateCurrentStep() {
-        const currentStepElement = this.modal.querySelector(`.blood-step-content[data-step="${this.currentStep}"]`);
+        const currentStepElement = document.getElementById(`blood-step-${this.currentStep}`);
         if (!currentStepElement) return false;
 
         const requiredFields = currentStepElement.querySelectorAll('[required]');
@@ -491,43 +408,12 @@ class BloodCollectionModal {
                 }
             } else if (!field.value.trim()) {
                 this.showToast(`Please fill in ${field.placeholder || field.name}`, 'error');
-                try { field.focus(); } catch(_) {}
+                field.focus();
                 isValid = false;
             }
         });
 
-        // Additional per-step validation
-        if (!isValid) return false;
-
-        // Step 1: require a bag type selection
-        if (this.currentStep === 1) {
-            const radios = this.modal.querySelectorAll('input[name="blood_bag_type"]');
-            const hasSelected = Array.from(radios).some(r => r.checked);
-            if (!hasSelected) {
-                this.showToast('Please select a blood bag type', 'error');
-                return false;
-            }
-        }
-
-        // Step 4: require status and conditionally donor reaction
-        if (this.currentStep === 4) {
-            const statusRadios = this.modal.querySelectorAll('input[name="is_successful"]');
-            const selected = Array.from(statusRadios).find(r => r.checked);
-            if (!selected) {
-                this.showToast('Please select collection status', 'error');
-                return false;
-            }
-            if (selected.value === 'false') {
-                const reaction = this.modal.querySelector('#donor_reaction');
-                if (reaction && !reaction.value.trim()) {
-                    this.showToast('Please provide donor reaction details', 'error');
-                    try { reaction.focus(); } catch(_) {}
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        return isValid;
     }
 
     updateFormSummary() {
@@ -545,34 +431,37 @@ class BloodCollectionModal {
             }
         }
         
-        // Map to current summary element IDs in HTML
-        const map = {
-            summary_bag_type: formData.blood_bag_type || '-',
-            summary_serial: formData.unit_serial_number || '-',
-            summary_date: formData.collection_date || '-',
-            summary_start: formData.start_time || '-',
-            summary_end: formData.end_time || '-',
-            summary_status: formData.is_successful === 'true' ? 'Successful' : (formData.is_successful === 'false' ? 'Unsuccessful' : '-')
+        const summaryElements = {
+            'summary-blood-bag': formData.blood_bag_type || '-',
+            'summary-successful': formData.is_successful === 'YES' ? 'Successful' : 'Failed',
+            'summary-start-time': formData.start_time || '-',
+            'summary-end-time': formData.end_time || '-',
+            'summary-duration': duration,
+            'summary-serial-number': formData.unit_serial_number || '-',
+            'summary-reaction': formData.donor_reaction || 'None',
+            'summary-management': formData.management_done || 'None'
         };
 
-        Object.entries(map).forEach(([id, value]) => {
-            const el = this.modal.querySelector(`#${id}`);
-            if (el) el.textContent = value;
+        Object.entries(summaryElements).forEach(([id, value]) => {
+            const element = document.getElementById(id);
+            if (element) element.textContent = value;
         });
 
-        // Also compute and append duration text if both times are present
-        if (formData.start_time && formData.end_time) {
-            const startTime = new Date(`2000-01-01T${formData.start_time}`);
-            const endTime = new Date(`2000-01-01T${formData.end_time}`);
-            const diffMinutes = Math.max(0, Math.round((endTime - startTime) / (1000 * 60)));
-            const durationText = diffMinutes > 0 ? `${diffMinutes} minutes` : '-';
-            const target = this.modal.querySelector('#summary_duration');
-            if (target) target.textContent = durationText;
+        // Show/hide reaction and management sections based on success status
+        const reactionSection = document.getElementById('summary-reaction-section');
+        const managementSection = document.getElementById('summary-management-section');
+        
+        if (formData.is_successful === 'NO') {
+            if (reactionSection) reactionSection.style.display = 'block';
+            if (managementSection) managementSection.style.display = 'block';
+        } else {
+            if (reactionSection) reactionSection.style.display = 'none';
+            if (managementSection) managementSection.style.display = 'none';
         }
     }
 
     getFormData() {
-        const form = this.modal.querySelector('#bloodCollectionForm');
+        const form = document.getElementById('bloodCollectionForm');
         const formData = new FormData(form);
         const data = {};
 
@@ -581,55 +470,14 @@ class BloodCollectionModal {
             data[key] = value;
         }
 
-        // Add hidden data (guard against missing context)
-        const ctx = this.bloodCollectionData || {};
-        data.physical_exam_id = data.physical_exam_id || ctx.physical_exam_id || null;
-        data.donor_id = data.donor_id || ctx.donor_id || null;
-        data.screening_id = data.screening_id || ctx.screening_id || null;
+        // Add hidden data
+        data.physical_exam_id = this.bloodCollectionData.physical_exam_id;
+        data.donor_id = this.bloodCollectionData.donor_id;
         // Hint to backend: if a row exists, increment amount_taken instead of replacing
         // and update other fields.
         data.update_mode = 'increment_on_existing';
 
-        // Normalize/derive blood bag brand and type to match backend expectations
-        try {
-            const selectedTypeRaw = (data.blood_bag_type || '').toString();
-            const normalized = this.computeBagBrandAndType(selectedTypeRaw);
-            if (normalized) {
-                data.blood_bag_type = normalized.typeCode; // e.g., S/D/T/Q, FK T&B, FRES
-                data.blood_bag_brand = normalized.brand;   // e.g., KARMI, SPECIAL BAG, APHERESIS
-            }
-        } catch (_) {}
-
         return data;
-    }
-
-    computeBagBrandAndType(selected) {
-        if (!selected) return null;
-        const t = String(selected).trim().toLowerCase();
-        // Default mapping rules:
-        // - Single/Multiple/Triple/Quad → brand KARMI; type S/D/T/Q
-        // - Top & Bottom → brand SPECIAL BAG; type FK T&B (default)
-        // - Apheresis → brand APHERESIS; type FRES (default variant)
-        if (t.includes('apheresis')) {
-            return { brand: 'APHERESIS', typeCode: 'FRES' };
-        }
-        if (t.includes('top') && t.includes('bottom')) {
-            return { brand: 'SPECIAL BAG', typeCode: 'FK T&B' };
-        }
-        if (t.includes('single')) {
-            return { brand: 'KARMI', typeCode: 'S' };
-        }
-        if (t.includes('double') || t.includes('multiple')) {
-            return { brand: 'KARMI', typeCode: 'D' };
-        }
-        if (t.includes('triple')) {
-            return { brand: 'KARMI', typeCode: 'T' };
-        }
-        if (t.includes('quad')) {
-            return { brand: 'KARMI', typeCode: 'Q' };
-        }
-        // Fallback: keep original text as type, and brand KARMI to satisfy backend
-        return { brand: 'KARMI', typeCode: selected };
     }
 
 
@@ -764,7 +612,7 @@ class BloodCollectionModal {
     }
 
     resetForm() {
-        const form = this.modal.querySelector('#bloodCollectionForm');
+        const form = document.getElementById('bloodCollectionForm');
         if (form) {
             form.reset();
             
@@ -785,16 +633,16 @@ class BloodCollectionModal {
         this.updateNavigationButtons();
         
         // Clear modern form selections
-        this.modal.querySelectorAll('.bag-option').forEach(option => {
+        document.querySelectorAll('.bag-option').forEach(option => {
             option.classList.remove('selected');
         });
         
-        this.modal.querySelectorAll('.blood-status-card').forEach(option => {
+        document.querySelectorAll('.blood-status-card').forEach(option => {
             option.classList.remove('selected');
         });
         
         // Re-enable and reset navigation buttons
-        const navButtons = this.modal.querySelectorAll('.blood-prev-btn, .blood-next-btn, .blood-submit-btn, .blood-cancel-btn');
+        const navButtons = document.querySelectorAll('.blood-prev-btn, .blood-next-btn, .blood-submit-btn, .blood-cancel-btn');
         navButtons.forEach(btn => {
             btn.disabled = false;
             btn.style.opacity = '';
@@ -802,7 +650,7 @@ class BloodCollectionModal {
         });
         
         // Reset submit button appearance
-        const submitBtn = this.modal.querySelector('.blood-submit-btn');
+        const submitBtn = document.querySelector('.blood-submit-btn');
         if (submitBtn) {
             submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submit Blood Collection';
             submitBtn.classList.remove('btn-outline-success');
@@ -814,7 +662,7 @@ class BloodCollectionModal {
     }
 
     showLoading(show) {
-        const submitBtn = this.modal.querySelector('.blood-submit-btn');
+        const submitBtn = document.querySelector('.blood-submit-btn');
         if (submitBtn) {
             if (show) {
                 submitBtn.disabled = true;
@@ -828,7 +676,7 @@ class BloodCollectionModal {
 
     disableAllFormInteraction() {
         // Disable all form elements
-        const form = this.modal.querySelector('#bloodCollectionForm');
+        const form = document.getElementById('bloodCollectionForm');
         if (form) {
             const formElements = form.querySelectorAll('input, select, textarea, button');
             formElements.forEach(element => {
@@ -837,7 +685,7 @@ class BloodCollectionModal {
         }
 
         // Disable navigation buttons
-        const navButtons = this.modal.querySelectorAll('.blood-prev-btn, .blood-next-btn, .blood-submit-btn, .blood-cancel-btn');
+        const navButtons = document.querySelectorAll('.blood-prev-btn, .blood-next-btn, .blood-submit-btn, .blood-cancel-btn');
         navButtons.forEach(btn => {
             btn.disabled = true;
             btn.style.opacity = '0.5';
@@ -845,7 +693,7 @@ class BloodCollectionModal {
         });
 
         // Update submit button to show success state
-        const submitBtn = this.modal.querySelector('.blood-submit-btn');
+        const submitBtn = document.querySelector('.blood-submit-btn');
         if (submitBtn) {
             submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submitted Successfully';
             submitBtn.classList.remove('btn-success');

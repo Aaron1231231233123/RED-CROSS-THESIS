@@ -2920,6 +2920,23 @@ $donor_history = $unique_donor_history;
                 let donorInfoHTML = '';
                 const safe = (v) => v || 'N/A';
                 
+                // Helper function to get blood type from eligibility records
+                const getBloodTypeFromEligibility = (donor) => {
+                    if (!donor || !donor.eligibility) return null;
+                    
+                    const eligibilityRecords = Array.isArray(donor.eligibility) ? donor.eligibility : [donor.eligibility];
+                    
+                    // Get the most recent eligibility record with blood type
+                    for (let i = eligibilityRecords.length - 1; i >= 0; i--) {
+                        const record = eligibilityRecords[i];
+                        if (record && record.blood_type) {
+                            return record.blood_type;
+                        }
+                    }
+                    
+                    return null;
+                };
+                
                 // Store donor data globally for eye button access
                 window.currentDonorData = donorData && donorData.data ? donorData.data : donorData;
                 
@@ -2972,6 +2989,9 @@ $donor_history = $unique_donor_history;
                                          <div class="fw-bold text-dark mb-1">
                                              <i class="fas fa-id-card me-1"></i>
                                              Donor ID: ${safe(donor.prc_donor_number || 'N/A')}
+                                         </div>
+                                         <div class="badge fs-6 px-3 py-2" style="background-color: #b22222; color: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; min-width: 80px;">
+                                             <div style="font-size: 1.3rem; font-weight: 700; line-height: 1;">${safe(getBloodTypeFromEligibility(donor) || 'N/A')}</div>
                                          </div>
                                      </div>
                                  </div>
@@ -3139,7 +3159,6 @@ $donor_history = $unique_donor_history;
                                  <td class="text-center">-</td>
                                  <td class="text-center">-</td>
                                  <td class="text-center">-</td>
-                                 <td class="text-center">-</td>
                                  <td class="text-center"><span class="text-warning">Pending</span></td>
                             </tr>`;
                     }
@@ -3167,7 +3186,6 @@ $donor_history = $unique_donor_history;
                                      <tr>
                                          <td class="text-center">${safe(formatDate(el.start_date || el.created_at))}</td>
                                          <td class="text-center">${safe(el.registration_channel || 'System')}</td>
-                                         <td class="text-center">${safe(el.blood_type || '-')}</td>
                                          <td class="text-center">${safe(formatDate(el.end_date) || '-')}</td>
                                          <td class="text-center"><span class="${statusClass}">${safe(medicalStatus)}</span></td>
                                      </tr>`;
@@ -3176,7 +3194,7 @@ $donor_history = $unique_donor_history;
                     }
                     
                     if (!donationRows) {
-                        donationRows = `<tr><td colspan="5" class="text-center text-muted">No donation history available</td></tr>`;
+                        donationRows = `<tr><td colspan="4" class="text-center text-muted">No donation history available</td></tr>`;
                     }
                         donorInfoHTML += `
                          <div class="mb-3">
@@ -3187,7 +3205,6 @@ $donor_history = $unique_donor_history;
                                          <tr>
                                              <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Last Donation Date</th>
                                              <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Gateway</th>
-                                             <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Blood</th>
                                              <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Next Eligible Date</th>
                                              <th class="text-center" style="background: #b22222 !important; color: white !important; font-weight: 600 !important; padding: 0.75rem !important; border: none !important; vertical-align: middle !important; line-height: 1.2 !important;">Medical History</th>
                                         </tr>
