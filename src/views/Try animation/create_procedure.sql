@@ -146,8 +146,8 @@ BEGIN
         RETURN CURRENT_TIMESTAMP + INTERVAL '3 days';
     END IF;
 
-    -- Successful donations require 9 months waiting period
-    RETURN CURRENT_TIMESTAMP + INTERVAL '9 months';
+    -- Successful donations require 3 months waiting period
+    RETURN CURRENT_TIMESTAMP + INTERVAL '3 months';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -391,7 +391,7 @@ BEGIN
         RETURN QUERY
         SELECT 
             FALSE,
-            'Ineligible until 9 months from last donation (' || v_days_remaining || ' days remaining)'::TEXT,
+            'Ineligible until 3 months from last donation (' || v_days_remaining || ' days remaining)'::TEXT,
             v_days_remaining,
             v_latest_eligibility.end_date;
     ELSE

@@ -138,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Calculate appropriate end date
                     $end_date = new DateTime();
                     if ($status === 'approved') {
-                        $end_date->modify('+9 months'); // 9 months for approved donors
+                        $end_date->modify('+3 months'); // 3 months for approved donors
                     } else if ($status === 'declined') {
                         if (strpos($remarks, 'Permanently') !== false) {
                             $end_date->modify('+100 years'); // Long time for permanent deferral
@@ -203,98 +203,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $blood_type = !empty($screening_data) ? $screening_data[0]['blood_type'] : null;
                     $donation_type = !empty($screening_data) ? $screening_data[0]['donation_type'] : null;
                     
-                    if (!empty($existing_eligibility)) {
-                        // Update existing eligibility record
-                        $eligibility_id = $existing_eligibility[0]['eligibility_id'];
-                        
-                        $update_data = [
-                            'status' => $status,
-                            'physical_exam_id' => $response_data[0]['physical_exam_id'],
-                            'remarks' => $remarks,
-                            'updated_at' => date('Y-m-d H:i:s'),
-                            'end_date' => $end_date_formatted
-                        ];
-                        
-                        // Add optional fields if available
-                        if ($screening_id) $update_data['screening_id'] = $screening_id;
-                        if ($medical_history_id) $update_data['medical_history_id'] = $medical_history_id;
-                        if ($blood_type) $update_data['blood_type'] = $blood_type;
-                        if ($donation_type) $update_data['donation_type'] = $donation_type;
-                        
-                        // Add disapproval reason if status is declined
-                        if ($status === 'declined' && isset($data['recommendation']) && !empty($data['recommendation'])) {
-                            $update_data['recommendation'] = $data['recommendation'];
-                        }
-                        
-                        $update_ch = curl_init();
-                        curl_setopt_array($update_ch, [
-                            CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility?eligibility_id=eq." . $eligibility_id,
-                            CURLOPT_RETURNTRANSFER => true,
-                            CURLOPT_CUSTOMREQUEST => "PATCH",
-                            CURLOPT_POSTFIELDS => json_encode($update_data),
-                            CURLOPT_HTTPHEADER => [
-                                'apikey: ' . SUPABASE_API_KEY,
-                                'Authorization: Bearer ' . SUPABASE_API_KEY,
-                                'Content-Type: application/json',
-                                'Prefer: return=minimal'
-                            ]
-                        ]);
-                        
-                        $update_response = curl_exec($update_ch);
-                        $update_http_code = curl_getinfo($update_ch, CURLINFO_HTTP_CODE);
-                        curl_close($update_ch);
-                        
-                        error_log("Eligibility update response code: " . $update_http_code);
-                        error_log("Updated eligibility record with status: " . $status);
-                    } else {
-                        // Create new eligibility record
-                        $new_eligibility_data = [
-                            'donor_id' => $data['donor_id'],
-                            'physical_exam_id' => $response_data[0]['physical_exam_id'],
-                            'status' => $status,
-                            'remarks' => $remarks,
-                            'created_at' => date('Y-m-d H:i:s'),
-                            'updated_at' => date('Y-m-d H:i:s'),
-                            'start_date' => date('Y-m-d\TH:i:s.000\Z'),
-                            'end_date' => $end_date_formatted
-                        ];
-                        
-                        // Add optional fields if available
-                        if ($screening_id) $new_eligibility_data['screening_id'] = $screening_id;
-                        if ($medical_history_id) $new_eligibility_data['medical_history_id'] = $medical_history_id;
-                        if ($blood_type) $new_eligibility_data['blood_type'] = $blood_type;
-                        if ($donation_type) $new_eligibility_data['donation_type'] = $donation_type;
-                        
-                        // Add disapproval reason if status is declined
-                        if ($status === 'declined' && isset($data['recommendation']) && !empty($data['recommendation'])) {
-                            $new_eligibility_data['recommendation'] = $data['recommendation'];
-                        }
-                        
-                        $create_ch = curl_init();
-                        curl_setopt_array($create_ch, [
-                            CURLOPT_URL => SUPABASE_URL . "/rest/v1/eligibility",
-                            CURLOPT_RETURNTRANSFER => true,
-                            CURLOPT_CUSTOMREQUEST => "POST",
-                            CURLOPT_POSTFIELDS => json_encode($new_eligibility_data),
-                            CURLOPT_HTTPHEADER => [
-                                'apikey: ' . SUPABASE_API_KEY,
-                                'Authorization: Bearer ' . SUPABASE_API_KEY,
-                                'Content-Type: application/json',
-                                'Prefer: return=representation'
-                            ]
-                        ]);
-                        
-                        $create_response = curl_exec($create_ch);
-                        $create_http_code = curl_getinfo($create_ch, CURLINFO_HTTP_CODE);
-                        curl_close($create_ch);
-                        
-                        error_log("Eligibility creation response code: " . $create_http_code);
-                        error_log("Created new eligibility record with status: " . $status);
-                    }
-                } catch (Exception $ee) {
-                    error_log("Exception when creating/updating eligibility record: " . $ee->getMessage());
-                    // Continue with normal flow even if eligibility creation fails
-                }
+                    // Note: Eligibility records are automatically created by database triggers
                 
                 // Different redirections based on role
             if ($_SESSION['role_id'] === 1) {

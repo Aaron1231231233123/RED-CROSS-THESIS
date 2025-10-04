@@ -75,7 +75,7 @@ BEGIN
             NEW.donor_id,
             v_blood_type,
             v_collection_record.unit_serial_number,
-            CURRENT_DATE + INTERVAL '35 days',
+            CURRENT_DATE + INTERVAL '3 months',
             'Valid'
         )
         ON CONFLICT (blood_collection_id) DO UPDATE

@@ -406,10 +406,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_
                         $physical_exam_info = json_decode($physical_exam_response, true);
                         $physical_exam_id = !empty($physical_exam_info) ? $physical_exam_info[0]['physical_exam_id'] : null;
                         
-                        // Calculate end date - Default to 9 months for successful donations
+                        // Calculate end date - Default to 3 months for successful donations
                         $end_date = new DateTime();
                         if ($is_successful) {
-                            $end_date->modify('+9 months');
+                            $end_date->modify('+3 months');
                         } else {
                             $end_date->modify('+3 months'); // Default for failed collection
                         }

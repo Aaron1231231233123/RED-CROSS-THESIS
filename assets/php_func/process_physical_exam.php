@@ -151,7 +151,7 @@ function processPhysicalExam($physicalExamId, $donorId, $remarks, $reason = '') 
         // Calculate end_date based on status and reason
         $endDate = new DateTime();
         if ($status === 'approved') {
-            $endDate->modify('+9 months'); // Standard waiting period for successful donations
+            $endDate->modify('+3 months'); // Standard waiting period for successful donations
         } elseif ($status === 'declined') {
             // For declined donors, set end date based on reason
             if (stripos($remarks, 'Permanently') !== false) {

@@ -32,22 +32,15 @@
                             <i class="fas fa-list-ul me-2 text-primary"></i>Deferral Type *
                         </label>
                         <select class="form-select" id="deferralTypeSelect" name="deferral_type" required>
-                            <option value="">Select deferral type...</option>
-                            <option value="Temporary Deferral">
+                            <option value="Temporary Deferral" selected>
                                 <i class="fas fa-clock me-2"></i>Temporary Deferral - Donor can donate after specified period
                             </option>
-                            <option value="Permanent Deferral">
-                                <i class="fas fa-ban me-2"></i>Permanent Deferral - Donor cannot donate in the future
-                            </option>
-                            <option value="Refuse">
-                                <i class="fas fa-times-circle me-2"></i>Refuse - Reject donation for this session only
-                            </option>
                         </select>
-                        <div class="form-text">Choose the appropriate deferral type based on the donor's condition</div>
+                        <div class="form-text">Temporary deferral is pre-selected for initial screening</div>
                     </div>
 
                     <!-- Duration Selection (only for Temporary Deferral) -->
-                    <div class="mb-4 duration-container" id="durationSection" style="display: none;">
+                    <div class="mb-4 duration-container" id="durationSection" style="display: block;">
                         <label class="form-label fw-semibold mb-3">
                             <i class="fas fa-calendar-alt me-2 text-primary"></i>Deferral Duration *
                         </label>
@@ -55,6 +48,12 @@
                         <!-- Quick Duration Options -->
                         <div class="duration-quick-options mb-3">
                             <div class="row g-2">
+                                <div class="col-6 col-md-3">
+                                    <div class="duration-option active" data-days="2">
+                                        <div class="duration-number">2</div>
+                                        <div class="duration-unit">Days</div>
+                                    </div>
+                                </div>
                                 <div class="col-6 col-md-3">
                                     <div class="duration-option" data-days="7">
                                         <div class="duration-number">7</div>
@@ -102,7 +101,7 @@
                         
                         <!-- Hidden select for form submission -->
                         <select class="form-select d-none" id="deferralDuration" name="duration">
-                            <option value="">Select duration...</option>
+                            <option value="2" selected>2 days (Day after tomorrow)</option>
                             <option value="7">7 days</option>
                             <option value="14">14 days</option>
                             <option value="21">21 days</option>
@@ -130,19 +129,13 @@
                     <!-- Disapproval Reason -->
                     <div class="mb-4">
                         <label for="disapprovalReason" class="form-label fw-semibold">Disapproval Reason *</label>
-                        <textarea class="form-control" id="disapprovalReason" name="disapproval_reason" rows="4" 
-                                placeholder="Please provide detailed reason for deferral..." 
-                                minlength="10" maxlength="200" required></textarea>
-                        <div class="d-flex justify-content-between align-items-center mt-1">
-                            <div class="form-text">Please provide a clear and specific reason for the deferral.</div>
-                            <small id="deferCharCount" class="text-muted">0/200 characters</small>
-                        </div>
-                        <div id="deferReasonError" class="invalid-feedback" style="display: none;">
-                            Please provide at least 10 characters for the deferral reason.
-                        </div>
-                        <div id="deferReasonSuccess" class="valid-feedback" style="display: none;">
-                            ✓ Reason provided successfully
-                        </div>
+                        <select class="form-select" id="disapprovalReason" name="disapproval_reason" required>
+                            <option value="">Select reason for deferral...</option>
+                            <option value="Weight out of acceptable range">Weight out of acceptable range</option>
+                            <option value="Low Hemoglobin">Low Hemoglobin</option>
+                            <option value="Both">Both</option>
+                        </select>
+                        <div class="form-text">Please select the appropriate reason for deferral.</div>
                     </div>
 
                     <!-- Duration Summary Display -->

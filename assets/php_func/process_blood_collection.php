@@ -258,45 +258,7 @@ try {
             throw new Exception('Failed to update blood collection' . ($detail ? (': ' . substr($detail, 0, 600)) : ''));
         }
 
-        // Also update eligibility collection status for consistency
-        try {
-            if ($donor_id) {
-                $statusText = ($is_successful === true) ? 'Successful' : 'Unsuccessful';
-                // Fetch latest eligibility by donor_id
-                $e = curl_init(SUPABASE_URL . '/rest/v1/eligibility?select=eligibility_id&donor_id=eq.' . urlencode((string)$donor_id) . '&order=created_at.desc&limit=1');
-                curl_setopt($e, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($e, CURLOPT_HTTPHEADER, [
-                    'apikey: ' . SUPABASE_API_KEY,
-                    'Authorization: Bearer ' . SUPABASE_API_KEY,
-                    'Accept: application/json'
-                ]);
-                $eResp = curl_exec($e);
-                $eCode = curl_getinfo($e, CURLINFO_HTTP_CODE);
-                curl_close($e);
-                if ($eCode === 200 && $eResp) {
-                    $eRows = json_decode($eResp, true) ?: [];
-                    if (!empty($eRows) && isset($eRows[0]['eligibility_id'])) {
-                        $eligId = $eRows[0]['eligibility_id'];
-                        $payloadElig = [
-                            'collection_status' => $statusText,
-                            'updated_at' => (new DateTime())->format('c')
-                        ];
-                        $ep = curl_init(SUPABASE_URL . '/rest/v1/eligibility?eligibility_id=eq.' . urlencode((string)$eligId));
-                        curl_setopt($ep, CURLOPT_RETURNTRANSFER, true);
-                        curl_setopt($ep, CURLOPT_CUSTOMREQUEST, 'PATCH');
-                        curl_setopt($ep, CURLOPT_HTTPHEADER, [
-                            'apikey: ' . SUPABASE_API_KEY,
-                            'Authorization: Bearer ' . SUPABASE_API_KEY,
-                            'Content-Type: application/json',
-                            'Prefer: return=representation'
-                        ]);
-                        curl_setopt($ep, CURLOPT_POSTFIELDS, json_encode($payloadElig));
-                        curl_exec($ep);
-                        curl_close($ep);
-                    }
-                }
-            }
-        } catch (Exception $ignored) {}
+        // Note: Eligibility records are automatically created by database triggers
 
         echo json_encode([
             'success' => true,
@@ -347,45 +309,7 @@ try {
             throw new Exception('Failed to create blood collection' . ($detail ? (': ' . substr($detail, 0, 600)) : ''));
         }
 
-        // Also update eligibility collection status for consistency
-        try {
-            if ($donor_id) {
-                $statusText = ($is_successful === true) ? 'Successful' : 'Unsuccessful';
-                // Fetch latest eligibility by donor_id
-                $e = curl_init(SUPABASE_URL . '/rest/v1/eligibility?select=eligibility_id&donor_id=eq.' . urlencode((string)$donor_id) . '&order=created_at.desc&limit=1');
-                curl_setopt($e, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($e, CURLOPT_HTTPHEADER, [
-                    'apikey: ' . SUPABASE_API_KEY,
-                    'Authorization: Bearer ' . SUPABASE_API_KEY,
-                    'Accept: application/json'
-                ]);
-                $eResp = curl_exec($e);
-                $eCode = curl_getinfo($e, CURLINFO_HTTP_CODE);
-                curl_close($e);
-                if ($eCode === 200 && $eResp) {
-                    $eRows = json_decode($eResp, true) ?: [];
-                    if (!empty($eRows) && isset($eRows[0]['eligibility_id'])) {
-                        $eligId = $eRows[0]['eligibility_id'];
-                        $payloadElig = [
-                            'collection_status' => $statusText,
-                            'updated_at' => (new DateTime())->format('c')
-                        ];
-                        $ep = curl_init(SUPABASE_URL . '/rest/v1/eligibility?eligibility_id=eq.' . urlencode((string)$eligId));
-                        curl_setopt($ep, CURLOPT_RETURNTRANSFER, true);
-                        curl_setopt($ep, CURLOPT_CUSTOMREQUEST, 'PATCH');
-                        curl_setopt($ep, CURLOPT_HTTPHEADER, [
-                            'apikey: ' . SUPABASE_API_KEY,
-                            'Authorization: Bearer ' . SUPABASE_API_KEY,
-                            'Content-Type: application/json',
-                            'Prefer: return=representation'
-                        ]);
-                        curl_setopt($ep, CURLOPT_POSTFIELDS, json_encode($payloadElig));
-                        curl_exec($ep);
-                        curl_close($ep);
-                    }
-                }
-            }
-        } catch (Exception $ignored) {}
+        // Note: Eligibility records are automatically created by database triggers
 
         echo json_encode([
             'success' => true,

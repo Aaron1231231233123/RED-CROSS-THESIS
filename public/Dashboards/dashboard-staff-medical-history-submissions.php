@@ -449,7 +449,7 @@ $queries = [
     'donor_forms' => '/rest/v1/donor_form?select=donor_id,surname,first_name,submitted_at,registration_channel,prc_donor_number&order=submitted_at.desc',
     // include needs_review flag and updated_at to prioritize and display review time
     'medical_histories' => '/rest/v1/medical_history?select=donor_id,medical_history_id,medical_approval,needs_review,created_at,updated_at&order=created_at.desc',
-    'screening_forms' => '/rest/v1/screening_form?select=screening_id,donor_form_id,needs_review,created_at&order=created_at.desc',
+    'screening_forms' => '/rest/v1/screening_form?select=screening_id,donor_form_id,interviewer_id,needs_review,created_at&order=created_at.desc',
     'physical_exams' => '/rest/v1/physical_examination?select=donor_id,needs_review,created_at&order=created_at.desc',
     'blood_collections' => '/rest/v1/blood_collection?select=screening_id,start_time&order=start_time.desc',
     'eligibility_records' => '/rest/v1/eligibility?select=donor_id,status&order=created_at.desc'
@@ -487,6 +487,51 @@ $physical_exams = json_decode(curl_multi_getcontent($curl_handles['physical_exam
 $blood_collections = json_decode(curl_multi_getcontent($curl_handles['blood_collections']), true) ?: [];
 $eligibility_records = json_decode(curl_multi_getcontent($curl_handles['eligibility_records']), true) ?: [];
 
+// Fetch interviewer information from users table
+$interviewer_ids = [];
+foreach ($screening_forms as $screening) {
+    if (!empty($screening['interviewer_id'])) {
+        $interviewer_ids[] = $screening['interviewer_id'];
+    }
+}
+
+// Remove duplicates and fetch unique interviewer names
+$interviewer_ids = array_unique($interviewer_ids);
+$interviewer_names = [];
+
+if (!empty($interviewer_ids)) {
+    $interviewer_ids_str = implode(',', $interviewer_ids);
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => SUPABASE_URL . "/rest/v1/users?user_id=in.($interviewer_ids_str)&select=user_id,first_name,surname,middle_name",
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY
+        ]
+    ]);
+    
+    $interviewer_response = curl_exec($ch);
+    $interviewer_err = curl_error($ch);
+    curl_close($ch);
+    
+    if (!$interviewer_err) {
+        $interviewer_data = json_decode($interviewer_response, true);
+        if (is_array($interviewer_data)) {
+            foreach ($interviewer_data as $interviewer) {
+                $user_id = $interviewer['user_id'];
+                $first_name = $interviewer['first_name'] ?? '';
+                $surname = $interviewer['surname'] ?? '';
+                $middle_name = $interviewer['middle_name'] ?? '';
+                
+                // Format name as "Surname, First Name Middle Name"
+                $full_name = trim($surname . ', ' . $first_name . ' ' . $middle_name);
+                $interviewer_names[$user_id] = $full_name;
+            }
+        }
+    }
+}
+
 // Clean up
 foreach ($curl_handles as $ch) {
     curl_multi_remove_handle($multi_handle, $ch);
@@ -500,6 +545,67 @@ $medical_by_donor = array_column($medical_histories, null, 'donor_id');
 $screenings_by_donor = array_column($screening_forms, null, 'donor_form_id');
 $physicals_by_donor = array_column($physical_exams, null, 'donor_id');
 $blood_by_screening = array_column($blood_collections, null, 'screening_id');
+
+// Create interviewer lookup array
+$interviewer_by_donor = [];
+foreach ($screening_forms as $screening) {
+    $donor_id = $screening['donor_form_id'] ?? null;
+    $interviewer_id = $screening['interviewer_id'] ?? null;
+    
+    if ($donor_id && $interviewer_id && isset($interviewer_names[$interviewer_id])) {
+        $interviewer_by_donor[$donor_id] = $interviewer_names[$interviewer_id];
+    }
+}
+
+// Fallback: For donors without screening forms, try to get interviewer from current session
+if (isset($_SESSION['user_id'])) {
+    // If current user is not in interviewer_names, fetch their info
+    if (!isset($interviewer_names[$_SESSION['user_id']])) {
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => SUPABASE_URL . "/rest/v1/users?user_id=eq." . $_SESSION['user_id'] . "&select=user_id,first_name,surname,middle_name",
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY
+            ]
+        ]);
+        
+        $user_response = curl_exec($ch);
+        $user_err = curl_error($ch);
+        curl_close($ch);
+        
+        if (!$user_err) {
+            $user_data = json_decode($user_response, true);
+            if (is_array($user_data) && !empty($user_data)) {
+                $user = $user_data[0];
+                $first_name = $user['first_name'] ?? '';
+                $surname = $user['surname'] ?? '';
+                $middle_name = $user['middle_name'] ?? '';
+                $full_name = trim($surname . ', ' . $first_name . ' ' . $middle_name);
+                $interviewer_names[$_SESSION['user_id']] = $full_name;
+            }
+        }
+    }
+    
+    $current_user_name = $interviewer_names[$_SESSION['user_id']] ?? 'Current User';
+    // For donors in medical review stage who don't have screening forms yet
+    foreach ($donor_forms as $donor_info) {
+        $donor_id = $donor_info['donor_id'];
+        if (!isset($interviewer_by_donor[$donor_id])) {
+            // Only set for donors in medical review stage (new donors)
+            if (!isset($eligibility_by_donor[$donor_id])) {
+                $interviewer_by_donor[$donor_id] = $current_user_name;
+            }
+        }
+    }
+}
+
+// Debug: Log interviewer data
+error_log("Interviewer names fetched: " . json_encode($interviewer_names));
+error_log("Interviewer by donor mapping: " . json_encode($interviewer_by_donor));
+error_log("Sample screening form: " . json_encode($screening_forms[0] ?? 'No screening forms'));
+error_log("Sample donor form: " . json_encode($donor_forms[0] ?? 'No donor forms'));
 // Build eligibility_by_donor using the most recent row per donor_id (records are ordered desc)
 $eligibility_by_donor = [];
 foreach ($eligibility_records as $row) {
@@ -555,7 +661,7 @@ foreach ($medical_by_donor as $rev_donor_id => $rev_medical) {
         'surname' => $donor_info['surname'] ?? 'N/A',
         'first_name' => $donor_info['first_name'] ?? 'N/A',
         'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
-        'interviewer' => 'N/A',
+        'interviewer' => $interviewer_by_donor[$rev_donor_id] ?? 'N/A',
         'donor_type' => $donor_type_label,
         'status' => $status,
         'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
@@ -598,7 +704,7 @@ foreach ($blood_collections as $blood_info) {
         'surname' => $donor_info['surname'] ?? 'N/A',
         'first_name' => $donor_info['first_name'] ?? 'N/A',
         'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
-        'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
+        'interviewer' => $interviewer_by_donor[$donor_id] ?? 'N/A',
         'donor_type' => $donor_type_label,
         'status' => $status,
         'status' => $status,
@@ -640,7 +746,7 @@ foreach ($physical_exams as $physical_info) {
             'surname' => $donor_info['surname'] ?? 'N/A',
             'first_name' => $donor_info['first_name'] ?? 'N/A',
             'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
-            'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
+            'interviewer' => $interviewer_by_donor[$donor_id] ?? 'N/A',
             'donor_type' => $donor_type_label,
             'status' => $status,
             'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
@@ -681,7 +787,7 @@ foreach ($screening_forms as $screening_info) {
             'surname' => $donor_info['surname'] ?? 'N/A',
             'first_name' => $donor_info['first_name'] ?? 'N/A',
             'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
-            'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
+            'interviewer' => $interviewer_by_donor[$donor_id] ?? 'N/A',
             'donor_type' => $donor_type_label,
             'status' => $status,
             'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
@@ -691,7 +797,6 @@ foreach ($screening_forms as $screening_info) {
         ];
     }
 }
-
 // PRIORITY 4: Process Donor Forms with ONLY registration (Medical Review stage)
 // Only include New donors in Medical stage and Returning donors in Medical stage
 $all_processed_donors = $donors_with_blood + $donors_with_physical + $donors_with_screening;
@@ -715,7 +820,7 @@ foreach ($donor_forms as $donor_info) {
             'surname' => $donor_info['surname'] ?? 'N/A',
             'first_name' => $donor_info['first_name'] ?? 'N/A',
             'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
-            'interviewer' => 'N/A', // interviewer_name column doesn't exist in medical_history table
+            'interviewer' => $interviewer_by_donor[$donor_id] ?? 'N/A',
             'donor_type' => $donor_type_label,
             'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
             'donor_id' => $donor_id,
@@ -1060,6 +1165,20 @@ $donor_history = $unique_donor_history;
         .dashboard-staff-tables tbody tr{
             cursor: pointer;
         }
+
+        /* Center status column specifically */
+        .dashboard-staff-tables tbody td.text-center {
+            text-align: center !important;
+            vertical-align: middle !important;
+        }
+
+        /* Ensure strong elements in status column are properly centered */
+        .dashboard-staff-tables tbody td.text-center strong {
+            text-align: center !important;
+            display: inline !important;
+        }
+
+
 
         /* Search bar */
         .search-container {
@@ -2135,18 +2254,18 @@ $donor_history = $unique_donor_history;
                     <hr class="red-separator">
                     
                     <div class="table-responsive">
-                        <table class="dashboard-staff-tables table-hover">
+                        <table class="table dashboard-staff-tables table-hover">
                             <thead>
                                 <tr>
-                                    <th>No.</th>
-                                    <th>Date</th>
-                                    <th>Surname</th>
-                                    <th>First Name</th>
-                                    <th>Interviewer</th>
-                                    <th>Donor Type</th>
-                                    <th>Status</th>
-                                    <th>Registered via</th>
-                                    <th>View</th>
+                                    <th class="text-center">No.</th>
+                                    <th class="text-center">Date</th>
+                                    <th class="text-center">Surname</th>
+                                    <th class="text-center">First Name</th>
+                                    <th class="text-center">Interviewer</th>
+                                    <th class="text-center">Donor Type</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-center">Registered via</th>
+                                    <th class="text-center">View</th>
                                 </tr>
                             </thead>
                             <tbody id="donorTableBody">
@@ -2161,8 +2280,8 @@ $donor_history = $unique_donor_history;
                                         }
                                         ?>
                                         <tr class="clickable-row" data-donor-id="<?php echo $entry['donor_id']; ?>" data-stage="<?php echo htmlspecialchars($entry['stage']); ?>" data-donor-type="<?php echo htmlspecialchars($entry['donor_type']); ?>">
-                                            <td><?php echo $entry['no']; ?></td>
-                                            <td><?php 
+                                            <td class="text-center"><?php echo $entry['no']; ?></td>
+                                            <td class="text-center"><?php 
                                                 if (isset($entry['date'])) {
                                                     $date = new DateTime($entry['date']);
                                                     echo $date->format('F d, Y');
@@ -2171,28 +2290,29 @@ $donor_history = $unique_donor_history;
                                                 }
                                             ?></td>
 
-                                            <td><?php echo isset($entry['surname']) ? htmlspecialchars($entry['surname']) : ''; ?></td>
-                                            <td><?php echo isset($entry['first_name']) ? htmlspecialchars($entry['first_name']) : ''; ?></td>
-                                            <td><?php echo isset($entry['interviewer']) ? htmlspecialchars($entry['interviewer']) : 'N/A'; ?></td>
-                                            <td><span class="<?php echo stripos($entry['donor_type'],'returning')===0 ? 'type-returning' : 'type-new'; ?>"><?php echo htmlspecialchars($entry['donor_type']); ?></span></td>
+                                            <td class="text-center"><?php echo isset($entry['surname']) ? htmlspecialchars($entry['surname']) : ''; ?></td>
+                                            <td class="text-center"><?php echo isset($entry['first_name']) ? htmlspecialchars($entry['first_name']) : ''; ?></td>
+                                            <td class="text-center"><?php echo isset($entry['interviewer']) ? htmlspecialchars($entry['interviewer']) : 'N/A'; ?></td>
+                                            <td class="text-center"><span class="<?php echo stripos($entry['donor_type'],'returning')===0 ? 'type-returning' : 'type-new'; ?>"><?php echo htmlspecialchars($entry['donor_type']); ?></span></td>
                                             <td class="text-center">
-                                                <div>
-                                                <?php 
-                                                    $status = $entry['status'] ?? '-';
-                                                    $lower = strtolower($status);
-                                                    if ($status === '-') {
-                                                        echo '-';
-                                                    } else {
-                                                        if ($lower === 'ineligible') {
-                                                            echo '<i class="fas fa-flag me-1" style="color:#dc3545"></i>';
+                                                <span style="display: block; text-align: center; width: 100%;">
+                                                    <?php 
+                                                        $status = $entry['status'] ?? '-';
+                                                        $lower = strtolower($status);
+                                                        if ($status === '-') {
+                                                            echo '-';
+                                                        } else {
+                                                            if ($lower === 'ineligible') {
+                                                                echo '<i class="fas fa-flag me-1" style="color:#dc3545"></i><strong>' . htmlspecialchars($status) . '</strong>';
+                                                            } else {
+                                                                echo '<strong>' . htmlspecialchars($status) . '</strong>';
+                                                            }
                                                         }
-                                                        echo '<strong>' . htmlspecialchars($status) . '</strong>';
-                                                    }
-                                                ?>
-                                                </div>
+                                                    ?>
+                                                </span>
                                             </td>
-                                            <td><span class="badge-tag badge-registered <?php echo strtolower($entry['registered_via'])==='mobile' ? 'badge-mobile' : 'badge-system'; ?>"><?php echo htmlspecialchars($entry['registered_via']); ?></span></td>
-                                            <td>
+                                            <td class="text-center"><span class="badge-tag badge-registered <?php echo strtolower($entry['registered_via'])==='mobile' ? 'badge-mobile' : 'badge-system'; ?>"><?php echo htmlspecialchars($entry['registered_via']); ?></span></td>
+                                            <td class="text-center">
                                                 <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" 
                                                         onclick="checkAndShowDonorStatus('<?php echo $entry['donor_id']; ?>')"
                                                         title="View Details"
@@ -2685,23 +2805,17 @@ $donor_history = $unique_donor_history;
                         fetchDonorStatusInfo(donorId);
                             return;
                         }
-                        // Returning but not Medical and no needs_review: friendly confirmation with mark option
-                        returningInfoModal.show();
-                        if (returningInfoViewBtn) {
-                            returningInfoViewBtn.onclick = () => {
-                            returningInfoModal.hide();
-                            deferralStatusContent.innerHTML = `
-                                <div class="d-flex justify-content-center">
-                                    <div class="spinner-border text-primary" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                </div>`;
-                            const proceedButton = getProceedButton();
-                            if (proceedButton && proceedButton.style) proceedButton.style.display = 'none';
-                            deferralStatusModal.show();
-                            fetchDonorStatusInfo(donorId);
-                        };
-                        }
+                        // Returning but not Medical and no needs_review: directly show donor modal
+                        deferralStatusContent.innerHTML = `
+                            <div class="d-flex justify-content-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>`;
+                        const proceedButton = getProceedButton();
+                        if (proceedButton && proceedButton.style) proceedButton.style.display = 'none';
+                        deferralStatusModal.show();
+                        fetchDonorStatusInfo(donorId);
                         // Mark for review handler
                         if (markReturningReviewBtn) {
                             markReturningReviewBtn.onclick = () => {
@@ -2975,6 +3089,45 @@ $donor_history = $unique_donor_history;
                                      <div class="text-muted small mb-1">
                                          <i class="fas fa-calendar-alt me-1"></i>
                                          Current Status: ${currentStatus}
+                                         ${(() => {
+                                             if (donor.eligibility && donor.eligibility.length > 0) {
+                                                 const latestEligibility = donor.eligibility[donor.eligibility.length - 1];
+                                                 const status = String(latestEligibility.status || '').toLowerCase();
+                                                 const startDate = latestEligibility.start_date ? new Date(latestEligibility.start_date) : null;
+                                                 const endDate = latestEligibility.end_date ? new Date(latestEligibility.end_date) : null;
+                                                 const today = new Date();
+                                                 
+                                                 function calculateRemainingDays() {
+                                                     if (status === 'approved' && startDate) {
+                                                         const threeMonthsLater = new Date(startDate);
+                                                         threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
+                                                         const endOfDay = new Date(threeMonthsLater);
+                                                         endOfDay.setHours(23, 59, 59, 999);
+                                                         return Math.ceil((endOfDay - today) / (1000 * 60 * 60 * 24));
+                                                     } else if (endDate) {
+                                                         const endOfDay = new Date(endDate);
+                                                         endOfDay.setHours(23, 59, 59, 999);
+                                                         return Math.ceil((endOfDay - today) / (1000 * 60 * 60 * 24));
+                                                     }
+                                                     return null;
+                                                 }
+                                                 
+                                                 const remainingDays = calculateRemainingDays();
+                                                 if (remainingDays !== null && remainingDays > 0) {
+                                                     // Color based on eligibility status
+                                                     let color = '#17a2b8'; // Default blue
+                                                     if (status === 'refused') {
+                                                         color = '#dc3545'; // Red
+                                                     } else if (status === 'deferred' || status === 'temporary_deferred') {
+                                                         color = '#ffc107'; // Yellow
+                                                     } else if (status === 'approved' || status === 'eligible') {
+                                                         color = '#28a745'; // Green
+                                                     }
+                                                     return ` • <span style="font-weight: bold; color: ${color};">${remainingDays} days left</span>`;
+                                                 }
+                                             }
+                                             return '';
+                                         })()}
                             </div>
                                      <h4 class="mb-1" style="color:#b22222; font-weight:700;">
                                          ${fullName}
@@ -3030,6 +3183,7 @@ $donor_history = $unique_donor_history;
                                         </div>
                                     </div>
                                 </div>`;
+                    
                     
                     // Determine if donor is New; if so, hide history sections
                     const __elig = Array.isArray(donor.eligibility) ? donor.eligibility : (donor.eligibility ? [donor.eligibility] : []);
@@ -5350,95 +5504,8 @@ $donor_history = $unique_donor_history;
 
         // Function to check if donor is new (no eligibility record)
         function checkAndShowDonorStatus(donorId) {
-            // Fast path: if we already know this donor has NO eligibility, skip remote checks
-            if (!hasEligibility(donorId)) {
-                // Render lightweight new-donor content and show proceed
-                const deferralStatusModal = new bootstrap.Modal(document.getElementById('deferralStatusModal'));
-                const deferralStatusContent = document.getElementById('deferralStatusContent');
-                window.currentDonorId = donorId;
-                deferralStatusContent.innerHTML = `
-                    <div class="alert alert-info mb-3">
-                        <h6 class="mb-1">New Donor</h6>
-                        <div>There is no donation history yet for this donor.</div>
-                    </div>
-                `;
-                const proceedButton = document.getElementById('proceedToMedicalHistory');
-                if (proceedButton && proceedButton.style) {
-                    proceedButton.style.display = 'inline-block';
-                    proceedButton.textContent = 'Proceed to Medical History';
-                }
-                // Hide mark-for-review button in this flow
-                const markReviewFromMain = document.getElementById('markReviewFromMain');
-                if (markReviewFromMain) markReviewFromMain.style.display = 'none';
-                // Ensure no stale backdrops before showing
-                cleanupModalBackdrops();
-                deferralStatusModal.show();
-                return;
-            }
-
-            // Otherwise, do existing server-side eligibility checks
-            fetch('../../assets/php_func/get_donor_eligibility_status.php?donor_id=' + donorId)
-                .then(response => response.json())
-                .then(data => {
-                    if (!data.success || (data.data && data.data.status === 'new')) {
-                        showDonorStatusModal(donorId);
-                    } else {
-                        const eligibility = data.data || {};
-                        const status = String(eligibility.status || '').toLowerCase();
-                        const startDate = eligibility.start_date ? new Date(eligibility.start_date) : null;
-                        const endDateApi = eligibility.end_date ? new Date(eligibility.end_date) : null;
-                        const today = new Date();
-
-                        // Compute remaining days without opening the modal
-                        function daysRemaining(toDate) {
-                            if (!toDate) return null;
-                            const endOfDay = new Date(toDate);
-                            endOfDay.setHours(23, 59, 59, 999);
-                            return Math.ceil((endOfDay - today) / (1000 * 60 * 60 * 24));
-                        }
-
-                        let remainingDays = null;
-                        if (status === 'approved' && startDate) {
-                            const threeMonthsLater = new Date(startDate);
-                            threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
-                            remainingDays = daysRemaining(threeMonthsLater);
-                        } else if (endDateApi) {
-                            remainingDays = daysRemaining(endDateApi);
-                        }
-
-                        // If refused: no alert; show mark-for-review button
-                        if (status === 'refused') {
-                            const btn = document.getElementById('markReviewFromMain');
-                            if (btn) {
-                                btn.style.display = 'inline-block';
-                                btn.style.visibility = 'visible';
-                                btn.style.opacity = '1';
-                            }
-                            // No modal at all when refused
-                            return;
-                        }
-
-                        // If we have a countdown and it's 0 or less, skip alert and show mark-for-review
-                        if (remainingDays !== null && remainingDays <= 0) {
-                            const btn = document.getElementById('markReviewFromMain');
-                            if (btn) {
-                                btn.style.display = 'inline-block';
-                                btn.style.visibility = 'visible';
-                                btn.style.opacity = '1';
-                            }
-                            // No modal at 0 days
-                            return;
-                        }
-
-                        // Otherwise, show the eligibility alert
-                        controlMarkReviewButton(donorId);
-                        showDonorEligibilityAlert(donorId);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error checking eligibility:', error);
-                    showDonorStatusModal(donorId);
-                });
+            // Directly show the donor status modal
+            showDonorStatusModal(donorId);
         }
 
         // Function to show donor status modal
@@ -5497,17 +5564,7 @@ $donor_history = $unique_donor_history;
             }, 800); // Increased delay to 800ms for smoother experience
         }
 
-        // Function to proceed after eligibility check
-        function proceedToDonorStatus(donorId) {
-            // Close eligibility alert modal if open
-            const eligibilityModal = bootstrap.Modal.getInstance(document.getElementById('donorEligibilityModal'));
-            if (eligibilityModal) {
-                eligibilityModal.hide();
-            }
 
-            // Show donor status modal
-            showDonorStatusModal(donorId);
-        }
     </script>
 
     <!-- Load eligibility alert script first -->

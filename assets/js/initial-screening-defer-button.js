@@ -98,54 +98,25 @@ function initializeScreeningDeferModal() {
     const durationOptions = document.querySelectorAll('.duration-option');
     
     // Validation elements
-    const disapprovalReasonTextarea = document.getElementById('disapprovalReason');
-    const deferCharCountElement = document.getElementById('deferCharCount');
-    const deferReasonError = document.getElementById('deferReasonError');
-    const deferReasonSuccess = document.getElementById('deferReasonSuccess');
+    const disapprovalReasonSelect = document.getElementById('disapprovalReason');
     
-    const MIN_LENGTH = 10;
-    const MAX_LENGTH = 200;
+    // Set default values
+    deferralTypeSelect.value = 'Temporary Deferral';
+    durationSelect.value = '2';
+    document.querySelector('.duration-option[data-days="2"]').classList.add('active');
 
     // Update disapproval reason validation
     function updateScreeningDeferValidation() {
-        if (!disapprovalReasonTextarea) return;
+        if (!disapprovalReasonSelect) return;
         
-        const currentLength = disapprovalReasonTextarea.value.length;
-        const isValid = currentLength >= MIN_LENGTH && currentLength <= MAX_LENGTH;
-        
-        // Update character count
-        deferCharCountElement.textContent = `${currentLength}/${MAX_LENGTH} characters`;
-        
-        // Update character count color with Red Cross theme
-        if (currentLength < MIN_LENGTH) {
-            deferCharCountElement.className = 'text-muted'; // Gray for incomplete
-        } else if (currentLength > MAX_LENGTH) {
-            deferCharCountElement.className = 'text-danger'; // Red for over limit
-        } else {
-            deferCharCountElement.className = 'text-success'; // Green for valid
-        }
+        const isValid = disapprovalReasonSelect.value !== '';
         
         // Update validation feedback
-        if (currentLength === 0) {
-            deferReasonError.style.display = 'none';
-            deferReasonSuccess.style.display = 'none';
-            disapprovalReasonTextarea.classList.remove('is-valid', 'is-invalid');
-        } else if (currentLength < MIN_LENGTH) {
-            deferReasonError.style.display = 'block';
-            deferReasonSuccess.style.display = 'none';
-            disapprovalReasonTextarea.classList.add('is-invalid');
-            disapprovalReasonTextarea.classList.remove('is-valid');
-        } else if (currentLength > MAX_LENGTH) {
-            deferReasonError.textContent = `Please keep the reason under ${MAX_LENGTH} characters.`;
-            deferReasonError.style.display = 'block';
-            deferReasonSuccess.style.display = 'none';
-            disapprovalReasonTextarea.classList.add('is-invalid');
-            disapprovalReasonTextarea.classList.remove('is-valid');
+        if (disapprovalReasonSelect.value === '') {
+            disapprovalReasonSelect.classList.remove('is-valid', 'is-invalid');
         } else {
-            deferReasonError.style.display = 'none';
-            deferReasonSuccess.style.display = 'block';
-            disapprovalReasonTextarea.classList.add('is-valid');
-            disapprovalReasonTextarea.classList.remove('is-invalid');
+            disapprovalReasonSelect.classList.add('is-valid');
+            disapprovalReasonSelect.classList.remove('is-invalid');
         }
         
         // Update submit button state
@@ -154,9 +125,9 @@ function initializeScreeningDeferModal() {
     
     // Update submit button state based on all form validation
     function updateScreeningDeferSubmitButtonState() {
-        if (!disapprovalReasonTextarea) return;
+        if (!disapprovalReasonSelect) return;
         
-        const reasonValid = disapprovalReasonTextarea.value.length >= MIN_LENGTH && disapprovalReasonTextarea.value.length <= MAX_LENGTH;
+        const reasonValid = disapprovalReasonSelect.value !== '';
         const deferralTypeValid = deferralTypeSelect.value !== '';
         
         // For temporary deferral, also check duration
@@ -312,11 +283,8 @@ function initializeScreeningDeferModal() {
     }
     
     // Add validation event listeners
-    if (disapprovalReasonTextarea) {
-        disapprovalReasonTextarea.addEventListener('input', updateScreeningDeferValidation);
-        disapprovalReasonTextarea.addEventListener('paste', () => {
-            setTimeout(updateScreeningDeferValidation, 10); // Small delay to allow paste to complete
-        });
+    if (disapprovalReasonSelect) {
+        disapprovalReasonSelect.addEventListener('change', updateScreeningDeferValidation);
     }
     
     // Update validation when deferral type changes
@@ -368,14 +336,8 @@ function validateScreeningDeferForm() {
     }
 
     if (!disapprovalReason) {
-        showScreeningDeferToast('Validation Error', 'Please provide a reason for the deferral.', 'error');
+        showScreeningDeferToast('Validation Error', 'Please select a reason for the deferral.', 'error');
         document.getElementById('disapprovalReason').scrollIntoView({ behavior: 'smooth' });
-        document.getElementById('disapprovalReason').focus();
-        return false;
-    }
-
-    if (disapprovalReason.length < 10) {
-        showScreeningDeferToast('Validation Error', 'Please provide a more detailed reason (minimum 10 characters).', 'error');
         document.getElementById('disapprovalReason').focus();
         return false;
     }
@@ -788,13 +750,16 @@ function openScreeningDeferModal(screeningData) {
     // Reset form
     document.getElementById('deferDonorForm').reset();
     
-    // Hide conditional sections
+    // Set default values
+    document.getElementById('deferralTypeSelect').value = 'Temporary Deferral';
+    document.getElementById('deferralDuration').value = '2';
+    document.querySelector('.duration-option[data-days="2"]').classList.add('active');
+    
+    // Show duration section since Temporary Deferral is pre-selected
     const durationSection = document.getElementById('durationSection');
     const customDurationSection = document.getElementById('customDurationSection');
     
-    durationSection.classList.remove('show');
-    customDurationSection.classList.remove('show');
-    durationSection.style.display = 'none';
+    durationSection.style.display = 'block';
     customDurationSection.style.display = 'none';
     document.getElementById('durationSummary').style.display = 'none';
     

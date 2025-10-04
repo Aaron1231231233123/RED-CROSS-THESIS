@@ -22,7 +22,7 @@ BEGIN
         NEW.donor_id,
         v_blood_type,
         NEW.unit_serial_number,
-        (NEW.created_at + INTERVAL '35 days')::date,
+        (NEW.created_at + INTERVAL '3 months')::date,
         'Valid'
     );
 
