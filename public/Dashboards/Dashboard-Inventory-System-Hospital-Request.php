@@ -19,9 +19,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $request_id = intval($_POST['request_id']);
         
         try {
-            // Update request status to Accepted
+            // Update request status to Approved
             $update_data = [
-                'status' => 'Accepted',
+                'status' => 'Approved',
                 'last_updated' => date('Y-m-d H:i:s'),
                 'approved_by' => $_SESSION['user_id'],
                 'approved_at' => date('Y-m-d H:i:s')
@@ -87,9 +87,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $request_id = intval($_POST['request_id']);
         
         try {
-            // Update request status to Confirmed (Handed Over)
+            // Update request status to Completed (Handed Over)
             $update_data = [
-                'status' => 'Confirmed',
+                'status' => 'Completed',
                 'last_updated' => date('Y-m-d H:i:s'),
                 'handed_over_by' => $_SESSION['user_id'],
                 'handed_over_at' => date('Y-m-d H:i:s')
@@ -1264,17 +1264,17 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     if ($status_val === 'pending') {
                                         echo '<span class="badge bg-warning text-dark">Pending</span>';
                                     } elseif ($status_val === 'rescheduled') {
-                                        echo '<span class="badge bg-info text-dark">Rescheduled</span>';
+                                        echo '<span class="badge bg-warning text-dark">Rescheduled</span>';
+                                    } elseif ($status_val === 'approved') {
+                                        echo '<span class="badge bg-success">Approved</span>';
                                     } elseif ($status_val === 'printed') {
                                         echo '<span class="badge bg-info text-dark">Printed</span>';
-                                    } elseif ($status_val === 'accepted') {
-                                            echo '<span class="badge bg-success">Approved</span>';
-                                        } elseif ($status_val === 'declined') {
-                                            echo '<span class="badge bg-danger">Declined</span>';
-                                        } elseif ($status_val === 'confirmed') {
-                                            echo '<span class="badge bg-warning text-dark">Handed Over</span>';
-                                        } else {
-                                            echo '<span class="badge bg-secondary">'.htmlspecialchars($request['status'] ?? 'N/A').'</span>';
+                                    } elseif ($status_val === 'completed') {
+                                        echo '<span class="badge bg-success">Completed</span>';
+                                    } elseif ($status_val === 'declined') {
+                                        echo '<span class="badge bg-danger">Declined</span>';
+                                    } else {
+                                        echo '<span class="badge bg-secondary">'.htmlspecialchars($request['status'] ?? 'N/A').'</span>';
                                     }
                                     ?>
                                 </td>
@@ -1284,7 +1284,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         data-bs-toggle="modal" 
                                         data-bs-target="#requestModal"
                                         title="View Details"
-                                        onclick="loadRequestDetails(
+                                        onclick="console.log('PHP Status being passed:', '<?php echo addslashes($request['status']); ?>'); loadRequestDetails(
                                             '<?php echo htmlspecialchars($request['request_id']); ?>',
                                             '<?php echo htmlspecialchars($request['patient_name']); ?>',
                                             '<?php echo htmlspecialchars($request['patient_blood_type']); ?>',
@@ -1339,7 +1339,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 </h4>
                             </div>
                                 <div class="d-flex align-items-center gap-3">
-                                    <span id="modalRequestStatus" class="badge" style="background: #28a745; padding: 8px 12px; font-size: 0.9rem;">Handed-Over</span>
+                                    <span id="modalRequestStatus" class="badge" style="background: #ffc107; padding: 8px 12px; font-size: 0.9rem;">Pending</span>
                                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="margin-left: 10px;"></button>
                             </div>
                         </div>
@@ -1701,7 +1701,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <script>
     // Enhanced function to populate the modal fields based on wireframe design
     function loadRequestDetails(request_id, patientName, bloodType, component, rhFactor, unitsNeeded, diagnosis, hospital, physician, priority, status, requestDate, whenNeeded, patientAge, patientGender) {
-        console.log('loadRequestDetails called with:', arguments);
+        console.log('=== loadRequestDetails DEBUG ===');
+        console.log('All arguments:', arguments);
+        console.log('Status parameter (11th argument):', status);
+        console.log('Status type:', typeof status);
+        console.log('Status value:', JSON.stringify(status));
+        console.log('Arguments length:', arguments.length);
         
         // Set basic request info
         document.getElementById('modalRequestId').value = request_id;
@@ -1756,47 +1761,69 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             }
         }
         
-        // Add event listeners for radio button changes
-        if (asapRadio && scheduledRadio && scheduledDateInput) {
-            asapRadio.addEventListener('change', function() {
-                if (this.checked) {
-                    scheduledDateInput.disabled = true;
-                }
-            });
-            
-            scheduledRadio.addEventListener('change', function() {
-                if (this.checked) {
-                    scheduledDateInput.disabled = false;
-                }
-            });
+        // Note: Event listeners removed since modal fields are readonly
+        
+        // Set status badge with proper mapping for new flow
+        const statusBadge = document.getElementById('modalRequestStatus');
+        let displayStatus = status || 'Pending';
+        
+        console.log('=== STATUS MAPPING DEBUG ===');
+        console.log('Original status from parameter:', status);
+        console.log('Status badge element:', statusBadge);
+        console.log('Status badge current text before update:', statusBadge ? statusBadge.textContent : 'Element not found');
+        
+        // Map database statuses to display statuses for Referral Blood Shipment Record modal
+        switch(status.toLowerCase()) {
+            case 'pending':
+                displayStatus = 'Pending';
+                break;
+            case 'approved':
+                displayStatus = 'Approved';
+                break;
+            case 'printed':
+                displayStatus = 'Printing';
+                break;
+            case 'completed':
+                displayStatus = 'Handed-Over';
+                break;
+            case 'declined':
+                displayStatus = 'Declined';
+                break;
+            case 'rescheduled':
+                displayStatus = 'Rescheduled';
+                break;
+            default:
+                displayStatus = status || 'Pending';
         }
         
-        // Set status badge (rename Confirmed to Handed-Over on display)
-        const statusBadge = document.getElementById('modalRequestStatus');
-        const displayStatus = (status === 'Confirmed') ? 'Handed-Over' : (status || 'Pending');
+        console.log('Final displayStatus after mapping:', displayStatus);
+        console.log('About to update status badge text to:', displayStatus);
         statusBadge.textContent = displayStatus;
+        console.log('Status badge text after update:', statusBadge.textContent);
+        console.log('=== END STATUS MAPPING DEBUG ===');
         
-        // Set status badge color based on status
+        // Set status badge color based on display status (matching new flow)
         switch(displayStatus) {
             case 'Pending':
             case 'Rescheduled':
                 statusBadge.style.background = '#ffc107';
                 statusBadge.style.color = '#000';
                 break;
-            case 'Accepted':
             case 'Approved':
+                statusBadge.style.background = '#28a745';
+                statusBadge.style.color = '#fff';
+                break;
+            case 'Printing':
+                statusBadge.style.background = '#17a2b8';
+                statusBadge.style.color = '#fff';
+                break;
+            case 'Handed-Over':
                 statusBadge.style.background = '#28a745';
                 statusBadge.style.color = '#fff';
                 break;
             case 'Declined':
                 statusBadge.style.background = '#dc3545';
                 statusBadge.style.color = '#fff';
-                break;
-            case 'Handed-Over':
-            case 'Handed Over':
-            case 'Confirmed':
-                statusBadge.style.background = '#ffc107';
-                statusBadge.style.color = '#000';
                 break;
             default:
                 statusBadge.style.background = '#6c757d';
@@ -1821,8 +1848,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 declineButton.style.display = 'inline-block';
                 handOverButton.style.display = 'none';
             }
-            // Show Hand Over button only for Accepted/Approved status
-            else if (['Accepted', 'Approved'].includes(displayStatus)) {
+            // Show Hand Over button for Approved status (ready for printing)
+            else if (['Approved'].includes(displayStatus)) {
                 acceptButton.style.display = 'none';
                 declineButton.style.display = 'none';
                 handOverButton.style.display = 'inline-block';
@@ -1838,8 +1865,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     })}`;
                 }
             }
-            // Show handover info for Confirmed/Handed Over status
-            else if (['Handed-Over', 'Handed Over', 'Confirmed'].includes(displayStatus)) {
+            // Show handover info for Handed-Over status (completed)
+            else if (['Handed-Over'].includes(displayStatus)) {
                 acceptButton.style.display = 'none';
                 declineButton.style.display = 'none';
                 handOverButton.style.display = 'none';

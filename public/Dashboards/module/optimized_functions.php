@@ -132,15 +132,50 @@ function querySQL($table, $select = "*", $filters = null) {
     return ['error' => $error];
 }
 
-// OPTIMIZATION: Function to add performance logging and caching headers
+// OPTIMIZATION: Enhanced performance logging and caching headers
 function addPerformanceHeaders($executionTime, $recordCount, $moduleName) {
-    // Performance logging
-    error_log("$moduleName - Records found: $recordCount in " . round($executionTime, 3) . " seconds");
+    // Performance logging with cache metrics
+    $cacheStatus = isset($GLOBALS['cache_source']) ? $GLOBALS['cache_source'] : 'none';
+    error_log("$moduleName - Records found: $recordCount in " . round($executionTime, 3) . " seconds, cache: $cacheStatus");
     
     // Only add headers if they haven't been sent yet
     if (!headers_sent()) {
-        header('Cache-Control: public, max-age=300'); // Cache for 5 minutes
-        header('Expires: ' . gmdate('D, d M Y H:i:s \G\M\T', time() + 300));
+        // Dynamic cache headers based on data freshness
+        $maxAge = $recordCount > 0 ? 300 : 60; // Longer cache for data, shorter for empty results
+        header('Cache-Control: public, max-age=' . $maxAge . ', stale-while-revalidate=60');
+        header('Expires: ' . gmdate('D, d M Y H:i:s \G\M\T', time() + $maxAge));
+        header('X-Module-Name: ' . $moduleName);
+        header('X-Record-Count: ' . $recordCount);
+        header('X-Execution-Time: ' . round($executionTime, 3) . 's');
     }
+}
+
+// OPTIMIZATION: API request caching to reduce external calls
+function cachedSupabaseRequest($endpoint, $method = 'GET', $data = null, $cacheTtl = 300) {
+    $cacheKey = 'api_' . md5($endpoint . $method . serialize($data));
+    $cacheFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . $cacheKey . '.json';
+    
+    // Check cache first
+    if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $cacheTtl) {
+        $cached = @file_get_contents($cacheFile);
+        if ($cached !== false) {
+            $data = json_decode($cached, true);
+            if (is_array($data)) {
+                $GLOBALS['cache_source'] = 'api_cache';
+                return $data;
+            }
+        }
+    }
+    
+    // Make API request
+    $result = supabaseRequest($endpoint, $method, $data);
+    
+    // Cache successful responses
+    if (isset($result['data']) && is_array($result['data'])) {
+        @file_put_contents($cacheFile, json_encode($result));
+        $GLOBALS['cache_source'] = 'api_fresh';
+    }
+    
+    return $result;
 }
 ?>

@@ -214,20 +214,27 @@ try {
                     $createdAt = isset($eligibility['created_at']) ? 
                         date('M d, Y', strtotime($eligibility['created_at'])) : '';
                         
-                    // Combine all data
+                    // OPTIMIZATION: Create standardized record with all required fields for UI
                     $donation = [
                         'eligibility_id' => $eligibility['eligibility_id'] ?? '',
                         'donor_id' => $donorId,
                         'surname' => $donor['surname'] ?? '',
                         'first_name' => $donor['first_name'] ?? '',
                         'middle_name' => $donor['middle_name'] ?? '',
+                        'donor_type' => 'Returning', // Approved donors are always returning
+                        'donor_number' => $donor['prc_donor_number'] ?? $donorId,
+                        'registration_source' => 'PRC System',
+                        'registration_channel' => 'PRC System', // Add alias for compatibility
                         'age' => $age ?: '0',
                         'sex' => $donor['sex'] ?? '',
+                        'birthdate' => $donor['birthdate'] ?? '', // Add missing field
                         'blood_type' => $eligibility['blood_type'] ?? '',
                         'donation_type' => $eligibility['donation_type'] ?? '',
                         'status' => 'approved',
                         'status_text' => 'Approved',
-                        'date_submitted' => $createdAt
+                        'status_class' => 'bg-success', // Add pre-calculated CSS class
+                        'date_submitted' => $createdAt,
+                        'sort_ts' => strtotime($eligibility['created_at'] ?? 'now') // Add sorting timestamp
                     ];
                     
                     $approvedDonations[] = $donation;

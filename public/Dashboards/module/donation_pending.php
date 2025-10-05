@@ -7,6 +7,9 @@ error_reporting(E_ALL);
 // Include database connection
 include_once '../../assets/conn/db_conn.php';
 
+// OPTIMIZATION: Include shared utilities first to prevent function redeclaration
+include_once __DIR__ . '/shared_utilities.php';
+
 // OPTIMIZATION: Include shared optimized functions
 include_once __DIR__ . '/optimized_functions.php';
 
@@ -34,7 +37,7 @@ try {
     $screeningResponse = supabaseRequest("screening_form?select=screening_id,donor_form_id,needs_review,disapproval_reason,created_at");
     $medicalResponse   = supabaseRequest("medical_history?select=donor_id,needs_review,medical_approval,updated_at");
     $physicalResponse  = supabaseRequest("physical_examination?select=donor_id,needs_review,remarks,created_at");
-    $collectionResponse = supabaseRequest("blood_collection?select=screening_id,needs_review,collection_status,start_time");
+    $collectionResponse = supabaseRequest("blood_collection?select=screening_id,needs_review,status,start_time");
 
     // Build lookup maps with status fields
     $screeningByDonorId = [];
@@ -80,7 +83,7 @@ try {
             if (!empty($row['screening_id'])) {
                 $collectionByScreeningId[$row['screening_id']] = [
                     'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
-                    'collection_status' => $row['collection_status'] ?? null
+                    'status' => $row['status'] ?? null
                 ];
             }
         }
@@ -271,7 +274,7 @@ try {
                         if ($screeningId && isset($collectionByScreeningId[$screeningId])) {
                             $collectionData = $collectionByScreeningId[$screeningId];
                             $collNeeds = $collectionData['needs_review'] ?? null;
-                            $collectionStatus = $collectionData['collection_status'] ?? '';
+                            $collectionStatus = $collectionData['status'] ?? '';
                             
                             // Blood collection is completed if it doesn't need review and has a valid status
                             // Valid statuses: 'Completed', 'Success', 'Approved', etc.
@@ -282,7 +285,7 @@ try {
                             }
                         } else {
                             // Fallback: Check blood collection directly if not in lookup
-                            $collectionCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?donor_id=eq.' . $donorId . '&select=needs_review,collection_status&order=created_at.desc&limit=1');
+                            $collectionCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?donor_id=eq.' . $donorId . '&select=needs_review,status&order=created_at.desc&limit=1');
                             curl_setopt($collectionCurl, CURLOPT_RETURNTRANSFER, true);
                             curl_setopt($collectionCurl, CURLOPT_HTTPHEADER, [
                                 'apikey: ' . SUPABASE_API_KEY,
@@ -297,7 +300,7 @@ try {
                                 $collectionData = json_decode($collectionResponse, true) ?: [];
                                 if (!empty($collectionData)) {
                                     $collNeeds = $collectionData[0]['needs_review'] ?? null;
-                                    $collectionStatus = $collectionData[0]['collection_status'] ?? '';
+                                    $collectionStatus = $collectionData[0]['status'] ?? '';
                                     if ($collNeeds !== true && !empty($collectionStatus) && 
                                         !in_array($collectionStatus, ['Pending', 'Incomplete', 'Failed', 'Yet to be collected'])) {
                                         $bloodCollectionCompleted = true;
@@ -317,18 +320,23 @@ try {
                 }
             }
 
-            // Create a simplified record with ONLY the required fields for UI
+            // OPTIMIZATION: Create standardized record with all required fields for UI
+            // This ensures consistent data structure across all modules
             $pendingDonations[] = [
                 'donor_id' => $donorId ?? '',
                 'surname' => $donor['surname'] ?? '',
                 'first_name' => $donor['first_name'] ?? '',
+                'middle_name' => $donor['middle_name'] ?? '', // Add missing field
                 'donor_type' => $donorType,
                 'donor_number' => $donor['prc_donor_number'] ?? ($donorId ?? ''),
                 'registration_source' => $donor['registration_channel'] ?? 'PRC System',
+                'registration_channel' => $donor['registration_channel'] ?? 'PRC System', // Add alias for compatibility
                 'status_text' => $statusLabel,
-                // Keep existing fields used elsewhere
+                'status' => strtolower(str_replace([' ', '(', ')'], ['_', '', ''], $statusLabel)), // Add normalized status
+                'status_class' => getStatusClass($statusLabel), // Add pre-calculated CSS class
                 'birthdate' => $donor['birthdate'] ?? '',
                 'sex' => $donor['sex'] ?? '',
+                'age' => calculateAge($donor['birthdate'] ?? ''), // Add calculated age
                 'date_submitted' => $dateSubmitted,
                 'eligibility_id' => 'pending_' . ($donorId ?? '0'),
                 'sort_ts' => !empty($donor['submitted_at']) ? strtotime($donor['submitted_at']) : (!empty($donor['created_at']) ? strtotime($donor['created_at']) : time())
@@ -368,4 +376,6 @@ addPerformanceHeaders($executionTime, count($pendingDonations), "Pending Donatio
 error_log("SUPABASE_URL: " . SUPABASE_URL);
 error_log("API Key Length: " . strlen(SUPABASE_API_KEY));
 error_log("Filtered out " . count($donorsWithEligibility) . " donors with eligibility data");
-error_log("Found " . count($pendingDonations) . " pending donors"); 
+error_log("Found " . count($pendingDonations) . " pending donors");
+
+// OPTIMIZATION: Shared utilities already included at the top of the file 

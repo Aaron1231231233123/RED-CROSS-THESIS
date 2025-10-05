@@ -1711,11 +1711,11 @@ foreach ($bloodByType as $type => $count) {
                     <h6 class="mb-3 mt-4 fw-bold">Additional Information</h6>
                     <div class="mb-3">
                         <label class="form-label">Hospital Admitted</label>
-                        <input type="text" class="form-control" name="hospital_admitted" value="<?php echo $_SESSION['user_first_name'] ?? ''; ?>" readonly>
+                        <input type="text" class="form-control" name="hospital_admitted" value="<?php echo isset($_SESSION['user_first_name']) ? $_SESSION['user_first_name'] : 'Hospital'; ?>" readonly>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Requesting Physician</label>
-                        <input type="text" class="form-control" name="physician_name" value="<?php echo $_SESSION['user_surname'] ?? ''; ?>" readonly>
+                        <input type="text" class="form-control" name="physician_name" value="<?php echo isset($_SESSION['user_surname']) ? $_SESSION['user_surname'] : 'Unknown'; ?>" readonly>
                     </div>
 
                     <!-- File Upload and Signature Section -->
@@ -2453,10 +2453,18 @@ foreach ($bloodByType as $type => $count) {
                 // Create FormData object
                 const formData = new FormData(this);
                 
-                // Add additional data
-                formData.append('user_id', '<?php echo $_SESSION['user_id']; ?>');
+                // Add additional data with validation
+                const userId = '<?php echo isset($_SESSION['user_id']) ? $_SESSION['user_id'] : ''; ?>';
+                const physicianName = '<?php echo isset($_SESSION['user_surname']) ? $_SESSION['user_surname'] : 'Unknown'; ?>';
+                
+                if (!userId) {
+                    alert('Error: User session not found. Please log in again.');
+                    return;
+                }
+                
+                formData.append('user_id', userId);
                 formData.append('status', 'Pending');
-                formData.append('physician_name', '<?php echo $_SESSION['user_surname']; ?>');
+                formData.append('physician_name', physicianName);
                 formData.append('requested_on', new Date().toISOString());
                 
                 // Handle "when needed" logic
@@ -2479,9 +2487,9 @@ foreach ($bloodByType as $type => $count) {
                     }
                 }
                 
-                // Define exact fields from the database schema
+                // Define exact fields from the database schema (removed request_id as it's auto-generated)
                 const validFields = [
-                    'request_id', 'user_id', 'patient_name', 'patient_age', 'patient_gender', 
+                    'user_id', 'patient_name', 'patient_age', 'patient_gender', 
                     'patient_diagnosis', 'patient_blood_type', 'rh_factor', 'blood_component', 
                     'units_requested', 'when_needed', 'is_asap', 'hospital_admitted', 
                     'physician_name', 'requested_on', 'status'
@@ -2524,6 +2532,32 @@ foreach ($bloodByType as $type => $count) {
                     }
                 });
                 
+                // Validate required fields
+                const requiredFields = ['patient_name', 'patient_age', 'patient_gender', 'patient_diagnosis', 'patient_blood_type', 'rh_factor', 'units_requested'];
+                const missingFields = requiredFields.filter(field => !data[field] || data[field] === '');
+                
+                if (missingFields.length > 0) {
+                    alert('Please fill in all required fields: ' + missingFields.join(', '));
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalBtnText;
+                    return;
+                }
+                
+                // Validate numeric fields
+                if (isNaN(data.patient_age) || data.patient_age < 0 || data.patient_age > 120) {
+                    alert('Please enter a valid age (0-120)');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalBtnText;
+                    return;
+                }
+                
+                if (isNaN(data.units_requested) || data.units_requested < 1 || data.units_requested > 10) {
+                    alert('Please enter a valid number of units (1-10)');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalBtnText;
+                    return;
+                }
+                
                 console.log('Submitting request data:', data);
                 console.log('Valid fields in database:', validFields);
                 console.log('FormData keys:', Array.from(formData.keys()));
@@ -2544,16 +2578,22 @@ foreach ($bloodByType as $type => $count) {
                 })
                 .then(response => {
                     console.log('Request response status:', response.status);
+                    console.log('Response headers:', response.headers);
+                    
                     if (!response.ok) {
                         return response.text().then(text => {
                             console.error('Error response body:', text);
+                            console.error('Response status:', response.status);
+                            console.error('Response statusText:', response.statusText);
+                            
                             // Try to parse as JSON to extract more details
                             try {
                                 const errorJson = JSON.parse(text);
-                                throw new Error(`Error ${response.status}: ${errorJson.message || errorJson.error || text}`);
+                                const errorMessage = errorJson.message || errorJson.error || errorJson.details || text;
+                                throw new Error(`Database Error (${response.status}): ${errorMessage}`);
                             } catch (jsonError) {
                                 // If can't parse as JSON, use the raw text
-                                throw new Error(`Error ${response.status}: ${text}`);
+                                throw new Error(`Server Error (${response.status}): ${text}`);
                             }
                         });
                     }

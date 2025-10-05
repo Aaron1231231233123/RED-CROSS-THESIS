@@ -121,10 +121,20 @@ function fetchEligibilityRecord($eligibilityId) {
     // If eligibility_id starts with "pending_", this is a pending donor without an eligibility record
     if ($eligibilityId && strpos($eligibilityId, 'pending_') === 0) {
         error_log("Handling pending eligibility record");
+        // Try to derive blood type from latest screening form
+        $derivedBloodType = 'Pending';
+        try {
+            $screeningData = fetchScreeningDataByDonorId($donor_id);
+            if (!empty($screeningData['blood_type'])) {
+                $derivedBloodType = $screeningData['blood_type'];
+            }
+        } catch (Exception $e) {
+            // ignore, keep Pending
+        }
         return [
             'eligibility_id' => $eligibilityId,
             'status' => 'pending',
-            'blood_type' => 'Pending',
+            'blood_type' => $derivedBloodType,
             'donation_type' => 'Pending',
             'start_date' => date('Y-m-d'),
             'end_date' => null,
@@ -304,10 +314,20 @@ function fetchEligibilityRecord($eligibilityId) {
         if (empty($data)) {
             error_log("No eligibility data found for ID: $eligibilityId");
             // Return a default eligibility object for pending donors
+            // Try to derive blood type from latest screening form
+            $derivedBloodType = 'Pending';
+            try {
+                $screeningData = fetchScreeningDataByDonorId($donor_id);
+                if (!empty($screeningData['blood_type'])) {
+                    $derivedBloodType = $screeningData['blood_type'];
+                }
+            } catch (Exception $e) {
+                // ignore, keep Pending
+            }
             return [
                 'eligibility_id' => $eligibilityId ?? 'pending_' . $donor_id,
                 'status' => 'pending',
-                'blood_type' => 'Pending',
+                'blood_type' => $derivedBloodType,
                 'donation_type' => 'Pending',
                 'start_date' => date('Y-m-d'),
                 'end_date' => null,

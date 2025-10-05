@@ -7,6 +7,9 @@ error_reporting(E_ALL);
 // Include database connection
 include_once '../../assets/conn/db_conn.php';
 
+// OPTIMIZATION: Include shared utilities first to prevent function redeclaration
+include_once __DIR__ . '/shared_utilities.php';
+
 // OPTIMIZATION: Include shared optimized functions
 include_once __DIR__ . '/optimized_functions.php';
 
@@ -26,71 +29,6 @@ function debug_log($message) {
     if ($DEBUG) {
         error_log("[DEBUG] " . $message);
     }
-}
-
-// Function to get declined/deferred donor IDs (reusable)
-function getDeclinedDeferredDonorIds() {
-    $declinedDeferredIds = [];
-    
-    try {
-        // 1. Check eligibility table for declined/deferred status
-        $eligibilityResponse = supabaseRequest("eligibility?or=(status.eq.declined,status.eq.deferred,status.eq.refused,status.eq.ineligible)&select=donor_id,status");
-        
-        if (isset($eligibilityResponse['data']) && is_array($eligibilityResponse['data'])) {
-            foreach ($eligibilityResponse['data'] as $eligibility) {
-                $donorId = $eligibility['donor_id'] ?? null;
-                if ($donorId) {
-                    $declinedDeferredIds[$donorId] = $eligibility['status'] ?? '';
-                }
-            }
-        }
-        
-        // 2. Check screening form for declined status
-        $screeningResponse = supabaseRequest("screening_form?disapproval_reason=not.is.null&select=donor_form_id");
-        
-        if (isset($screeningResponse['data']) && is_array($screeningResponse['data'])) {
-            foreach ($screeningResponse['data'] as $screening) {
-                $donorId = $screening['donor_form_id'] ?? null;
-                if ($donorId) {
-                    $declinedDeferredIds[$donorId] = 'declined';
-                }
-            }
-        }
-        
-        // 3. Check physical examination for deferral/decline status
-        $physicalResponse = supabaseRequest("physical_examination?or=(remarks.eq.Temporarily%20Deferred,remarks.eq.Permanently%20Deferred,remarks.eq.Declined,remarks.eq.Refused)&select=donor_id,remarks");
-        
-        if (isset($physicalResponse['data']) && is_array($physicalResponse['data'])) {
-            foreach ($physicalResponse['data'] as $exam) {
-                $donorId = $exam['donor_id'] ?? null;
-                if ($donorId) {
-                    $remarks = $exam['remarks'] ?? '';
-                    if (in_array($remarks, ['Temporarily Deferred', 'Permanently Deferred'])) {
-                        $declinedDeferredIds[$donorId] = 'deferred';
-                    } elseif (in_array($remarks, ['Declined', 'Refused'])) {
-                        $declinedDeferredIds[$donorId] = 'declined';
-                    }
-                }
-            }
-        }
-        
-        // 4. Check medical history for decline status
-        $medicalResponse = supabaseRequest("medical_history?medical_approval=eq.Not%20Approved&select=donor_id");
-        
-        if (isset($medicalResponse['data']) && is_array($medicalResponse['data'])) {
-            foreach ($medicalResponse['data'] as $medical) {
-                $donorId = $medical['donor_id'] ?? null;
-                if ($donorId) {
-                    $declinedDeferredIds[$donorId] = 'declined';
-                }
-            }
-        }
-        
-    } catch (Exception $e) {
-        debug_log("Error getting declined/deferred donor IDs: " . $e->getMessage());
-    }
-    
-    return $declinedDeferredIds;
 }
 
 try {
@@ -144,19 +82,29 @@ try {
                     $statusText = 'Declined';
                 }
                 
-                // Create record for declined/deferred donor
+                // OPTIMIZATION: Create standardized record with all required fields for UI
                 $declinedDonations[] = [
                     'eligibility_id' => $eligibility['eligibility_id'],
                     'donor_id' => $donorId,
                     'surname' => $donor['surname'] ?? '',
                     'first_name' => $donor['first_name'] ?? '',
                     'middle_name' => $donor['middle_name'] ?? '',
+                    'donor_type' => 'Returning', // Declined donors are typically returning
+                    'donor_number' => $donor['prc_donor_number'] ?? $donorId,
+                    'registration_source' => 'PRC System',
+                    'registration_channel' => 'PRC System', // Add alias for compatibility
+                    'age' => calculateAge($donor['birthdate'] ?? ''), // Add calculated age
+                    'sex' => $donor['sex'] ?? '',
+                    'birthdate' => $donor['birthdate'] ?? '', // Add missing field
                     'rejection_source' => 'Eligibility',
                     'rejection_reason' => $disapprovalReason,
                     'rejection_date' => date('M d, Y', strtotime($eligibility['created_at'] ?? 'now')),
                     'remarks_status' => ucfirst($status),
                     'status' => $status,
-                    'status_text' => $statusText
+                    'status_text' => $statusText,
+                    'status_class' => getStatusClass($statusText), // Add pre-calculated CSS class
+                    'date_submitted' => date('M d, Y', strtotime($eligibility['created_at'] ?? 'now')), // Add for compatibility
+                    'sort_ts' => strtotime($eligibility['created_at'] ?? 'now') // Add sorting timestamp
                 ];
                 
                 debug_log("Added declined/deferred donor from eligibility: " . ($donor['surname'] ?? 'Unknown') . ", " . ($donor['first_name'] ?? 'Unknown') . " - " . $statusText);
@@ -205,19 +153,29 @@ try {
                     continue;
                 }
                 
-                // Create record for declined screening
+                // OPTIMIZATION: Create standardized record for declined screening
                 $declinedDonations[] = [
                     'eligibility_id' => 'declined_screening_' . $screening['screening_id'],
                     'donor_id' => $donorId,
                     'surname' => $donor['surname'] ?? '',
                     'first_name' => $donor['first_name'] ?? '',
                     'middle_name' => $donor['middle_name'] ?? '',
+                    'donor_type' => 'Returning', // Declined donors are typically returning
+                    'donor_number' => $donor['prc_donor_number'] ?? $donorId,
+                    'registration_source' => 'PRC System',
+                    'registration_channel' => 'PRC System', // Add alias for compatibility
+                    'age' => calculateAge($donor['birthdate'] ?? ''), // Add calculated age
+                    'sex' => $donor['sex'] ?? '',
+                    'birthdate' => $donor['birthdate'] ?? '', // Add missing field
                     'rejection_source' => 'Screening',
                     'rejection_reason' => $disapprovalReason,
                     'rejection_date' => date('M d, Y', strtotime($screening['created_at'] ?? 'now')),
                     'remarks_status' => 'Declined',
                     'status' => 'declined',
-                    'status_text' => 'Declined'
+                    'status_text' => 'Declined',
+                    'status_class' => 'bg-danger', // Add pre-calculated CSS class
+                    'date_submitted' => date('M d, Y', strtotime($screening['created_at'] ?? 'now')), // Add for compatibility
+                    'sort_ts' => strtotime($screening['created_at'] ?? 'now') // Add sorting timestamp
                 ];
                 
                 debug_log("Added declined donor from screening: " . ($donor['surname'] ?? 'Unknown') . ", " . ($donor['first_name'] ?? 'Unknown'));
@@ -273,19 +231,29 @@ try {
                 // Normalize deferred status to just "Deferred" regardless of type
                 $statusText = 'Deferred';
                 
-                // Create record with all required fields
+                // OPTIMIZATION: Create standardized record for deferred physical examination
                 $declinedDonations[] = [
                     'eligibility_id' => 'deferred_' . $exam['physical_exam_id'],
                     'donor_id' => $donorId,
                     'surname' => $donor['surname'] ?? '',
                     'first_name' => $donor['first_name'] ?? '',
                     'middle_name' => $donor['middle_name'] ?? '',
+                    'donor_type' => 'Returning', // Deferred donors are typically returning
+                    'donor_number' => $donor['prc_donor_number'] ?? $donorId,
+                    'registration_source' => 'PRC System',
+                    'registration_channel' => 'PRC System', // Add alias for compatibility
+                    'age' => calculateAge($donor['birthdate'] ?? ''), // Add calculated age
+                    'sex' => $donor['sex'] ?? '',
+                    'birthdate' => $donor['birthdate'] ?? '', // Add missing field
                     'rejection_source' => 'Physical Examination',
                     'rejection_reason' => $rejectionReason,
                     'rejection_date' => date('M d, Y', strtotime($exam['created_at'] ?? 'now')),
                     'remarks_status' => $remarks,
                     'status' => 'deferred',
-                    'status_text' => $statusText
+                    'status_text' => $statusText,
+                    'status_class' => 'bg-warning', // Add pre-calculated CSS class
+                    'date_submitted' => date('M d, Y', strtotime($exam['created_at'] ?? 'now')), // Add for compatibility
+                    'sort_ts' => strtotime($exam['created_at'] ?? 'now') // Add sorting timestamp
                 ];
                 
                 debug_log("Added deferred donor: " . ($donor['surname'] ?? 'Unknown') . ", " . ($donor['first_name'] ?? 'Unknown') . " - " . $statusText);
@@ -311,3 +279,5 @@ addPerformanceHeaders($executionTime, count($declinedDonations), "Declined Donat
 
 // Log diagnostic information
 debug_log("Declined Donations Module - Records found: " . count($declinedDonations) . " in " . round($executionTime, 3) . " seconds");
+
+// OPTIMIZATION: Shared utilities already included at the top of the file

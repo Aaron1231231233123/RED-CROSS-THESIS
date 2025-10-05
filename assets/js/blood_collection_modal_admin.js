@@ -1,0 +1,817 @@
+class BloodCollectionModal {
+	constructor() {
+		this.modal = null;
+		this.currentStep = 1;
+		this.totalSteps = 5;
+		this.bloodCollectionData = null;
+		this.selectedBagLabel = null;
+		this.isSubmitting = false; // Prevent duplicate submissions
+		this.init();
+	}
+
+	init() {
+		// Initialize modal when DOM is loaded
+		if (document.readyState === 'loading') {
+			document.addEventListener('DOMContentLoaded', () => this.initializeModal());
+		} else {
+			this.initializeModal();
+		}
+	}
+
+	initializeModal() {
+		this.modal = document.getElementById('bloodCollectionModal');
+		if (!this.modal) {
+			console.error('Blood collection modal not found');
+			return;
+		}
+
+		this.setupEventListeners();
+		this.generateUnitSerialNumber();
+	}
+
+	setupEventListeners() {
+		// Navigation buttons
+		const prevBtn = document.querySelector('.blood-prev-btn');
+		const nextBtn = document.querySelector('.blood-next-btn');
+		const submitBtn = document.querySelector('.blood-submit-btn');
+		const cancelBtn = document.querySelector('.blood-cancel-btn');
+		const closeBtn = document.querySelector('.blood-close-btn');
+
+		if (prevBtn) prevBtn.addEventListener('click', () => this.previousStep());
+		if (nextBtn) nextBtn.addEventListener('click', () => this.nextStep());
+		if (submitBtn) {
+			// Add debounced click handler to prevent rapid double-clicks
+			let submitTimeout = null;
+			submitBtn.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				
+				// Clear any existing timeout
+				if (submitTimeout) {
+					clearTimeout(submitTimeout);
+				}
+				
+				// Add a small delay to prevent rapid clicks
+				submitTimeout = setTimeout(() => {
+					this.showCollectionCompleteConfirmation();
+					submitTimeout = null;
+				}, 300);
+			});
+		}
+		if (cancelBtn) cancelBtn.addEventListener('click', () => this.closeModal());
+		if (closeBtn) closeBtn.addEventListener('click', () => this.closeModal());
+
+		// Step navigation
+		document.querySelectorAll('.blood-step').forEach(step => {
+			step.addEventListener('click', (e) => {
+				const stepNumber = parseInt(e.currentTarget.dataset.step);
+				if (stepNumber <= this.currentStep) {
+					this.goToStep(stepNumber);
+				}
+			});
+		});
+
+		// Modern bag option selection
+		document.querySelectorAll('.bag-option input[type="radio"]').forEach(radio => {
+			radio.addEventListener('change', () => {
+				// Remove selected class from all bag options
+				document.querySelectorAll('.bag-option').forEach(opt => {
+					opt.classList.remove('selected');
+				});
+				
+				// Add selected class to current option parent
+				if (radio.checked) {
+					radio.closest('.bag-option').classList.add('selected');
+					// Capture human-readable label for summary
+					const labelText = radio.closest('label')?.querySelector('strong')?.textContent?.trim();
+					this.selectedBagLabel = labelText || radio.value || null;
+					// Persist to hidden field so FormData always contains the label
+					const hiddenLabel = document.getElementById('blood-bag-type-label');
+					if (hiddenLabel) hiddenLabel.value = this.selectedBagLabel || '';
+				}
+			});
+		});
+
+		// Blood status option selection and reaction visibility
+		document.querySelectorAll('input[name="is_successful"]').forEach(radio => {
+			radio.addEventListener('change', () => {
+				// Remove selected class from all status options
+				document.querySelectorAll('.blood-status-card').forEach(opt => {
+					opt.classList.remove('selected');
+				});
+				
+				// Add selected class to current option parent
+				if (radio.checked) {
+					radio.closest('.blood-status-card').classList.add('selected');
+				}
+				
+				// Show/hide reaction management based on selection
+				this.updateReactionVisibility(radio.value === 'NO');
+			});
+		});
+
+		// Initialize modern form elements
+		this.initializeModernFormElements();
+		
+		// Setup time validation
+		this.setupTimeValidation();
+	}
+
+	setupTimeValidation() {
+		const startTimeInput = document.getElementById('blood-start-time');
+		const endTimeInput = document.getElementById('blood-end-time');
+
+		if (startTimeInput && endTimeInput) {
+			// Validate end time is at least 5 minutes after start time
+			const validateTimes = () => {
+				if (startTimeInput.value && endTimeInput.value) {
+					const startTime = new Date(`2000-01-01T${startTimeInput.value}`);
+					const endTime = new Date(`2000-01-01T${endTimeInput.value}`);
+					const diffMinutes = (endTime - startTime) / (1000 * 60);
+
+					if (diffMinutes < 5) {
+						// Auto-adjust end time to be 5 minutes after start time
+						const adjustedEndTime = new Date(startTime.getTime() + 5 * 60000);
+						const hours = adjustedEndTime.getHours().toString().padStart(2, '0');
+						const minutes = adjustedEndTime.getMinutes().toString().padStart(2, '0');
+						endTimeInput.value = `${hours}:${minutes}`;
+						
+						this.showToast('End time adjusted to be at least 5 minutes after start time', 'info');
+					}
+				}
+			};
+
+			startTimeInput.addEventListener('change', validateTimes);
+			endTimeInput.addEventListener('change', validateTimes);
+		}
+	}
+
+	initializeModernFormElements() {
+		// Add click handlers for bag option labels
+		document.querySelectorAll('.bag-option').forEach(option => {
+			option.addEventListener('click', (e) => {
+				if (e.target.tagName !== 'INPUT') {
+					const radio = option.querySelector('input[type="radio"]');
+					if (radio) {
+						radio.checked = true;
+						radio.dispatchEvent(new Event('change'));
+					}
+				}
+			});
+		});
+
+		// Add click handlers for blood status card labels
+		document.querySelectorAll('.blood-status-card').forEach(option => {
+			option.addEventListener('click', (e) => {
+				if (e.target.tagName !== 'INPUT') {
+					const radio = option.querySelector('input[type="radio"]');
+					if (radio) {
+						radio.checked = true;
+						radio.dispatchEvent(new Event('change'));
+					}
+				}
+			});
+		});
+	}
+
+	updateReactionVisibility(showReaction) {
+		const reactionSection = document.querySelector('.blood-reaction-section');
+		if (reactionSection) {
+			reactionSection.style.display = showReaction ? 'block' : 'none';
+		}
+	}
+
+	generateUnitSerialNumber() {
+		const today = new Date();
+		const dateStr = today.getFullYear().toString() + 
+					  (today.getMonth() + 1).toString().padStart(2, '0') + 
+					  today.getDate().toString().padStart(2, '0');
+		
+		// Generate more unique sequence using timestamp + random
+		const timestamp = Date.now().toString().slice(-4); // Last 4 digits of timestamp
+		const random = Math.floor(Math.random() * 99).toString().padStart(2, '0');
+		const sequence = timestamp + random;
+		const serialNumber = `BC-${dateStr}-${sequence}`;
+		
+		const serialInput = document.getElementById('blood-unit-serial');
+		if (serialInput) {
+			serialInput.value = serialNumber;
+		}
+
+		// Also update the display in Step 1
+		const serialDisplay = document.getElementById('blood-unit-serial-display');
+		if (serialDisplay) {
+			serialDisplay.textContent = serialNumber;
+		}
+	}
+
+	openModal(collectionData) {
+		this.bloodCollectionData = collectionData;
+		this.currentStep = 1;
+		
+		// Reset submission flag when opening modal
+		this.isSubmitting = false;
+		
+		// Generate new serial number for each modal opening
+		this.generateUnitSerialNumber();
+		
+		// Populate summary data (store promise so submit can wait for it)
+		this.populatePromise = this.populateSummary();
+		
+		// Show modal
+		this.modal.style.display = 'flex';
+		setTimeout(() => {
+			this.modal.classList.add('show');
+		}, 10);
+		
+		// Initialize first step
+		this.showStep(1);
+		this.updateProgressIndicator();
+		this.updateNavigationButtons();
+	}
+
+	async populateSummary() {
+		if (!this.bloodCollectionData) return;
+
+		try {
+			// Fetch additional donor and physical exam data (admin endpoints)
+			const [donorResponse, physicalExamResponse] = await Promise.all([
+				fetch(`../../assets/php_func/admin/get_donor_details_admin.php?donor_id=${this.bloodCollectionData.donor_id}`),
+				fetch(`../../assets/php_func/admin/get_physical_exam_details_admin.php?donor_id=${this.bloodCollectionData.donor_id}`)
+			]);
+
+			if (donorResponse.ok) {
+				const donorData = await donorResponse.json();
+				if (donorData.success) {
+					this.populateDonorInfo(donorData.data);
+					// Populate blood type and weight if available
+					const bloodTypeInput = document.getElementById('blood_type');
+					if (donorData.data && donorData.data.blood_type && bloodTypeInput) {
+						bloodTypeInput.value = donorData.data.blood_type;
+					}
+					const weightInput = document.getElementById('donor_weight');
+					if (donorData.data && typeof donorData.data.body_weight !== 'undefined' && donorData.data.body_weight !== null && weightInput) {
+						weightInput.value = donorData.data.body_weight;
+					}
+				}
+			}
+
+			if (physicalExamResponse.ok) {
+				const physicalData = await physicalExamResponse.json();
+				if (physicalData.success && physicalData.data) {
+					this.populatePhysicalExamInfo(physicalData.data);
+					// Capture and store physical_exam_id if present
+					if (physicalData.data.physical_exam_id) {
+						this.bloodCollectionData.physical_exam_id = this.bloodCollectionData.physical_exam_id || physicalData.data.physical_exam_id;
+						const hiddenPhysId = document.querySelector('input[name="physical_exam_id"]');
+						if (hiddenPhysId) hiddenPhysId.value = physicalData.data.physical_exam_id;
+					}
+					// Populate donor weight if available
+					if (typeof physicalData.data.body_weight !== 'undefined' && physicalData.data.body_weight !== null) {
+						const weightInput = document.getElementById('donor_weight');
+						if (weightInput) weightInput.value = physicalData.data.body_weight;
+					}
+				}
+			}
+
+		} catch (error) {
+			console.error('Error fetching summary data:', error);
+			this.showToast('Error loading summary data', 'error');
+		}
+	}
+
+	populateDonorInfo(donorData) {
+		// Populate the donor info
+		const donorNameDisplay = document.getElementById('blood-donor-name-display');
+		const collectionDateDisplay = document.getElementById('blood-collection-date-display');
+		const unitSerialDisplay = document.getElementById('blood-unit-serial-display');
+
+		if (donorNameDisplay) {
+			const fullName = `${donorData.surname || ''} ${donorData.first_name || ''} ${donorData.middle_name || ''}`.trim();
+			donorNameDisplay.textContent = fullName || 'Unknown Donor';
+		}
+
+		if (collectionDateDisplay) {
+			// Display donor's birthdate instead of current date
+			if (donorData.birthdate) {
+				const birthdate = new Date(donorData.birthdate);
+				collectionDateDisplay.textContent = birthdate.toLocaleDateString('en-US', {
+					month: 'long',
+					day: 'numeric',
+					year: 'numeric'
+				});
+			} else {
+				collectionDateDisplay.textContent = 'Birthdate not available';
+			}
+		}
+
+		if (unitSerialDisplay) {
+			const serialInput = document.getElementById('blood-unit-serial');
+			unitSerialDisplay.textContent = serialInput?.value || 'Generating...';
+		}
+
+		// Also update the serial display in Step 1
+		const serialDisplayStep1 = document.getElementById('blood-unit-serial-display');
+		if (serialDisplayStep1) {
+			const serialInput = document.getElementById('blood-unit-serial');
+			serialDisplayStep1.textContent = serialInput?.value || 'Generating...';
+		}
+	}
+
+	populatePhysicalExamInfo(physicalData) {
+		// Since we simplified Step 1, we don't need to populate detailed physical exam info
+		// The collection details form only shows basic information
+		console.log('Physical exam data available for reference:', physicalData);
+	}
+
+	showStep(stepNumber) {
+		// Hide all steps and ensure they are not displayed
+		document.querySelectorAll('.blood-step-content').forEach(step => {
+			step.classList.remove('active');
+			// Explicitly hide via inline style to override initial inline display:none
+			try { step.style.display = 'none'; } catch (_) {}
+		});
+		
+		// Show current step (select via data-step attribute)
+		const currentStepContent = document.querySelector(`.blood-step-content[data-step="${stepNumber}"]`);
+		if (currentStepContent) {
+			currentStepContent.classList.add('active');
+			// Explicitly show current step
+			try { currentStepContent.style.display = ''; } catch (_) {}
+		}
+		
+		this.currentStep = stepNumber;
+	}
+
+	updateProgressIndicator() {
+		document.querySelectorAll('.blood-step').forEach((step, index) => {
+			const stepNumber = index + 1;
+			if (stepNumber < this.currentStep) {
+				step.classList.add('completed');
+				step.classList.remove('active');
+			} else if (stepNumber === this.currentStep) {
+				step.classList.add('active');
+				step.classList.remove('completed');
+			} else {
+				step.classList.remove('active', 'completed');
+			}
+		});
+
+		// Update progress bar
+		const progressFill = document.querySelector('.blood-progress-fill');
+		if (progressFill) {
+			const percentage = ((this.currentStep - 1) / (this.totalSteps - 1)) * 100;
+			progressFill.style.width = percentage + '%';
+		}
+	}
+
+	updateNavigationButtons() {
+		const prevBtn = document.querySelector('.blood-prev-btn');
+		const nextBtn = document.querySelector('.blood-next-btn');
+		const submitBtn = document.querySelector('.blood-submit-btn');
+
+		if (prevBtn) {
+			prevBtn.style.display = this.currentStep > 1 ? 'inline-block' : 'none';
+		}
+
+		if (nextBtn) {
+			nextBtn.style.display = this.currentStep < this.totalSteps ? 'inline-block' : 'none';
+		}
+
+		if (submitBtn) {
+			submitBtn.style.display = this.currentStep === this.totalSteps ? 'inline-block' : 'none';
+		}
+	}
+
+	nextStep() {
+		if (this.validateCurrentStep()) {
+			if (this.currentStep < this.totalSteps) {
+				this.currentStep++;
+				this.updateProgressIndicator();
+				this.showStep(this.currentStep);
+				this.updateNavigationButtons();
+				
+				// Update summary if we're at the review step
+				if (this.currentStep === 5) {
+					this.updateFormSummary();
+				}
+			}
+		}
+	}
+
+	previousStep() {
+		if (this.currentStep > 1) {
+			this.currentStep--;
+			this.updateProgressIndicator();
+			this.showStep(this.currentStep);
+			this.updateNavigationButtons();
+		}
+	}
+
+	goToStep(step) {
+		if (step >= 1 && step <= this.currentStep && step <= this.totalSteps) {
+			this.currentStep = step;
+			this.updateProgressIndicator();
+			this.showStep(step);
+			this.updateNavigationButtons();
+			
+			if (step === 5) {
+				this.updateFormSummary();
+			}
+		}
+	}
+
+	validateCurrentStep() {
+		const currentStepElement = document.querySelector(`.blood-step-content[data-step="${this.currentStep}"]`);
+		if (!currentStepElement) return false;
+
+		const requiredFields = currentStepElement.querySelectorAll('[required]');
+		let isValid = true;
+
+		requiredFields.forEach(field => {
+			if (field.type === 'radio') {
+				const radioGroup = currentStepElement.querySelectorAll(`input[name="${field.name}"]`);
+				const isChecked = Array.from(radioGroup).some(radio => radio.checked);
+				if (!isChecked) {
+					this.showToast(`Please select ${field.name.replace('_', ' ')}`, 'error');
+					isValid = false;
+				}
+			} else if (!field.value.trim()) {
+				this.showToast(`Please fill in ${field.placeholder || field.name}`, 'error');
+				field.focus();
+				isValid = false;
+			}
+		});
+
+		return isValid;
+	}
+
+	updateFormSummary() {
+		// Update summary with form values
+		const formData = this.getFormData();
+		// As a robustness measure, ensure bag type is resolved from the checked radio/selected tile
+		if (!formData.blood_bag_type) {
+			const selectedRadio = document.querySelector('input[name="blood_bag_type"]:checked');
+			if (selectedRadio) {
+				const labelText = selectedRadio.closest('label')?.querySelector('strong')?.textContent?.trim();
+				formData.blood_bag_type = labelText || selectedRadio.value || '';
+			} else {
+				const selectedTile = document.querySelector('.bag-option.selected strong');
+				if (selectedTile) {
+					formData.blood_bag_type = selectedTile.textContent.trim();
+				}
+			}
+			if (!formData.blood_bag_type && this.selectedBagLabel) {
+				formData.blood_bag_type = this.selectedBagLabel;
+			}
+			if (!formData.blood_bag_type) {
+				const hiddenLabel = document.getElementById('blood-bag-type-label');
+				if (hiddenLabel && hiddenLabel.value) formData.blood_bag_type = hiddenLabel.value;
+			}
+		}
+		
+		// Calculate duration if both times are provided
+		let duration = '-';
+		if (formData.start_time && formData.end_time) {
+			const startTime = new Date(`2000-01-01T${formData.start_time}`);
+			const endTime = new Date(`2000-01-01T${formData.end_time}`);
+			const diffMinutes = Math.round((endTime - startTime) / (1000 * 60));
+			if (diffMinutes > 0) {
+				duration = `${diffMinutes} minutes`;
+			}
+		}
+		
+		const summaryElements = {
+			'summary-blood-bag': formData.blood_bag_type || '-',
+			'summary-successful': formData.is_successful === 'YES' ? 'Successful' : 'Failed',
+			'summary-start-time': formData.start_time || '-',
+			'summary-end-time': formData.end_time || '-',
+			'summary-duration': duration,
+			'summary-serial-number': formData.unit_serial_number || '-',
+			'summary-reaction': formData.donor_reaction || 'None',
+			'summary-management': formData.management_done || 'None'
+		};
+
+		Object.entries(summaryElements).forEach(([id, value]) => {
+			const element = this.modal ? this.modal.querySelector(`#${id}`) : document.getElementById(id);
+			if (element) element.textContent = value;
+		});
+
+		// Show/hide reaction and management sections based on success status
+		const reactionSection = this.modal ? this.modal.querySelector('#summary-reaction-section') : document.getElementById('summary-reaction-section');
+		const managementSection = this.modal ? this.modal.querySelector('#summary-management-section') : document.getElementById('summary-management-section');
+		
+		if (formData.is_successful === 'NO') {
+			if (reactionSection) reactionSection.style.display = 'block';
+			if (managementSection) managementSection.style.display = 'block';
+		} else {
+			if (reactionSection) reactionSection.style.display = 'none';
+			if (managementSection) managementSection.style.display = 'none';
+		}
+	}
+
+	getFormData() {
+		const form = document.getElementById('bloodCollectionForm');
+		const formData = new FormData(form);
+		const data = {};
+
+		// Convert FormData to object
+		for (let [key, value] of formData.entries()) {
+			data[key] = value;
+		}
+
+		// Ensure bag type is captured even if browser omitted it
+		if (!data.blood_bag_type) {
+			const selectedBag = document.querySelector('input[name="blood_bag_type"]:checked');
+			if (selectedBag) {
+				const labelText = selectedBag.closest('label')?.querySelector('strong')?.textContent?.trim();
+				data.blood_bag_type = labelText || selectedBag.value || '';
+			}
+			if (!data.blood_bag_type && this.selectedBagLabel) {
+				data.blood_bag_type = this.selectedBagLabel;
+			}
+			if (!data.blood_bag_type) {
+				const hiddenLabel = document.getElementById('blood-bag-type-label');
+				if (hiddenLabel && hiddenLabel.value) data.blood_bag_type = hiddenLabel.value;
+			}
+		}
+
+		// Add hidden data with safe fallbacks: do not overwrite populated form values
+		if (!data.physical_exam_id && this.bloodCollectionData && this.bloodCollectionData.physical_exam_id) {
+			data.physical_exam_id = this.bloodCollectionData.physical_exam_id;
+		}
+		if (!data.donor_id && this.bloodCollectionData && this.bloodCollectionData.donor_id) {
+			data.donor_id = this.bloodCollectionData.donor_id;
+		}
+		// Hint to backend: if a row exists, increment amount_taken instead of replacing
+		// and update other fields.
+		data.update_mode = 'increment_on_existing';
+
+		return data;
+	}
+
+
+	async retryUpdateWithIncrement(formData) {
+		try {
+			// Ensure flag present
+			formData.update_mode = 'increment_on_existing';
+
+			const response = await fetch('../../assets/php_func/admin/process_blood_collection_admin.php?action=update', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(formData)
+			});
+
+			const raw = await response.text();
+			let result;
+			try { result = JSON.parse(raw); } catch (e) { result = { success: false, error: raw || 'Non-JSON response' }; }
+
+			if (result.success) {
+				this.showToast('Existing collection updated (amount added).', 'success');
+				this.disableAllFormInteraction();
+				setTimeout(() => {
+					this.closeModal();
+					window.location.reload();
+				}, 1500);
+			} else {
+				const msg = result.error || result.message || 'Failed to update collection';
+				throw new Error(msg);
+			}
+		} catch (err) {
+			console.error('Update with increment failed:', err);
+			this.showToast(err.message || 'Update failed', 'error');
+			this.isSubmitting = false;
+			this.showLoading(false);
+		}
+	}
+
+	validateFormData(data) {
+		const requiredFields = [
+			'blood_bag_type',
+			'is_successful',
+			'start_time',
+			'end_time',
+			'unit_serial_number'
+		];
+
+		for (let field of requiredFields) {
+			if (!data[field]) {
+				this.showToast(`Missing required field: ${field}`, 'error');
+				return false;
+			}
+		}
+
+		// Amount is automatically set to 1 unit (standard donation)
+		// No validation needed as it's a hidden field with fixed value
+
+		return true;
+	}
+
+	closeModal() {
+		this.modal.classList.remove('show');
+		setTimeout(() => {
+			this.modal.style.display = 'none';
+		}, 300);
+		
+		// Reset form
+		this.resetForm();
+	}
+
+	showCollectionCompleteConfirmation() {
+		// Show the collection complete confirmation modal
+		if (window.showCollectionCompleteModal) {
+			window.showCollectionCompleteModal();
+		} else {
+			// Fallback to direct submission if modal function not available
+			this.submitForm();
+		}
+	}
+
+	async submitForm() {
+		// This method will be called from the final confirmation modal
+		// Ensure any pending populate has completed so hidden ids are ready
+		try { if (this.populatePromise) { await this.populatePromise; } } catch (_) {}
+		const formData = this.getFormData();
+		
+		if (!this.validateFormData(formData)) {
+			return;
+		}
+
+		this.showLoading(true);
+		this.isSubmitting = true;
+
+		// Submit to backend (admin endpoint)
+		fetch('../../assets/php_func/admin/process_blood_collection_admin.php', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify(formData)
+		})
+		.then(response => response.json())
+		.then(data => {
+			this.isSubmitting = false;
+			this.showLoading(false);
+			
+			if (data.success) {
+				this.showSuccessModal();
+			} else {
+				this.showToast(data.message || 'Submission failed', 'error');
+			}
+		})
+		.catch(error => {
+			this.isSubmitting = false;
+			this.showLoading(false);
+			console.error('Error:', error);
+			this.showToast('Network error occurred', 'error');
+		});
+	}
+
+	showSuccessModal() {
+		// Close the blood collection modal first
+		this.closeModal();
+		
+		// Show the donation success modal after a short delay to ensure modal closes
+		setTimeout(() => {
+			if (window.showDonationSuccessModal) {
+				window.showDonationSuccessModal();
+				// Auto-reload the page after 3 seconds to show updated eligibility status
+				setTimeout(() => {
+					window.location.reload();
+				}, 3000);
+			} else {
+				// Fallback to toast message
+				this.showToast('Donation completed successfully! Blood has been added to Blood Bank.', 'success');
+				setTimeout(() => {
+					window.location.reload();
+				}, 2000);
+			}
+		}, 300);
+	}
+
+	resetForm() {
+		const form = document.getElementById('bloodCollectionForm');
+		if (form) {
+			form.reset();
+			
+			// Re-enable all form elements
+			const formElements = form.querySelectorAll('input, select, textarea, button');
+			formElements.forEach(element => {
+				element.disabled = false;
+			});
+		}
+		
+		// Reset submission flag
+		this.isSubmitting = false;
+		
+		// Reset progress
+		this.currentStep = 1;
+		this.updateProgressIndicator();
+		this.showStep(1);
+		this.updateNavigationButtons();
+		
+		// Clear modern form selections
+		document.querySelectorAll('.bag-option').forEach(option => {
+			option.classList.remove('selected');
+		});
+		
+		document.querySelectorAll('.blood-status-card').forEach(option => {
+			option.classList.remove('selected');
+		});
+		
+		// Re-enable and reset navigation buttons
+		const navButtons = document.querySelectorAll('.blood-prev-btn, .blood-next-btn, .blood-submit-btn, .blood-cancel-btn');
+		navButtons.forEach(btn => {
+			btn.disabled = false;
+			btn.style.opacity = '';
+			btn.style.cursor = '';
+		});
+		
+		// Reset submit button appearance
+		const submitBtn = document.querySelector('.blood-submit-btn');
+		if (submitBtn) {
+			submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submit Blood Collection';
+			submitBtn.classList.remove('btn-outline-success');
+			submitBtn.classList.add('btn-success');
+		}
+		
+		// Generate new serial number
+		this.generateUnitSerialNumber();
+	}
+
+	showLoading(show) {
+		const submitBtn = document.querySelector('.blood-submit-btn');
+		if (submitBtn) {
+			if (show) {
+				submitBtn.disabled = true;
+				submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Submitting...';
+			} else {
+				submitBtn.disabled = false;
+				submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submit Blood Collection';
+			}
+		}
+	}
+
+	disableAllFormInteraction() {
+		// Disable all form elements
+		const form = document.getElementById('bloodCollectionForm');
+		if (form) {
+			const formElements = form.querySelectorAll('input, select, textarea, button');
+			formElements.forEach(element => {
+				element.disabled = true;
+			});
+		}
+
+		// Disable navigation buttons
+		const navButtons = document.querySelectorAll('.blood-prev-btn, .blood-next-btn, .blood-submit-btn, .blood-cancel-btn');
+		navButtons.forEach(btn => {
+			btn.disabled = true;
+			btn.style.opacity = '0.5';
+			btn.style.cursor = 'not-allowed';
+		});
+
+		// Update submit button to show success state
+		const submitBtn = document.querySelector('.blood-submit-btn');
+		if (submitBtn) {
+			submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submitted Successfully';
+			submitBtn.classList.remove('btn-success');
+			submitBtn.classList.add('btn-outline-success');
+		}
+	}
+
+	showToast(message, type = 'info') {
+		// Create toast element
+		const toast = document.createElement('div');
+		toast.className = `blood-toast blood-toast-${type}`;
+		
+		const icon = type === 'success' ? 'check-circle' : 
+					type === 'error' ? 'exclamation-circle' : 'info-circle';
+		
+		toast.innerHTML = `
+			<div class="blood-toast-content">
+				<i class="fas fa-${icon}"></i>
+				<span>${message}</span>
+			</div>
+		`;
+		
+		document.body.appendChild(toast);
+		
+		// Show toast
+		setTimeout(() => {
+			toast.classList.add('show');
+		}, 100);
+		
+		// Hide toast after 5 seconds
+		setTimeout(() => {
+			toast.classList.remove('show');
+			setTimeout(() => {
+				document.body.removeChild(toast);
+			}, 300);
+		}, 5000);
+	}
+}
+
+// Initialize the blood collection modal
+window.bloodCollectionModal = new BloodCollectionModal(); 
+
+
