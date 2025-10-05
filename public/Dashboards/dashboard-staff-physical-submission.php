@@ -387,6 +387,8 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
     <link rel="stylesheet" href="../../assets/css/medical-history-approval-modals.css">
     <script src="../../assets/js/physical_examination_modal.js?v=<?php echo time(); ?>"></script>
     <script src="../../assets/js/defer_donor_modal.js"></script>
+    <script src="../../assets/js/search_func/search_accont_physical_exam.js?v=<?php echo time(); ?>"></script>
+    <script src="../../assets/js/search_func/filter_search_accont_physical_exam.js?v=<?php echo time(); ?>"></script>
     
     <style>
         :root {
@@ -2039,9 +2041,16 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                             if ($needs_review_flag) {
                                                 $status = 'Pending';
                                             } elseif (!empty($exam['remarks'])) {
-                                                $status = ucfirst($exam['remarks']); // Use actual remarks like "Accepted", "Temporarily Deferred", etc.
+                                                $status = ucfirst($exam['remarks']);
                                             } else {
                                                 $status = 'Pending';
+                                            }
+                                            // Normalize to uniform dashboard terms
+                                            $sl = strtolower($status);
+                                            if (strpos($sl, 'permanent') !== false) {
+                                                $status = 'Ineligible';
+                                            } elseif (strpos($sl, 'refus') !== false || strpos($sl, 'defer') !== false || strpos($sl, 'reject') !== false || strpos($sl, 'declin') !== false) {
+                                                $status = 'Deferred';
                                             }
                                             
                                             // Results column - based on remarks and disapproval_reason
@@ -2167,12 +2176,14 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                             <td>
                                                 <?php 
                                                 // Determine badge color based on actual remarks
-                                                $badge_class = 'bg-warning'; // Default for pending
+                                                $badge_class = 'bg-warning'; // Pending default
                                                 $status_lower = strtolower($status);
                                                 if ($status_lower === 'accepted') {
                                                     $badge_class = 'bg-success';
-                                                } elseif (strpos($status_lower, 'defer') !== false || strpos($status_lower, 'reject') !== false || strpos($status_lower, 'decline') !== false) {
+                                                } elseif ($status_lower === 'ineligible') {
                                                     $badge_class = 'bg-danger';
+                                                } elseif ($status_lower === 'deferred') {
+                                                    $badge_class = 'bg-secondary';
                                                 } elseif ($status_lower === 'pending') {
                                                     $badge_class = 'bg-warning';
                                                 }
@@ -2542,52 +2553,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             // Attach click event to view buttons
             function attachButtonClickHandlers() {
                 // Remove existing event listeners first
-                document.querySelectorAll(".view-btn").forEach(button => {
-                    button.removeEventListener("click", button.viewClickHandler);
-                    // On every show, force-refresh content to ensure latest DB state
-                    try {
-                        window.lastDonorProfileContext = { donorId: donorId, screeningData: screeningData };
-                        setTimeout(() => { refreshDonorProfileModal({ donorId, screeningData }); }, 60);
-                    } catch(_) {}
-                });
-                document.querySelectorAll(".edit-btn").forEach(button => {
-                    button.removeEventListener("click", button.editClickHandler);
-                });
-
-                document.querySelectorAll(".view-btn").forEach(button => {
-                    button.viewClickHandler = function(e) {
-                        e.stopPropagation(); // Prevent row click
-                        try {
-                            currentScreeningData = JSON.parse(this.getAttribute('data-screening'));
-                            
-                            
-                            // Open donor profile modal instead of confirmation dialog
-                            openDonorProfileModal(currentScreeningData);
-                        } catch (e) {
-                            
-                            alert("Error selecting this record. Please try again.");
-                        }
-                    };
-                    button.addEventListener("click", button.viewClickHandler);
-                });
-
-                // Attach click event to edit buttons
-                document.querySelectorAll(".edit-btn").forEach(button => {
-                    button.editClickHandler = function(e) {
-                        e.stopPropagation(); // Prevent row click
-                        try {
-                            currentScreeningData = JSON.parse(this.getAttribute('data-screening'));
-                            
-                            
-                            // Open donor profile modal for editing
-                            openDonorProfileModal(currentScreeningData);
-                        } catch (e) {
-                            
-                            alert("Error selecting this record. Please try again.");
-                        }
-                    };
-                    button.addEventListener("click", button.editClickHandler);
-                    });
+                // No per-button listeners; delegated handler installed by search script
             }
 
             // Only call once
