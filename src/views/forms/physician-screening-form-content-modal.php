@@ -1,6 +1,6 @@
 <!-- Screening Form Modal (Physician Copy) -->
 <div class="modal fade" id="screeningFormModal" tabindex="-1" aria-labelledby="screeningFormModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-    <div class="modal-dialog modal-lg" style="max-width: 900px; margin: 2.25rem auto;">
+    <div class="modal-dialog modal-lg modal-dialog-centered" style="max-width: 900px;">
         <div class="modal-content screening-modal-content" style="position: relative; z-index: 1066; pointer-events: auto;">
             <div class="modal-header screening-modal-header">
                 <div class="d-flex align-items-center">
@@ -15,155 +15,18 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             
-            <!-- Progress Indicator -->
-            <div class="screening-progress-container">
-                <div class="screening-progress-steps">
-                    <div class="screening-step active" data-step="1">
-                        <div class="screening-step-number">1</div>
-                        <div class="screening-step-label">Donation Type</div>
-                    </div>
-                    <div class="screening-step" data-step="2">
-                        <div class="screening-step-number">2</div>
-                        <div class="screening-step-label">Basic Info</div>
-                    </div>
-                </div>
-                <div class="screening-progress-line">
-                    <div class="screening-progress-fill"></div>
-                </div>
-            </div>
+            <!-- Summary Only - No Progress Indicator for Physician View -->
             
             <div class="modal-body screening-modal-body" style="max-height: 70vh; overflow-y: auto; padding: 1.5rem;">
                 <form id="screeningForm">
                     <input type="hidden" name="donor_id" value="">
                     
-                    <!-- Step 1: Donation Type -->
-                    <div class="screening-step-content active" data-step="1">
-                        <div class="screening-step-title">
-                            <h6><i class="fas fa-heart me-2 text-danger"></i>Type of Donation</h6>
-                            <p class="text-muted mb-4">Please select the donor's choice of donation type</p>
-                        </div>
-                        
-                        <!-- IN-HOUSE Section -->
-                        <div id="phys-inhouse-card" class="screening-detail-card" style="background: #e9ecef; border: 1px solid #ddd; margin-bottom: 20px;">
-                            <div class="screening-category-title" style="background: #e9ecef; color: #b22222; font-weight: bold; text-align: center; padding: 10px; margin: -20px -20px 15px -20px;">IN-HOUSE</div>
-                            <div class="row g-3">
-                                <div class="col-12">
-                                    <select name="donation-type" id="inhouseDonationTypeSelect" class="screening-input">
-                                        <option value="">Select Donation Type</option>
-                                        <option value="Walk-in">Walk-in</option>
-                                        <option value="Replacement">Replacement</option>
-                                        <option value="Patient-Directed">Patient-Directed</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Patient Information Table (shows when Patient-Directed is selected) -->
-                        <div id="patientDetailsSection" style="display: none; margin-bottom: 20px;">
-                            <h6 style="color: #b22222; font-weight: bold; margin-bottom: 15px;">Patient Information</h6>
-                            <div class="table-responsive">
-                                <table class="table table-bordered" style="margin-bottom: 0;">
-                                    <thead>
-                                        <tr style="background: #b22222; color: white;">
-                                            <th style="text-align: center; font-weight: bold;">Patient Name</th>
-                                            <th style="text-align: center; font-weight: bold;">Hospital</th>
-                                            <th style="text-align: center; font-weight: bold;">Blood Type</th>
-                                            <th style="text-align: center; font-weight: bold;">No. of Units</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr>
-                                            <td>
-                                                <input type="text" name="patient-name" class="form-control form-control-sm" placeholder="Enter patient name">
-                                            </td>
-                                            <td>
-                                                <input type="text" name="hospital" class="form-control form-control-sm" placeholder="Enter hospital">
-                                            </td>
-                                            <td>
-                                                <select name="patient-blood-type" class="form-control form-control-sm">
-                                                    <option value="">Select Blood Type</option>
-                                                    <option value="A+">A+</option>
-                                                    <option value="A-">A-</option>
-                                                    <option value="B+">B+</option>
-                                                    <option value="B-">B-</option>
-                                                    <option value="AB+">AB+</option>
-                                                    <option value="AB-">AB-</option>
-                                                    <option value="O+">O+</option>
-                                                    <option value="O-">O-</option>
-                                                </select>
-                                            </td>
-                                            <td>
-                                                <input type="number" name="no-units" class="form-control form-control-sm" placeholder="1" min="1">
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        
-                        <!-- MOBILE BLOOD DONATION Section (conditionally visible) -->
-                        <div id="phys-mobile-card" class="screening-detail-card" style="background: #e9ecef; border: 1px solid #ddd;">
-                            <div class="screening-category-title" style="background: #e9ecef; color: #b22222; font-weight: bold; text-align: center; padding: 10px; margin: -20px -20px 15px -20px;">MOBILE BLOOD DONATION</div>
-                            <h6 style="color: #b22222; font-weight: bold; margin-bottom: 15px;">Mobile Donation Details</h6>
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="screening-label">Place</label>
-                                    <input type="text" name="mobile-place" id="mobilePlaceInput" class="screening-input" placeholder="Enter location">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="screening-label">Organizer</label>
-                                    <input type="text" name="mobile-organizer" id="mobileOrganizerInput" class="screening-input" placeholder="Enter organizer">
-                                </div>
-                            </div>
-                        </div>
+                    <!-- Summary (Stage 4) Only -->
+                    <div class="screening-step-title">
+                        <h6><i class="fas fa-clipboard-check me-2 text-danger"></i>Screening Summary</h6>
+                        <p class="text-muted mb-4">Review the screening details for this donor</p>
                     </div>
-
-                    <!-- Step 2: Basic Information -->
-                    <div class="screening-step-content" data-step="2">
-                        <div class="screening-step-title">
-                            <h6><i class="fas fa-info-circle me-2 text-danger"></i>Basic Screening Information</h6>
-                            <p class="text-muted mb-4">Please enter the basic screening measurements</p>
-                        </div>
-                        
-                        <div class="row g-3">
-                            <div class="col-12">
-                                <label class="screening-label">Body Weight</label>
-                                <div class="screening-input-group">
-                                    <input type="number" step="0.01" name="body-wt" id="bodyWeightInput" class="screening-input" required min="0">
-                                    <span class="screening-input-suffix">kg</span>
-                                </div>
-                                <div id="bodyWeightAlert" class="text-danger mt-1" style="display: none; font-size: 0.875rem;">
-                                    ⚠️ Minimum eligible weight is 50 kg. Donation must be deferred for donor safety.
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <label class="screening-label">Specific Gravity</label>
-                                <div class="screening-input-group">
-                                    <input type="number" step="0.1" name="sp-gr" id="specificGravityInput" class="screening-input" required min="0">
-                                    <span class="screening-input-suffix">g/dL</span>
-                                </div>
-                                <div id="specificGravityAlert" class="text-danger mt-1" style="display: none; font-size: 0.875rem;">
-                                    ⚠️ Specific gravity should be between 12.5-18.0 g/dL for donor safety. Values outside this range require deferral.
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <label class="screening-label">Blood Type</label>
-                                <select name="blood-type" class="screening-input" required>
-                                    <option value="" disabled selected>Select Blood Type</option>
-                                    <option value="A+">A+</option>
-                                    <option value="A-">A-</option>
-                                    <option value="B+">B+</option>
-                                    <option value="B-">B-</option>
-                                    <option value="O+">O+</option>
-                                    <option value="O-">O-</option>
-                                    <option value="AB+">AB+</option>
-                                    <option value="AB-">AB-</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Step 3 removed for physician read-only view -->
+                    <div id="reviewContent"></div>
                 </form>
             </div>
             
@@ -171,15 +34,6 @@
                 
                 <!-- Right side - Action buttons -->
                 <div style="display: flex; gap: 8px;">
-                    <button type="button" class="btn btn-outline-danger" id="screeningPrevButton" style="display: none;">
-                        <i class="fas fa-arrow-left me-1"></i>Previous
-                    </button>
-                    <button type="button" class="btn btn-outline-danger" id="screeningDeferButton" style="display: none;">
-                        <i class="fas fa-ban me-1"></i>Defer Donor
-                    </button>
-                    <button type="button" class="btn btn-danger" id="physNextBtn">
-                        <i class="fas fa-arrow-right me-1"></i>Next
-                    </button>
                     <button type="button" class="btn btn-success" id="physApproveBtn" style="display: none;">
                         <i class="fas fa-check me-1"></i>Approve
                     </button>
@@ -196,8 +50,6 @@
     try {
         const modalEl = document.getElementById('screeningFormModal');
         const formEl = document.getElementById('screeningForm');
-        const nextBtn = document.getElementById('physNextBtn');
-        const submitBtn = document.getElementById('screeningSubmitButton');
         const approveBtn = document.getElementById('physApproveBtn');
         let __approveCheckTimer = null;
 
@@ -267,8 +119,8 @@
             if (confirm(message)) onConfirm && onConfirm();
         }
 
-        // Prefill read-only fields from DB by donor_id (screening_form uses donor_form_id)
-        function prefillFromMedicalHistoryCache(){
+        // Render-only: fetch latest screening/physical data and generate summary
+        function renderSummary(){
             try {
                 const donorInput = formEl.querySelector('input[name="donor_id"]');
                 const donorId = (donorInput && donorInput.value) ||
@@ -276,74 +128,23 @@
                                 (window.lastDonorProfileContext && window.lastDonorProfileContext.donorId) || '';
                 if (donorInput && !donorInput.value && donorId) donorInput.value = donorId;
                 if (!donorId) return;
-                // Use dedicated physician endpoint (maps donor_id to donor_form_id internally)
                 const tryFetch = (url) => fetch(url).then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)));
                 tryFetch(`../api/get-physician-screening-form-data.php?donor_id=${encodeURIComponent(donorId)}`)
                     .then(data => {
-                // removed debug log
-                        if (!data || !data.success || !data.screening_form) return;
-                        const s = data.screening_form || {};
-                        // Donation type
-                        const dtInhouse = document.getElementById('inhouseDonationTypeSelect');
-                        const dtVal = s.donation_type || s.donation_type_new || '';
-                        if (dtInhouse && dtVal) {
-                            const formatLabel = (v) => String(v)
-                                .replace(/_/g, ' ')
-                                .replace(/-/g, ' ')
-                                .split(' ')
-                                .filter(Boolean)
-                                .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-                                .join(' ');
-                            // If option not present, inject it so value shows
-                            let found = false;
-                            Array.from(dtInhouse.options).forEach(o => {
-                                if (String(o.value) === String(dtVal)) {
-                                    found = true;
-                                    // Normalize label to Capitalized form
-                                    o.textContent = formatLabel(dtVal);
-                                }
-                            });
-                            if (!found) {
-                                const opt = document.createElement('option');
-                                opt.value = String(dtVal);
-                                opt.textContent = formatLabel(dtVal);
-                                dtInhouse.appendChild(opt);
-                            }
-                            dtInhouse.value = String(dtVal);
-                        }
-                        // Mobile fields
-                        const place = document.getElementById('mobilePlaceInput');
-                        if (place && s.mobile_location) place.value = s.mobile_location;
-                        const org = document.getElementById('mobileOrganizerInput');
-                        if (org && s.mobile_organizer) org.value = s.mobile_organizer;
-                        // Basic info
-                        const bw = document.getElementById('bodyWeightInput');
-                        if (bw && s.body_weight) bw.value = s.body_weight;
-                        const sg = document.getElementById('specificGravityInput');
-                        if (sg && s.specific_gravity) sg.value = s.specific_gravity;
-                        const bt = formEl.querySelector('select[name="blood-type"]');
-                        if (bt && s.blood_type) bt.value = s.blood_type;
-                        // Conditional visibility: show only sections that have data
-                        try {
-                            const inhouseCard = document.getElementById('phys-inhouse-card');
-                            const mobileCard = document.getElementById('phys-mobile-card');
-                            const hasInhouse = !!dtVal;
-                            const hasMobile = !!(s.mobile_location || s.mobile_organizer);
-                            if (inhouseCard && mobileCard) {
-                                if (hasInhouse && !hasMobile) {
-                                    mobileCard.style.display = 'none';
-                                } else if (!hasInhouse && hasMobile) {
-                                    inhouseCard.style.display = 'none';
-                                } else {
-                                    inhouseCard.style.display = '';
-                                    mobileCard.style.display = '';
-                                }
-                            }
-                        } catch(_) {}
-                        // If API returned nothing usable, explicitly keep fields empty
-                        // Ensure Step 1 shows some value to indicate read-only state
-                        if (dtInhouse && !dtInhouse.value) dtInhouse.value = '';
-                        // Make the entire form read-only
+                        const s = (data && data.success && data.screening_form) ? data.screening_form : {};
+                        generateSummaryHtml({
+                            donation_type: s.donation_type || s.donation_type_new || '',
+                            mobile_place: s.mobile_location || '',
+                            mobile_organizer: s.mobile_organizer || '',
+                            body_weight: s.body_weight || '',
+                            specific_gravity: s.specific_gravity || '',
+                            blood_type: s.blood_type || '',
+                            patient_name: s.patient_name || '',
+                            hospital: s.hospital || '',
+                            patient_blood_type: s.patient_blood_type || s.patient_bloodtype || '',
+                            no_units: s.no_units || s.units || ''
+                        });
+                        // Disable all controls if any exist
                         setTimeout(() => {
                             formEl.querySelectorAll('input, select, textarea').forEach(el => {
                                 el.setAttribute('readonly', 'readonly');
@@ -352,69 +153,70 @@
                         }, 10);
                     })
                     .catch(() => {
-                        // Retry using donor_form_id as some legacy endpoints might expect it
+                        // Retry legacy endpoint using donor_form_id
                         return tryFetch(`../api/get-screening-form.php?donor_form_id=${encodeURIComponent(donorId)}`)
                             .then(data => {
                                 if (!data || !data.success || !data.screening_form) throw new Error('notfound');
                                 const s = data.screening_form;
-                                const dtInhouse = document.getElementById('inhouseDonationTypeSelect');
-                                if (dtInhouse && s.donation_type) dtInhouse.value = s.donation_type;
-                                const place = document.getElementById('mobilePlaceInput');
-                                if (place && s.mobile_location) place.value = s.mobile_location;
-                                const org = document.getElementById('mobileOrganizerInput');
-                                if (org && s.mobile_organizer) org.value = s.mobile_organizer;
-                                const bw = document.getElementById('bodyWeightInput');
-                                if (bw && s.body_weight) bw.value = s.body_weight;
-                                const sg = document.getElementById('specificGravityInput');
-                                if (sg && s.specific_gravity) sg.value = s.specific_gravity;
-                                const bt = formEl.querySelector('select[name="blood-type"]');
-                                if (bt && s.blood_type) bt.value = s.blood_type;
+                                generateSummaryHtml({
+                                    donation_type: s.donation_type || '',
+                                    mobile_place: s.mobile_location || '',
+                                    mobile_organizer: s.mobile_organizer || '',
+                                    body_weight: s.body_weight || '',
+                                    specific_gravity: s.specific_gravity || '',
+                                    blood_type: s.blood_type || '',
+                                    patient_name: s.patient_name || '',
+                                    hospital: s.hospital || '',
+                                    patient_blood_type: s.patient_blood_type || s.patient_bloodtype || '',
+                                    no_units: s.no_units || s.units || ''
+                                });
                             });
                     })
                     .catch(() => {
-                        // If fetch fails, still enforce read-only
-                        formEl.querySelectorAll('input, select, textarea').forEach(el => {
-                            el.setAttribute('readonly', 'readonly');
-                            el.setAttribute('disabled', 'disabled');
-                        });
-                        // Best-effort fallback: try to hydrate from physical examination
+                        // Best-effort fallback: hydrate from physical examination
                         try {
                             fetch(`../api/get-physical-examination.php?donor_id=${encodeURIComponent(donorId)}`)
                                 .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
                                 .then(px => {
                                     if (!px || !px.success || !px.physical_exam) return;
                                     const pe = px.physical_exam;
-                                    const bw = document.getElementById('bodyWeightInput');
-                                    if (bw && pe.body_weight) bw.value = pe.body_weight;
-                                    const bt = formEl.querySelector('select[name="blood-type"]');
-                                    if (bt && pe.blood_type) bt.value = pe.blood_type;
+                                    generateSummaryHtml({
+                                        donation_type: '',
+                                        mobile_place: '',
+                                        mobile_organizer: '',
+                                        body_weight: pe.body_weight || '',
+                                        specific_gravity: pe.specific_gravity || pe.sp_gr || '',
+                                        blood_type: pe.blood_type || '',
+                                        patient_name: '',
+                                        hospital: '',
+                                        patient_blood_type: '',
+                                        no_units: ''
+                                    });
                                 })
                                 .catch(() => {});
                         } catch(_) {}
+                        // Enforce read-only even on fallback
+                        formEl.querySelectorAll('input, select, textarea').forEach(el => {
+                            el.setAttribute('readonly', 'readonly');
+                            el.setAttribute('disabled', 'disabled');
+                        });
                     });
             } catch(_) {}
         }
 
-        // When modal shows, ensure Approve button only on step 2 and hide on step 1
-        function ensureApproveOnFinalStep(){
+        function ensureApproveVisibility(){
             try {
                 if (!approveBtn) return;
-                if (submitBtn) submitBtn.style.display = 'none';
-                // Determine current step from visible panel
-                const step2Active = !!document.querySelector('.screening-step-content[data-step="2"].active');
-                // Hide Approve if MH is already Approved
                 let mhApproved = false;
                 try { mhApproved = isMedicalApprovedFor(resolveDonorId()); } catch(_) {}
-                approveBtn.style.display = (step2Active && !mhApproved) ? 'inline-block' : 'none';
-                // Hide Next on step 2
-                if (nextBtn) nextBtn.style.display = step2Active ? 'none' : '';
+                approveBtn.style.display = (!mhApproved) ? 'inline-block' : 'none';
                 // Schedule a short re-check to catch late data hydration
                 try {
                     if (__approveCheckTimer) clearTimeout(__approveCheckTimer);
                     __approveCheckTimer = setTimeout(function(){ try { _recheckApproveVisibility(); } catch(_) {} }, 150);
                 } catch(_) {}
                 // If still showing and we do not have Approved in cache, try live refresh once
-                if (step2Active && !mhApproved) {
+                if (!mhApproved) {
                     const donorId = resolveDonorId();
                     refreshMhApprovalAndUpdate(donorId).then((isApproved) => {
                         try { if (isApproved) _recheckApproveVisibility(); } catch(_) {}
@@ -425,11 +227,10 @@
 
         function _recheckApproveVisibility(){
             try {
-                const step2Active = !!document.querySelector('.screening-step-content[data-step="2"].active');
                 if (!approveBtn) return;
                 let mhApproved = false;
                 try { mhApproved = isMedicalApprovedFor(resolveDonorId()); } catch(_) {}
-                approveBtn.style.display = (step2Active && !mhApproved) ? 'inline-block' : 'none';
+                approveBtn.style.display = (!mhApproved) ? 'inline-block' : 'none';
             } catch(_) {}
         }
 
@@ -441,51 +242,38 @@
             } catch(_) {}
         }
 
+        // Build summary HTML
+        function generateSummaryHtml(data){
+            try {
+                const reviewContent = document.getElementById('reviewContent');
+                if (!reviewContent) return;
+                const clean = (v) => (v == null || v === '') ? 'Not specified' : String(v);
+                const finalDonationType = (data.mobile_place || data.mobile_organizer) ? 'Mobile' : (data.donation_type || '');
+                let html = '';
+                // Donation Type first
+                html += '<div class="mb-3">';
+                html += '<h6 class="text-danger mb-2">Donation Type</h6>';
+                html += `<div class="screening-review-item"><span class="screening-review-label">Type:</span><span class="screening-review-value">${finalDonationType ? finalDonationType : '-'}</span></div>`;
+                // Basic Information
+                html += '</div>';
+                html += '<div class="mb-3">';
+                html += '<h6 class="text-danger mb-2">Basic Information</h6>';
+                html += `<div class="screening-review-item"><span class="screening-review-label">Body Weight:</span><span class="screening-review-value">${data.body_weight ? data.body_weight + ' kg' : '-'}</span></div>`;
+                html += `<div class="screening-review-item"><span class="screening-review-label">Specific Gravity:</span><span class="screening-review-value">${data.specific_gravity ? data.specific_gravity : '-'}</span></div>`;
+                html += `<div class="screening-review-item"><span class="screening-review-label">Blood Type:</span><span class="screening-review-value">${data.blood_type ? data.blood_type : '-'}</span></div>`;
+                html += '</div>';
+                reviewContent.innerHTML = html;
+            } catch(_) {}
+        }
+
         // Bind once when modal exists
         if (modalEl) {
-            // When shown, prefill from MH cache and place Approve control
+            // When shown, render summary and place Approve control
             modalEl.addEventListener('shown.bs.modal', function(){
-                prefillFromMedicalHistoryCache();
-                // Always reset to Step 1 on open
-                try {
-                    document.querySelectorAll('#screeningFormModal .screening-step-content').forEach(function(p){ p.classList.remove('active'); });
-                    const s1 = document.querySelector('#screeningFormModal .screening-step-content[data-step="1"]');
-                    if (s1) s1.classList.add('active');
-                    // Progress indicators
-                    document.querySelectorAll('#screeningFormModal .screening-step').forEach(function(ind){ ind.classList.remove('active','completed'); });
-                    const ind1 = document.querySelector('#screeningFormModal .screening-step[data-step="1"]');
-                    if (ind1) ind1.classList.add('active');
-                    // Ensure inactive step 2 number is gray
-                    const ind2num = document.querySelector('#screeningFormModal .screening-step[data-step="2"] .screening-step-number');
-                    if (ind2num) { ind2num.style.background = '#e9ecef'; ind2num.style.color = '#6c757d'; }
-                    // Reset progress fill
-                    const fill = document.querySelector('#screeningFormModal .screening-progress-fill');
-                    if (fill) fill.style.width = '0%';
-                    const nextBtnLocal = document.getElementById('physNextBtn');
-                    if (nextBtnLocal) nextBtnLocal.style.display = '';
-                    // Ensure Previous button exists and is hidden on step 1
-                    let prevBtn = document.getElementById('physPrevBtn');
-                    if (!prevBtn) {
-                        prevBtn = document.createElement('button');
-                        prevBtn.type = 'button';
-                        prevBtn.id = 'physPrevBtn';
-                        prevBtn.className = 'btn btn-outline-danger';
-                        prevBtn.innerHTML = '<i class="fas fa-arrow-left me-1"></i>Previous';
-                        const actions = document.querySelector('#screeningFormModal .screening-modal-footer .d-flex, #screeningFormModal .screening-modal-footer');
-                        if (actions) actions.insertBefore(prevBtn, actions.firstChild);
-                        prevBtn.addEventListener('click', function(){
-                            try { document.querySelectorAll('#screeningFormModal .screening-step-content').forEach(p=>p.classList.remove('active')); document.querySelector('#screeningFormModal .screening-step-content[data-step="1"]').classList.add('active'); } catch(_) {}
-                            try { goToStep(1); } catch(_) {}
-                        });
-                    }
-                    prevBtn.style.display = 'none';
-                    const approveLocal = document.getElementById('physApproveBtn');
-                    if (approveLocal) approveLocal.style.display = 'none';
+                renderSummary();
+                try { const approveLocal = document.getElementById('physApproveBtn'); if (approveLocal) approveLocal.style.display = 'none'; } catch(_) {}
                     // Immediately enforce approve visibility based on MH status
-                    setTimeout(function(){ try { ensureApproveOnFinalStep(); } catch(_) {} }, 50);
-                } catch(_) {}
-                // Update Approve visibility based on current step
-                ensureApproveOnFinalStep();
+                setTimeout(function(){ try { ensureApproveVisibility(); } catch(_) {} }, 50);
                 // Poll briefly after open to catch async updates to medicalByDonor
                 try {
                     let c = 0; const max = 10; // ~1.5s total at 150ms
@@ -494,8 +282,6 @@
                         if (++c >= max) clearInterval(t);
                     }, 150);
                 } catch(_) {}
-                // Let Bootstrap handle backdrop management naturally
-                // No need for aggressive backdrop deduplication
             });
 
             // On hide, only normalize body; do not remove global backdrops
@@ -583,80 +369,29 @@
                 } catch(_) { /* noop */ }
             });
 
-            // Removed close guard to allow consistent closing behavior
-
-            // Force step navigation for read-only: allow Next without validation
-            function goToStep(step){
-                try {
-                    const all = Array.from(document.querySelectorAll('#screeningFormModal .screening-step-content'));
-                    all.forEach(el => el.classList.remove('active'));
-                    const target = document.querySelector(`#screeningFormModal .screening-step-content[data-step="${step}"]`);
-                    if (target) target.classList.add('active');
-                    // Indicators
-                    const s1 = document.querySelector('#screeningFormModal .screening-step[data-step="1"]');
-                    const s2 = document.querySelector('#screeningFormModal .screening-step[data-step="2"]');
-                    if (s1 && s2) {
-                        if (step === 1) {
-                            s1.classList.add('active'); s1.classList.remove('completed');
-                        s2.classList.remove('active','completed');
-                        } else {
-                            s1.classList.add('completed'); s1.classList.remove('active');
-                            s2.classList.add('active');
-                        }
-                    }
-                // Adjust step number colors for inactive/active states
-                const n1 = document.querySelector('#screeningFormModal .screening-step[data-step="1"] .screening-step-number');
-                const n2 = document.querySelector('#screeningFormModal .screening-step[data-step="2"] .screening-step-number');
-                if (n1 && n2) {
-                    if (step === 1) {
-                        n1.style.background = '#b22222'; n1.style.color = '#fff';
-                        n2.style.background = '#e9ecef'; n2.style.color = '#6c757d';
-                    } else {
-                        n1.style.background = '#b22222'; n1.style.color = '#fff';
-                        n2.style.background = '#b22222'; n2.style.color = '#fff';
-                    }
-                }
-                    // Progress fill (2-step)
-                    const fill = document.querySelector('#screeningFormModal .screening-progress-fill');
-                    if (fill) fill.style.width = (step === 2 ? '100%' : '0%');
-                    // Toggle buttons
-                const nextBtnLocal = document.getElementById('physNextBtn');
-                    if (nextBtnLocal) nextBtnLocal.style.display = (step === 2 ? 'none' : '');
-                    // Do not force-show Approve here; delegate to ensureApproveOnFinalStep()
-                const prevBtn = document.getElementById('physPrevBtn');
-                if (prevBtn) prevBtn.style.display = (step === 2 ? 'inline-block' : 'none');
-                // Enforce approve visibility against MH state when arriving on step 2
-                try { ensureApproveOnFinalStep(); } catch(_) {}
-                } catch(_) {}
-            }
-
-            if (nextBtn) {
-                nextBtn.addEventListener('click', function(e){
-                    try { e.preventDefault(); e.stopPropagation(); } catch(_) {}
-                    goToStep(2);
-                });
-            }
+            // Removed navigation and step logic for summary-only view
         }
     } catch(_) {}
 })();
 </script>
 <style>
 /* Physician screening modal: tighten step spacing for 2-step flow */
-#screeningFormModal .screening-progress-steps {
-    justify-content: center;
-    gap: 40px;
-}
-#screeningFormModal .screening-progress-line {
-    max-width: 420px;
-    margin: 4px auto 0;
-}
-#screeningFormModal .screening-step-number {
-    width: 40px; height: 40px; border-radius: 50%;
-    background: #e9ecef; color: #6c757d; font-weight: 700; display:flex; align-items:center; justify-content:center;
-}
-#screeningFormModal .screening-step-label { color: #b22222; font-weight: 600; }
-#screeningFormModal .screening-modal-body label.screening-label { color: #333; font-weight: 600; }
-#screeningFormModal .screening-input { color: #222; }
 #screeningFormModal .modal-content.screening-modal-content { box-shadow: 0 30px 80px rgba(0,0,0,.4); }
 #screeningFormModal .modal-backdrop.show { opacity: .6 !important; }
+
+/* Summary rows to match target layout */
+#screeningFormModal .screening-review-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+#screeningFormModal .screening-review-item:last-child { border-bottom: none; }
+#screeningFormModal .screening-review-label {
+    color: #333;
+    font-weight: 600;
+}
+#screeningFormModal .screening-review-value { color: #6c757d; }
+#screeningFormModal h6.text-danger { color: #b22222 !important; }
 </style>

@@ -917,6 +917,91 @@ foreach ($donor_history as $entry) {
 }
 
 $donor_history = $unique_donor_history;
+
+// Lightweight server-side search endpoint (filters already-processed donor_history)
+if (isset($_GET['action']) && $_GET['action'] === 'search') {
+    header('Content-Type: application/json');
+    $q = isset($_GET['q']) ? trim($_GET['q']) : '';
+    $q_l = strtolower($q);
+
+    $filtered = [];
+    if ($q_l !== '') {
+        foreach ($donor_history as $entry) {
+            $sn = strtolower($entry['surname'] ?? '');
+            $fn = strtolower($entry['first_name'] ?? '');
+            if (strpos($sn, $q_l) !== false || strpos($fn, $q_l) !== false) {
+                $filtered[] = $entry;
+            }
+        }
+    } else {
+        // Empty search returns current page data
+        $filtered = $donor_history;
+    }
+
+    // Render rows HTML using the same structure as the main table
+    ob_start();
+    if (!empty($filtered)) {
+        foreach ($filtered as $entry) {
+            // Calculate age if missing but birthdate is available
+            if (empty($entry['age']) && !empty($entry['birthdate'])) {
+                try {
+                    $birthDate = new DateTime($entry['birthdate']);
+                    $todayDt = new DateTime();
+                    $entry['age'] = $birthDate->diff($todayDt)->y;
+                } catch (Exception $e) {}
+            }
+            ?>
+            <tr data-donor-id="<?php echo $entry['donor_id']; ?>" data-stage="<?php echo htmlspecialchars($entry['stage']); ?>" data-donor-type="<?php echo htmlspecialchars($entry['donor_type']); ?>">
+                <td><?php echo $entry['no']; ?></td>
+                <td><?php 
+                    if (isset($entry['date'])) {
+                        try { $date = new DateTime($entry['date']); echo $date->format('F d, Y'); } catch (Exception $e) { echo 'N/A'; }
+                    } else { echo 'N/A'; }
+                ?></td>
+                <td><?php echo isset($entry['surname']) ? htmlspecialchars($entry['surname']) : ''; ?></td>
+                <td><?php echo isset($entry['first_name']) ? htmlspecialchars($entry['first_name']) : ''; ?></td>
+                <td><?php echo isset($entry['interviewer']) ? htmlspecialchars($entry['interviewer']) : 'N/A'; ?></td>
+                <td><span class="<?php echo stripos($entry['donor_type'],'returning')===0 ? 'type-returning' : 'type-new'; ?>"><?php echo htmlspecialchars($entry['donor_type']); ?></span></td>
+                <td>
+                    <span class="status-text">
+                        <?php 
+                            $status = $entry['status'] ?? '-';
+                            $lower = strtolower($status);
+                            if ($status === '-') {
+                                echo '-';
+                            } else {
+                                if ($lower === 'ineligible') {
+                                    echo '<i class="fas fa-flag me-1" style="color:#dc3545"></i><strong>' . htmlspecialchars($status) . '</strong>';
+                                } else {
+                                    echo '<strong>' . htmlspecialchars($status) . '</strong>';
+                                }
+                            }
+                        ?>
+                    </span>
+                </td>
+                <td><span class="badge-tag badge-registered <?php echo strtolower($entry['registered_via'])==='mobile' ? 'badge-mobile' : 'badge-system'; ?>"><?php echo htmlspecialchars($entry['registered_via']); ?></span></td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" 
+                            onclick="viewDonorFromRow('<?php echo $entry['donor_id']; ?>','<?php echo htmlspecialchars($entry['stage']); ?>','<?php echo htmlspecialchars($entry['donor_type']); ?>')"
+                            title="View Details"
+                            style="width: 35px; height: 30px;">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </td>
+            </tr>
+            <?php
+        }
+    } else {
+        ?>
+        <tr>
+            <td colspan="9" class="text-muted">Name can't be found</td>
+        </tr>
+        <?php
+    }
+    $html = ob_get_clean();
+    echo json_encode(['success' => true, 'count' => count($filtered), 'html' => $html]);
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -932,6 +1017,8 @@ $donor_history = $unique_donor_history;
     <script src="../../assets/js/account_interviewer_feedback_modal.js"></script>
     <script src="../../assets/js/account_interviewer_error_modal.js"></script>
     <script src="../../assets/js/screening_form_modal.js"></script>
+    <script src="../../assets/js/search_func/search_account_medical_history.js"></script>
+    <script src="../../assets/js/search_func/filter_search_account_medical_history.js"></script>
     <style>
         :root {
             --bg-color: #f5f5f5;
@@ -1150,6 +1237,27 @@ $donor_history = $unique_donor_history;
             font-size: 0.95rem;
         }
 
+        /* Force left alignment for table cells, override any center classes */
+        .dashboard-staff-tables thead th,
+        .dashboard-staff-tables tbody td {
+            text-align: left !important;
+        }
+
+        /* Keep the last column (View) centered */
+        .dashboard-staff-tables thead th:nth-child(9),
+        .dashboard-staff-tables tbody td:nth-child(9) {
+            text-align: center !important;
+        }
+
+        /* Status text should not look like a badge; keep inline and left */
+        .dashboard-staff-tables tbody td:nth-child(7) span.status-text {
+            display: inline !important;
+            text-align: left !important;
+            width: auto !important;
+            padding: 0 !important;
+            background: transparent !important;
+        }
+
         .dashboard-staff-tables tbody tr:nth-child(odd) {
             background-color: #f8f9fa;
         }
@@ -1163,20 +1271,13 @@ $donor_history = $unique_donor_history;
         }
 
         .dashboard-staff-tables tbody tr{
-            cursor: pointer;
+            cursor: default;
         }
 
-        /* Center status column specifically */
-        .dashboard-staff-tables tbody td.text-center {
-            text-align: center !important;
-            vertical-align: middle !important;
-        }
-
-        /* Ensure strong elements in status column are properly centered */
-        .dashboard-staff-tables tbody td.text-center strong {
-            text-align: center !important;
-            display: inline !important;
-        }
+        /* Remove legacy center helpers impact */
+        .dashboard-staff-tables tbody td.text-center,
+        .dashboard-staff-tables tbody td.text-center strong { text-align: left !important; }
+        .dashboard-staff-tables tbody td.text-center strong { display: inline !important; }
 
 
 
@@ -2245,10 +2346,15 @@ $donor_history = $unique_donor_history;
                     
                     <!-- Search Bar -->
                     <div class="search-container">
+                        <div class="position-relative">
                         <input type="text" 
                             class="form-control form-control-sm" 
                             id="searchInput" 
-                            placeholder="Search donors...">
+                                placeholder="Search donors by name...">
+                            <div id="searchLoading" class="position-absolute" style="right:10px; top:50%; transform: translateY(-50%); display:none;">
+                                <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+                            </div>
+                        </div>
                     </div>
                     
                     <hr class="red-separator">
@@ -2279,7 +2385,7 @@ $donor_history = $unique_donor_history;
                                             $entry['age'] = $birthDate->diff($today)->y;
                                         }
                                         ?>
-                                        <tr class="clickable-row" data-donor-id="<?php echo $entry['donor_id']; ?>" data-stage="<?php echo htmlspecialchars($entry['stage']); ?>" data-donor-type="<?php echo htmlspecialchars($entry['donor_type']); ?>">
+                                        <tr data-donor-id="<?php echo $entry['donor_id']; ?>" data-stage="<?php echo htmlspecialchars($entry['stage']); ?>" data-donor-type="<?php echo htmlspecialchars($entry['donor_type']); ?>">
                                             <td class="text-center"><?php echo $entry['no']; ?></td>
                                             <td class="text-center"><?php 
                                                 if (isset($entry['date'])) {
@@ -2294,8 +2400,8 @@ $donor_history = $unique_donor_history;
                                             <td class="text-center"><?php echo isset($entry['first_name']) ? htmlspecialchars($entry['first_name']) : ''; ?></td>
                                             <td class="text-center"><?php echo isset($entry['interviewer']) ? htmlspecialchars($entry['interviewer']) : 'N/A'; ?></td>
                                             <td class="text-center"><span class="<?php echo stripos($entry['donor_type'],'returning')===0 ? 'type-returning' : 'type-new'; ?>"><?php echo htmlspecialchars($entry['donor_type']); ?></span></td>
-                                            <td class="text-center">
-                                                <span style="display: block; text-align: center; width: 100%;">
+                                            <td>
+                                                <span class="status-text">
                                                     <?php 
                                                         $status = $entry['status'] ?? '-';
                                                         $lower = strtolower($status);
@@ -2314,7 +2420,7 @@ $donor_history = $unique_donor_history;
                                             <td class="text-center"><span class="badge-tag badge-registered <?php echo strtolower($entry['registered_via'])==='mobile' ? 'badge-mobile' : 'badge-system'; ?>"><?php echo htmlspecialchars($entry['registered_via']); ?></span></td>
                                             <td class="text-center">
                                                 <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" 
-                                                        onclick="checkAndShowDonorStatus('<?php echo $entry['donor_id']; ?>')"
+                                                        onclick="viewDonorFromRow('<?php echo $entry['donor_id']; ?>','<?php echo htmlspecialchars($entry['stage']); ?>','<?php echo htmlspecialchars($entry['donor_type']); ?>')"
                                                         title="View Details"
                                                         style="width: 35px; height: 30px;">
                                                     <i class="fas fa-eye"></i>
@@ -2659,6 +2765,7 @@ $donor_history = $unique_donor_history;
         }
         document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('searchInput');
+            const searchLoading = document.getElementById('searchLoading');
             const searchCategory = document.getElementById('searchCategory');
             const donorTableBody = document.getElementById('donorTableBody');
             const deferralStatusModal = new bootstrap.Modal(document.getElementById('deferralStatusModal'));
@@ -2690,316 +2797,9 @@ $donor_history = $unique_donor_history;
             // Store original rows for search reset
             const originalRows = Array.from(donorTableBody.getElementsByTagName('tr'));
             
-            // Optimized search functionality with debouncing
-            let searchTimeout;
-            if (searchInput && searchInput.addEventListener) {
-            searchInput.addEventListener('input', function() {
-                clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(() => {
-                    performOptimizedSearch(this.value.toLowerCase());
-                }, 300); // 300ms debounce
-            });
-            }
+            // Search is handled by ../../assets/js/search_func/search_account_medical_history.js
             
-            // Add click event to all clickable rows
-            document.querySelectorAll('.clickable-row').forEach(row => {
-                row.addEventListener('click', function() {
-                    const donorId = this.getAttribute('data-donor-id');
-                    const stageAttr = this.getAttribute('data-stage');
-                    const donorTypeLabel = this.getAttribute('data-donor-type');
-                    if (!donorId) return;
-                    
-                    // Set global variables for modal context
-                    window.currentDonorId = donorId;
-                    window.currentDonorType = donorTypeLabel || 'New';
-                    window.currentDonorStage = stageAttr || 'Medical';
-                    
-                        currentDonorId = donorId;
-                    const lowerType = (donorTypeLabel || '').toLowerCase();
-                    const isNew = lowerType.startsWith('new');
-                    const isReturning = lowerType.startsWith('returning');
-                    // Derive stage from donor type text to avoid mismatches
-                    const typeText = lowerType;
-                    let stageFromType = 'unknown';
-                    if (typeText.includes('medical')) stageFromType = 'medical_review';
-                    else if (typeText.includes('screening')) stageFromType = 'screening_form';
-                    else if (typeText.includes('physical')) stageFromType = 'physical_examination';
-                    else if (typeText.includes('collection') || typeText.includes('completed')) stageFromType = 'blood_collection';
-                    const effectiveStage = stageFromType !== 'unknown' ? stageFromType : stageAttr;
-                    currentStage = effectiveStage;
-                    // Allow processing for new donors in medical_review OR any donor with needs_review=true
-                    allowProcessing = (isNew && (effectiveStage === 'medical_review')) || 
-                                    (effectiveStage === 'medical_review' && currentDonorId && medicalByDonor[currentDonorId] && medicalByDonor[currentDonorId].needs_review);
-                    // Determine modal context type
-                    if (allowProcessing) {
-                        modalContextType = 'new_medical'; // Can process medical history
-                    } else if (isNew) {
-                        modalContextType = 'new_other_stage';
-                    } else if (isReturning) {
-                        modalContextType = 'returning';
-                    } else {
-                        modalContextType = 'other';
-                    }
-                    window.modalContextType = modalContextType;
-                    
-                    if (!allowProcessing && !isReturning) {
-                        // Show read-only notice modal
-                        const stageTitleMap = {
-                            'screening_form': 'Screening Stage',
-                            'physical_examination': 'Physical Examination Stage',
-                            'blood_collection': 'Blood Collection Stage'
-                        };
-                        const friendlyStage = stageTitleMap[effectiveStage] || 'Different Stage';
-                        const newOrReturningNote = isNew
-                            ? `This record is <strong>New</strong> but not in the Medical stage (<strong>${friendlyStage}</strong>).`
-                            : `This record is <strong>Returning</strong>. This page is dedicated to processing <strong>New (Medical)</strong> only.`;
-                        stageNoticeBody.innerHTML = `
-                            <p>${newOrReturningNote}</p>
-                            <p><strong>Note:</strong> Medical history processing on this page is available only for <strong>New (Medical)</strong> records.</p>
-                            <div class="alert alert-info mb-0">
-                                <div><strong>Donor type:</strong> ${donorTypeLabel || ''}</div>
-                                <div class="small text-muted">You can view read-only details for reference.</div>
-                            </div>`;
-                        stageNoticeModal.show();
-                        
-                        // Bind view details to open the existing details modal without processing
-                        if (stageNoticeViewBtn) {
-                            stageNoticeViewBtn.onclick = () => {
-                            stageNoticeModal.hide();
-                            // Prepare details modal in read-only mode
-                            deferralStatusContent.innerHTML = `
-                                <div class=\"d-flex justify-content-center\">\n                                    <div class=\"spinner-border text-primary\" role=\"status\">\n                                        <span class=\"visually-hidden\">Loading...</span>\n                                    </div>\n                                </div>`;
-                            
-                            // Hide proceed button in read-only mode
-                            const proceedButton = getProceedButton();
-                            if (proceedButton && proceedButton.style) {
-                                proceedButton.style.display = 'none';
-                                proceedButton.textContent = 'Proceed to Medical History';
-                            }
-                            deferralStatusModal.show();
-                            fetchDonorStatusInfo(donorId);
-                        };
-                        }
-                        return;
-                    }
-                    
-                    if (isReturning) {
-                        // Check if returning donor has needs_review=true
-                        const hasNeedsReview = currentDonorId && medicalByDonor[currentDonorId] && medicalByDonor[currentDonorId].needs_review;
-                        
-                        if (effectiveStage === 'medical_review' || hasNeedsReview) {
-                            // Returning (Medical) OR Returning with needs_review: go straight to details with Review available
-                        deferralStatusContent.innerHTML = `
-                            <div class="d-flex justify-content-center">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                    </div>
-                            </div>`;
-                            const proceedButton = getProceedButton();
-                            if (proceedButton && proceedButton.style) {
-                                proceedButton.style.display = 'inline-block';
-                                proceedButton.textContent = 'Proceed to Medical History';
-                            }
-                            if (markReviewFromMain) markReviewFromMain.style.display = 'none';
-                        deferralStatusModal.show();
-                        fetchDonorStatusInfo(donorId);
-                            return;
-                        }
-                        // Returning but not Medical and no needs_review: directly show donor modal
-                        deferralStatusContent.innerHTML = `
-                            <div class="d-flex justify-content-center">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                            </div>`;
-                        const proceedButton = getProceedButton();
-                        if (proceedButton && proceedButton.style) proceedButton.style.display = 'none';
-                        deferralStatusModal.show();
-                        fetchDonorStatusInfo(donorId);
-                        // Mark for review handler
-                        if (markReturningReviewBtn) {
-                            markReturningReviewBtn.onclick = () => {
-                                const confirmMsg = 'This action will mark the donor for Medical Review and move them back to the medical stage for reassessment. Do you want to proceed?';
-                                if (window.customConfirm) {
-                                    window.customConfirm(confirmMsg, function() {
-                                        fetch('../../assets/php_func/update_needs_review.php', {
-                                            method: 'POST',
-                                            headers: { 'Accept': 'application/json' },
-                                            body: new URLSearchParams({ donor_id: donorId })
-                                        })
-                                        .then(r => r.json())
-                                        .then(res => {
-                                            if (res && res.success) {
-                                                returningInfoModal.hide();
-                                                // Silent success + refresh without opening another modal
-                                                // Show centered success modal (auto-closes, no buttons)
-                                                try {
-                                                    const existing = document.getElementById('successAutoModal');
-                                                    if (existing) existing.remove();
-                                                    const successHTML = `
-                                                        <div id="successAutoModal" style="
-                                                            position: fixed;
-                                                            top: 0;
-                                                            left: 0;
-                                                            width: 100%;
-                                                            height: 100%;
-                                                            background: rgba(0,0,0,0.5);
-                                                            z-index: 99999;
-                                                            display: flex;
-                                                            align-items: center;
-                                                            justify-content: center;
-                                                        ">
-                                                            <div style="
-                                                                background: #ffffff;
-                                                                border-radius: 10px;
-                                                                max-width: 520px;
-                                                                width: 90%;
-                                                                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-                                                                overflow: hidden;
-                                                            ">
-                                                                <div style="
-                                                                    background: #9c0000;
-                                                                    color: white;
-                                                                    padding: 14px 18px;
-                                                                    font-weight: 700;
-                                                                ">Marked</div>
-                                                                <div style="padding: 22px;">
-                                                                    <p style="margin: 0;">The donor is medically cleared for donation.</p>
-                                                                </div>
-                                                            </div>
-                                                        </div>`;
-                                                    document.body.insertAdjacentHTML('beforeend', successHTML);
-                                                } catch(_) {}
-                                                setTimeout(() => { 
-                                                    const m = document.getElementById('successAutoModal');
-                                                    if (m) m.remove();
-                                                    window.location.href = window.location.pathname + '?page=1'; 
-                                                }, 1800);
-                                                const row = document.querySelector(`tr[data-donor-id="${donorId}"]`);
-                                                if (row) {
-                                                    const donorTypeCell = row.querySelector('td:nth-child(6)');
-                                                    if (donorTypeCell && donorTypeCell.textContent.toLowerCase().includes('returning')) {
-                                                        donorTypeCell.textContent = 'Returning (Medical)';
-                                                        row.setAttribute('data-donor-type', 'Returning (Medical)');
-                                                    }
-                                                }
-                                            } else {
-                                                window.customConfirm('Failed to mark for review.', function() {});
-                                            }
-                                        })
-                                        .catch(() => {
-                                            window.customConfirm('Failed to mark for review.', function() {});
-                                        });
-                                    });
-                                }
-                            };
-                        }
-                        // Enable main modal mark button only for returning
-                        if (markReviewFromMain) {
-                            // Don't force display here - let button control logic handle it
-                            markReviewFromMain.onclick = () => {
-                                const confirmMsg = 'This action will mark the donor for Medical Review and return them to the medical stage for reassessment. Do you want to proceed?';
-                                if (window.customConfirm) {
-                                    window.customConfirm(confirmMsg, function() {
-                                        fetch('../../assets/php_func/update_needs_review.php', {
-                                            method: 'POST',
-                                            headers: { 'Accept': 'application/json' },
-                                            body: new URLSearchParams({ donor_id: donorId })
-                                        })
-                                        .then(r => r.json())
-                                        .then(res => {
-                                            if (res && res.success) {
-                                                // Silent success + refresh without opening another modal
-                                                // Show centered success modal (auto-closes, no buttons)
-                                                try {
-                                                    const existing = document.getElementById('successAutoModal');
-                                                    if (existing) existing.remove();
-                                                    const successHTML = `
-                                                        <div id="successAutoModal" style="
-                                                            position: fixed;
-                                                            top: 0;
-                                                            left: 0;
-                                                            width: 100%;
-                                                            height: 100%;
-                                                            background: rgba(0,0,0,0.5);
-                                                            z-index: 99999;
-                                                            display: flex;
-                                                            align-items: center;
-                                                            justify-content: center;
-                                                        ">
-                                                            <div style="
-                                                                background: #ffffff;
-                                                                border-radius: 10px;
-                                                                max-width: 520px;
-                                                                width: 90%;
-                                                                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-                                                                overflow: hidden;
-                                                            ">
-                                                                <div style="
-                                                                    background: #9c0000;
-                                                                    color: white;
-                                                                    padding: 14px 18px;
-                                                                    font-weight: 700;
-                                                                ">Marked</div>
-                                                                <div style="padding: 22px;">
-                                                                    <p style="margin: 0;">The donor is medically cleared for donation.</p>
-                                                                </div>
-                                                            </div>
-                                                        </div>`;
-                                                    document.body.insertAdjacentHTML('beforeend', successHTML);
-                                                } catch(_) {}
-                                                setTimeout(() => { 
-                                                    const m = document.getElementById('successAutoModal');
-                                                    if (m) m.remove();
-                                                    window.location.href = window.location.pathname + '?page=1'; 
-                                                }, 1800);
-                                                const row = document.querySelector(`tr[data-donor-id="${donorId}"]`);
-                                                if (row) {
-                                                    const donorTypeCell = row.querySelector('td:nth-child(6)');
-                                                    if (donorTypeCell && donorTypeCell.textContent.toLowerCase().includes('returning')) {
-                                                        donorTypeCell.textContent = 'Returning (Medical)';
-                                                        row.setAttribute('data-donor-type', 'Returning (Medical)');
-                                                    }
-                                                    const dateCell = row.querySelector('td:nth-child(2)');
-                                                    if (dateCell && res.updated_at) {
-                                                        const d = new Date(res.updated_at);
-                                                        const options = { year: 'numeric', month: 'long', day: 'numeric' };
-                                                        dateCell.textContent = d.toLocaleDateString('en-US', options);
-                                                    }
-                                                }
-                                            } else {
-                                                window.customConfirm('Failed to mark for review.', function() {});
-                                            }
-                                        })
-                                        .catch(() => {
-                                            window.customConfirm('Failed to mark for review.', function() {});
-                                        });
-                                    });
-                                }
-                            };
-                        }
-                        return;
-                    }
-                    
-                    // Allow processing: show details and keep proceed button visible
-                    deferralStatusContent.innerHTML = `
-                        <div class="d-flex justify-content-center">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                        </div>`;
-                    
-                    const proceedButton = getProceedButton();
-                    if (proceedButton && proceedButton.style) {
-                        proceedButton.style.display = 'inline-block';
-                        proceedButton.textContent = 'Proceed to Medical History';
-                    }
-                    // Hide mark button for non-returning/new-medical flow
-                    if (markReviewFromMain) markReviewFromMain.style.display = 'none';
-                    deferralStatusModal.show();
-                    fetchDonorStatusInfo(donorId);
-                });
-            });
+            // Remove row click behavior in favor of explicit Eye button
             
             // Function to fetch donor status information
             function fetchDonorStatusInfo(donorId) {
@@ -3707,35 +3507,7 @@ $donor_history = $unique_donor_history;
                     }
                 });
             
-            // Optimized search function with caching
-            function performOptimizedSearch(searchTerm) {
-                if (!searchTerm.trim()) {
-                    // Show all rows if search is empty
-                    originalRows.forEach(row => row.style.display = '');
-                    return;
-                }
-                
-                // Use cached search results for better performance
-                const searchResults = originalRows.filter(row => {
-                    const cells = row.getElementsByTagName('td');
-                    if (cells.length === 0) return false;
-                    
-                    // Search in surname, first name, and donor type columns
-                    const surname = (cells[2]?.textContent || '').toLowerCase();
-                    const firstName = (cells[3]?.textContent || '').toLowerCase();
-                    const donorType = (cells[5]?.textContent || '').toLowerCase();
-                    
-                    return surname.includes(searchTerm) || 
-                           firstName.includes(searchTerm) || 
-                           donorType.includes(searchTerm);
-                });
-                
-                // Hide all rows first
-                originalRows.forEach(row => row.style.display = 'none');
-                
-                // Show matching rows
-                searchResults.forEach(row => row.style.display = '');
-            }
+            // Global search moved to assets/js/search_func/search_account_medical_history.js
             
             // Update placeholder based on selected category
             if (searchCategory && searchCategory.addEventListener) {
@@ -5504,8 +5276,16 @@ $donor_history = $unique_donor_history;
 
         // Function to check if donor is new (no eligibility record)
         function checkAndShowDonorStatus(donorId) {
-            // Directly show the donor status modal
             showDonorStatusModal(donorId);
+        }
+
+        // Helper triggered by Eye button; preserves stage/type context without row clicks
+        function viewDonorFromRow(donorId, stage, donorTypeLabel) {
+            if (!donorId) return;
+            window.currentDonorId = donorId;
+            window.currentDonorType = donorTypeLabel || 'New';
+            window.currentDonorStage = stage || 'medical_review';
+            checkAndShowDonorStatus(donorId);
         }
 
         // Function to show donor status modal

@@ -47,11 +47,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Debug log
         error_log("POST data received in handler: " . print_r($_POST, true));
         error_log("Session data in handler: " . print_r($_SESSION, true));
-
-
-
-
-
         // Prepare data for insertion
         $data = [
             'donor_id' => intval($_SESSION['donor_id']), // int4
