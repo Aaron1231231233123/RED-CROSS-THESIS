@@ -3,9 +3,22 @@
 
 document.addEventListener('DOMContentLoaded', function(){
     const input = document.getElementById('searchInput');
-    const loading = document.getElementById('searchLoading');
+		let loading = document.getElementById('searchLoading');
     const tbody = document.getElementById('donorTableBody');
     if (!input || !tbody) return;
+
+		// Ensure a loading indicator exists (align with other search modules)
+		if (!loading) {
+			const container = document.querySelector('.search-container');
+			if (container) {
+				loading = document.createElement('div');
+				loading.id = 'searchLoading';
+				loading.className = 'mt-2 text-muted';
+				loading.style.display = 'none';
+				loading.textContent = 'Searching...';
+				container.appendChild(loading);
+			}
+		}
 
     // Cache initial table to allow reset when search is cleared
     const initialHTML = tbody.innerHTML;

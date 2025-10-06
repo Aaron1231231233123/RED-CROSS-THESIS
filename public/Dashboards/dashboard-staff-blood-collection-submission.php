@@ -331,6 +331,8 @@ foreach ($display_records as $index => $record) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <script src="../../assets/js/blood_collection_modal.js"></script>
     <script src="../../assets/js/phlebotomist_blood_collection_details_modal.js"></script>
+    <script src="../../assets/js/search_func/search_account_blood_collection.js"></script>
+    <script src="../../assets/js/search_func/filter_search_account_blood_collection.js"></script>
     <style>
         :root {
             --bg-color: #f5f5f5;
@@ -2853,41 +2855,7 @@ foreach ($display_records as $index => $record) {
             }
             
 
-            // FIXED: Search functionality - always use current table rows
-            function performSearch() {
-                const searchTerm = searchInput.value.toLowerCase().trim();
-                
-                // Get current table rows (not cached ones)
-                const currentRows = Array.from(bloodCollectionTableBody.getElementsByTagName('tr'));
-                
-                if (!searchTerm) {
-                    currentRows.forEach(row => row.style.display = '');
-                    return;
-                }
-
-                currentRows.forEach(row => {
-                    const cells = Array.from(row.getElementsByTagName('td'));
-                    const shouldShow = cells.some(cell => 
-                        cell.textContent.toLowerCase().includes(searchTerm)
-                    );
-                    row.style.display = shouldShow ? '' : 'none';
-                });
-            }
-
-            // Debounce function
-            function debounce(func, wait) {
-                let timeout;
-                return function(...args) {
-                    clearTimeout(timeout);
-                    timeout = setTimeout(() => func.apply(this, args), wait);
-                };
-            }
-
-            // Apply debounced search
-            const debouncedSearch = debounce(performSearch, 300);
-
-            // Event listeners
-            searchInput.addEventListener('input', debouncedSearch);
+            // Client-side row filtering removed. Search is now server-backed via search_account_blood_collection.js
             
             // Add loading functionality for data processing
             function showProcessingModal(message = 'Processing blood collection data...') {

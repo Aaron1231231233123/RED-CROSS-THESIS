@@ -73,6 +73,16 @@ $blood_requests = fetchBloodRequests($_SESSION['user_id']);
 
 // Calculate summary statistics
 $summary_stats = calculateSummaryStats($blood_requests);
+
+// Collect handed over request IDs for notification logic
+$handed_over_ids = [];
+if (!empty($blood_requests) && is_array($blood_requests)) {
+    foreach ($blood_requests as $req) {
+        if (($req['status'] ?? '') === 'Handed_over') {
+            $handed_over_ids[] = $req['request_id'];
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -104,7 +114,7 @@ $summary_stats = calculateSummaryStats($blood_requests);
             --redcross-light: #f8f9fa;
         }
 
-        /* Button Styling */
+         /* Button Styling */
         .btn-danger {
             background-color: var(--redcross-red);
             border-color: var(--redcross-red);
@@ -116,6 +126,67 @@ $summary_stats = calculateSummaryStats($blood_requests);
             border-color: var(--redcross-dark);
             color: white;
         }
+        /* Themed success (for submit button on request form) */
+        .btn-success {
+            background-color: #198754;
+            border-color: #198754;
+            color: #fff;
+        }
+        .btn-success:hover {
+            background-color: #146c43;
+            border-color: #146c43;
+            color: #fff;
+        }
+
+        /* Request form theming */
+        #bloodRequestModal .modal-body label.form-label {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        #bloodRequestModal .form-control, #bloodRequestModal .form-select {
+            border-radius: 8px;
+        }
+        #bloodRequestModal .table thead th {
+            background-color: #941022;
+            color: #fff;
+        }
+        #bloodRequestModal .modal-content {
+            border-radius: 12px;
+        }
+
+        /* Stepper */
+        #bloodRequestModal .stepper {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        #bloodRequestModal .step {
+            flex: 1;
+            text-align: center;
+            padding: 8px 10px;
+            border-radius: 20px;
+            background: #f1f3f5;
+            color: #6c757d;
+            font-weight: 600;
+            font-size: .85rem;
+        }
+        #bloodRequestModal .step.active { background: #941022; color: #fff; }
+        #bloodRequestModal .form-step { display: none; }
+        #bloodRequestModal .form-step.active { display: block; }
+
+        /* View Modal (Referral Blood Shipment Record) spacing and layout */
+        #bloodReorderModal .modal-dialog { max-width: 900px; }
+        #bloodReorderModal .modal-body { padding: 28px; }
+        #bloodReorderModal h5, #bloodReorderModal h6 { margin-bottom: 10px; }
+        #bloodReorderModal .mb-4 { margin-bottom: 1.25rem !important; }
+        #bloodReorderModal .mb-3 { margin-bottom: 0.9rem !important; }
+        #bloodReorderModal .form-label { margin-bottom: 6px; }
+        #bloodReorderModal .table { margin-bottom: 12px; }
+        #bloodReorderModal .table td, #bloodReorderModal .table th { vertical-align: middle; }
+        #bloodReorderModal .form-control[readonly] { background-color: #f8f9fa; }
+        #bloodReorderModal .form-check { margin-right: 16px; }
+        #bloodReorderModal hr { margin: 16px 0; }
         .table thead th {
             background-color: var(--redcross-red);
             color: white;
@@ -202,8 +273,8 @@ $summary_stats = calculateSummaryStats($blood_requests);
         }
         
         /* Header Styling */
-        .dashboard-header {
-            background-color: white;
+         .dashboard-header {
+             background-color: #f5f7fa;
             padding: 20px;
             border-bottom: 1px solid #e9ecef;
             display: flex;
@@ -212,35 +283,24 @@ $summary_stats = calculateSummaryStats($blood_requests);
             margin-bottom: 30px;
         }
         
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
+         .header-left {
+             display: flex;
+             align-items: center;
+             gap: 12px;
+         }
         
-        .logo {
-            width: 40px;
-            height: 40px;
-            background-color: #941022;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-        }
+         .header-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
         
-        .header-title {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: #2c3e50;
+         .header-title {
+             font-size: 1.25rem;
+             font-weight: 800;
+             color: #0b2a5b;
             margin: 0;
         }
         
-        .header-date {
-            color: #6c757d;
-            font-size: 0.9rem;
-        }
+         .header-date { color: #8a8f98; font-size: 0.85rem; }
+
+         .title-row { display: flex; align-items: baseline; gap: 14px; }
         
         .header-right {
             display: flex;
@@ -248,17 +308,18 @@ $summary_stats = calculateSummaryStats($blood_requests);
             gap: 15px;
         }
         
-        .exit-btn {
-            width: 30px;
-            height: 30px;
-            background-color: #dc3545;
-            border: none;
-            border-radius: 4px;
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
+         .exit-btn {
+             background-color: #941022;
+             border: none;
+             border-radius: 20px;
+             color: white;
+             display: inline-flex;
+             align-items: center;
+             gap: 8px;
+             padding: 6px 14px;
+             font-weight: 600;
+             box-shadow: 0 2px 6px rgba(0,0,0,.12);
+         }
         /* Search Box Styling */
         .search-box .input-group {
             border-radius: 8px;
@@ -319,30 +380,35 @@ $summary_stats = calculateSummaryStats($blood_requests);
         .summary-cards {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-            margin-bottom: 30px;
+             gap: 20px;
+             margin-bottom: 30px;
         }
         
         .summary-card {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
+             background: white;
+             border-radius: 8px;
+             padding: 24px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            text-align: center;
+             text-align: center;
+             display: flex;
+             flex-direction: column;
+             align-items: center;
+             justify-content: center;
+             min-height: 120px;
         }
         
         .summary-card-title {
-            color: #941022;
-            font-size: 0.9rem;
-            font-weight: 600;
-            margin-bottom: 10px;
+             color: #941022;
+             font-size: 0.95rem;
+             font-weight: 600;
+             margin-bottom: 12px;
         }
         
         .summary-card-number {
-            color: #941022;
-            font-size: 2rem;
-            font-weight: bold;
-            margin: 0;
+             color: #941022;
+             font-size: 2rem;
+             font-weight: bold;
+             margin: 0;
         }
         
         /* Content Section */
@@ -538,17 +604,18 @@ th {
 <div class="main-content">
     <!-- Header -->
     <div class="dashboard-header">
-        <div class="header-left">
-            <div class="logo">PRC</div>
-            <div>
-                <h1 class="header-title">Hospital Request Dashboard</h1>
-            </div>
-        </div>
-        <div class="header-right">
-            <div class="header-date"><?php echo date('l, F j, Y'); ?></div>
-            <button class="exit-btn" onclick="window.location.href='../../assets/php_func/logout.php'">
-                <i class="fas fa-times"></i>
-            </button>
+         <div class="header-left">
+             <img src="../../assets/image/PRC_Logo.png" alt="PRC" class="header-logo">
+             <div class="title-row">
+                 <h1 class="header-title">Hospital Request Dashboard</h1>
+                 <div class="header-date"><?php echo date('l, F j, Y'); ?></div>
+             </div>
+         </div>
+         <div class="header-right">
+             <button class="exit-btn" onclick="window.location.href='../../assets/php_func/logout.php'">
+                 <i class="fas fa-sign-out-alt"></i>
+                 Logout
+             </button>
         </div>
     </div>
 
@@ -642,6 +709,9 @@ th {
                                     echo '<span class="badge bg-primary">Approved</span>';
                                 } elseif ($status === 'Completed') {
                                     echo '<span class="badge bg-success">Completed</span>';
+                                } elseif ($status === 'Handed_over') {
+                                    // Display Handed_over as Approved in the table
+                                    echo '<span class="badge bg-primary">Approved</span>';
                                 } elseif ($status === 'Declined') {
                                     echo '<span class="badge bg-danger">Declined</span>';
                                 } elseif ($status === 'Rescheduled') {
@@ -668,6 +738,12 @@ th {
                                         data-units="<?php echo htmlspecialchars($request['units_requested']); ?>"
                                         data-when-needed="<?php echo htmlspecialchars($request['when_needed']); ?>"
                                         data-debug-when-needed="<?php echo htmlspecialchars($request['when_needed'] ?? 'NULL'); ?>"
+                                        data-is-asap="<?php echo isset($request['is_asap']) && ($request['is_asap'] === true || $request['is_asap'] === 'true' || $request['is_asap'] === 1 || $request['is_asap'] === '1') ? 'true' : 'false'; ?>"
+                                        data-approved-by="<?php echo htmlspecialchars($request['approved_by'] ?? ''); ?>"
+                                        data-approved-date="<?php echo htmlspecialchars($request['approved_date'] ?? ''); ?>"
+                                        data-handed-over-by="<?php echo htmlspecialchars($request['handed_over_by'] ?? ''); ?>"
+                                        data-handed-over-date="<?php echo htmlspecialchars($request['handed_over_date'] ?? ''); ?>"
+                                        data-physician-name="<?php echo htmlspecialchars($request['physician_name'] ?? ''); ?>"
                                         data-status="<?php echo htmlspecialchars($request['status']); ?>">
                                         <i class="fas fa-eye"></i>
                                     </button>
@@ -684,11 +760,17 @@ th {
                                         data-units="<?php echo htmlspecialchars($request['units_requested']); ?>"
                                         data-when-needed="<?php echo htmlspecialchars($request['when_needed']); ?>"
                                         data-debug-when-needed="<?php echo htmlspecialchars($request['when_needed'] ?? 'NULL'); ?>"
+                                        data-is-asap="<?php echo isset($request['is_asap']) && ($request['is_asap'] === true || $request['is_asap'] === 'true' || $request['is_asap'] === 1 || $request['is_asap'] === '1') ? 'true' : 'false'; ?>"
+                                        data-approved-by="<?php echo htmlspecialchars($request['approved_by'] ?? ''); ?>"
+                                        data-approved-date="<?php echo htmlspecialchars($request['approved_date'] ?? ''); ?>"
+                                        data-handed-over-by="<?php echo htmlspecialchars($request['handed_over_by'] ?? ''); ?>"
+                                        data-handed-over-date="<?php echo htmlspecialchars($request['handed_over_date'] ?? ''); ?>"
+                                        data-physician-name="<?php echo htmlspecialchars($request['physician_name'] ?? ''); ?>"
                                         data-status="<?php echo htmlspecialchars($request['status']); ?>">
                                         <i class="fas fa-print"></i>
                                     </button>
                                 <?php elseif ($status === 'Printed'): ?>
-                                    <button class="btn btn-sm btn-success handover-btn" 
+                                    <button class="btn btn-sm btn-primary view-btn" 
                                         data-request-id="<?php echo htmlspecialchars($request['request_id']); ?>"
                                         data-patient-name="<?php echo htmlspecialchars($request['patient_name']); ?>"
                                         data-patient-age="<?php echo htmlspecialchars($request['patient_age']); ?>"
@@ -700,8 +782,37 @@ th {
                                         data-units="<?php echo htmlspecialchars($request['units_requested']); ?>"
                                         data-when-needed="<?php echo htmlspecialchars($request['when_needed']); ?>"
                                         data-debug-when-needed="<?php echo htmlspecialchars($request['when_needed'] ?? 'NULL'); ?>"
+                                        data-is-asap="<?php echo isset($request['is_asap']) && ($request['is_asap'] === true || $request['is_asap'] === 'true' || $request['is_asap'] === 1 || $request['is_asap'] === '1') ? 'true' : 'false'; ?>"
+                                        data-approved-by="<?php echo htmlspecialchars($request['approved_by'] ?? ''); ?>"
+                                        data-approved-date="<?php echo htmlspecialchars($request['approved_date'] ?? ''); ?>"
+                                        data-handed-over-by="<?php echo htmlspecialchars($request['handed_over_by'] ?? ''); ?>"
+                                        data-handed-over-date="<?php echo htmlspecialchars($request['handed_over_date'] ?? ''); ?>"
+                                        data-physician-name="<?php echo htmlspecialchars($request['physician_name'] ?? ''); ?>"
                                         data-status="<?php echo htmlspecialchars($request['status']); ?>">
-                                        <i class="fas fa-truck"></i>
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                <?php elseif ($status === 'Handed_over'): ?>
+                                    <button class="btn btn-sm btn-success handover-btn" 
+                                        title="Confirm Arrival"
+                                        data-request-id="<?php echo htmlspecialchars($request['request_id']); ?>"
+                                        data-patient-name="<?php echo htmlspecialchars($request['patient_name']); ?>"
+                                        data-patient-age="<?php echo htmlspecialchars($request['patient_age']); ?>"
+                                        data-patient-gender="<?php echo htmlspecialchars($request['patient_gender']); ?>"
+                                        data-patient-diagnosis="<?php echo htmlspecialchars($request['patient_diagnosis']); ?>"
+                                        data-blood-type="<?php echo htmlspecialchars($request['patient_blood_type']); ?>"
+                                        data-rh-factor="<?php echo htmlspecialchars($request['rh_factor']); ?>"
+                                        data-component="Whole Blood"
+                                        data-units="<?php echo htmlspecialchars($request['units_requested']); ?>"
+                                        data-when-needed="<?php echo htmlspecialchars($request['when_needed']); ?>"
+                                        data-debug-when-needed="<?php echo htmlspecialchars($request['when_needed'] ?? 'NULL'); ?>"
+                                        data-is-asap="<?php echo isset($request['is_asap']) && ($request['is_asap'] === true || $request['is_asap'] === 'true' || $request['is_asap'] === 1 || $request['is_asap'] === '1') ? 'true' : 'false'; ?>"
+                                        data-approved-by="<?php echo htmlspecialchars($request['approved_by'] ?? ''); ?>"
+                                        data-approved-date="<?php echo htmlspecialchars($request['approved_date'] ?? ''); ?>"
+                                        data-handed-over-by="<?php echo htmlspecialchars($request['handed_over_by'] ?? ''); ?>"
+                                        data-handed-over-date="<?php echo htmlspecialchars($request['handed_over_date'] ?? ''); ?>"
+                                        data-physician-name="<?php echo htmlspecialchars($request['physician_name'] ?? ''); ?>"
+                                        data-status="<?php echo htmlspecialchars($request['status']); ?>">
+                                        <i class="fas fa-check"></i>
                                     </button>
                                 <?php elseif ($status === 'Completed' || $status === 'Declined'): ?>
                                     <button class="btn btn-sm btn-primary view-btn" 
@@ -716,6 +827,12 @@ th {
                                         data-units="<?php echo htmlspecialchars($request['units_requested']); ?>"
                                         data-when-needed="<?php echo htmlspecialchars($request['when_needed']); ?>"
                                         data-debug-when-needed="<?php echo htmlspecialchars($request['when_needed'] ?? 'NULL'); ?>"
+                                        data-is-asap="<?php echo isset($request['is_asap']) && ($request['is_asap'] === true || $request['is_asap'] === 'true' || $request['is_asap'] === 1 || $request['is_asap'] === '1') ? 'true' : 'false'; ?>"
+                                        data-approved-by="<?php echo htmlspecialchars($request['approved_by'] ?? ''); ?>"
+                                        data-approved-date="<?php echo htmlspecialchars($request['approved_date'] ?? ''); ?>"
+                                        data-handed-over-by="<?php echo htmlspecialchars($request['handed_over_by'] ?? ''); ?>"
+                                        data-handed-over-date="<?php echo htmlspecialchars($request['handed_over_date'] ?? ''); ?>"
+                                        data-physician-name="<?php echo htmlspecialchars($request['physician_name'] ?? ''); ?>"
                                         data-status="<?php echo htmlspecialchars($request['status']); ?>">
                                         <i class="fas fa-eye"></i>
                                     </button>
@@ -732,6 +849,7 @@ th {
                                         data-units="<?php echo htmlspecialchars($request['units_requested']); ?>"
                                         data-when-needed="<?php echo htmlspecialchars($request['when_needed']); ?>"
                                         data-debug-when-needed="<?php echo htmlspecialchars($request['when_needed'] ?? 'NULL'); ?>"
+                                        data-is-asap="<?php echo isset($request['is_asap']) && ($request['is_asap'] === true || $request['is_asap'] === 'true' || $request['is_asap'] === 1 || $request['is_asap'] === '1') ? 'true' : 'false'; ?>"
                                         data-status="<?php echo htmlspecialchars($request['status']); ?>">
                                         <i class="fas fa-eye"></i>
                                     </button>
@@ -761,19 +879,40 @@ th {
 
 <!-- Blood Request Modal -->
 <div class="modal fade" id="bloodRequestModal" tabindex="-1" aria-labelledby="bloodRequestModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="bloodRequestModalLabel">Blood Request Form</h5>
+                <h5 class="modal-title" id="bloodRequestModalLabel">Referral Blood Shipment Record</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <form id="bloodRequestForm">
-                    <!-- Patient Information Section -->
-                    <h6 class="mb-3 fw-bold">Patient Information</h6>
+                    <!-- Stepper -->
+                    <div class="stepper">
+                        <div class="step active" data-step="1">Patient</div>
+                        <div class="step" data-step="2">Request Details</div>
+                        <div class="step" data-step="3">Review</div>
+                    </div>
+
+                    <!-- Step 1: Patient Information -->
+                    <div class="form-step active" data-step="1">
                     <div class="mb-3">
                         <label class="form-label">Patient Name</label>
-                        <input type="text" class="form-control" name="patient_name" required>
+                        <div class="row g-3 align-items-start">
+                            <div class="col-md-5">
+                                <label class="form-label mb-1">First Name</label>
+                                <input type="text" class="form-control" name="patient_first_name" placeholder="e.g., Juan" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label mb-1">M.I.</label>
+                                <input type="text" class="form-control text-center" name="patient_middle_initial" maxlength="1" placeholder="A" aria-label="Middle Initial">
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label mb-1">Surname</label>
+                                <input type="text" class="form-control" name="patient_last_name" placeholder="e.g., Dela Cruz" required>
+                            </div>
+                        </div>
+                        <input type="hidden" name="patient_name">
                     </div>
                     <div class="mb-3 row">
                         <div class="col">
@@ -794,7 +933,10 @@ th {
                         <input type="text" class="form-control" name="patient_diagnosis" placeholder="e.g., T/E, FTE, Septic Shock" required>
                     </div>
 
-                    <!-- Blood Request Details Section -->
+                    </div>
+
+                    <!-- Step 2: Blood Request Details -->
+                    <div class="form-step" data-step="2">
                     <h6 class="mb-3 mt-4 fw-bold">Blood Request Details</h6>
                     <div class="mb-3 row">
                         <div class="col">
@@ -839,57 +981,43 @@ th {
                         <input type="datetime-local" class="form-control" name="scheduled_datetime">
                     </div>
 
-                    <!-- Additional Information Section -->
-                    <h6 class="mb-3 mt-4 fw-bold">Additional Information</h6>
-                    <div class="mb-3">
-                        <label class="form-label">Hospital Admitted</label>
-                        <input type="text" class="form-control" name="hospital_admitted" value="<?php echo $_SESSION['user_first_name'] ?? ''; ?>" readonly>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Requesting Physician</label>
-                        <input type="text" class="form-control" name="physician_name" value="<?php echo $_SESSION['user_surname'] ?? ''; ?>" readonly>
+                    <!-- Additional Information (hidden in step UI; shown in summary only) -->
+                    <input type="hidden" name="hospital_admitted" value="<?php echo $_SESSION['user_first_name'] ?? ''; ?>">
+                    <input type="hidden" name="physician_name" value="<?php echo $_SESSION['user_surname'] ?? ''; ?>">
                     </div>
 
-                    <!-- File Upload and Signature Section -->
-                    <h6 class="mb-3 mt-4 fw-bold">Supporting Documents & Signature</h6>
-                    <div class="mb-3">
-                        <label class="form-label">Upload Supporting Documents (Images only)</label>
-                        <input type="file" class="form-control" name="supporting_docs[]" accept="image/*" multiple>
-                        <small class="text-muted">Accepted formats: .jpg, .jpeg, .png</small>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">Physician's Signature</label>
-                        <div class="signature-method-selector mb-2">
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="signature_method" id="uploadSignature" value="upload" checked>
-                                <label class="form-check-label" for="uploadSignature">Upload Signature</label>
+                    <!-- Step 3: Review -->
+                    <div class="form-step" data-step="3">
+                        <h6 class="mb-3 mt-4 fw-bold">Review & Confirm</h6>
+                        <p class="text-muted">Please review the information before submitting your request.</p>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="list-group">
+                                    <div class="list-group-item"><strong>Patient:</strong> <span id="reviewPatientName"></span></div>
+                                    <div class="list-group-item"><strong>Age/Gender:</strong> <span id="reviewAgeGender"></span></div>
+                                    <div class="list-group-item"><strong>Diagnosis:</strong> <span id="reviewDiagnosis"></span></div>
+                                    <div class="list-group-item"><strong>Blood Type:</strong> <span id="reviewBlood"></span></div>
+                                    <div class="list-group-item"><strong>Units/When Needed:</strong> <span id="reviewUnitsWhen"></span></div>
+                                </div>
                             </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="signature_method" id="drawSignature" value="draw">
-                                <label class="form-check-label" for="drawSignature">Draw Signature</label>
+                            <div class="col-12">
+                                <h6 class="fw-bold mt-2">Additional Information</h6>
+                                <div class="list-group">
+                                    <div class="list-group-item"><strong>Hospital Admitted:</strong> <span id="reviewHospital"></span></div>
+                                    <div class="list-group-item"><strong>Requesting Physician:</strong> <span id="reviewPhysician"></span></div>
+                                </div>
                             </div>
                         </div>
-
-                        <div id="signatureUpload" class="mb-3">
-                            <input type="file" class="form-control" name="signature_file" accept="image/*">
-                        </div>
-
-                        <div id="signaturePad" class="d-none">
-                            <div class="border rounded p-3 mb-2">
-                                <canvas id="physicianSignaturePad" class="w-100" style="height: 200px; border: 1px solid #dee2e6;"></canvas>
-                            </div>
-                            <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-secondary btn-sm" id="clearSignature">Clear</button>
-                                <button type="button" class="btn btn-primary btn-sm" id="saveSignature">Save Signature</button>
-                            </div>
-                            <input type="hidden" name="signature_data" id="signatureData">
-                        </div>
                     </div>
 
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="submit" class="btn btn-danger">Submit Request</button>
+                    <div class="modal-footer d-flex justify-content-between">
+                        <div>
+                            <button type="button" class="btn btn-outline-secondary" id="prevStepBtn">Back</button>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-danger" id="nextStepBtn">Next</button>
+                            <button type="submit" class="btn btn-success d-none" id="submitRequestBtn">Submit Request</button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -921,7 +1049,7 @@ th {
                     <p class="mb-1" id="modalPatientDetails">Age, Gender</p>
                 </div>
 
-                <hr class="my-4">
+                <hr class="my-4" id="approvalSeparator">
 
                 <!-- Request Details Section -->
                 <div class="mb-4">
@@ -964,7 +1092,7 @@ th {
                                 <input class="form-check-input" type="radio" name="modalWhenNeeded" id="modalScheduled" value="Scheduled" disabled>
                                 <label class="form-check-label" for="modalScheduled">Scheduled</label>
                             </div>
-                            <input type="datetime-local" class="form-control" id="modalScheduledDate" style="width: 200px;" readonly>
+                            <input type="date" class="form-control" id="modalScheduledDate" style="width: 200px;" readonly>
                         </div>
                     </div>
 
@@ -982,7 +1110,7 @@ th {
                 <hr class="my-4">
 
                 <!-- Approval Section -->
-                <div class="mb-4">
+                <div class="mb-4" id="approvalSection">
                     <label class="form-label fw-bold">Approved by:</label>
                     <input type="text" class="form-control" id="modalApprovedBy" placeholder="(e.g., &quot;Approved by Dr. Reyes - June 18, 2025 at 9:42 AM&quot;)" readonly style="background-color: #f8f9fa;">
                 </div>
@@ -1015,7 +1143,7 @@ th {
                         <i class="fas fa-print"></i> Print
                     </button>
                     <button type="button" class="btn btn-success handover-btn" id="handoverRequestBtn" style="display: none;" data-request-id="">
-                        <i class="fas fa-truck"></i> Hand Over
+                        <i class="fas fa-check"></i> Confirm Arrival
                     </button>
                 </div>
             </div>
@@ -1025,7 +1153,7 @@ th {
 
 <!-- Success Modal -->
 <div class="modal fade" id="printSuccessModal" tabindex="-1" aria-labelledby="printSuccessModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header" style="background-color: #dc3545; color: white;">
                 <h5 class="modal-title" id="printSuccessModalLabel">Blood Request Completed</h5>
@@ -1041,10 +1169,55 @@ th {
     </div>
 </div>
 
+<!-- Action Result Modal -->
+<div class="modal fade" id="actionResultModal" tabindex="-1" aria-labelledby="actionResultModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header" style="background-color: #dc3545; color: white;">
+                <h5 class="modal-title" id="actionResultModalLabel">Request Update</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="actionResultBody">
+                <!-- Filled dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <!-- Confirm Submit Modal -->
+    <div class="modal fade" id="confirmSubmitModal" tabindex="-1" aria-labelledby="confirmSubmitModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header" style="background-color: #941022; color: white;">
+                    <h5 class="modal-title" id="confirmSubmitModalLabel">Confirm Blood Request</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Please review the request details before submitting. Proceed with creating this blood request?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmSubmitBtn">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="../../assets/js/handed-over-notify.js"></script>
 
     <script>
+        // Configure one-time per-account notification for Handed_over (handled in external module)
+        window.HandedOverNotifyConfig = {
+            userId: <?php echo json_encode($_SESSION['user_id'] ?? 'guest'); ?>,
+            handedOverIds: <?php echo json_encode($handed_over_ids); ?>,
+            modalSelector: '#printSuccessModal',
+            viewButtonSelector: '#printSuccessModal .btn-primary',
+            buildViewUrl: (id) => `../../src/views/forms/print-blood-request.php?request_id=${id}`
+        };
         // Define Supabase constants
         const SUPABASE_URL = '<?php echo SUPABASE_URL; ?>';
         const SUPABASE_KEY = '<?php echo SUPABASE_API_KEY; ?>';
@@ -1304,27 +1477,134 @@ document.addEventListener("DOMContentLoaded", function () {
 
     <!-- Blood Request Form JavaScript -->
     <script>
+    // Stepper logic for blood request modal
+    document.addEventListener('DOMContentLoaded', function() {
+        const modalEl = document.getElementById('bloodRequestModal');
+        if (!modalEl) return;
+        const steps = Array.from(modalEl.querySelectorAll('.form-step'));
+        const stepChips = Array.from(modalEl.querySelectorAll('.stepper .step'));
+        const nextBtn = modalEl.querySelector('#nextStepBtn');
+        const prevBtn = modalEl.querySelector('#prevStepBtn');
+        const submitBtn = modalEl.querySelector('#submitRequestBtn');
+        let current = 0;
+
+        function updateUI() {
+            steps.forEach((s, i) => s.classList.toggle('active', i === current));
+            stepChips.forEach((c, i) => c.classList.toggle('active', i === current));
+            prevBtn.style.visibility = current === 0 ? 'hidden' : 'visible';
+            nextBtn.classList.toggle('d-none', current === steps.length - 1);
+            submitBtn.classList.toggle('d-none', current !== steps.length - 1);
+            if (current === steps.length - 1) fillReview();
+        }
+
+        function fillReview() {
+            const get = (name) => modalEl.querySelector(`[name="${name}"]`);
+            // Compose review patient name from split fields if present
+            const first = get('patient_first_name')?.value || '';
+            const mi = get('patient_middle_initial')?.value || '';
+            const last = get('patient_last_name')?.value || '';
+            const patient = (first || mi || last) ? `${first}${mi ? ' ' + mi + '.' : ''} ${last}`.trim() : (get('patient_name')?.value || '');
+            const age = get('patient_age')?.value || '';
+            const gender = get('patient_gender')?.value || '';
+            const diagnosis = get('patient_diagnosis')?.value || '';
+            const bt = get('patient_blood_type')?.value || '';
+            const rh = get('rh_factor')?.value || '';
+            const units = get('units_requested')?.value || '';
+            const when = get('when_needed')?.value || '';
+            const hosp = get('hospital_admitted')?.value || '';
+            const phys = get('physician_name')?.value || '';
+            modalEl.querySelector('#reviewPatientName').textContent = patient;
+            modalEl.querySelector('#reviewAgeGender').textContent = `${age} / ${gender}`;
+            modalEl.querySelector('#reviewDiagnosis').textContent = diagnosis;
+            modalEl.querySelector('#reviewBlood').textContent = `${bt} ${rh}`.trim();
+            modalEl.querySelector('#reviewUnitsWhen').textContent = `${units} unit(s) / ${when}`;
+            modalEl.querySelector('#reviewHospital').textContent = hosp;
+            modalEl.querySelector('#reviewPhysician').textContent = phys;
+        }
+
+        nextBtn?.addEventListener('click', function() {
+            // Basic required validations per step
+            if (current === 0) {
+                const requiredFields = [
+                    '[name="patient_first_name"]',
+                    '[name="patient_last_name"]',
+                    '[name="patient_age"]',
+                    '[name="patient_gender"]',
+                    '[name="patient_diagnosis"]'
+                ];
+                for (const sel of requiredFields) {
+                    const el = modalEl.querySelector(sel);
+                    if (el && !el.value.trim()) {
+                        const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
+                        const body = document.getElementById('actionResultBody');
+                        if (body) { body.textContent = 'Please complete all required fields on this step before continuing.'; }
+                        msgModal.show();
+                        el.focus();
+                        return;
+                    }
+                }
+            } else if (current === 1) {
+                const requiredFields = [
+                    '[name="patient_blood_type"]',
+                    '[name="rh_factor"]',
+                    '[name="units_requested"]',
+                    '#whenNeeded'
+                ];
+                for (const sel of requiredFields) {
+                    const el = modalEl.querySelector(sel);
+                    if (el && (!el.value || !el.value.trim())) {
+                        const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
+                        const body = document.getElementById('actionResultBody');
+                        if (body) { body.textContent = 'Please complete all required fields on this step before continuing.'; }
+                        msgModal.show();
+                        el.focus();
+                        return;
+                    }
+                }
+            }
+            if (current < steps.length - 1) { current++; updateUI(); }
+        });
+        prevBtn?.addEventListener('click', function() {
+            if (current > 0) { current--; updateUI(); }
+        });
+
+        modalEl.addEventListener('shown.bs.modal', function(){ current = 0; updateUI(); });
+    });
+
     document.addEventListener('DOMContentLoaded', function() {
         // Add blood request form submission handler
         const bloodRequestForm = document.getElementById('bloodRequestForm');
         if (bloodRequestForm) {
             bloodRequestForm.addEventListener('submit', function(e) {
                 e.preventDefault();
+                // Show confirm modal before actual submission
+                const confirmModal = new bootstrap.Modal(document.getElementById('confirmSubmitModal'));
+                confirmModal.show();
                 
+                const doSubmit = () => {
                 // Show loading state
-                const submitBtn = this.querySelector('button[type="submit"]');
+                const submitBtn = bloodRequestForm.querySelector('button[type="submit"]');
                 const originalBtnText = submitBtn.innerHTML;
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
                 
                 // Create FormData object
-                const formData = new FormData(this);
+                const formData = new FormData(bloodRequestForm);
                 
                 // Add additional data
                 formData.append('user_id', '<?php echo $_SESSION['user_id']; ?>');
                 formData.append('status', 'Pending');
                 formData.append('physician_name', '<?php echo $_SESSION['user_surname']; ?>');
                 formData.append('requested_on', new Date().toISOString());
+                // Compose patient_name from split fields for uniform DB storage
+                try {
+                    const first = this.querySelector('[name="patient_first_name"]').value?.trim() || '';
+                    const mi = this.querySelector('[name="patient_middle_initial"]').value?.trim() || '';
+                    const last = this.querySelector('[name="patient_last_name"]').value?.trim() || '';
+                    const fullName = `${first}${mi ? ' ' + mi + '.' : ''} ${last}`.trim();
+                    this.querySelector('[name="patient_name"]').value = fullName;
+                    formData.set('patient_name', fullName);
+                } catch (_) {}
                 
                 // Handle "when needed" logic
                 const whenNeeded = document.getElementById('whenNeeded').value;
@@ -1428,27 +1708,35 @@ document.addEventListener("DOMContentLoaded", function () {
                 })
                 .then(result => {
                     console.log('Request submitted successfully:', result);
-                    
-                    // Show success message
-                    alert('Blood request submitted successfully!');
-                    
-                    // Reset form and close modal
-                    bloodRequestForm.reset();
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('bloodRequestModal'));
-                    modal.hide();
-                    
-                    // Reload the page to show the new request
-                    window.location.reload();
+                    // Show success modal instead of alert
+                    const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
+                    const body = document.getElementById('actionResultBody');
+                    if (body) { body.textContent = 'Blood request submitted successfully!'; }
+                    msgModal.show();
+                    // Reset and close after dismiss
+                    const brm = bootstrap.Modal.getInstance(document.getElementById('bloodRequestModal'));
+                    if (brm) brm.hide();
+                    document.getElementById('actionResultModal').addEventListener('hidden.bs.modal', () => window.location.reload(), { once: true });
                 })
                 .catch(error => {
                     console.error('Error submitting request:', error);
-                    alert('Error submitting request: ' + error.message);
+                    const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
+                    const body = document.getElementById('actionResultBody');
+                    if (body) { body.textContent = 'Error submitting request: ' + error.message; }
+                    msgModal.show();
                 })
                 .finally(() => {
                     // Restore button state
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = originalBtnText;
                 });
+                };
+                // Wire confirm button once
+                const confirmBtn = document.getElementById('confirmSubmitBtn');
+                confirmBtn.onclick = function() {
+                    confirmModal.hide();
+                    doSubmit();
+                };
             });
         }
         
@@ -1589,59 +1877,167 @@ document.addEventListener("DOMContentLoaded", function () {
                     document.getElementById('modalRH').textContent = data.rhFactor || data['rh-factor'] || '';
                     document.getElementById('modalUnits').textContent = data.units || '';
                     
-                    // Set when needed
-                    const whenNeeded = data['when-needed'];
-                    console.log('Modal when_needed data:', whenNeeded);
-                    if (whenNeeded) {
-                        const date = new Date(whenNeeded);
-                        console.log('Modal parsed date:', date);
-                        if (!isNaN(date.getTime())) {
-                            const isAsap = date.getTime() - new Date().getTime() < 24 * 60 * 60 * 1000; // Within 24 hours
-                            console.log('Modal is ASAP:', isAsap);
-                            if (isAsap) {
-                                document.getElementById('modalAsap').checked = true;
-                            } else {
-                                document.getElementById('modalScheduled').checked = true;
-                                document.getElementById('modalScheduledDate').value = date.toISOString().slice(0, 16);
-                            }
+                    // Set when needed from dataset flags/values (dataset converts to camelCase)
+                    const whenNeededRaw = data.whenNeeded || data['when-needed'];
+                    const isAsapRaw = data.isAsap ?? data['is-asap'];
+                    const isAsapFlag = (isAsapRaw === true || isAsapRaw === 'true' || isAsapRaw === 1 || isAsapRaw === '1');
+                    console.log('Modal when_needed data:', whenNeededRaw, 'is_asap raw:', isAsapRaw, 'flag:', isAsapFlag);
+                    const asapRadio = document.getElementById('modalAsap');
+                    const schedRadio = document.getElementById('modalScheduled');
+                    const schedInput = document.getElementById('modalScheduledDate');
+
+                    // Reset controls first to avoid stale state from previous row
+                    if (asapRadio) asapRadio.checked = false;
+                    if (schedRadio) schedRadio.checked = false;
+                    if (schedInput) schedInput.value = '';
+
+                    // Helper: robustly parse various date formats into date input value (YYYY-MM-DD)
+                    const toDatetimeLocal = (raw) => {
+                        if (!raw) return '';
+                        let d;
+                        // If raw is only a date (YYYY-MM-DD), create local midnight
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+                            d = new Date(raw + 'T00:00:00');
+                        } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) { // mm/dd/yyyy
+                            const [m, v, y] = raw.split('/');
+                            d = new Date(parseInt(y,10), parseInt(m,10)-1, parseInt(v,10), 0, 0, 0);
+                        } else {
+                            d = new Date(raw);
                         }
+                        if (isNaN(d.getTime())) return '';
+                        const pad = (n) => String(n).padStart(2, '0');
+                        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                    };
+
+                    if (isAsapFlag) {
+                        if (asapRadio) asapRadio.checked = true;
+                        // Even if ASAP, still display the stored when_needed from DB if provided
+                        const localVal = toDatetimeLocal(whenNeededRaw);
+                        if (localVal && schedInput) schedInput.value = localVal;
                     } else {
-                        console.log('Modal when_needed is empty or undefined');
+                        // Not ASAP: mark scheduled and populate if available
+                        if (schedRadio) schedRadio.checked = true;
+                        const localVal = toDatetimeLocal(whenNeededRaw);
+                        if (localVal && schedInput) schedInput.value = localVal;
                     }
                     
                     // Set hospital and physician
                     document.getElementById('modalHospital').value = '<?php echo $_SESSION['user_first_name'] ?? ''; ?>';
-                    document.getElementById('modalPhysician').value = '<?php echo $_SESSION['user_surname'] ?? ''; ?>';
+                    document.getElementById('modalPhysician').value = data.physicianName || data['physician-name'] || data['physician_name'] || '<?php echo $_SESSION['user_surname'] ?? ''; ?>';
                     
-                    // Set approval info
-                    document.getElementById('modalApprovedBy').value = `Approved by Dr. ${data.patientName || 'System'} - ${new Date().toLocaleDateString('en-US', { 
-                        year: 'numeric', month: 'long', day: 'numeric' 
-                    })} at ${new Date().toLocaleTimeString('en-US', { 
-                        hour: '2-digit', minute: '2-digit' 
-                    })}`;
+                    // Set approval info from DB columns (approved_by, approved_date)
+                    (function(){
+                        const approvedBy = data.approvedBy || data['approved-by'] || data['approved_by'] || '';
+                        const approvedDateRaw = data.approvedDate || data['approved-date'] || data['approved_date'] || '';
+                        let approvedDateText = '';
+                        if (approvedDateRaw) {
+                            const d = new Date(approvedDateRaw);
+                            if (!isNaN(d.getTime())) {
+                                approvedDateText = d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) + ` at ` + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                            }
+                        }
+                        document.getElementById('modalApprovedBy').value = approvedBy && approvedDateText ? `Approved by ${approvedBy} - ${approvedDateText}` : approvedBy || approvedDateText || '';
+                    })();
 
-                    // Show/hide handover information based on status
+                    // Update modal status badge text/color based on DB status (modal-only rules)
+                    const statusBadge = document.getElementById('modalStatusBadge');
+                    if (statusBadge) {
+                        // reset base classes and keep size/padding
+                        statusBadge.classList.remove('bg-success', 'bg-primary', 'bg-warning', 'text-dark', 'bg-danger', 'bg-secondary');
+                        let badgeText = currentStatus;
+                        let badgeClass = 'bg-secondary';
+
+                        if (currentStatus === 'Pending') {
+                            badgeText = 'Pending';
+                            badgeClass = 'bg-warning text-dark';
+                        } else if (
+                            currentStatus === 'Approved' ||
+                            currentStatus === 'Accepted' ||
+                            currentStatus === 'Confirmed'
+                        ) {
+                            // Approved-like: show blue Approved
+                            badgeText = 'Approved';
+                            badgeClass = 'bg-primary';
+                        } else if (currentStatus === 'Printed') {
+                            // Show actual word "Printed" in modal
+                            badgeText = 'Printed';
+                            badgeClass = 'bg-primary';
+                        } else if (currentStatus === 'Handed_over') {
+                            // Show actual word for handover
+                            badgeText = 'Handed Over';
+                            badgeClass = 'bg-primary';
+                        } else if (currentStatus === 'Declined') {
+                            badgeText = 'Declined';
+                            badgeClass = 'bg-danger';
+                        } else if (currentStatus === 'Completed') {
+                            badgeText = 'Completed';
+                            badgeClass = 'bg-success';
+                        }
+
+                        statusBadge.textContent = badgeText;
+                        // preserve fs-6 px-3 py-2, add computed color classes
+                        badgeClass.split(' ').forEach(cls => statusBadge.classList.add(cls));
+                    }
+
+                    // Show/hide handover and approval sections based on status
                     const handoverInfo = document.getElementById('handoverInfo');
                     const approvalInstructions = document.getElementById('approvalInstructions');
                     const handoverInstructions = document.getElementById('handoverInstructions');
+                    const approvalSection = document.getElementById('approvalSection');
+                    const approvalSeparator = document.getElementById('approvalSeparator');
+                    const approvalText = approvalInstructions ? approvalInstructions.querySelector('p') : null;
                     
-                    if (currentStatus === 'Printed') {
-                        // Show handover information for Printed status
+                    if (currentStatus === 'Handed_over' || currentStatus === 'Completed') {
+                        // Handed over or Completed: show handover details & success notice, hide approval section
                         handoverInfo.style.display = 'block';
                         approvalInstructions.style.display = 'none';
                         handoverInstructions.style.display = 'block';
-                        
+                        if (approvalSection) approvalSection.style.display = 'none';
+                        if (approvalSeparator) approvalSeparator.style.display = 'none';
+
                         // Populate handover information
-                        const currentDate = new Date().toLocaleDateString('en-US', { 
-                            year: 'numeric', month: 'long', day: 'numeric' 
-                        });
-                        document.getElementById('modalHandedOverBy').value = `(Handed over by Staff ${data.patientName || 'System'} - ${currentDate})`;
-                        document.getElementById('modalReceivedBy').value = `(Received By hospital personnel - ${currentDate})`;
-                    } else {
-                        // Hide handover information for other statuses
+                        // Handover fields from DB (handed_over_by, handed_over_date) and physician_name for received by
+                        const handedBy = data.handedOverBy || data['handed-over-by'] || data['handed_over_by'] || '';
+                        const handedDateRaw = data.handedOverDate || data['handed-over-date'] || data['handed_over_date'] || '';
+                        let handedDateText = '';
+                        if (handedDateRaw) {
+                            const hd = new Date(handedDateRaw);
+                            if (!isNaN(hd.getTime())) {
+                                handedDateText = hd.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                            }
+                        }
+                        document.getElementById('modalHandedOverBy').value = handedBy || handedDateText ? `(${handedBy}${handedBy && handedDateText ? ' - ' : (handedDateText ? '' : '')}${handedDateText})` : '';
+                        const receiver = data.physicianName || data['physician-name'] || data['physician_name'] || '';
+                        document.getElementById('modalReceivedBy').value = receiver ? `(${receiver}${handedDateText ? ' - ' + handedDateText : ''})` : (handedDateText ? `(${handedDateText})` : '');
+                    } else if (
+                        currentStatus === 'Approved' ||
+                        currentStatus === 'Accepted' ||
+                        currentStatus === 'Confirmed' ||
+                        currentStatus === 'Printed'
+                    ) {
+                        // Approved-like states: show only approval section, hide handover
                         handoverInfo.style.display = 'none';
                         approvalInstructions.style.display = 'block';
+                        if (approvalText) {
+                            if (currentStatus === 'Printed') {
+                                approvalText.textContent = 'The request has been printed. Please wait while an administrator confirms the receipt and the blood is prepared for delivery to your hospital.';
+                            } else {
+                                approvalText.textContent = "The blood request has been approved. Please print the receipt and provide it to the patient's representative for claiming at PRC.";
+                            }
+                        }
                         handoverInstructions.style.display = 'none';
+                        if (approvalSection) approvalSection.style.display = 'block';
+                        if (approvalSeparator) approvalSeparator.style.display = 'block';
+                    } else {
+                        // Other statuses: default behavior
+                        handoverInfo.style.display = 'none';
+                        approvalInstructions.style.display = (currentStatus === 'Pending') ? 'none' : 'block';
+                        if (approvalText && approvalInstructions.style.display === 'block') {
+                            approvalText.textContent = "The blood request has been approved. Please print the receipt and provide it to the patient's representative for claiming at PRC.";
+                        }
+                        handoverInstructions.style.display = 'none';
+                        if (approvalSection) approvalSection.style.display = (currentStatus === 'Pending') ? 'none' : 'block';
+                        if (approvalSeparator) approvalSeparator.style.display = (currentStatus === 'Pending') ? 'none' : 'block';
                     }
 
                     // Show/hide buttons based on current status
@@ -1663,8 +2059,11 @@ document.addEventListener("DOMContentLoaded", function () {
                             printBtn.style.display = 'inline-block';
                             handoverBtn.style.display = 'none';
                         } else if (currentStatus === 'Printed') {
-                            // Show handover button only for Printed status
-                            console.log('Showing handover button for status:', currentStatus);
+                            // Printed: view only, no action buttons
+                            printBtn.style.display = 'none';
+                            handoverBtn.style.display = 'none';
+                        } else if (currentStatus === 'Handed_over') {
+                            // Handed_over: allow confirm arrival
                             handoverBtn.style.display = 'inline-block';
                             printBtn.style.display = 'none';
                         } else {
@@ -1770,16 +2169,28 @@ document.addEventListener("DOMContentLoaded", function () {
             })
             .then(result => {
                 console.log('Request handed over successfully:', result);
-                alert('Request has been marked as completed (handed over) successfully!');
+                // Show proper modal instead of alert
+                const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
+                const body = document.getElementById('actionResultBody');
+                if (body) {
+                    body.textContent = 'Request has been marked as completed (handed over) successfully!';
+                }
+                msgModal.show();
                 
-                // Close modal and reload page
-                const modal = bootstrap.Modal.getInstance(document.getElementById('bloodReorderModal'));
-                modal.hide();
-                window.location.reload();
+                // Close view modal and refresh after dismissal
+                const currentView = bootstrap.Modal.getInstance(document.getElementById('bloodReorderModal'));
+                if (currentView) currentView.hide();
+                const modalEl = document.getElementById('actionResultModal');
+                modalEl.addEventListener('hidden.bs.modal', () => window.location.reload(), { once: true });
             })
             .catch(error => {
                 console.error('Error handing over request:', error);
-                alert('Error handing over request: ' + error.message);
+                const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
+                const body = document.getElementById('actionResultBody');
+                if (body) {
+                    body.textContent = 'Error handing over request: ' + error.message;
+                }
+                msgModal.show();
             })
             .finally(() => {
                 // Restore button state
@@ -1806,4 +2217,4 @@ document.addEventListener("DOMContentLoaded", function () {
     });
     </script>
 </body>
-</html>
+</html> 

@@ -23,7 +23,7 @@ function generateRedCrossID($type, $id, $date) {
     
     // Red Cross service type prefixes
     $prefixes = [
-        'blood_request' => 'PRC-BR',      // Blood Request
+        'blood_request' => 'REQ-BR',      // Blood Request (request-centric prefix)
         'donor_form' => 'PRC-DF',         // Donor Form
         'hospital' => 'PRC-HOS',          // Hospital
         'staff' => 'PRC-STF',             // Staff
@@ -420,12 +420,12 @@ $current_date = date('F d, Y');
         <div class="signature-section">
             <div class="signature-block">
                 <div class="signature-line"></div>
-                <div class="signature-label"><?php echo h($request['approved_by'] ?? 'Authorized Representative'); ?></div>
+                <div class="signature-label">Authorized Representative</div>
                 <div class="signature-subtitle">Approved By</div>
             </div>
             <div class="signature-block">
                 <div class="signature-line"></div>
-                <div class="signature-label"><?php echo h($request['handed_over_by'] ?? 'Hospital Authorized Officer'); ?></div>
+                <div class="signature-label">Hospital Authorized Officer</div>
                 <div class="signature-subtitle">Handed Over By</div>
             </div>
         </div>
