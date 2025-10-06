@@ -269,6 +269,11 @@ class PhysicalExaminationModalAdmin {
     validateCurrentStep() {
         console.log('[PE ADMIN DEBUG] Validating current step:', this.currentStep);
         
+        // Skip validation on review step (step 4) - we'll validate all fields during submission
+        if (this.currentStep === 4) {
+            return true;
+        }
+        
         const currentStepEl = document.getElementById(`physical-step-${this.currentStep}-admin`);
         if (currentStepEl) {
             const requiredFields = currentStepEl.querySelectorAll('input[required], select[required], textarea[required]');
@@ -316,6 +321,30 @@ class PhysicalExaminationModalAdmin {
             return;
         }
         
+        // Validate all required fields before submission
+        const requiredFields = [
+            { name: 'blood_pressure', id: 'physical-blood-pressure-admin' },
+            { name: 'pulse_rate', id: 'physical-pulse-rate-admin' },
+            { name: 'body_temp', id: 'physical-body-temp-admin' },
+            { name: 'gen_appearance', id: 'physical-gen-appearance-admin' },
+            { name: 'skin', id: 'physical-skin-admin' },
+            { name: 'heent', id: 'physical-heent-admin' },
+            { name: 'heart_and_lungs', id: 'physical-heart-lungs-admin' }
+        ];
+        
+        const missingFields = [];
+        for (const field of requiredFields) {
+            const element = document.getElementById(field.id);
+            if (!element || !element.value.trim()) {
+                missingFields.push(field.name);
+            }
+        }
+        
+        if (missingFields.length > 0) {
+            this.showToast(`Missing required fields: ${missingFields.join(', ')}`, 'error');
+            return;
+        }
+        
         // Collect form data
         const formData = new FormData();
         
@@ -333,25 +362,34 @@ class PhysicalExaminationModalAdmin {
         
         // Get form field values
         const fields = [
-            'blood_pressure',
-            'pulse_rate', 
-            'body_temp',
-            'gen_appearance',
-            'skin',
-            'heent',
-            'heart_and_lungs'
+            { name: 'blood_pressure', id: 'physical-blood-pressure-admin' },
+            { name: 'pulse_rate', id: 'physical-pulse-rate-admin' },
+            { name: 'body_temp', id: 'physical-body-temp-admin' },
+            { name: 'gen_appearance', id: 'physical-gen-appearance-admin' },
+            { name: 'skin', id: 'physical-skin-admin' },
+            { name: 'heent', id: 'physical-heent-admin' },
+            { name: 'heart_and_lungs', id: 'physical-heart-lungs-admin' }
         ];
         
         fields.forEach(field => {
-            const element = document.getElementById(`physical-${field}-admin`);
+            const element = document.getElementById(field.id);
             if (element && element.value) {
-                formData.append(field, element.value);
+                formData.append(field.name, element.value);
+                console.log(`[PE ADMIN DEBUG] Added ${field.name}: ${element.value}`);
+            } else {
+                console.log(`[PE ADMIN DEBUG] Field ${field.name} (${field.id}) not found or empty`);
             }
         });
         
         // Set default values for admin
         formData.append('remarks', 'Accepted');
         formData.append('blood_bag_type', 'Single');
+        
+        // Debug: Log all form data being sent
+        console.log('[PE ADMIN DEBUG] Form data being sent:');
+        for (let [key, value] of formData.entries()) {
+            console.log(`  ${key}: ${value}`);
+        }
         
         try {
             this.showToast('Submitting physical examination...', 'info');

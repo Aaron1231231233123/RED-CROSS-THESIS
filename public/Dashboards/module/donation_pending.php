@@ -4,6 +4,12 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
+// Test debug logging
+error_log("DEBUG - donation_pending.php module loaded at " . date('Y-m-d H:i:s'));
+
+// Also write to a custom log file for easier debugging
+file_put_contents('../../assets/logs/donation_pending_debug.log', "[" . date('Y-m-d H:i:s') . "] donation_pending.php module loaded\n", FILE_APPEND | LOCK_EX);
+
 // Include database connection
 include_once '../../assets/conn/db_conn.php';
 
@@ -36,8 +42,10 @@ try {
     // Include status fields from each stage to determine accurate pending status
     $screeningResponse = supabaseRequest("screening_form?select=screening_id,donor_form_id,needs_review,disapproval_reason,created_at");
     $medicalResponse   = supabaseRequest("medical_history?select=donor_id,needs_review,medical_approval,updated_at");
-    $physicalResponse  = supabaseRequest("physical_examination?select=donor_id,needs_review,remarks,created_at");
-    $collectionResponse = supabaseRequest("blood_collection?select=screening_id,needs_review,status,start_time");
+    $physicalResponse  = supabaseRequest("physical_examination?select=physical_exam_id,donor_id,needs_review,remarks,created_at");
+    
+    // Fetch blood collection data with proper linking
+    $collectionResponse = supabaseRequest("blood_collection?select=physical_exam_id,needs_review,status,start_time,created_at&order=created_at.desc");
 
     // Build lookup maps with status fields
     $screeningByDonorId = [];
@@ -66,6 +74,7 @@ try {
     }
     
     $physicalByDonorId = [];
+    $physicalExamIdByDonorId = []; // Add mapping for physical_exam_id
     if (isset($physicalResponse['data']) && is_array($physicalResponse['data'])) {
         foreach ($physicalResponse['data'] as $row) {
             if (!empty($row['donor_id'])) {
@@ -73,31 +82,78 @@ try {
                     'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
                     'remarks' => $row['remarks'] ?? null
                 ];
+                // Also store physical_exam_id for blood collection lookup
+                if (!empty($row['physical_exam_id'])) {
+                    $physicalExamIdByDonorId[$row['donor_id']] = $row['physical_exam_id'];
+                }
             }
         }
+        error_log("DEBUG - Fetched " . count($physicalExamIdByDonorId) . " physical exam records");
+        // Log some sample physical exam records for debugging
+        $sampleCount = 0;
+        foreach ($physicalExamIdByDonorId as $donorId => $examId) {
+            if ($sampleCount < 3) {
+                error_log("DEBUG - Sample physical exam: donorId=$donorId, examId=$examId");
+                $sampleCount++;
+            }
+        }
+    } else {
+        error_log("DEBUG - No physical exam data found or invalid response");
     }
     
-    $collectionByScreeningId = [];
+    $collectionByPhysicalExamId = [];
     if (isset($collectionResponse['data']) && is_array($collectionResponse['data'])) {
         foreach ($collectionResponse['data'] as $row) {
-            if (!empty($row['screening_id'])) {
-                $collectionByScreeningId[$row['screening_id']] = [
-                    'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
-                    'status' => $row['status'] ?? null
-                ];
+            if (!empty($row['physical_exam_id'])) {
+                // Store the most recent record for each physical_exam_id (since we ordered by created_at.desc)
+                if (!isset($collectionByPhysicalExamId[$row['physical_exam_id']])) {
+                    $collectionByPhysicalExamId[$row['physical_exam_id']] = [
+                        'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
+                        'status' => $row['status'] ?? null,
+                        'created_at' => $row['created_at'] ?? null
+                    ];
+                }
             }
         }
+        error_log("DEBUG - Fetched " . count($collectionByPhysicalExamId) . " blood collection records");
+        // Log some sample blood collection records for debugging
+        $sampleCount = 0;
+        foreach ($collectionByPhysicalExamId as $examId => $data) {
+            if ($sampleCount < 3) {
+                error_log("DEBUG - Sample blood collection: examId=$examId, status=" . ($data['status'] ?? 'null') . ", needs_review=" . ($data['needs_review'] ? 'true' : 'false'));
+                $sampleCount++;
+            }
+        }
+    } else {
+        error_log("DEBUG - No blood collection data found or invalid response");
     }
 
     // OPTIMIZATION 3: Get donor_form data with limit/offset for pagination
     $limit = isset($GLOBALS['DONATION_LIMIT']) ? intval($GLOBALS['DONATION_LIMIT']) : 100;
     $offset = isset($GLOBALS['DONATION_OFFSET']) ? intval($GLOBALS['DONATION_OFFSET']) : 0;
+    error_log("DEBUG - Fetching donors with limit=$limit, offset=$offset");
     $donorResponse = supabaseRequest("donor_form?order=submitted_at.desc&limit={$limit}&offset={$offset}");
     
     if (isset($donorResponse['data']) && is_array($donorResponse['data'])) {
         // Log the first donor record to see all available fields
         if (!empty($donorResponse['data'])) {
             error_log("First donor record fields: " . print_r(array_keys($donorResponse['data'][0]), true));
+        }
+        
+        // Log all donor IDs being processed
+        $donorIds = array_column($donorResponse['data'], 'donor_id');
+        error_log("DEBUG - Processing " . count($donorIds) . " donors. Donor IDs: " . implode(', ', $donorIds));
+        file_put_contents('../../assets/logs/donation_pending_debug.log', "[" . date('Y-m-d H:i:s') . "] Processing " . count($donorIds) . " donors. Donor IDs: " . implode(', ', $donorIds) . "\n", FILE_APPEND | LOCK_EX);
+        
+        // Check if our specific donor IDs are in the fetched data
+        $targetDonorIds = [176, 169, 170, 144, 140, 142, 135, 120];
+        $foundTargetIds = array_intersect($targetDonorIds, $donorIds);
+        if (!empty($foundTargetIds)) {
+            error_log("DEBUG - Found target donor IDs in fetched data: " . implode(', ', $foundTargetIds));
+            file_put_contents('../../assets/logs/donation_pending_debug.log', "[" . date('Y-m-d H:i:s') . "] Found target donor IDs in fetched data: " . implode(', ', $foundTargetIds) . "\n", FILE_APPEND | LOCK_EX);
+        } else {
+            error_log("DEBUG - Target donor IDs NOT found in fetched data. They may be outside the limit/offset range.");
+            file_put_contents('../../assets/logs/donation_pending_debug.log', "[" . date('Y-m-d H:i:s') . "] Target donor IDs NOT found in fetched data. They may be outside the limit/offset range.\n", FILE_APPEND | LOCK_EX);
         }
         
         // Process each donor
@@ -120,6 +176,11 @@ try {
             // Determine donor type using presence of eligibility (aligns with staff dashboard logic)
             $donorId = $donor['donor_id'] ?? null;
             $donorType = isset($donorsWithEligibility[$donorId]) ? 'Returning' : 'New';
+            
+            // Debug logging for specific donor IDs
+            if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
+                error_log("DEBUG - Processing donor $donorId: donorType = '$donorType'");
+            }
 
             // Compute current process status
             $statusLabel = 'Pending (Screening)';
@@ -154,6 +215,9 @@ try {
                             $declineDeferType = 'Deferred';
                         } elseif (in_array($eligibilityStatus, ['approved', 'eligible'])) {
                             // Donor has final approved status, should not appear in pending
+                            if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
+                                error_log("DEBUG - Donor $donorId: Skipped due to eligibility status: '$eligibilityStatus'");
+                            }
                             continue;
                         }
                     }
@@ -197,47 +261,55 @@ try {
                 
                 // If donor has ANY decline/deferral status, they should not appear in pending
                 if ($hasDeclineDeferStatus) {
+                    if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
+                        error_log("DEBUG - Donor $donorId: Skipped due to decline/deferral status: '$declineDeferType'");
+                    }
                     continue; // Skip this donor - they have a final decline/deferral status
                 }
                 
                 // PENDING STATUS DETERMINATION LOGIC
-                // Based on user specifications for 3 pending statuses
+                // Based on user specifications: Interviewer role as primary checking, needs_review as fallback
                 
-                // 1. PENDING (SCREENING) - New donors or MH + Initial Screening not completed
-                $medicalHistoryCompleted = false;
-                $screeningCompleted = false;
+                // 1. PENDING (SCREENING) - Interviewer role: Screening needs review (primary)
+                $screeningNeedsReview = false;
+                $hasScreeningForm = false;
                 
-                // Check Medical History completion
-                if (isset($medicalByDonorId[$donorId])) {
-                    $medRecord = $medicalByDonorId[$donorId];
-                    if (is_array($medRecord)) {
-                        $medicalApproval = $medRecord['medical_approval'] ?? '';
-                        $medNeeds = $medRecord['needs_review'] ?? null;
-                        // Medical History is completed if it has approval status (Approved or Not Approved)
-                        // and doesn't need review
-                        if (in_array($medicalApproval, ['Approved', 'Not Approved']) && $medNeeds !== true) {
-                            $medicalHistoryCompleted = true;
-                        }
-                    }
-                }
-                
-                // Check Initial Screening completion
+                // Check Initial Screening needs_review (primary checking for interviewer role)
                 if (isset($screeningByDonorId[$donorId])) {
+                    $hasScreeningForm = true;
                     $screen = $screeningByDonorId[$donorId];
                     if (is_array($screen)) {
                         $screenNeeds = $screen['needs_review'] ?? null;
-                        $disapprovalReason = $screen['disapproval_reason'] ?? '';
-                        // Screening is completed if it doesn't need review and has no disapproval reason
-                        // (disapproval_reason being empty means it was approved)
-                        if ($screenNeeds !== true && empty($disapprovalReason)) {
-                            $screeningCompleted = true;
-                        }
+                        $screeningNeedsReview = ($screenNeeds === true);
                     }
                 }
                 
-                // If MH and Initial Screening are not both completed -> Pending (Screening)
-                if (!$medicalHistoryCompleted || !$screeningCompleted) {
+                // 2. PENDING (EXAMINATION) - Medical History needs review (physician role)
+                $medicalNeedsReview = false;
+                if (isset($medicalByDonorId[$donorId])) {
+                    $medRecord = $medicalByDonorId[$donorId];
+                    if (is_array($medRecord)) {
+                        $medNeeds = $medRecord['needs_review'] ?? null;
+                        $medicalNeedsReview = ($medNeeds === true);
+                    }
+                }
+                
+                // If Screening needs review -> Pending (Screening) (Interviewer role)
+                if ($screeningNeedsReview) {
                     $statusLabel = 'Pending (Screening)';
+                    
+                    // Debug logging for specific donor IDs
+                    if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120, 182])) {
+                        error_log("DEBUG - Donor $donorId: screeningNeedsReview = " . ($screeningNeedsReview ? 'true' : 'false') . " (Interviewer role)");
+                    }
+                } else if ($medicalNeedsReview) {
+                    // If Medical History needs review -> Pending (Examination) (Physician role)
+                    $statusLabel = 'Pending (Examination)';
+                    
+                    // Debug logging for specific donor IDs
+                    if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120, 182])) {
+                        error_log("DEBUG - Donor $donorId: medicalNeedsReview = " . ($medicalNeedsReview ? 'true' : 'false') . " (Physician role)");
+                    }
                 } else {
                     // 2. PENDING (EXAMINATION) - MH approval and Physical Examination process
                     $physicalExaminationCompleted = false;
@@ -248,13 +320,29 @@ try {
                         if (is_array($phys)) {
                             $physNeeds = $phys['needs_review'] ?? null;
                             $remarks = $phys['remarks'] ?? '';
+                            
+                            // Debug logging for specific donor IDs
+                            if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
+                                error_log("DEBUG - Donor $donorId: physNeeds = " . ($physNeeds ? 'true' : 'false') . ", remarks = '$remarks'");
+                            }
+                            
                             // Physical examination is completed if it doesn't need review and has valid remarks
                             // Valid remarks include: 'Accepted', 'Approved', 'Completed', etc.
                             // Invalid remarks include: 'Pending', 'Temporarily Deferred', 'Permanently Deferred', 'Declined', 'Refused'
                             if ($physNeeds !== true && !empty($remarks) && 
                                 !in_array($remarks, ['Pending', 'Temporarily Deferred', 'Permanently Deferred', 'Declined', 'Refused'])) {
                                 $physicalExaminationCompleted = true;
+                                
+                                // Debug logging for specific donor IDs
+                                if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
+                                    error_log("DEBUG - Donor $donorId: Physical examination completed");
+                                }
                             }
+                        }
+                    } else {
+                        // Debug logging for specific donor IDs
+                        if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
+                            error_log("DEBUG - Donor $donorId: No physical examination record found");
                         }
                     }
                     
@@ -265,47 +353,40 @@ try {
                         // 3. PENDING (COLLECTION) - Blood Collection Status is "Yet to be collected"
                         $bloodCollectionCompleted = false;
                         
-                        // First check if we have collection data in our lookup
-                        $screeningId = null;
-                        if (isset($screeningByDonorId[$donorId])) {
-                            $screeningId = $screeningByDonorId[$donorId]['screening_id'] ?? null;
+                        // Check if we have collection data in our lookup
+                        $physicalExamId = $physicalExamIdByDonorId[$donorId] ?? null;
+                        
+                        // Debug logging for specific donor IDs
+                        if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
+                            error_log("DEBUG - Donor $donorId: physicalExamId = " . ($physicalExamId ?? 'null'));
+                            error_log("DEBUG - Donor $donorId: has collection data = " . (isset($collectionByPhysicalExamId[$physicalExamId]) ? 'yes' : 'no'));
                         }
                         
-                        if ($screeningId && isset($collectionByScreeningId[$screeningId])) {
-                            $collectionData = $collectionByScreeningId[$screeningId];
+                        if ($physicalExamId && isset($collectionByPhysicalExamId[$physicalExamId])) {
+                            $collectionData = $collectionByPhysicalExamId[$physicalExamId];
                             $collNeeds = $collectionData['needs_review'] ?? null;
                             $collectionStatus = $collectionData['status'] ?? '';
                             
+                            // Debug logging for specific donor IDs
+                            if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
+                                error_log("DEBUG - Donor $donorId: collectionStatus = '$collectionStatus', collNeeds = " . ($collNeeds ? 'true' : 'false'));
+                            }
+                            
                             // Blood collection is completed if it doesn't need review and has a valid status
                             // Valid statuses: 'Completed', 'Success', 'Approved', etc.
-                            // Invalid statuses: 'Pending', 'Incomplete', 'Failed', 'Yet to be collected'
+                            // Invalid statuses: 'pending', 'Incomplete', 'Failed', 'Yet to be collected'
                             if ($collNeeds !== true && !empty($collectionStatus) && 
-                                !in_array($collectionStatus, ['Pending', 'Incomplete', 'Failed', 'Yet to be collected'])) {
+                                !in_array($collectionStatus, ['pending', 'Incomplete', 'Failed', 'Yet to be collected'])) {
                                 $bloodCollectionCompleted = true;
                             }
                         } else {
-                            // Fallback: Check blood collection directly if not in lookup
-                            $collectionCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?donor_id=eq.' . $donorId . '&select=needs_review,status&order=created_at.desc&limit=1');
-                            curl_setopt($collectionCurl, CURLOPT_RETURNTRANSFER, true);
-                            curl_setopt($collectionCurl, CURLOPT_HTTPHEADER, [
-                                'apikey: ' . SUPABASE_API_KEY,
-                                'Authorization: Bearer ' . SUPABASE_API_KEY,
-                                'Content-Type: application/json'
-                            ]);
-                            $collectionResponse = curl_exec($collectionCurl);
-                            $collectionHttpCode = curl_getinfo($collectionCurl, CURLINFO_HTTP_CODE);
-                            curl_close($collectionCurl);
+                            // If no blood collection record exists, it means blood collection hasn't been started yet
+                            // This should result in "Pending (Collection)" status
+                            $bloodCollectionCompleted = false;
                             
-                            if ($collectionHttpCode === 200) {
-                                $collectionData = json_decode($collectionResponse, true) ?: [];
-                                if (!empty($collectionData)) {
-                                    $collNeeds = $collectionData[0]['needs_review'] ?? null;
-                                    $collectionStatus = $collectionData[0]['status'] ?? '';
-                                    if ($collNeeds !== true && !empty($collectionStatus) && 
-                                        !in_array($collectionStatus, ['Pending', 'Incomplete', 'Failed', 'Yet to be collected'])) {
-                                        $bloodCollectionCompleted = true;
-                                    }
-                                }
+                            // Debug logging for specific donor IDs
+                            if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
+                                error_log("DEBUG - Donor $donorId: No blood collection record found, setting to Pending (Collection)");
                             }
                         }
                         
@@ -315,6 +396,11 @@ try {
                         } else {
                             // Blood collection is "Yet to be collected" -> Pending (Collection)
                             $statusLabel = 'Pending (Collection)';
+                            
+                            // Debug logging for specific donor IDs
+                            if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
+                                error_log("DEBUG - Donor $donorId: Final status = Pending (Collection)");
+                            }
                         }
                     }
                 }
@@ -341,6 +427,11 @@ try {
                 'eligibility_id' => 'pending_' . ($donorId ?? '0'),
                 'sort_ts' => !empty($donor['submitted_at']) ? strtotime($donor['submitted_at']) : (!empty($donor['created_at']) ? strtotime($donor['created_at']) : time())
             ];
+            
+            // Debug logging for specific donor IDs
+            if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
+                error_log("DEBUG - Donor $donorId: Added to pendingDonations array with status: '$statusLabel'");
+            }
         }
 
         // Enforce FIFO: oldest first
@@ -349,6 +440,11 @@ try {
             if ($ta === $tb) return 0;
             return ($ta < $tb) ? -1 : 1;
         });
+        
+        // Apply pagination for display (10 items per page)
+        $displayLimit = 10;
+        $displayOffset = isset($GLOBALS['DONATION_DISPLAY_OFFSET']) ? intval($GLOBALS['DONATION_DISPLAY_OFFSET']) : 0;
+        $pendingDonations = array_slice($pendingDonations, $displayOffset, $displayLimit);
     } else {
         // Handle API errors
         if (isset($donorResponse['error'])) {

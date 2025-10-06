@@ -437,6 +437,19 @@ try {
 
         // Note: Eligibility records are automatically created by database triggers
 
+        // Invalidate cache to ensure status updates immediately
+        try {
+            // Include the proper cache invalidation function
+            require_once __DIR__ . '/../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php';
+            
+            // Use the proper cache invalidation function
+            invalidateCache();
+            
+            error_log("Blood Collection Admin - Cache invalidated for donor: " . $donor_id);
+        } catch (Exception $cache_error) {
+            error_log("Blood Collection Admin - Cache invalidation error: " . $cache_error->getMessage());
+        }
+
         echo json_encode([
             'success' => true,
             'message' => 'Blood collection created',

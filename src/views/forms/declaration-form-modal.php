@@ -6,27 +6,31 @@ require_once '../../../assets/conn/db_conn.php';
 // Store the referrer URL to use it for the return button
 $referrer = '';
 
-// Only set the referrer in the session if not already set
-if (!isset($_SESSION['declaration_form_referrer'])) {
-    if (isset($_SERVER['HTTP_REFERER'])) {
-        $referrer = $_SERVER['HTTP_REFERER'];
-    }
-    if (!$referrer || !stripos($referrer, 'dashboard')) {
-        if (isset($_SESSION['donor_form_referrer'])) {
-            $referrer = $_SESSION['donor_form_referrer'];
-        }
-    }
-    if (!$referrer) {
-        $referrer = '../../public/Dashboards/dashboard-Inventory-System.php';
-    }
+// Prioritize session-stored referrer over HTTP_REFERER
+if (isset($_SESSION['declaration_form_referrer'])) {
+    $referrer = $_SESSION['declaration_form_referrer'];
+} elseif (isset($_SESSION['donor_form_referrer'])) {
+    $referrer = $_SESSION['donor_form_referrer'];
+    $_SESSION['declaration_form_referrer'] = $referrer;
+} elseif (isset($_SERVER['HTTP_REFERER']) && stripos($_SERVER['HTTP_REFERER'], 'dashboard') !== false) {
+    $referrer = $_SERVER['HTTP_REFERER'];
+    $_SESSION['declaration_form_referrer'] = $referrer;
+} else {
+    $referrer = '../../public/Dashboards/dashboard-Inventory-System.php';
     $_SESSION['declaration_form_referrer'] = $referrer;
 }
-$referrer = $_SESSION['declaration_form_referrer'];
 
 // Log all potential donor_id sources for debugging
 error_log("Declaration form - donor_id sources: SESSION=" . ($_SESSION['donor_id'] ?? 'not set') . 
           ", GET=" . ($_GET['donor_id'] ?? 'not set') . 
           ", POST=" . ($_POST['donor_id'] ?? 'not set'));
+
+// Log referrer chain for debugging
+error_log("Declaration form - referrer chain: declaration_form_referrer=" . ($_SESSION['declaration_form_referrer'] ?? 'not set') . 
+          ", donor_form_referrer=" . ($_SESSION['donor_form_referrer'] ?? 'not set') . 
+          ", medical_history_referrer=" . ($_SESSION['medical_history_referrer'] ?? 'not set') . 
+          ", HTTP_REFERER=" . ($_SERVER['HTTP_REFERER'] ?? 'not set') . 
+          ", final_referrer=" . $referrer);
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {

@@ -89,9 +89,11 @@ if (isset($_SESSION['role_id']) && $_SESSION['role_id'] == 3 && !empty($user_sta
 // Always update the referrer if we have a valid one, to prevent stale values
 if (!empty($referrer)) {
     $_SESSION['donor_form_referrer'] = $referrer;
+    error_log("Donor form - Set donor_form_referrer: " . $referrer);
 } else if (isset($_SESSION['donor_form_referrer'])) {
     // Use the stored referrer if available
     $referrer = $_SESSION['donor_form_referrer'];
+    error_log("Donor form - Using existing donor_form_referrer: " . $referrer);
 }
 
 // Debug logging (remove in production)

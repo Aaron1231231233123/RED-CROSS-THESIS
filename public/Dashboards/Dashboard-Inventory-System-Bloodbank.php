@@ -9,6 +9,9 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
+// Include required functions
+require_once 'module/optimized_functions.php';
+
 // Include database connection
 include_once '../../assets/conn/db_conn.php';
 
@@ -1413,7 +1416,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize modals
-            const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+            const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'), {
+                backdrop: true,
+                keyboard: true
+            });
             const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
                 backdrop: false,
                 keyboard: false

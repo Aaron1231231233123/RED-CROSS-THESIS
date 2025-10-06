@@ -96,10 +96,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($screening_data) {
                     $log_message = "[" . date('Y-m-d H:i:s') . "] Processing screening data\n";
                     file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
+                    
+                    // Get medical_history_id for this donor
+                    $medical_history_id = null;
+                    $ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?select=medical_history_id&donor_id=eq.' . $donor_id . '&order=created_at.desc&limit=1');
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                        'apikey: ' . SUPABASE_API_KEY,
+                        'Authorization: Bearer ' . SUPABASE_API_KEY
+                    ]);
+
+                    $response = curl_exec($ch);
+                    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+
+                    if ($http_code === 200) {
+                        $medical_data = json_decode($response, true);
+                        if (!empty($medical_data)) {
+                            $medical_history_id = $medical_data[0]['medical_history_id'];
+                            $log_message = "[" . date('Y-m-d H:i:s') . "] Found medical_history_id: " . $medical_history_id . "\n";
+                            file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
+                        }
+                    }
+                    
                     // Process and submit screening data
                     $screening_submission_data = [
                         'donor_form_id' => $donor_id,
-                        // Note: medical_history_id removed due to foreign key constraint - will be linked later
+                        'medical_history_id' => $medical_history_id, // Include the medical_history_id
                         'interviewer_id' => $_SESSION['user_id'],
                         'interview_date' => date('Y-m-d') // Use interview_date (date format) instead of screening_date
                     ];
@@ -270,11 +293,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         }
                         
-                        // Update medical_history needs_review to false and medical_approval to 'Not Approved'
+                        // Update medical_history needs_review to true (physician needs to review)
+                        // The physician will decide the medical_approval status during the physician section
                         $medical_update_data = [
                             'donor_id' => $donor_id, // Use donor_id for medical_history table
-                            'needs_review' => false,
-                            'medical_approval' => 'Not Approved',
+                            'needs_review' => true, // Set to true so physician knows to review
                             'updated_at' => date('Y-m-d H:i:s')
                         ];
                         
@@ -300,7 +323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         
                         if ($mh_http_code === 200) {
-                            $log_message = "[" . date('Y-m-d H:i:s') . "] Medical history updated successfully - needs_review=false, medical_approval=Not Approved\n";
+                            $log_message = "[" . date('Y-m-d H:i:s') . "] Medical history updated successfully - needs_review=true (physician needs to review, medical_approval left unchanged)\n";
                             file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         } else {
                             $log_message = "[" . date('Y-m-d H:i:s') . "] Failed to update medical history: " . $mh_response . "\n";
@@ -470,6 +493,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             unset($_SESSION['screening_id']);
             unset($_SESSION['transferred_screening_data']);
             unset($_SESSION['medical_history_processed']);
+            
+            // Invalidate cache to ensure status updates immediately (admin dashboard only)
+            try {
+                // Check if we're in admin context by looking for the admin dashboard file
+                $adminDashboardPath = __DIR__ . '/../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php';
+                if (file_exists($adminDashboardPath)) {
+                    // Include the proper cache invalidation function
+                    require_once $adminDashboardPath;
+                    
+                    // Use the proper cache invalidation function if available
+                    if (function_exists('invalidateCache')) {
+                        invalidateCache();
+                        error_log("Declaration Form Process - Cache invalidated for donor: " . $donor_id);
+                    }
+                }
+            } catch (Exception $cache_error) {
+                error_log("Declaration Form Process - Cache invalidation error: " . $cache_error->getMessage());
+            }
             
             echo json_encode([
                 'success' => true, 

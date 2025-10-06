@@ -9,6 +9,7 @@ header("Expires: 0");
 
 session_start();
 include_once '../../assets/conn/db_conn.php';
+require_once 'module/optimized_functions.php';
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
@@ -2215,7 +2216,10 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
         // Initialize modals and add button functionality
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize modals
-            const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+            const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'), {
+                backdrop: true,
+                keyboard: true
+            });
             const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
                 backdrop: false,
                 keyboard: false

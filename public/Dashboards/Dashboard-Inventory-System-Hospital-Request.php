@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../assets/conn/db_conn.php';
+require_once 'module/optimized_functions.php';
 // Send short-term caching headers for better performance on slow networks
 header('Cache-Control: public, max-age=180');
 header('Vary: Accept-Encoding');
@@ -23,8 +24,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $update_data = [
                 'status' => 'Approved',
                 'last_updated' => date('Y-m-d H:i:s'),
-                'approved_by' => $_SESSION['user_id'],
-                'approved_at' => date('Y-m-d H:i:s')
+                'approved_by' => $_SESSION['user_id'] ?? 'Admin',
+                'approved_date' => date('Y-m-d H:i:s')
             ];
             
             $response = supabaseRequest(
@@ -57,9 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $update_data = [
                 'status' => 'Declined',
                 'last_updated' => date('Y-m-d H:i:s'),
-                'decline_reason' => $decline_reason,
-                'declined_by' => $_SESSION['user_id'],
-                'declined_at' => date('Y-m-d H:i:s')
+                'decline_reason' => $decline_reason
             ];
             
             $response = supabaseRequest(
@@ -91,8 +90,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $update_data = [
                 'status' => 'Completed',
                 'last_updated' => date('Y-m-d H:i:s'),
-                'handed_over_by' => $_SESSION['user_id'],
-                'handed_over_at' => date('Y-m-d H:i:s')
+                'handed_over_by' => $_SESSION['user_id'] ?? 'Admin',
+                'handed_over_date' => date('Y-m-d H:i:s')
             ];
             
             $response = supabaseRequest(
@@ -119,6 +118,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // OPTIMIZATION: Include shared optimized functions
 include_once __DIR__ . '/module/optimized_functions.php';
 
+// Function to get admin name from user_id
+function getAdminName($user_id) {
+    try {
+        $response = supabaseRequest("users?select=first_name,surname&user_id=eq." . $user_id);
+        if ($response['code'] === 200 && !empty($response['data'])) {
+            $user = $response['data'][0];
+            $first_name = trim($user['first_name'] ?? '');
+            $surname = trim($user['surname'] ?? '');
+            
+            if (!empty($first_name) && !empty($surname)) {
+                return "Dr. $first_name $surname";
+            } elseif (!empty($first_name)) {
+                return "Dr. $first_name";
+            } elseif (!empty($surname)) {
+                return "Dr. $surname";
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Error getting admin name: " . $e->getMessage());
+    }
+    return 'Dr. Admin';
+}
+
+// Get current admin name
+$admin_name = getAdminName($_SESSION['user_id'] ?? '');
+
+// Function to get admin name from handed_over_by user_id
+function getHandedOverByAdminName($handed_over_by) {
+    if (empty($handed_over_by)) {
+        return 'Not handed over yet';
+    }
+    return getAdminName($handed_over_by);
+}
+
 // OPTIMIZATION: Performance monitoring
 $startTime = microtime(true);
 
@@ -128,7 +161,7 @@ $status = 'all';
 
 function fetchAllBloodRequests($limit = 50, $offset = 0) {
     // Narrow columns and paginate (urgent first, newest first)
-    $select = "request_id,hospital_admitted,patient_blood_type,rh_factor,units_requested,is_asap,requested_on,status,patient_name,patient_age,patient_gender,patient_diagnosis,physician_name,when_needed";
+    $select = "request_id,hospital_admitted,patient_blood_type,rh_factor,units_requested,is_asap,requested_on,status,patient_name,patient_age,patient_gender,patient_diagnosis,physician_name,when_needed,handed_over_by,handed_over_date";
     $endpoint = "blood_requests?select=" . urlencode($select) . "&order=is_asap.desc,requested_on.desc&limit={$limit}&offset={$offset}";
     $response = supabaseRequest($endpoint);
     if (isset($response['data'])) {
@@ -1299,7 +1332,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             '<?php echo htmlspecialchars($request['requested_on']); ?>',
                                             '<?php echo htmlspecialchars($request['when_needed']); ?>',
                                             '<?php echo htmlspecialchars($request['patient_age']); ?>',
-                                            '<?php echo htmlspecialchars($request['patient_gender']); ?>'
+                                            '<?php echo htmlspecialchars($request['patient_gender']); ?>',
+                                            '<?php echo htmlspecialchars($request['handed_over_by'] ?? ''); ?>',
+                                            '<?php echo htmlspecialchars($request['handed_over_date'] ?? ''); ?>',
+                                            '<?php echo htmlspecialchars(getHandedOverByAdminName($request['handed_over_by'] ?? '')); ?>'
                                         )"
                                         >
                                         <i class="fas fa-eye"></i>
@@ -1699,8 +1735,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
+    // Get admin name from PHP
+    const adminName = '<?php echo addslashes($admin_name); ?>';
+    
     // Enhanced function to populate the modal fields based on wireframe design
-    function loadRequestDetails(request_id, patientName, bloodType, component, rhFactor, unitsNeeded, diagnosis, hospital, physician, priority, status, requestDate, whenNeeded, patientAge, patientGender) {
+    function loadRequestDetails(request_id, patientName, bloodType, component, rhFactor, unitsNeeded, diagnosis, hospital, physician, priority, status, requestDate, whenNeeded, patientAge, patientGender, handedOverBy, handedOverDate, handedOverByAdminName) {
         console.log('=== loadRequestDetails DEBUG ===');
         console.log('All arguments:', arguments);
         console.log('Status parameter (11th argument):', status);
@@ -1848,14 +1887,31 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 declineButton.style.display = 'inline-block';
                 handOverButton.style.display = 'none';
             }
-            // Show Hand Over button for Approved status (ready for printing)
+            // Show approval info for Approved status (no action buttons)
             else if (['Approved'].includes(displayStatus)) {
+                acceptButton.style.display = 'none';
+                declineButton.style.display = 'none';
+                handOverButton.style.display = 'none';
+                if (approvalSection) {
+                    approvalSection.style.display = 'block';
+                    document.getElementById('modalApprovedBy').value = `Approved by ${adminName} - ${new Date().toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                    })} at ${new Date().toLocaleTimeString('en-US', { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    })}`;
+                }
+            }
+            // Show Hand Over button for Printed status (ready for handover)
+            else if (['Printing'].includes(displayStatus)) {
                 acceptButton.style.display = 'none';
                 declineButton.style.display = 'none';
                 handOverButton.style.display = 'inline-block';
                 if (approvalSection) {
                     approvalSection.style.display = 'block';
-                    document.getElementById('modalApprovedBy').value = `Approved by Dr. ${physician || 'Staff'} - ${new Date().toLocaleDateString('en-US', { 
+                    document.getElementById('modalApprovedBy').value = `Approved by ${adminName} - ${new Date().toLocaleDateString('en-US', { 
                         year: 'numeric', 
                         month: 'long', 
                         day: 'numeric' 
@@ -1872,10 +1928,26 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 handOverButton.style.display = 'none';
                 if (handoverSection) {
                     handoverSection.style.display = 'block';
-                    document.getElementById('modalHandedOverBy').value = `Handed Over by Staff ${physician || 'Member'} - ${new Date().toLocaleDateString('en-US', { 
+                    
+                    // Use actual handed over date if available, otherwise use current date
+                    let handedOverDisplayDate = new Date();
+                    if (handedOverDate) {
+                        const parsedDate = new Date(handedOverDate);
+                        if (!isNaN(parsedDate.getTime())) {
+                            handedOverDisplayDate = parsedDate;
+                        }
+                    }
+                    
+                    // Use the actual admin name passed from PHP
+                    let handedOverByAdmin = handedOverByAdminName || 'Admin';
+                    
+                    document.getElementById('modalHandedOverBy').value = `Handed Over by ${handedOverByAdmin} - ${handedOverDisplayDate.toLocaleDateString('en-US', { 
                         year: 'numeric', 
                         month: 'long', 
                         day: 'numeric' 
+                    })} at ${handedOverDisplayDate.toLocaleTimeString('en-US', { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
                     })}`;
                 }
             }
@@ -1953,6 +2025,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         const requestApprovedModal = new bootstrap.Modal(document.getElementById('requestApprovedModal'));
         const handoverConfirmModal = new bootstrap.Modal(document.getElementById('handoverConfirmModal'));
         const handoverSuccessModal = new bootstrap.Modal(document.getElementById('handoverSuccessModal'));
+        
+        // Initialize confirmation and loading modals for donor registration
+        const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'), {
+            backdrop: true,
+            keyboard: true
+        });
+        const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
+            backdrop: false,
+            keyboard: false
+        });
 
         // Initialize search functionality
         const searchInput = document.getElementById('searchInput');

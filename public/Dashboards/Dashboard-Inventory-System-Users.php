@@ -7,7 +7,7 @@ header("Expires: 0");
 session_start();
 require_once '../../assets/conn/db_conn.php';
 // Shared helpers (provides supabaseRequest)
-@include_once __DIR__ . '/module/optimized_functions.php';
+require_once 'module/optimized_functions.php';
 
 // Admin only
 $required_role = 1;

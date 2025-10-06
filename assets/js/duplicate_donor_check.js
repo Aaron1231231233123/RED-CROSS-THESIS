@@ -69,7 +69,7 @@ class DuplicateDonorChecker {
         }
         
         const modalHTML = `
-            <div class="modal fade" id="duplicateDonorModal" tabindex="-1" aria-labelledby="duplicateDonorModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+            <div class="modal fade" id="duplicateDonorModal" tabindex="-1" aria-labelledby="duplicateDonorModalLabel" aria-hidden="true" data-bs-backdrop="true" data-bs-keyboard="true">
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content">
                         <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #a00000 100%) !important; border-bottom: none;">

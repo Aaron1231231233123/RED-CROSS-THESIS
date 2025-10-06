@@ -33,23 +33,33 @@ $pageTitle = "All Donors";
 
 // Initialize pagination early so modules receive correct LIMIT/OFFSET when filtered by status
 $itemsPerPage = 10; // optimize initial render and navigation performance
+// For pending filter, we need to fetch more records to ensure all pending donors are shown
+$pendingItemsPerPage = 200; // Increased limit for pending filter to capture all pending donors
 $currentPage = isset($_GET['page']) ? intval($_GET['page']) : 1;
 if ($currentPage < 1) { $currentPage = 1; }
 $startIndex = ($currentPage - 1) * $itemsPerPage;
 // Only push LIMIT/OFFSET to modules for specific status tabs; keep existing behavior for 'all'
 if ($status !== 'all') {
-    $GLOBALS['DONATION_LIMIT'] = $itemsPerPage;
-    $GLOBALS['DONATION_OFFSET'] = $startIndex;
+    // Use higher limit for pending filter to ensure all pending donors are captured
+    if ($status === 'pending') {
+        $GLOBALS['DONATION_LIMIT'] = $pendingItemsPerPage; // Fetch more records for processing
+        $GLOBALS['DONATION_OFFSET'] = 0; // Start from beginning for processing
+        // But still use normal pagination for display
+        $GLOBALS['DONATION_DISPLAY_OFFSET'] = $startIndex; // Use normal pagination for display
+    } else {
+        $GLOBALS['DONATION_LIMIT'] = $itemsPerPage;
+        $GLOBALS['DONATION_OFFSET'] = $startIndex;
+    }
 }
 // OPTIMIZATION: Enhanced multi-layer caching system for maximum performance
 // Layer 1: Memory cache (fastest, session-based)
 // Layer 2: File cache (persistent, compressed)
 // Layer 3: Database cache (long-term, with invalidation)
-// Cache configuration
+// Cache configuration - Optimized for faster status updates
 $cacheConfig = [
-    'memory_ttl' => 60,        // 1 minute memory cache
-    'file_ttl' => 300,         // 5 minutes file cache
-    'db_ttl' => 1800,          // 30 minutes database cache
+    'memory_ttl' => 30,        // 30 seconds memory cache (faster updates)
+    'file_ttl' => 120,         // 2 minutes file cache (faster updates)
+    'db_ttl' => 600,           // 10 minutes database cache (reduced from 30 min)
     'compression' => true,     // Enable compression
     'warm_cache' => true       // Enable cache warming
 ];
@@ -393,6 +403,56 @@ function getCacheStats() {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard</title>
+    <!-- Immediate script to prevent loading text flash on hard refresh -->
+    <script>
+        // Run immediately - this executes as soon as the script tag is parsed
+        (function() {
+            // Function to hide loading indicators
+            function hideLoadingIndicators() {
+                const loadingIndicator = document.getElementById('loadingIndicator');
+                if (loadingIndicator) {
+                    loadingIndicator.style.display = 'none !important';
+                    loadingIndicator.style.visibility = 'hidden';
+                }
+                
+                // Hide medical history modal specifically
+                const medicalHistoryModal = document.getElementById('medicalHistoryModal');
+                if (medicalHistoryModal) {
+                    medicalHistoryModal.style.display = 'none !important';
+                    medicalHistoryModal.style.visibility = 'hidden';
+                    medicalHistoryModal.classList.remove('show');
+                }
+                
+                // Clear modal content that might show loading text
+                const modalContents = [
+                    'medicalHistoryModalContent',
+                    'medicalHistoryModalAdminContent',
+                    'medicalHistoryApprovalContent'
+                ];
+                
+                modalContents.forEach(contentId => {
+                    const content = document.getElementById(contentId);
+                    if (content) {
+                        content.innerHTML = '';
+                    }
+                });
+            }
+            
+            // Run immediately if DOM is already loaded
+            if (document.readyState !== 'loading') {
+                hideLoadingIndicators();
+            }
+            
+            // Also run on DOMContentLoaded
+            document.addEventListener('DOMContentLoaded', hideLoadingIndicators);
+            
+            // Run on window load as well
+            window.addEventListener('load', hideLoadingIndicators);
+            
+            // Run periodically to catch any that might appear
+            setInterval(hideLoadingIndicators, 100);
+        })();
+    </script>
     <!-- Bootstrap 5.3 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- FontAwesome for Icons -->
@@ -400,8 +460,25 @@ function getCacheStats() {
     <!-- Enhanced Modal Styles -->
     <link href="../../assets/css/medical-history-approval-modals.css" rel="stylesheet">
     <link href="../../assets/css/defer-donor-modal.css" rel="stylesheet">
-    <link href="../../assets/css/screening-form-modal.css" rel="stylesheet">
+    <link href="../../assets/css/admin-screening-form-modal.css" rel="stylesheet">
     <link href="../../assets/css/enhanced-modal-styles.css" rel="stylesheet">
+    <!-- Prevent loading text flash on hard refresh -->
+    <style>
+        #loadingIndicator {
+            display: none !important;
+        }
+        .modal-content .spinner-border,
+        .modal-content [class*="loading"] {
+            display: none !important;
+        }
+        /* Hide medical history modal by default to prevent flash on hard refresh */
+        #medicalHistoryModal {
+            display: none !important;
+        }
+        .medical-history-modal {
+            display: none !important;
+        }
+    </style>
     <style>
 /* General Body Styling */
 body {
@@ -414,7 +491,7 @@ body {
 .modal-backdrop { z-index: 1055 !important; }
 #medicalHistoryApprovalModal, #medicalHistoryDeclineModal { z-index: 1060 !important; }
 #deferDonorModal { z-index: 1065 !important; }
-#screeningFormModal { z-index: 1070 !important; }
+#adminScreeningFormModal { z-index: 1070 !important; }
 #physicalExaminationModalAdmin { z-index: 1075 !important; }
 #bloodCollectionModal { z-index: 1080 !important; }
 #phlebotomistBloodCollectionDetailsModal { z-index: 1085 !important; }
@@ -445,29 +522,41 @@ body {
 #donorModal.modal.show {
     z-index: 1060 !important;
 }
-/* Make donor modal backdrop non-interactive to prevent click blocking */
-#donorModal + .modal-backdrop.show {
-    pointer-events: none !important;
-    z-index: 1055 !important;
+/* Remove modal backdrop completely for admin donor registration */
+#donorModal + .modal-backdrop {
+    display: none !important;
 }
 /* Alternative: Target backdrop when donor modal is open */
 body:has(#donorModal.show) .modal-backdrop {
-    pointer-events: none !important;
-    z-index: 1055 !important;
+    display: none !important;
 }
-/* Specific fix for donor modal backdrop fade class */
+/* Remove all modal backdrops for admin donor modal */
 .modal-backdrop.fade.show {
-    pointer-events: none !important;
+    display: none !important;
 }
 /* Override for donor modal specifically */
 #donorModal ~ .modal-backdrop.fade.show {
-    pointer-events: none !important;
-    z-index: 1055 !important;
+    display: none !important;
 }
 /* Ensure donor modal content is clickable */
 #donorModal .modal-content {
     pointer-events: auto !important;
     z-index: 1061 !important;
+}
+/* Additional CSS to prevent any backdrop from appearing during admin donor registration */
+body.modal-open .modal-backdrop {
+    display: none !important;
+}
+/* Specifically target admin donor registration modals */
+#donorModal.modal.show ~ .modal-backdrop,
+#donorModal.modal.show + .modal-backdrop {
+    display: none !important;
+}
+/* Global rule to prevent backdrop fade during admin operations */
+.modal-backdrop.fade.show {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
 }
 #donorModal .modal-content * {
     pointer-events: auto !important;
@@ -1347,10 +1436,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <a href="Dashboard-Inventory-System-Bloodbank.php" class="nav-link">
                             <span><i class="fas fa-tint"></i>Blood Bank</span>
                         </a>
-                        <a class="nav-link" href="#" data-bs-toggle="collapse" data-bs-target="#hospitalRequestsCollapse" role="button" aria-expanded="false" aria-controls="hospitalRequestsCollapse" onclick="event.preventDefault();">
+                        <a href="Dashboard-Inventory-System-Hospital-Request.php" class="nav-link">
                             <span><i class="fas fa-list"></i>Hospital Requests</span>
                         </a>
-                        <script>document.querySelectorAll('.dashboard-home-sidebar .nav-link').forEach(function(a){if(a.textContent.includes('Hospital Requests')){a.setAttribute('href','Dashboard-Inventory-System-Hospital-Request.php'); a.removeAttribute('data-bs-toggle'); a.removeAttribute('data-bs-target'); a.removeAttribute('aria-controls');}});</script>
                         <a href="#" class="nav-link">
                             <span><i class="fas fa-chart-line"></i>Forecast Reports</span>
                         </a>
@@ -1440,7 +1528,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </div>
                         <?php endif; ?>
                         <!-- OPTIMIZATION: Loading indicator for slow connections -->
-                        <div id="loadingIndicator" class="text-center py-4" style="display: none;">
+                        <div id="loadingIndicator" class="text-center py-4" style="display: none !important;">
                             <div class="spinner-border text-primary" role="status">
                                 <span class="visually-hidden">Loading...</span>
                             </div>
@@ -1497,7 +1585,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         <td>
                                             <?php
                                             $regChannel = $donation['registration_source'] ?? $donation['registration_channel'] ?? 'PRC Portal';
-                                            echo $regChannel === 'PRC Portal' ? 'System' : htmlspecialchars($regChannel);
+                                            // Display logic for admin side only
+                                            if ($regChannel === 'PRC Portal') {
+                                                echo 'PRC System';
+                                            } elseif ($regChannel === 'Mobile') {
+                                                echo 'Mobile System';
+                                            } else {
+                                                echo htmlspecialchars($regChannel);
+                                            }
                                             ?>
                                         </td>
                                         <td>
@@ -1715,25 +1810,48 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                         } else {
                                                             // 3. PENDING (COLLECTION) - Blood Collection Status is "Yet to be collected"
                                                             $bloodCollectionCompleted = false;
-                                                            // Check if blood collection is completed
-                                                            $collectionCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?donor_id=eq.' . $donorId . '&select=needs_review,status&order=created_at.desc&limit=1');
-                                                            curl_setopt($collectionCurl, CURLOPT_RETURNTRANSFER, true);
-                                                            curl_setopt($collectionCurl, CURLOPT_HTTPHEADER, [
+                                                            // Check if blood collection is completed via physical_exam_id
+                                                            // First get the physical_exam_id for this donor
+                                                            $physicalExamCurl = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?donor_id=eq.' . $donorId . '&select=physical_exam_id&order=created_at.desc&limit=1');
+                                                            curl_setopt($physicalExamCurl, CURLOPT_RETURNTRANSFER, true);
+                                                            curl_setopt($physicalExamCurl, CURLOPT_HTTPHEADER, [
                                                                 'apikey: ' . SUPABASE_API_KEY,
                                                                 'Authorization: Bearer ' . SUPABASE_API_KEY,
                                                                 'Content-Type: application/json'
                                                             ]);
-                                                            $collectionResponse = curl_exec($collectionCurl);
-                                                            $collectionHttpCode = curl_getinfo($collectionCurl, CURLINFO_HTTP_CODE);
-                                                            curl_close($collectionCurl);
-                                                            if ($collectionHttpCode === 200) {
-                                                                $collectionData = json_decode($collectionResponse, true) ?: [];
-                                                                if (!empty($collectionData)) {
-                                                                    $collNeeds = $collectionData[0]['needs_review'] ?? null;
-                                                                    $collectionStatus = $collectionData[0]['status'] ?? '';
-                                                                    if ($collNeeds !== true && !empty($collectionStatus) &&
-                                                                        !in_array($collectionStatus, ['Pending', 'Incomplete', 'Failed', 'Yet to be collected'])) {
-                                                                        $bloodCollectionCompleted = true;
+                                                            $physicalExamResponse = curl_exec($physicalExamCurl);
+                                                            $physicalExamHttpCode = curl_getinfo($physicalExamCurl, CURLINFO_HTTP_CODE);
+                                                            curl_close($physicalExamCurl);
+                                                            
+                                                            if ($physicalExamHttpCode === 200) {
+                                                                $physicalExamData = json_decode($physicalExamResponse, true) ?: [];
+                                                                if (!empty($physicalExamData)) {
+                                                                    $physicalExamId = $physicalExamData[0]['physical_exam_id'] ?? null;
+                                                                    
+                                                                    if ($physicalExamId) {
+                                                                        // Now check blood collection using physical_exam_id
+                                                                        $collectionCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?physical_exam_id=eq.' . $physicalExamId . '&select=needs_review,status&order=created_at.desc&limit=1');
+                                                                        curl_setopt($collectionCurl, CURLOPT_RETURNTRANSFER, true);
+                                                                        curl_setopt($collectionCurl, CURLOPT_HTTPHEADER, [
+                                                                            'apikey: ' . SUPABASE_API_KEY,
+                                                                            'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                                                            'Content-Type: application/json'
+                                                                        ]);
+                                                                        $collectionResponse = curl_exec($collectionCurl);
+                                                                        $collectionHttpCode = curl_getinfo($collectionCurl, CURLINFO_HTTP_CODE);
+                                                                        curl_close($collectionCurl);
+                                                                        
+                                                                        if ($collectionHttpCode === 200) {
+                                                                            $collectionData = json_decode($collectionResponse, true) ?: [];
+                                                                            if (!empty($collectionData)) {
+                                                                                $collNeeds = $collectionData[0]['needs_review'] ?? null;
+                                                                                $collectionStatus = $collectionData[0]['status'] ?? '';
+                                                                                if ($collNeeds !== true && !empty($collectionStatus) &&
+                                                                                    !in_array($collectionStatus, ['pending', 'Incomplete', 'Failed', 'Yet to be collected'])) {
+                                                                                    $bloodCollectionCompleted = true;
+                                                                                }
+                                                                            }
+                                                                        }
                                                                     }
                                                                 }
                                                             }
@@ -2298,10 +2416,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         </div>
     </div>
 </div>
-<!-- Include Screening Form Modal -->
-<?php include '../../src/views/forms/staff_donor_initial_screening_form_modal.php'; ?>
+<!-- Include Admin Screening Form Modal -->
+<?php include '../../src/views/forms/admin_donor_initial_screening_form_modal.php'; ?>
 <!-- Medical History Modal (Staff Style) -->
-<div class="medical-history-modal" id="medicalHistoryModal">
+<div class="medical-history-modal" id="medicalHistoryModal" style="display: none !important;">
     <div class="medical-modal-content">
         <div class="medical-modal-header">
             <h3><i class="fas fa-file-medical me-2"></i>Medical History Review & Approval</h3>
@@ -2322,6 +2440,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         </div>
     </div>
 </div>
+<!-- Immediately hide medical history modal to prevent flash on hard refresh -->
+<script>
+    (function() {
+        const medicalHistoryModal = document.getElementById('medicalHistoryModal');
+        if (medicalHistoryModal) {
+            medicalHistoryModal.style.display = 'none !important';
+            medicalHistoryModal.style.visibility = 'hidden';
+        }
+    })();
+</script>
 <!-- Blood Collection Modal is included below from shared staff modal to avoid duplication/conflicts -->
 <!-- Edit Donor Modal -->
 <div class="modal fade" id="editDonorForm" tabindex="-1" aria-labelledby="editDonorFormLabel" aria-hidden="true">
@@ -2352,11 +2480,91 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Immediate cleanup to prevent loading text flash on page refresh
+        (function() {
+            // Hide loading indicator immediately
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            if (loadingIndicator) {
+                loadingIndicator.style.display = 'none';
+            }
+            
+            // Clear any modal content that might show loading text
+            const modalContents = [
+                'medicalHistoryModalContent',
+                'medicalHistoryModalAdminContent',
+                'medicalHistoryApprovalContent'
+            ];
+            
+            modalContents.forEach(contentId => {
+                const content = document.getElementById(contentId);
+                if (content) {
+                    content.innerHTML = '';
+                }
+            });
+        })();
+        
         // Document ready event listener
         document.addEventListener('DOMContentLoaded', function() {
+            // Clean up any lingering loading states and modal content on page load
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            if (loadingIndicator) {
+                loadingIndicator.style.display = 'none';
+            }
+            
+            // Reset all modal content to prevent loading text from showing
+            const modalContents = [
+                'medicalHistoryModalContent',
+                'medicalHistoryModalAdminContent',
+                'medicalHistoryApprovalContent'
+            ];
+            
+            modalContents.forEach(contentId => {
+                const content = document.getElementById(contentId);
+                if (content) {
+                    content.innerHTML = '';
+                }
+            });
+            
+            // Hide any visible modals that might be showing loading states
+            const modals = [
+                'medicalHistoryModal',
+                'medicalHistoryModalAdmin',
+                'medicalHistoryApprovalWorkflowModal',
+                'physicianMedicalHistoryModal'
+            ];
+            
+            modals.forEach(modalId => {
+                const modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.classList.remove('show');
+                    modal.style.display = 'none !important';
+                    modal.style.visibility = 'hidden';
+                    modal.setAttribute('aria-hidden', 'true');
+                }
+            });
+            
+            // Admin-specific: Continuously remove modal backdrops to prevent interference
+            setInterval(() => {
+                try {
+                    document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+                        backdrop.style.display = 'none';
+                        backdrop.style.opacity = '0';
+                        backdrop.style.visibility = 'hidden';
+                    });
+                } catch(e) {
+                    // Ignore errors
+                }
+            }, 100);
+            
             // OPTIMIZATION: Show loading indicator for slow connections
             const loadingIndicator = document.getElementById('loadingIndicator');
             const tableContainer = document.querySelector('.table-responsive');
+            
+            // Ensure loading indicator is hidden initially
+            if (loadingIndicator) {
+                loadingIndicator.style.display = 'none !important';
+            }
+            
             // Show loading indicator if page takes more than 1 second to load
             const loadingTimeout = setTimeout(function() {
                 if (loadingIndicator && tableContainer) {
@@ -2371,6 +2579,28 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     loadingIndicator.style.display = 'none';
                     tableContainer.style.opacity = '1';
                 }
+                
+                // Additional cleanup to ensure no loading states are visible
+                const allLoadingElements = document.querySelectorAll('.spinner-border, .loading-text, [class*="loading"]');
+                allLoadingElements.forEach(element => {
+                    if (element.closest('.modal') === null) { // Only hide if not inside a modal
+                        element.style.display = 'none';
+                    }
+                });
+                
+                // Ensure all modal content areas are clean
+                const modalContentAreas = [
+                    'medicalHistoryModalContent',
+                    'medicalHistoryModalAdminContent', 
+                    'medicalHistoryApprovalContent'
+                ];
+                
+                modalContentAreas.forEach(contentId => {
+                    const content = document.getElementById(contentId);
+                    if (content && content.innerHTML.includes('Loading')) {
+                        content.innerHTML = '';
+                    }
+                });
             });
             // Check if we need to refresh data (e.g. after processing a donor)
             const urlParams = new URLSearchParams(window.location.search);
@@ -2523,9 +2753,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 }
                 // Initialize
                 if (searchInput && searchCategory) {
-                    // Add input event for real-time filtering
-                    searchInput.addEventListener('input', performSearch);
-                    searchCategory.addEventListener('change', performSearch);
+                    // Add input event for real-time filtering (delegate to latest window.performSearch)
+                    searchInput.addEventListener('input', function() { if (window.performSearch) window.performSearch(); });
+                    searchCategory.addEventListener('change', function() { if (window.performSearch) window.performSearch(); });
                     // Initial update
                     updateSearchInfo();
                 }
@@ -2537,7 +2767,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             // OPTIMIZATION: Debounced search for better performance
             document.getElementById('searchInput').addEventListener('keyup', function() {
                 clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(searchDonations, 300); // Wait 300ms after user stops typing
+                searchTimeout = setTimeout(function(){ if (window.performSearch) window.performSearch(); }, 300); // Wait 300ms after user stops typing
             });
             document.getElementById('searchCategory').addEventListener('change', searchDonations);
             // Initialize donor modal with proper backdrop configuration
@@ -2547,12 +2777,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 focus: true
             });
             const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
-                backdrop: 'static',
+                backdrop: false,
                 keyboard: false
             });
             // Function to show confirmation modal
             window.showConfirmationModal = function() {
-                const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+                const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'), {
+                    backdrop: true,
+                    keyboard: true
+                });
                 confirmationModal.show();
             };
             // Function to handle form submission
@@ -3318,9 +3551,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     include_once '../../src/views/modals/physical-examination-modal-admin.php'; // Admin-specific modal
     // Interviewer confirmation modals
     include_once '../../src/views/modals/interviewer-confirmation-modals.php';
-    // Screening modal (staff compact modal)
-    if (file_exists('../../src/views/forms/staff_donor_initial_screening_form_modal.php')) {
-        include_once '../../src/views/forms/staff_donor_initial_screening_form_modal.php';
+    // Admin screening modal (admin-specific)
+    if (file_exists('../../src/views/forms/admin_donor_initial_screening_form_modal.php')) {
+        include_once '../../src/views/forms/admin_donor_initial_screening_form_modal.php';
     }
     // Defer donor modal (shared with staff)
     if (file_exists('../../src/views/modals/defer-donor-modal.php')) {
@@ -3343,7 +3576,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <script src="../../assets/js/medical-history-approval.js"></script>
     <script src="../../assets/js/defer_donor_modal.js"></script>
     <script src="../../assets/js/initial-screening-defer-button.js"></script>
-    <script src="../../assets/js/screening_form_modal.js"></script>
+    <script src="../../assets/js/admin-screening-form-modal.js"></script>
+    <!-- Admin-specific declaration form modal script -->
+    <script src="../../assets/js/admin-declaration-form-modal.js"></script>
     <!-- Admin-specific physical examination modal script -->
     <script src="../../assets/js/physical_examination_modal_admin.js"></script>
      <script>
@@ -3384,6 +3619,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             if (typeof UnifiedStaffWorkflowSystem !== 'undefined') {
                 window.unifiedSystem = new UnifiedStaffWorkflowSystem();
                 console.log('Unified Staff Workflow System initialized for dashboard');
+            }
+            // Initialize blood collection modal for admin
+            if (typeof BloodCollectionModal !== 'undefined') {
+                window.bloodCollectionModal = new BloodCollectionModal();
+                console.log('Blood Collection Modal initialized for admin');
             }
         });
         window.openInterviewerScreening = function(donor) {
@@ -3983,39 +4223,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         window.openScreeningModal = function(context) {
             try {
                 const donorId = context?.donor_id ? String(context.donor_id) : '';
-                const modalEl = document.getElementById('screeningFormModal');
-                const contentEl = document.getElementById('screeningFormModalContent');
-                if (!modalEl || !contentEl) return;
-                contentEl.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
-                const bsModal = new bootstrap.Modal(modalEl);
-                bsModal.show();
-                console.log(`🔄 Loading screening form content for donor: ${donorId}`);
-                fetch(`../../src/views/forms/staff_donor_initial_screening_form_modal.php?donor_id=${encodeURIComponent(donorId)}`)
-                    .then(r => {
-                        console.log(`📡 Screening form response status: ${r.status}`);
-                        if (!r.ok) {
-                            throw new Error(`HTTP ${r.status}: ${r.statusText}`);
-                        }
-                        return r.text();
-                    })
-                    .then(html => {
-                        console.log(`✅ Screening form content loaded successfully`);
-                        contentEl.innerHTML = html;
-                        // Bind refresh handler for when modal closes
-                        bindScreeningFormRefresh();
-                    })
-                    .catch(err => {
-                        console.error(`❌ Error loading screening form:`, err);
-                        contentEl.innerHTML = `
-                            <div class="alert alert-danger">
-                                <h6>Error Loading Screening Form</h6>
-                                <p>Failed to load the screening form content. Please try again.</p>
-                                <small class="text-muted">Error: ${err.message}</small>
-                            </div>
-                        `;
-                    });
+                console.log(`🔄 Opening admin screening modal for donor: ${donorId}`);
+                
+                // Use admin-specific modal
+                if (typeof window.openAdminScreeningModal === 'function') {
+                    window.openAdminScreeningModal({ donor_id: donorId });
+                } else {
+                    console.error('openAdminScreeningModal function not found');
+                }
             } catch (err) {
-                console.error('Error opening screening modal:', err);
+                console.error('Error opening admin screening modal:', err);
             }
         };
         // Donor Details modal opener - shows comprehensive donor information
@@ -5163,8 +5380,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 // Reset body/backdrops to avoid stacked artifacts
                 try { document.querySelectorAll('.modal-backdrop').forEach(b => b.remove()); } catch(_) {}
                 try { document.body.classList.remove('modal-open'); document.body.style.overflow=''; document.body.style.paddingRight=''; } catch(_) {}
-                const bs = new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: true, focus: true });
+                const bs = new bootstrap.Modal(modalEl, { backdrop: false, keyboard: true, focus: true });
                 bs.show();
+                // Ensure no backdrop is created for admin donor registration
+                setTimeout(() => {
+                    try { document.querySelectorAll('.modal-backdrop').forEach(b => b.remove()); } catch(_) {}
+                }, 100);
                 contentEl.innerHTML = '<div class="d-flex justify-content-center my-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
                 // Load admin MH form content
                 fetch(`../../src/views/forms/medical-history-modal-content-admin.php?donor_id=${encodeURIComponent(donorId)}`)
@@ -6760,26 +6981,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         }
         // Function to open screening form for interviewer workflow
         function openScreeningFormForInterviewer(donorId) {
-            console.log('Opening screening form for interviewer workflow:', donorId);
-            // Set donor ID in the form
-            const form = document.getElementById('screeningForm');
-            if (form) {
-                const donorIdInput = form.querySelector('input[name="donor_id"]');
-                if (donorIdInput) {
-                    donorIdInput.value = donorId;
-                }
-            }
-            // Show the screening modal
-            const modal = document.getElementById('screeningFormModal');
-            if (modal) {
-                const bootstrapModal = new bootstrap.Modal(modal);
-                bootstrapModal.show();
-                // Initialize screening form functionality
-                setTimeout(() => {
-                    if (typeof window.initializeScreeningForm === 'function') {
-                        window.initializeScreeningForm();
-                    }
-                }, 300);
+            console.log('Opening admin screening form for interviewer workflow:', donorId);
+            
+            // Use admin-specific modal
+            if (typeof window.openAdminScreeningModal === 'function') {
+                window.openAdminScreeningModal({ donor_id: donorId });
+            } else {
+                console.error('openAdminScreeningModal function not found');
             }
         }
         // Function to open declaration form for interviewer workflow
@@ -7224,15 +7432,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             </div>
         </div>
     </div>
-    <!-- Admin Screening Form Modal Container (content fetched from staff modal content) -->
-    <div class="modal fade" id="screeningFormModal" tabindex="-1" aria-labelledby="screeningFormModalLabel" aria-hidden="true">
+    <!-- Admin Screening Form Modal Container (admin-specific modal) -->
+    <div class="modal fade" id="adminScreeningFormModal" tabindex="-1" aria-labelledby="adminScreeningFormModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;">
-                    <h5 class="modal-title" id="screeningFormModalLabel"><i class="fas fa-clipboard-check me-2"></i>Initial Screening Form</h5>
+                    <h5 class="modal-title" id="adminScreeningFormModalLabel"><i class="fas fa-clipboard-check me-2"></i>Initial Screening Form</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body" id="screeningFormModalContent">
+                <div class="modal-body" id="adminScreeningFormModalContent">
                     <div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>
                 </div>
             </div>
@@ -8011,5 +8219,118 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         .screening-step-title h6 { margin-bottom: 4px; font-weight: 700; color: #b22222; }
         .screening-review-card { border: 1px solid #eee; border-radius: 8px; padding: 12px; background: #fff; }
     </style>
+    <script src="../../assets/js/unified-search_admin.js"></script>
+    <script>
+        (function() {
+            try {
+                var adminSearch = new UnifiedSearch({
+                    inputId: 'searchInput',
+                    categoryId: 'searchCategory',
+                    tableId: 'donationsTable',
+                    rowSelector: 'tbody tr:not(.no-results)',
+                    mode: 'hybrid',
+                    debounceMs: 250,
+                    highlight: false,
+                    autobind: false,
+                    columnsMapping: {
+                        all: 'all',
+                        donor: [1, 2],
+                        donor_number: [0],
+                        donor_type: [3],
+                        registered_via: [4],
+                        status: [5]
+                    },
+                    backend: {
+                        url: '../api/unified-search_admin.php',
+                        action: 'donors',
+                        pageSize: 50
+                    },
+                    renderResults: function(data) {
+                        try {
+                            var table = document.getElementById('donationsTable');
+                            if (!table) return;
+                            var tbody = table.querySelector('tbody');
+                            if (!tbody) return;
+                            // Fallback: if no backend results, do nothing (frontend already filtered)
+                            if (!data || !Array.isArray(data.results) || data.results.length === 0) return;
+                            // Replace rows with backend results (basic mapping)
+                            while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+                            for (var i = 0; i < data.results.length; i++) {
+                                var r = data.results[i];
+                                var tr = document.createElement('tr');
+                                tr.innerHTML = '<td>' + (r[0] || '') + '</td>' +
+                                               '<td>' + (r[1] || '') + '</td>' +
+                                               '<td>' + (r[2] || '') + '</td>' +
+                                               '<td><span class="badge ' + ((String(r[3]||'').toLowerCase()==='returning')?'bg-info':'bg-primary') + '">' + (r[3] || 'New') + '</span></td>' +
+                                               '<td>' + (r[4] || '') + '</td>' +
+                                               '<td>' + (r[5] || '') + '</td>' +
+                                               '<td><button type="button" class="btn btn-info btn-sm" disabled><i class="fas fa-eye"></i></button></td>';
+                                tbody.appendChild(tr);
+                            }
+                            var searchInfo = document.getElementById('searchInfo');
+                            if (searchInfo) searchInfo.textContent = 'Showing ' + data.results.length + ' of ' + data.results.length + ' entries';
+                        } catch (e) { /* no-op */ }
+                    }
+                });
+                window.adminUnifiedSearch = adminSearch;
+
+                var originalPerformSearch = window.performSearch;
+                window.performSearch = function() {
+                    var searchInput = document.getElementById('searchInput');
+                    var searchCategory = document.getElementById('searchCategory');
+                    var table = document.getElementById('donationsTable');
+                    if (!searchInput || !table) {
+                        if (typeof originalPerformSearch === 'function') return originalPerformSearch();
+                        return;
+                    }
+                    var tbody = table.querySelector('tbody');
+                    if (!tbody) return;
+                    var value = (searchInput.value || '').toLowerCase().trim();
+                    var category = searchCategory ? searchCategory.value : 'all';
+                    // Remove any existing "no results" message
+                    var existingNoResults = tbody.querySelector('.no-results');
+                    if (existingNoResults) existingNoResults.remove();
+
+                    if (!value) {
+                        adminSearch.resetFrontend();
+                        // Update results info
+                        var rowsAll = Array.prototype.slice.call(tbody.querySelectorAll('tr:not(.no-results)'));
+                        var searchInfo = document.getElementById('searchInfo');
+                        if (searchInfo) searchInfo.textContent = 'Showing ' + rowsAll.length + ' of ' + rowsAll.length + ' entries';
+                        return;
+                    }
+
+                    adminSearch.searchFrontend(value, category);
+
+                    // Update results info and handle no-results state
+                    var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr:not(.no-results)'));
+                    var visibleCount = 0;
+                    for (var i = 0; i < rows.length; i++) {
+                        if (rows[i].style.display !== 'none') visibleCount++;
+                    }
+                    var searchInfoEl = document.getElementById('searchInfo');
+                    if (searchInfoEl) searchInfoEl.textContent = 'Showing ' + visibleCount + ' of ' + rows.length + ' entries';
+
+                    if (visibleCount === 0 && rows.length > 0) {
+                        var noResultsRow = document.createElement('tr');
+                        noResultsRow.className = 'no-results';
+                        var lastTh = table.querySelector('thead th:last-child');
+                        var colspan = lastTh ? lastTh.cellIndex + 1 : 6;
+                        noResultsRow.innerHTML = '<td colspan="' + colspan + '" class="text-center">\
+                                <div class="alert alert-info m-2">\
+                                    No matching donors found\
+                                    <button class="btn btn-outline-primary btn-sm ms-2" onclick="clearSearch()">\
+                                        Clear Search\
+                                    </button>\
+                                </div>\
+                            </td>';
+                        tbody.appendChild(noResultsRow);
+                    }
+                };
+            } catch (e) {
+                // no-op
+            }
+        })();
+    </script>
 </body>
 </html>

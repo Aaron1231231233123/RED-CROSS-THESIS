@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../assets/conn/db_conn.php';
+require_once 'module/optimized_functions.php';
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
@@ -1377,6 +1378,33 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 modal.show();
             });
         });
+        
+        // Initialize confirmation and loading modals for donor registration
+        const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'), {
+            backdrop: true,
+            keyboard: true
+        });
+        const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
+            backdrop: false,
+            keyboard: false
+        });
+        
+        // Function to show confirmation modal
+        window.showConfirmationModal = function() {
+            confirmationModal.show();
+        };
+        
+        // Function to handle form submission
+        window.proceedToDonorForm = function() {
+            confirmationModal.hide();
+            loadingModal.show();
+            
+            setTimeout(() => {
+                // Pass current page as source parameter for proper redirect back
+                const currentPage = encodeURIComponent(window.location.pathname + window.location.search);
+                window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + currentPage;
+            }, 1500);
+        };
     });
     </script>
 </body>

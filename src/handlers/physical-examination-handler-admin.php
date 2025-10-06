@@ -10,6 +10,43 @@ ob_start();
 session_start();
 require_once '../../assets/conn/db_conn.php';
 
+// Helper function to get physician name from user_id
+function getPhysicianName($user_id) {
+    try {
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/users?select=first_name,surname&user_id=eq.' . $user_id);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json'
+        ]);
+
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($http_code === 200 && $response !== false) {
+            $users = json_decode($response, true);
+            if (!empty($users) && isset($users[0])) {
+                $user = $users[0];
+                $first_name = trim($user['first_name'] ?? '');
+                $surname = trim($user['surname'] ?? '');
+                
+                if (!empty($first_name) && !empty($surname)) {
+                    return "Dr. $first_name $surname";
+                } elseif (!empty($first_name)) {
+                    return "Dr. $first_name";
+                } elseif (!empty($surname)) {
+                    return "Dr. $surname";
+                }
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Error getting physician name: " . $e->getMessage());
+    }
+    return 'Dr. Unknown';
+}
+
 // Admin-specific physical examination handler
 // This handler is specifically designed for admin workflows
 
@@ -35,9 +72,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Log submission for tracking
         error_log("Admin Physical Examination Handler - Processing physical examination for donor: " . $_POST['donor_id']);
         
+        // Debug log all POST data
+        error_log("Admin Physical Examination Handler - POST data: " . print_r($_POST, true));
+        
+        // Validate required fields with more detailed logging
+        $required_fields = ['blood_pressure', 'pulse_rate', 'body_temp', 'gen_appearance', 'skin', 'heent', 'heart_and_lungs'];
+        $missing_fields = [];
+        
+        foreach ($required_fields as $field) {
+            $value = $_POST[$field] ?? '';
+            $is_set = isset($_POST[$field]);
+            $is_empty = empty(trim($value));
+            
+            error_log("Admin Physical Examination Handler - Field $field: " . ($is_set ? 'SET' : 'NOT SET') . ", " . ($is_empty ? 'EMPTY' : 'NOT EMPTY') . " (value: '$value')");
+            
+            if (!$is_set || $is_empty) {
+                $missing_fields[] = $field;
+            }
+        }
+        
+        if (!empty($missing_fields)) {
+            error_log("Admin Physical Examination Handler - Missing required fields: " . implode(', ', $missing_fields));
+            throw new Exception("Missing required fields: " . implode(', ', $missing_fields));
+        }
+        
+        // Get screening_id for this donor
+        $screening_id = null;
+        $screening_ch = curl_init();
+        curl_setopt_array($screening_ch, [
+            CURLOPT_URL => SUPABASE_URL . "/rest/v1/screening_form?donor_form_id=eq." . $_POST['donor_id'] . "&select=screening_id&order=created_at.desc&limit=1",
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json'
+            ]
+        ]);
+        $screening_response = curl_exec($screening_ch);
+        curl_close($screening_ch);
+        
+        if ($screening_response) {
+            $screening_data = json_decode($screening_response, true);
+            $screening_id = !empty($screening_data) ? $screening_data[0]['screening_id'] : null;
+            error_log("Admin Physical Examination Handler - Found screening_id: " . ($screening_id ?? 'null'));
+        }
+
+        // Get physician name for the logged-in user
+        $physician_name = getPhysicianName($_SESSION['user_id']);
+        error_log("Admin Physical Examination Handler - Physician name: " . $physician_name);
+
         // Prepare data for insertion
         $data = [
             'donor_id' => intval($_POST['donor_id']), // int4
+            'screening_id' => $screening_id, // Include screening_id for referential integrity
+            'physician' => $physician_name, // Include physician name
             'blood_pressure' => strval($_POST['blood_pressure']), // varchar
             'pulse_rate' => intval($_POST['pulse_rate']), // int4
             'body_temp' => number_format(floatval($_POST['body_temp']), 1), // numeric with 1 decimal place
@@ -101,6 +189,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $physical_exam_id = $response_data[0]['physical_exam_id'];
                 error_log("Admin Physical Examination Handler - Created physical_exam_id: " . $physical_exam_id);
                 
+                // Create blood collection record for admin workflow
+                try {
+                    // Create blood collection record first
+                    $collectionData = [
+                        'physical_exam_id' => $physical_exam_id,
+                        'needs_review' => true,
+                        'status' => 'pending',
+                        'created_at' => date('Y-m-d\TH:i:s.000\Z'),
+                        'updated_at' => date('Y-m-d\TH:i:s.000\Z')
+                    ];
+                    
+                    // Add screening_id if available
+                    if (!empty($screening_id)) {
+                        $collectionData['screening_id'] = $screening_id;
+                    }
+                    
+                    $collection_ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection');
+                    curl_setopt($collection_ch, CURLOPT_POST, true);
+                    curl_setopt($collection_ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($collection_ch, CURLOPT_POSTFIELDS, json_encode($collectionData));
+                    curl_setopt($collection_ch, CURLOPT_HTTPHEADER, [
+                        'apikey: ' . SUPABASE_API_KEY,
+                        'Authorization: Bearer ' . SUPABASE_API_KEY,
+                        'Content-Type: application/json',
+                        'Prefer: return=representation'
+                    ]);
+                    
+                    $collection_response = curl_exec($collection_ch);
+                    $collection_http_code = curl_getinfo($collection_ch, CURLINFO_HTTP_CODE);
+                    curl_close($collection_ch);
+                    
+                    if ($collection_http_code === 201) {
+                        $collection_data = json_decode($collection_response, true);
+                        $blood_collection_id = $collection_data[0]['blood_collection_id'] ?? null;
+                        error_log("Admin Physical Examination Handler - Created blood collection record: " . $blood_collection_id);
+                    } else {
+                        error_log("Admin Physical Examination Handler - Failed to create blood collection record: HTTP $collection_http_code");
+                    }
+                } catch (Exception $collection_error) {
+                    error_log("Admin Physical Examination Handler - Blood collection creation error: " . $collection_error->getMessage());
+                }
+                
                 // Create eligibility record for admin workflow
                 try {
                     $status = 'approved'; // Admin always approves for blood collection
@@ -150,20 +280,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     
                     // Invalidate cache to ensure status updates immediately
                     try {
-                        // Clear memory cache for this donor
-                        $cacheKey = 'donor_cache_donations_list_all_p1_' . md5('all');
-                        if (isset($_SESSION[$cacheKey])) {
-                            unset($_SESSION[$cacheKey]);
-                        }
+                        // Include the proper cache invalidation function
+                        require_once __DIR__ . '/../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php';
                         
-                        // Clear file cache
-                        $cacheDir = __DIR__ . '/../../public/cache';
-                        if (is_dir($cacheDir)) {
-                            $files = glob($cacheDir . '/donations_list_*.json.gz');
-                            foreach ($files as $file) {
-                                @unlink($file);
-                            }
-                        }
+                        // Use the proper cache invalidation function
+                        invalidateCache();
                         
                         error_log("Admin Physical Examination Handler - Cache invalidated for donor: " . $data['donor_id']);
                     } catch (Exception $cache_error) {

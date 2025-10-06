@@ -108,6 +108,10 @@ try {
         $medical_history_data['medical_approval'] = 'Declined';
         $medical_history_data['needs_review'] = false;
         error_log("Processing decline action");
+    } elseif ($action === 'admin_complete') {
+        // For 'admin_complete' action, mark review as completed
+        $medical_history_data['needs_review'] = false;
+        error_log("Processing admin_complete action - marking review as completed");
     } elseif ($action === 'next') {
         // For 'next' action, just save the data without setting approval status
         // This allows for draft saving

@@ -45,29 +45,29 @@ if (isset($_SESSION['donor_form_data']) && isset($_SESSION['donor_form_timestamp
 // Store the referrer URL to use it for the close button
 $referrer = '';
 
-// Check HTTP_REFERER first
-if (isset($_SERVER['HTTP_REFERER'])) {
+// Prioritize session-stored referrer from donor form
+if (isset($_SESSION['donor_form_referrer'])) {
+    $referrer = $_SESSION['donor_form_referrer'];
+    error_log("Medical history - Using donor_form_referrer: " . $referrer);
+} elseif (isset($_GET['source'])) {
+    $referrer = $_GET['source'];
+    error_log("Medical history - Using source parameter: " . $referrer);
+} elseif (isset($_SERVER['HTTP_REFERER']) && stripos($_SERVER['HTTP_REFERER'], 'dashboard') !== false) {
     $referrer = $_SERVER['HTTP_REFERER'];
-}
-
-// If no referrer or it's not from a dashboard, check for a passed parameter
-if (!$referrer || !stripos($referrer, 'dashboard')) {
-    if (isset($_GET['source'])) {
-        $referrer = $_GET['source'];
-    }
-}
-
-// Default fallback
-if (!$referrer) {
+    error_log("Medical history - Using HTTP_REFERER: " . $referrer);
+} else {
     $referrer = '../../public/Dashboards/dashboard-Inventory-System.php';
+    error_log("Medical history - Using default referrer: " . $referrer);
 }
 
 // Store the referrer in a session variable to maintain it across form submissions
 if (!isset($_SESSION['medical_history_referrer'])) {
     $_SESSION['medical_history_referrer'] = $referrer;
+    error_log("Medical history - Set medical_history_referrer: " . $referrer);
 } else {
     // Use the stored referrer if available
     $referrer = $_SESSION['medical_history_referrer'];
+    error_log("Medical history - Using existing medical_history_referrer: " . $referrer);
 }
 
 // Check if user is logged in
@@ -495,8 +495,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Store the referrer for use in declaration form's back button
                 if (isset($_SESSION['medical_history_referrer'])) {
                     $_SESSION['declaration_form_referrer'] = $_SESSION['medical_history_referrer'];
+                    error_log("Medical history - Set declaration_form_referrer from medical_history_referrer: " . $_SESSION['declaration_form_referrer']);
                 } else {
                     $_SESSION['declaration_form_referrer'] = '../../public/Dashboards/dashboard-Inventory-System.php';
+                    error_log("Medical history - Set declaration_form_referrer to default: " . $_SESSION['declaration_form_referrer']);
                 }
                 // Redirect to declaration form modal with donor_id
                 header('Location: declaration-form-modal.php?donor_id=' . urlencode($donor_id));

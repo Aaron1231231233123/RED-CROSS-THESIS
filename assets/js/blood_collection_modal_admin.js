@@ -292,17 +292,13 @@ class BloodCollectionModal {
 		}
 
 		if (collectionDateDisplay) {
-			// Display donor's birthdate instead of current date
-			if (donorData.birthdate) {
-				const birthdate = new Date(donorData.birthdate);
-				collectionDateDisplay.textContent = birthdate.toLocaleDateString('en-US', {
-					month: 'long',
-					day: 'numeric',
-					year: 'numeric'
-				});
-			} else {
-				collectionDateDisplay.textContent = 'Birthdate not available';
-			}
+			// Display collection date (current date)
+			const today = new Date();
+			collectionDateDisplay.textContent = today.toLocaleDateString('en-US', {
+				month: 'long',
+				day: 'numeric',
+				year: 'numeric'
+			});
 		}
 
 		if (unitSerialDisplay) {

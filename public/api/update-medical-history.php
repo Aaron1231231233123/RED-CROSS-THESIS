@@ -17,20 +17,26 @@ if (!$input) {
 }
 
 $medicalHistoryId = $input['medical_history_id'] ?? null;
+$donorId = $input['donor_id'] ?? null;
 $needsReview = $input['needs_review'] ?? null;
 $medicalApproval = $input['medical_approval'] ?? null; // optional
 
 // Log the received data for debugging
 error_log('Medical history update request received: ' . json_encode($input));
 error_log('Extracted medical_history_id: ' . $medicalHistoryId);
+error_log('Extracted donor_id: ' . $donorId);
 error_log('Extracted needs_review: ' . ($needsReview ? 'true' : 'false'));
 
-if (!$medicalHistoryId || !isset($needsReview)) {
-    error_log('Missing required fields - medical_history_id: ' . ($medicalHistoryId ? 'present' : 'missing') . ', needs_review: ' . (isset($needsReview) ? 'present' : 'missing'));
+// Accept either medical_history_id or donor_id
+$identifier = $medicalHistoryId ?: $donorId;
+$identifierField = $medicalHistoryId ? 'medical_history_id' : 'donor_id';
+
+if (!$identifier || !isset($needsReview)) {
+    error_log('Missing required fields - identifier: ' . ($identifier ? 'present' : 'missing') . ', needs_review: ' . (isset($needsReview) ? 'present' : 'missing'));
     http_response_code(400);
     echo json_encode([
         'success' => false, 
-        'error' => 'Missing required fields: medical_history_id, needs_review'
+        'error' => 'Missing required fields: medical_history_id or donor_id, needs_review'
     ]);
     exit;
 }
@@ -50,7 +56,7 @@ try {
     
     // Prepare cURL request to Supabase
     $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, SUPABASE_URL . '/rest/v1/medical_history?medical_history_id=eq.' . urlencode($medicalHistoryId));
+    curl_setopt($ch, CURLOPT_URL, SUPABASE_URL . '/rest/v1/medical_history?' . $identifierField . '=eq.' . urlencode($identifier));
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($updateData));
@@ -71,6 +77,19 @@ try {
     }
     
     if ($httpCode >= 200 && $httpCode < 300) {
+        // Invalidate cache to ensure status updates immediately
+        try {
+            // Include the proper cache invalidation function
+            require_once __DIR__ . '/../Dashboards/dashboard-Inventory-System-list-of-donations.php';
+            
+            // Use the proper cache invalidation function
+            invalidateCache();
+            
+            error_log("Medical History Update API - Cache invalidated for donor: " . $donor_id);
+        } catch (Exception $cache_error) {
+            error_log("Medical History Update API - Cache invalidation error: " . $cache_error->getMessage());
+        }
+
         echo json_encode([
             'success' => true,
             'message' => 'Medical history record updated successfully',
