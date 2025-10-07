@@ -1,8 +1,6 @@
 <?php
-// Speed up first render of home dashboard for admin
-header('Cache-Control: public, max-age=120, stale-while-revalidate=60');
+// Prevent browser caching (server-side caching is handled below)
 header('Vary: Accept-Encoding');
-// Prevent browser caching
 header("Cache-Control: no-cache, no-store, must-revalidate");
 header("Pragma: no-cache");
 header("Expires: 0");
@@ -31,7 +29,7 @@ include_once __DIR__ . '/module/optimized_functions.php';
 $startTime = microtime(true);
 
 // OPTIMIZATION: Smart caching with intelligent change detection
-$cacheKey = 'home_dashboard_v1_' . date('Y-m-d'); // Daily cache key
+$cacheKey = 'home_dashboard_v2_' . date('Y-m-d'); // Daily cache key (bumped)
 $cacheFile = sys_get_temp_dir() . '/' . $cacheKey . '.json';
 $cacheMetaFile = sys_get_temp_dir() . '/' . $cacheKey . '_meta.json';
 
@@ -63,8 +61,8 @@ if (file_exists($cacheFile) && file_exists($cacheMetaFile)) {
     // Simplified change detection - only check cache age
     $hasChanges = false;
     
-    // Check cache age - if older than 5 minutes, consider it stale
-    if ($cacheAge > 300) { // 5 minutes for faster updates
+    // Check cache age - if older than 15 minutes, consider it stale
+    if ($cacheAge > 900) { // 15 minutes
         $hasChanges = true;
     }
     
@@ -72,7 +70,7 @@ if (file_exists($cacheFile) && file_exists($cacheMetaFile)) {
         // No changes detected - use full cache
         $useCache = true;
         $cachedData = json_decode(file_get_contents($cacheFile), true);
-        if ($cachedData && !empty($cachedData['totalDonorCount'])) {
+        if (is_array($cachedData)) {
             $hospitalRequestsCount = $cachedData['hospitalRequestsCount'] ?? 0;
             $bloodReceivedCount = $cachedData['bloodReceivedCount'] ?? 0;
             $bloodInStockCount = $cachedData['bloodInStockCount'] ?? 0;
@@ -111,67 +109,73 @@ if (isset($bloodRequestsResponse['data']) && is_array($bloodRequestsResponse['da
 }
 
 // ----------------------------------------------------
-// PART 2: GET BLOOD RECEIVED COUNT (OPTIMIZED)
+// PART 2-3: GET BLOOD RECEIVED, INVENTORY, AND BLOOD TYPE COUNTS IN ONE PASS
 // ----------------------------------------------------
-// Count unique donors from blood_bank_units (all are successful donations)
-$bloodReceivedCount = 0;
-$seenDonorIds = [];
-
-$bloodBankUnitsResponse = supabaseRequest("blood_bank_units?select=donor_id&unit_serial_number=not.is.null");
-$bloodBankUnitsData = isset($bloodBankUnitsResponse['data']) ? $bloodBankUnitsResponse['data'] : [];
-
-foreach ($bloodBankUnitsData as $unit) {
-    if (!in_array($unit['donor_id'], $seenDonorIds)) {
-        $bloodReceivedCount++;
-        $seenDonorIds[] = $unit['donor_id'];
-    }
-}
-
-// ----------------------------------------------------
-// PART 3: GET BLOOD IN STOCK COUNT (OPTIMIZED)
-// ----------------------------------------------------
-// Get all blood bank units data in one query
 $bloodInventory = [];
 $bloodInStockCount = 0;
+$bloodReceivedCount = 0;
+$seenDonorIds = [];
+$bloodByType = [
+    'A+' => 0,
+    'A-' => 0,
+    'B+' => 0,
+    'B-' => 0,
+    'O+' => 0,
+    'O-' => 0,
+    'AB+' => 0,
+    'AB-' => 0
+];
 
-$bloodBankUnitsResponse = supabaseRequest("blood_bank_units?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,created_at,updated_at&unit_serial_number=not.is.null&order=collected_at.desc");
+// Single query without ORDER BY for speed
+$bloodBankUnitsResponse = supabaseRequest("blood_bank_units?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,created_at,updated_at&unit_serial_number=not.is.null");
 $bloodBankUnitsData = isset($bloodBankUnitsResponse['data']) ? $bloodBankUnitsResponse['data'] : [];
 
 if (is_array($bloodBankUnitsData) && !empty($bloodBankUnitsData)) {
     foreach ($bloodBankUnitsData as $item) {
-        // Parse collection and expiration dates
+        // Count unique donors (successful donations)
+        $donorId = $item['donor_id'];
+        if (!isset($seenDonorIds[$donorId])) {
+            $seenDonorIds[$donorId] = true;
+            $bloodReceivedCount++;
+        }
+
+        // Parse dates once
         $collectionDate = new DateTime($item['collected_at']);
         $expirationDate = new DateTime($item['expires_at']);
         $today = new DateTime();
-        
-        // Check if expired or handed over
+
+        // Skip expired or handed over units for inventory/availability
         $isExpired = ($today > $expirationDate);
         $isHandedOver = ($item['status'] === 'handed_over');
-        
-        // Skip if expired or handed over
         if ($isExpired || $isHandedOver) {
             continue;
         }
-        
-        // Create blood bag entry
-        $bloodBag = [
+
+        // Count available inventory
+        $bloodInStockCount += 1;
+
+        // Update blood type availability
+        $bt = $item['blood_type'] ?? '';
+        if (isset($bloodByType[$bt])) {
+            $bloodByType[$bt] += 1;
+        }
+
+        // Build simplified inventory list used by UI
+        $bloodInventory[] = [
             'unit_id' => $item['unit_id'],
-            'donor_id' => $item['donor_id'],
+            'donor_id' => $donorId,
             'serial_number' => $item['unit_serial_number'],
-            'blood_type' => $item['blood_type'],
-            'bags' => 1, // Each unit represents 1 bag
+            'blood_type' => $bt,
+            'bags' => 1,
             'bag_type' => $item['bag_type'] ?: 'Standard',
             'bag_brand' => $item['bag_brand'] ?: 'N/A',
             'collection_date' => $collectionDate->format('Y-m-d'),
             'expiration_date' => $expirationDate->format('Y-m-d'),
-            'status' => 'Valid', // Only valid units make it here
+            'status' => 'Valid',
             'unit_status' => $item['status'],
             'created_at' => $item['created_at'],
             'updated_at' => $item['updated_at'],
         ];
-        
-        $bloodInventory[] = $bloodBag;
-        $bloodInStockCount += 1; // Each unit = 1 bag
     }
 }
 
@@ -186,9 +190,10 @@ $postgisAvailable = false; // Initialize PostGIS availability flag
 
 // Try to get optimized GIS data from PostGIS endpoint
 try {
-    // Fix the path to the API endpoint
+    // Fix the path to the API endpoint and add a fast timeout
     $apiPath = 'http://' . $_SERVER['HTTP_HOST'] . '/REDCROSS/public/api/optimized-gis-data.php?t=' . time();
-    $gisDataResponse = file_get_contents($apiPath);
+    $ctx = stream_context_create(['http' => ['timeout' => 0.8]]);
+    $gisDataResponse = @file_get_contents($apiPath, false, $ctx);
     if ($gisDataResponse) {
         $gisData = json_decode($gisDataResponse, true);
         if ($gisData && !isset($gisData['error'])) {
@@ -272,7 +277,11 @@ if (!$postgisAvailable || (empty($cityDonorCounts) && empty($heatmapData))) {
     }
 
     // OPTIMIZED: Single query to get unique donor IDs and their addresses
-    $donorIds = array_unique($seenDonorIds); // Reuse from blood received count
+    $donorIds = array_keys($seenDonorIds); // Reuse from blood received count (already a set)
+    // Cap to a reasonable maximum to avoid huge in() queries
+    if (count($donorIds) > 500) {
+        $donorIds = array_slice($donorIds, 0, 500);
+    }
     $totalDonorCount = count($donorIds);
 
     // Get donor addresses for GIS mapping in one query
@@ -351,42 +360,7 @@ $endTime = microtime(true);
 $executionTime = round(($endTime - $startTime) * 1000, 2); // Convert to milliseconds
 addPerformanceHeaders($executionTime, $bloodReceivedCount, "Dashboard - Hospital Requests: {$hospitalRequestsCount}, Blood In Stock: {$bloodInStockCount}");
 
-// ----------------------------------------------------
-// PART 4: GET BLOOD AVAILABILITY BY TYPE
-// ----------------------------------------------------
-// Initialize blood type counts
-$bloodByType = [
-    'A+' => 0,
-    'A-' => 0,
-    'B+' => 0,
-    'B-' => 0,
-    'O+' => 0,
-    'O-' => 0,
-    'AB+' => 0,
-    'AB-' => 0
-];
-
-// Calculate blood type counts from blood inventory
-foreach ($bloodInventory as $bag) {
-    if ($bag['status'] == 'Valid' && is_numeric($bag['bags'])) {
-        $bloodType = $bag['blood_type'] ?? '';
-        if (isset($bloodByType[$bloodType])) {
-            $bloodByType[$bloodType] += floatval($bag['bags']);
-        }
-    }
-}
-
-// Convert to integers
-foreach ($bloodByType as $type => $count) {
-    $bloodByType[$type] = (int)$count;
-}
-
-// Verify blood in stock equals sum of blood type counts
-$totalFromTypes = array_sum($bloodByType);
-if ($totalFromTypes != $bloodInStockCount) {
-    // If there's a discrepancy, use the sum of blood types
-    $bloodInStockCount = $totalFromTypes;
-}
+// BLOOD AVAILABILITY BY TYPE is already computed in the single pass above ($bloodByType)
 
 // OPTIMIZATION: Save to cache with metadata
 $cacheData = [
@@ -1149,8 +1123,8 @@ h6 {
     border-radius: 2px;
 }
     </style>
-    <!-- Iconify for custom icons -->
-    <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
+    <!-- Iconify for custom icons (deferred) -->
+    <script defer src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
 </head>
 <body>
     <!-- Notification Bell and Alerts -->
@@ -1486,17 +1460,16 @@ h6 {
                         <div class="row g-4">
                             <!-- Blood Type Cards -->
                             <?php
-                            // OPTIMIZED: Calculate blood type counts in one pass
-                            $bloodTypeCounts = [
+                            // Uniform calculation with Bloodbank page: count 1 per valid unit
+                            $bloodTypeCounts = array_reduce($bloodInventory, function($carry, $bag) {
+                                if ($bag['status'] == 'Valid' && isset($carry[$bag['blood_type']])) {
+                                    $carry[$bag['blood_type']] += 1; // Each unit = 1 bag
+                                }
+                                return $carry;
+                            }, [
                                 'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
                                 'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
-                            ];
-                            
-                            foreach ($bloodInventory as $bag) {
-                                if ($bag['status'] == 'Valid' && is_numeric($bag['bags']) && isset($bloodTypeCounts[$bag['blood_type']])) {
-                                    $bloodTypeCounts[$bag['blood_type']] += floatval($bag['bags']);
-                                }
-                            }
+                            ]);
                             ?>
                             
                             <div class="col-md-3">
@@ -1570,9 +1543,9 @@ h6 {
                     <?php
 // Show critical alert if status is critical
 if ($statusClass === 'critical') {
-    // List all blood types that are critically low
+    // List all blood types that are critically low (use uniform counts)
     $criticalTypes = [];
-    foreach ($bloodByType as $type => $count) {
+    foreach ($bloodTypeCounts as $type => $count) {
         if ($count < 30) $criticalTypes[] = $type;
     }
     if (!empty($criticalTypes)) {
@@ -2188,31 +2161,8 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
     </div>
 
     <!-- Bootstrap 5.3 JS and Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Prevent browser caching and force refresh
-        window.addEventListener('pageshow', function(event) {
-            if (event.persisted) {
-                // Page was loaded from cache, force refresh
-                window.location.reload();
-            }
-        });
-        
-        // Force refresh when page becomes visible (when navigating back)
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden) {
-                // Page became visible, check if we need to refresh
-                const lastUpdate = localStorage.getItem('homeDashboardLastUpdate');
-                const currentTime = Date.now();
-                if (!lastUpdate || (currentTime - parseInt(lastUpdate)) > 5000) { // 5 seconds
-                    window.location.reload();
-                }
-            }
-        });
-        
-        // Store current timestamp
-        localStorage.setItem('homeDashboardLastUpdate', Date.now().toString());
-        
         // Initialize modals and add button functionality
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize modals

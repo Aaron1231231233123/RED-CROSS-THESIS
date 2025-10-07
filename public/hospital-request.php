@@ -54,7 +54,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     header("Location: Dashboards/dashboard-Inventory-System.php");
                     break;
                 case 2:
-                    header("Location: Dashboards/dashboard-hospital-main.php");
+                    header("Location: Dashboards/dashboard-hospital-final-request.php");
                     break;
                 case 3:
                     header("Location: Dashboards/dashboard-staff-main.php");
