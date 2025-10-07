@@ -2744,66 +2744,56 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + currentPage;
                 }, 1500);
             };
-            // View buttons
-            const viewButtons = document.querySelectorAll('.view-donor');
-            viewButtons.forEach(function(button) {
-                console.log('Adding click listener to view button');
-                button.addEventListener('click', function(e) {
+            // Helper to open details using new modal with legacy fallback
+            function openDetails(donorId, eligibilityId) {
+                if (!donorId) { return; }
+                // Legacy first: match behavior of the All status filter
+                const legacyDetails = document.getElementById('donorDetails');
+                if (legacyDetails) {
+                    legacyDetails.innerHTML = '<div class="text-center my-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading donor details...</p></div>';
+                }
+                try { (new bootstrap.Modal(document.getElementById('donorModal'))).show(); } catch(_) {}
+                if (typeof window.fetchDonorDetails === 'function') {
+                    window.fetchDonorDetails(donorId, eligibilityId || '');
+                }
+            }
+            // Explicit listeners (replicates previous working approach)
+            document.querySelectorAll('.view-donor').forEach(function(btn){
+                btn.addEventListener('click', function(e){
+                    e.preventDefault();
                     e.stopPropagation();
-                    console.log('View button clicked!');
-                    const donorId = this.getAttribute('data-donor-id');
-                    const eligibilityId = this.getAttribute('data-eligibility-id');
-                    if (!donorId) {
-                        console.error('No donor ID found for view button');
+                    openDetails(this.getAttribute('data-donor-id') || '', this.getAttribute('data-eligibility-id') || '');
+                });
+            });
+            document.querySelectorAll('.edit-donor').forEach(function(btn){
+                btn.addEventListener('click', function(e){
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openDetails(this.getAttribute('data-donor-id') || '', this.getAttribute('data-eligibility-id') || '');
+                });
+            });
+            document.querySelectorAll('tr.donor-row').forEach(function(row){
+                row.addEventListener('click', function(){
+                    openDetails(this.getAttribute('data-donor-id') || '', this.getAttribute('data-eligibility-id') || '');
+                });
+            });
+            // Delegated listener on table container (ensures any status/pagination re-renders work)
+            const donationsTableEl = document.getElementById('donationsTable');
+            if (donationsTableEl) {
+                donationsTableEl.addEventListener('click', function(e){
+                    const actionBtn = e.target && (e.target.closest && e.target.closest('.view-donor, .edit-donor')) ? e.target.closest('.view-donor, .edit-donor') : null;
+                    if (actionBtn) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openDetails(actionBtn.getAttribute('data-donor-id') || '', actionBtn.getAttribute('data-eligibility-id') || '');
                         return;
                     }
-                    console.log(`Viewing donor ID: ${donorId}, eligibility ID: ${eligibilityId}`);
-                    // Show legacy donor details modal styled to match wireframe
-                    const legacyDetails = document.getElementById('donorDetails');
-                    if (legacyDetails) {
-                        legacyDetails.innerHTML = '<div class="text-center my-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading donor details...</p></div>';
-                    }
-                    try { (new bootstrap.Modal(document.getElementById('donorModal'))).show(); } catch(_) {}
-                    if (typeof window.fetchDonorDetails === 'function') {
-                        window.fetchDonorDetails(donorId, eligibilityId);
+                    const row = e.target && (e.target.closest && e.target.closest('tr.donor-row')) ? e.target.closest('tr.donor-row') : null;
+                    if (row) {
+                        openDetails(row.getAttribute('data-donor-id') || '', row.getAttribute('data-eligibility-id') || '');
                     }
                 });
-            });
-            // Make entire row clickable for donor details
-            const donorRows = document.querySelectorAll('.donor-row');
-            donorRows.forEach(function(row) {
-                row.addEventListener('click', function() {
-                    const donorId = this.getAttribute('data-donor-id');
-                    const eligibilityId = this.getAttribute('data-eligibility-id');
-                    if (!donorId) return;
-                    const legacyDetails = document.getElementById('donorDetails');
-                    if (legacyDetails) {
-                        legacyDetails.innerHTML = '<div class="text-center my-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading donor details...</p></div>';
-                    }
-                    try { (new bootstrap.Modal(document.getElementById('donorModal'))).show(); } catch(_) {}
-                    if (typeof window.fetchDonorDetails === 'function') {
-                        window.fetchDonorDetails(donorId, eligibilityId);
-                    }
-                });
-            });
-            // Edit buttons
-            const editButtons = document.querySelectorAll('.edit-donor');
-            editButtons.forEach(function(button) {
-                button.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    const donorId = this.getAttribute('data-donor-id');
-                    const eligibilityId = this.getAttribute('data-eligibility-id');
-                    if (!donorId) return;
-                    const legacyDetails = document.getElementById('donorDetails');
-                    if (legacyDetails) {
-                        legacyDetails.innerHTML = '<div class="text-center my-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading donor details...</p></div>';
-                    }
-                    try { (new bootstrap.Modal(document.getElementById('donorModal'))).show(); } catch(_) {}
-                    if (typeof window.fetchDonorDetails === 'function') {
-                        window.fetchDonorDetails(donorId, eligibilityId);
-                    }
-                });
-            });
+            }
         });
 
         // Ensure donor detail modals always clean their backdrops when closed
@@ -6518,6 +6508,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     const donor = data.donor || {};
                     const eligibility = data.eligibility || {};
                     const safe = (v, fb = '-') => (v === null || v === undefined || v === '' ? fb : v);
+                    // Determine legacy success from eligibility (fallback API)
+                    const legacySuccess = ((eligibility.collection_status || '') + '').toLowerCase().includes('success');
                     // Create exact wireframe-matching donor details HTML
                     const donorDetailsHTML = `
                         <div class="donor-details-wireframe">
@@ -6655,8 +6647,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     </thead>
                                     <tbody>
                                         <tr>
-                                            <td>${safe(eligibility.collection_status || 'Successful')}</td>
-                                            <td>${safe(eligibility.phlebotomist_note || 'Successful')}</td>
+                                            <td>${legacySuccess ? 'Successful' : (eligibility.collection_status ? eligibility.collection_status : 'Pending')}</td>
+                                            <td>${legacySuccess ? safe(eligibility.phlebotomist_note, 'Successful') : safe(eligibility.phlebotomist_note, '-')}</td>
                                             <td>
                                                 <button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="View Blood Collection" onclick="openPhlebotomistCollection({ donor_id: '${safe(donor.donor_id || eligibility.donor_id,'')}' })">
                                                     <i class="fas fa-eye"></i>
@@ -7201,6 +7193,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 const safe = (v, fb = '-') => (v === null || v === undefined || v === '' ? fb : v);
                 // Determine if donor is fully approved
                 const isFullyApproved = eligibility.status === 'approved' || eligibility.status === 'eligible';
+                // Gate success on DB is_successful or legacy success flag
+                const legacySuccess = ((eligibility.collection_status || '') + '').toLowerCase().includes('success');
+                const dbSuccess = !!bloodCollection && (bloodCollection.is_successful === true || bloodCollection.is_successful === 'true' || bloodCollection.is_successful === 1);
+                const showSuccess = dbSuccess || legacySuccess;
+                const collectionStatusText = showSuccess ? 'Successful' : (dbSuccess === false ? 'Unsuccessful' : 'Pending');
+                const phlebotomistNoteText = showSuccess ? safe(bloodCollection.phlebotomist_note, 'Successful') : safe(bloodCollection.phlebotomist_note, '-');
                 // Create wireframe-matching donor details HTML
                 const html = `
                     <div class="donor-details-wireframe">
@@ -7338,8 +7336,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td>${safe(bloodCollection.is_successful ? 'TRUE' : 'Successful', 'Unsuccessful')}</td>
-                                        <td>${safe(bloodCollection.phlebotomist_note, 'Successful')}</td>
+                                        <td>${collectionStatusText}</td>
+                                        <td>${phlebotomistNoteText}</td>
                                         <td>
                                             <button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="View Blood Collection">
                                                 <i class="fas fa-eye"></i>

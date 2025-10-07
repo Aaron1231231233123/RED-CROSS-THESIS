@@ -311,6 +311,72 @@ try {
         }
     }
 
+    // Admin-only validation: allow marking Successful only if legacy phlebotomist shows success
+    // or an existing blood_collection for this donor is already successful
+    if ($is_successful === true) {
+        $headers = [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Accept: application/json'
+        ];
+
+        $legacySuccess = false;
+        $existingDbSuccess = false;
+
+        // Check legacy eligibility collection_status for donor (most recent)
+        if (!empty($donor_id)) {
+            try {
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/eligibility?donor_id=eq.' . urlencode((string)$donor_id) . '&select=collection_status,updated_at,created_at&order=updated_at.desc,created_at.desc&limit=1');
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+                $resp = curl_exec($ch);
+                $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if ($http === 200 && $resp) {
+                    $arr = json_decode($resp, true) ?: [];
+                    if (!empty($arr) && isset($arr[0]['collection_status'])) {
+                        $cs = strtolower(trim((string)$arr[0]['collection_status']));
+                        if ($cs !== '' && strpos($cs, 'success') !== false) {
+                            $legacySuccess = true;
+                        }
+                    }
+                }
+            } catch (Exception $e) {
+                error_log('Blood Collection Admin - Legacy eligibility check failed: ' . $e->getMessage());
+            }
+        }
+
+        // Check if any existing blood_collection is already successful for this donor (or physical exam fallback)
+        try {
+            $queryBase = null;
+            if (!empty($donor_id)) {
+                $queryBase = SUPABASE_URL . '/rest/v1/blood_collection?donor_id=eq.' . urlencode((string)$donor_id);
+            } elseif (!empty($physical_exam_id)) {
+                $queryBase = SUPABASE_URL . '/rest/v1/blood_collection?physical_exam_id=eq.' . urlencode((string)$physical_exam_id);
+            }
+            if ($queryBase) {
+                $ch = curl_init($queryBase . '&select=is_successful&is_successful=eq.true&order=created_at.desc&limit=1');
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+                $resp = curl_exec($ch);
+                $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if ($http === 200 && $resp) {
+                    $arr = json_decode($resp, true) ?: [];
+                    if (!empty($arr) && isset($arr[0]['is_successful']) && ($arr[0]['is_successful'] === true || $arr[0]['is_successful'] === 'true' || $arr[0]['is_successful'] === 1)) {
+                        $existingDbSuccess = true;
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            error_log('Blood Collection Admin - Existing DB success check failed: ' . $e->getMessage());
+        }
+
+        if (!($legacySuccess || $existingDbSuccess)) {
+            throw new Exception('Cannot mark as Successful: legacy phlebotomist status not Successful and no existing successful blood collection found.');
+        }
+    }
+
     // Build payload for Supabase blood_collection
     $nowIso = (new DateTime())->format('c');
     // Status is controlled by downstream review/eligibility; keep DB happy with 'pending'
