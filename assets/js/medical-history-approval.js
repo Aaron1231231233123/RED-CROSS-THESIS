@@ -1904,12 +1904,20 @@ function forceShowDonorProfileElement() {
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
+    // Only activate on pages where the Medical History modal exists
+    const mhModalExists = !!document.getElementById('medicalHistoryModal');
+    const declineModalExists = !!document.getElementById('medicalHistoryDeclineModal');
+    const approvalModalExists = !!document.getElementById('medicalHistoryApprovalModal');
+    if (!mhModalExists && !declineModalExists && !approvalModalExists) {
+        return; // No MH UI on this page; safely no-op
+    }
+
     console.log('Medical history approval system initialized');
     
-    // Initialize decline form validation
-    initializeDeclineFormValidation();
+    // Initialize decline form validation (guard internal DOM)
+    try { initializeDeclineFormValidation(); } catch(_) {}
     // Bind interceptors for Approve flow ordering
-    bindApproveInterceptors();
+    try { bindApproveInterceptors(); } catch(_) {}
     // Global capture: block any non-primary Approve inside MH modal
     try {
         const root = document.getElementById('medicalHistoryModal') || document;

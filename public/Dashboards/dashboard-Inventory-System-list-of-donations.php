@@ -479,6 +479,15 @@ function getCacheStats() {
             display: none !important;
         }
     </style>
+    <!-- Allow spinners to be visible inside donor modals -->
+    <style>
+        #donorModal .spinner-border,
+        #donorModal [class*="loading"],
+        #donorDetailsModal .spinner-border,
+        #donorDetailsModal [class*="loading"] {
+            display: inline-block !important;
+        }
+    </style>
     <style>
 /* General Body Styling */
 body {
@@ -511,56 +520,7 @@ body {
 .modal-backdrop + .modal {
     z-index: 1061 !important;
 }
-/* Specific fixes for donor modal only */
-#donorModal {
-    z-index: 1060 !important;
-}
-#donorModal + .modal-backdrop {
-    z-index: 1055 !important;
-}
-/* Fix donor modal backdrop interaction issues */
-#donorModal.modal.show {
-    z-index: 1060 !important;
-}
-/* Remove modal backdrop completely for admin donor registration */
-#donorModal + .modal-backdrop {
-    display: none !important;
-}
-/* Alternative: Target backdrop when donor modal is open */
-body:has(#donorModal.show) .modal-backdrop {
-    display: none !important;
-}
-/* Remove all modal backdrops for admin donor modal */
-.modal-backdrop.fade.show {
-    display: none !important;
-}
-/* Override for donor modal specifically */
-#donorModal ~ .modal-backdrop.fade.show {
-    display: none !important;
-}
-/* Ensure donor modal content is clickable */
-#donorModal .modal-content {
-    pointer-events: auto !important;
-    z-index: 1061 !important;
-}
-/* Additional CSS to prevent any backdrop from appearing during admin donor registration */
-body.modal-open .modal-backdrop {
-    display: none !important;
-}
-/* Specifically target admin donor registration modals */
-#donorModal.modal.show ~ .modal-backdrop,
-#donorModal.modal.show + .modal-backdrop {
-    display: none !important;
-}
-/* Global rule to prevent backdrop fade during admin operations */
-.modal-backdrop.fade.show {
-    display: none !important;
-    opacity: 0 !important;
-    visibility: hidden !important;
-}
-#donorModal .modal-content * {
-    pointer-events: auto !important;
-}
+/* Removed legacy donorModal-specific overrides. Unified to donorDetailsModal. */
 /* Physical Examination Modal Step Visibility */
 .physical-step-content {
     display: none;
@@ -1441,7 +1401,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </a>
                         <a href="#" class="nav-link">
                             <span><i class="fas fa-chart-line"></i>Forecast Reports</span>
-                        </a>
+                        </a>    
                         <a href="Dashboard-Inventory-System-Users.php" class="nav-link">
                             <span><i class="fas fa-user-cog"></i>Manage Users</span>
                         </a>
@@ -1991,7 +1951,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             </p>
                         </div>
                     </div>
-<!-- Donor Details Modal -->
+<!-- Donor Details Modal (Legacy) -->
 <div class="modal fade" id="donorModal" tabindex="-1" aria-labelledby="donorModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
@@ -2543,21 +2503,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 }
             });
             
-            // Admin-specific: Continuously remove modal backdrops to prevent interference
-            setInterval(() => {
-                try {
-                    document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
-                        backdrop.style.display = 'none';
-                        backdrop.style.opacity = '0';
-                        backdrop.style.visibility = 'hidden';
-                    });
-                } catch(e) {
-                    // Ignore errors
-                }
-            }, 100);
+            // Removed backdrop interference loop; Bootstrap handles backdrops.
             
             // OPTIMIZATION: Show loading indicator for slow connections
-            const loadingIndicator = document.getElementById('loadingIndicator');
             const tableContainer = document.querySelector('.table-responsive');
             
             // Ensure loading indicator is hidden initially
@@ -2566,17 +2514,18 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             }
             
             // Show loading indicator if page takes more than 1 second to load
+            const loadingIndicatorEl = document.getElementById('loadingIndicator');
             const loadingTimeout = setTimeout(function() {
-                if (loadingIndicator && tableContainer) {
-                    loadingIndicator.style.display = 'block';
+                if (loadingIndicatorEl && tableContainer) {
+                    loadingIndicatorEl.style.display = 'block';
                     tableContainer.style.opacity = '0.5';
                 }
             }, 1000);
             // Hide loading indicator when page is fully loaded
             window.addEventListener('load', function() {
                 clearTimeout(loadingTimeout);
-                if (loadingIndicator && tableContainer) {
-                    loadingIndicator.style.display = 'none';
+                if (loadingIndicatorEl && tableContainer) {
+                    loadingIndicatorEl.style.display = 'none';
                     tableContainer.style.opacity = '1';
                 }
                 
@@ -2770,12 +2719,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 searchTimeout = setTimeout(function(){ if (window.performSearch) window.performSearch(); }, 300); // Wait 300ms after user stops typing
             });
             document.getElementById('searchCategory').addEventListener('change', searchDonations);
-            // Initialize donor modal with proper backdrop configuration
-            const donorModal = new bootstrap.Modal(document.getElementById('donorModal'), {
-                backdrop: true,
-                keyboard: true,
-                focus: true
-            });
+            // Initialize loading modal (kept)
             const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
                 backdrop: false,
                 keyboard: false
@@ -2803,8 +2747,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             // View buttons
             const viewButtons = document.querySelectorAll('.view-donor');
             viewButtons.forEach(function(button) {
+                console.log('Adding click listener to view button');
                 button.addEventListener('click', function(e) {
                     e.stopPropagation();
+                    console.log('View button clicked!');
                     const donorId = this.getAttribute('data-donor-id');
                     const eligibilityId = this.getAttribute('data-eligibility-id');
                     if (!donorId) {
@@ -2812,18 +2758,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         return;
                     }
                     console.log(`Viewing donor ID: ${donorId}, eligibility ID: ${eligibilityId}`);
-                    // Show loading state in modal
-                    document.getElementById('donorDetails').innerHTML = `
-                        <div class="text-center my-4">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="mt-2">Loading donor details...</p>
-                        </div>
-                    `;
-                    donorModal.show();
-                    // Fetch and display donor details
-                    fetchDonorDetails(donorId, eligibilityId);
+                    // Show legacy donor details modal styled to match wireframe
+                    const legacyDetails = document.getElementById('donorDetails');
+                    if (legacyDetails) {
+                        legacyDetails.innerHTML = '<div class="text-center my-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading donor details...</p></div>';
+                    }
+                    try { (new bootstrap.Modal(document.getElementById('donorModal'))).show(); } catch(_) {}
+                    if (typeof window.fetchDonorDetails === 'function') {
+                        window.fetchDonorDetails(donorId, eligibilityId);
+                    }
                 });
             });
             // Make entire row clickable for donor details
@@ -2832,23 +2775,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 row.addEventListener('click', function() {
                     const donorId = this.getAttribute('data-donor-id');
                     const eligibilityId = this.getAttribute('data-eligibility-id');
-                    if (!donorId) {
-                        console.error('No donor ID found for row');
-                        return;
+                    if (!donorId) return;
+                    const legacyDetails = document.getElementById('donorDetails');
+                    if (legacyDetails) {
+                        legacyDetails.innerHTML = '<div class="text-center my-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading donor details...</p></div>';
                     }
-                    console.log(`Row click - donor ID: ${donorId}, eligibility ID: ${eligibilityId}`);
-                    // Show loading state in modal
-                    document.getElementById('donorDetails').innerHTML = `
-                        <div class="text-center my-4">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="mt-2">Loading donor details...</p>
-                        </div>
-                    `;
-                    donorModal.show();
-                    // Fetch and display donor details
-                    fetchDonorDetails(donorId, eligibilityId);
+                    try { (new bootstrap.Modal(document.getElementById('donorModal'))).show(); } catch(_) {}
+                    if (typeof window.fetchDonorDetails === 'function') {
+                        window.fetchDonorDetails(donorId, eligibilityId);
+                    }
                 });
             });
             // Edit buttons
@@ -2858,24 +2793,38 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     e.stopPropagation();
                     const donorId = this.getAttribute('data-donor-id');
                     const eligibilityId = this.getAttribute('data-eligibility-id');
-                    if (!donorId) {
-                        console.error('No donor ID found for edit button');
-                        return;
+                    if (!donorId) return;
+                    const legacyDetails = document.getElementById('donorDetails');
+                    if (legacyDetails) {
+                        legacyDetails.innerHTML = '<div class="text-center my-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading donor details...</p></div>';
                     }
-                    // Show donor details modal (same as view button)
-                    document.getElementById('donorDetails').innerHTML = `
-                        <div class="text-center my-4">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="mt-2">Loading donor details...</p>
-                        </div>
-                    `;
-                    donorModal.show();
-                    fetchDonorDetails(donorId, eligibilityId);
+                    try { (new bootstrap.Modal(document.getElementById('donorModal'))).show(); } catch(_) {}
+                    if (typeof window.fetchDonorDetails === 'function') {
+                        window.fetchDonorDetails(donorId, eligibilityId);
+                    }
                 });
             });
         });
+
+        // Ensure donor detail modals always clean their backdrops when closed
+        (function ensureDonorDetailBackdropCleanup(){
+            function purgeBackdropsAndBody(){
+                try {
+                    document.querySelectorAll('.modal-backdrop').forEach(b => { try { b.remove(); } catch(_) {} });
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+                } catch(_) {}
+            }
+            document.addEventListener('DOMContentLoaded', function(){
+                ['donorDetailsModal','donorModal'].forEach(function(id){
+                    var el = document.getElementById(id);
+                    if (!el) return;
+                    el.addEventListener('hidden.bs.modal', purgeBackdropsAndBody);
+                    el.addEventListener('hide.bs.modal', function(){ setTimeout(purgeBackdropsAndBody, 0); });
+                });
+            });
+        })();
         // Function to fetch donor details
         function fetchDonorDetails(donorId, eligibilityId) {
             console.log(`Fetching details for donor: ${donorId}, eligibility: ${eligibilityId}`);
@@ -3566,14 +3515,25 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     ?>
     <!-- Admin modal styles/scripts -->
     <link rel="stylesheet" href="../../assets/css/medical-history-approval-modals.css">
-     <link rel="stylesheet" href="../../assets/css/physical-examination-modal.css">
+    <!-- Optional: physical exam modal CSS; load only if present -->
+    <link rel="preload" as="style" href="../../assets/css/physical-examination-modal.css" onload="this.rel='stylesheet'" crossorigin>
+    <noscript><link rel="stylesheet" href="../../assets/css/physical-examination-modal.css"></noscript>
      <!-- Enhanced JavaScript files -->
     <script src="../../assets/js/enhanced-workflow-manager.js"></script>
     <script src="../../assets/js/enhanced-data-handler.js"></script>
     <script src="../../assets/js/enhanced-validation-system.js"></script>
     <script src="../../assets/js/unified-staff-workflow-system.js"></script>
     <!-- Project scripts that power these modals -->
-    <script src="../../assets/js/medical-history-approval.js"></script>
+    <script>
+        // Load MH approval script only if MH modals are present
+        (function(){
+            const hasMH = document.getElementById('medicalHistoryModal') || document.getElementById('medicalHistoryDeclineModal') || document.getElementById('medicalHistoryApprovalModal');
+            if (!hasMH) return;
+            const s = document.createElement('script');
+            s.src = '../../assets/js/medical-history-approval.js';
+            document.currentScript.parentNode.insertBefore(s, document.currentScript.nextSibling);
+        })();
+    </script>
     <script src="../../assets/js/defer_donor_modal.js"></script>
     <script src="../../assets/js/initial-screening-defer-button.js"></script>
     <script src="../../assets/js/admin-screening-form-modal.js"></script>
@@ -3611,9 +3571,22 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
      }
      </script>
     <script src="../../assets/js/blood_collection_modal_admin.js"></script>
-    <script src="../../assets/js/phlebotomist_blood_collection_details_modal.js"></script>
     <script>
+        // Load phlebotomist details modal only when its container exists
+        (function(){
+            if (!document.getElementById('phlebotomistBloodCollectionDetailsModal')) return;
+            const s = document.createElement('script');
+            s.src = '../../assets/js/phlebotomist_blood_collection_details_modal.js';
+            document.currentScript.parentNode.insertBefore(s, document.currentScript.nextSibling);
+        })();
+    </script>
+    <script>
+        console.log('=== SCRIPT LOADING - JAVASCRIPT TEST ===');
+        console.log('Script is loading and executing!');
+        
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('=== DOM CONTENT LOADED - TESTING JAVASCRIPT ===');
+            console.log('JavaScript is working!');
             try { if (typeof initializeMedicalHistoryApproval === 'function') initializeMedicalHistoryApproval(); } catch (e) {}
             // Initialize enhanced workflow system if available
             if (typeof UnifiedStaffWorkflowSystem !== 'undefined') {
@@ -4237,13 +4210,45 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         };
         // Donor Details modal opener - shows comprehensive donor information
         window.openDonorDetails = function(context) {
+            console.log('=== OPENING DONOR DETAILS MODAL ===');
+            console.log('Context received:', context);
+            
             const donorId = context?.donor_id ? String(context.donor_id) : '';
+            console.log('Donor ID:', donorId);
+            
             const modalEl = document.getElementById('donorDetailsModal');
             const contentEl = document.getElementById('donorDetailsModalContent');
-            if (!modalEl || !contentEl) return;
+            
+            console.log('Modal element found:', !!modalEl);
+            console.log('Content element found:', !!contentEl);
+            
+            if (!modalEl) {
+                console.error('❌ donorDetailsModal element not found!');
+                alert('Error: Donor details modal not found. Please refresh the page.');
+                return;
+            }
+            
+            if (!contentEl) {
+                console.error('❌ donorDetailsModalContent element not found!');
+                alert('Error: Donor details modal content not found. Please refresh the page.');
+                return;
+            }
+            
+            console.log('✅ Both modal elements found, proceeding...');
+            
             contentEl.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
-            const bsModal = new bootstrap.Modal(modalEl);
-            bsModal.show();
+            
+            try {
+                const bsModal = new bootstrap.Modal(modalEl);
+                console.log('Bootstrap modal instance created:', !!bsModal);
+                bsModal.show();
+                console.log('Modal show() called');
+            } catch (error) {
+                console.error('Error creating or showing modal:', error);
+                alert('Error opening modal: ' + error.message);
+                return;
+            }
+            
             // Fetch comprehensive donor details from specific tables
             console.log(`Fetching donor details for ID: ${donorId}, eligibility: ${context?.eligibility_id || ''}`);
             // Try comprehensive API first, fallback to original if it fails
@@ -5377,15 +5382,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 const modalEl = document.getElementById('medicalHistoryModalAdmin');
                 const contentEl = document.getElementById('medicalHistoryModalAdminContent');
                 if (!modalEl || !contentEl) return;
-                // Reset body/backdrops to avoid stacked artifacts
-                try { document.querySelectorAll('.modal-backdrop').forEach(b => b.remove()); } catch(_) {}
-                try { document.body.classList.remove('modal-open'); document.body.style.overflow=''; document.body.style.paddingRight=''; } catch(_) {}
                 const bs = new bootstrap.Modal(modalEl, { backdrop: false, keyboard: true, focus: true });
                 bs.show();
-                // Ensure no backdrop is created for admin donor registration
-                setTimeout(() => {
-                    try { document.querySelectorAll('.modal-backdrop').forEach(b => b.remove()); } catch(_) {}
-                }, 100);
+                // Rely on Bootstrap to manage backdrops.
                 contentEl.innerHTML = '<div class="d-flex justify-content-center my-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
                 // Load admin MH form content
                 fetch(`../../src/views/forms/medical-history-modal-content-admin.php?donor_id=${encodeURIComponent(donorId)}`)
@@ -5940,34 +5939,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             });
             document.dispatchEvent(event);
         }
-        // Enhanced function to clean up modal backdrops
-        function cleanupModalBackdrops() {
-            // Remove show class from all modal backdrops first
-            const backdrops = document.querySelectorAll('.modal-backdrop');
-            backdrops.forEach(backdrop => {
-                backdrop.classList.remove('show', 'fade');
-                // Remove the backdrop after a short delay to allow fade out
-                setTimeout(() => {
-                    if (backdrop.parentNode) {
-                        backdrop.remove();
-                    }
-                }, 150);
-            });
-            // Remove modal-open class from body
-            document.body.classList.remove('modal-open');
-            // Reset body padding and overflow
-            document.body.style.paddingRight = '';
-            document.body.style.overflow = '';
-            // Force remove any remaining backdrops after cleanup
-            setTimeout(() => {
-                const remainingBackdrops = document.querySelectorAll('.modal-backdrop');
-                remainingBackdrops.forEach(backdrop => {
-                    if (backdrop.parentNode) {
-                        backdrop.remove();
-                    }
-                });
-            }, 300);
-        }
+        // Removed heavy backdrop cleanup; rely on Bootstrap's modal lifecycle.
         // Function to safely show a modal with proper cleanup
         function showModalSafely(modalId, delay = 0) {
             return new Promise((resolve) => {
@@ -6035,37 +6007,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 backdrop.classList.remove('show');
             });
         });
-        // Periodic cleanup to catch any lingering backdrops
-        setInterval(() => {
-            const backdrops = document.querySelectorAll('.modal-backdrop');
-            if (backdrops.length > 0) {
-                console.log('Found lingering modal backdrops, cleaning up...');
-                // First remove show class from any visible backdrops
-                backdrops.forEach(backdrop => {
-                    if (backdrop.classList.contains('show')) {
-                        backdrop.classList.remove('show');
-                        console.log('Removed show class from backdrop');
-                    }
-                });
-                cleanupModalBackdrops();
-            }
-        }, 2000); // Check every 2 seconds
-        // Add cleanup on page visibility change
-        document.addEventListener('visibilitychange', function() {
-            if (document.visibilityState === 'visible') {
-                cleanupModalBackdrops();
-            }
-        });
-        // Immediate fix for show class removal
-        function removeShowClassFromBackdrops() {
-            const backdrops = document.querySelectorAll('.modal-backdrop.show');
-            backdrops.forEach(backdrop => {
-                backdrop.classList.remove('show');
-                console.log('Immediately removed show class from backdrop');
-            });
-        }
-        // Run immediate cleanup every 500ms to catch show classes quickly
-        setInterval(removeShowClassFromBackdrops, 500);
+        // Removed periodic backdrop tampering and visibility-based cleanup.
         // Add event listeners for medical history approval buttons
         document.addEventListener('DOMContentLoaded', function() {
             // Listen for medical history approval button clicks
@@ -6515,9 +6457,25 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             window.showDonationSuccessModal = window.showBloodCollectionCompleted;
         }
         window.viewInterviewerDetails = function(donorId) {
-            console.log('Viewing interviewer details for donor:', donorId);
+            console.log('=== VIEWING INTERVIEWER DETAILS ===');
+            console.log('Donor ID:', donorId);
+            console.log('Type of donorId:', typeof donorId);
+            
+            if (!donorId) {
+                console.error('❌ No donor ID provided to viewInterviewerDetails');
+                alert('Error: No donor ID provided');
+                return;
+            }
+            
             const eligibilityId = window.currentEligibilityId || 'pending_' + donorId;
+            console.log('Eligibility ID:', eligibilityId);
+            
             // Use the comprehensive donor details modal
+            console.log('Calling openDonorDetails with context:', {
+                donor_id: donorId,
+                eligibility_id: eligibilityId
+            });
+            
             window.openDonorDetails({
                 donor_id: donorId,
                 eligibility_id: eligibilityId
@@ -6728,6 +6686,18 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         window.testDonorDetailsModal = function(donorId = '171') {
             console.log('Testing Donor Details Modal with donor ID:', donorId);
             window.viewInterviewerDetails(donorId);
+        };
+        
+        // Debug function to check modal elements (legacy donorModal removed)
+        window.debugModalElements = function() {
+            console.log('=== DEBUGGING MODAL ELEMENTS ===');
+            const donorDetailsModal = document.getElementById('donorDetailsModal');
+            const donorDetailsModalContent = document.getElementById('donorDetailsModalContent');
+            console.log('donorDetailsModal element:', donorDetailsModal);
+            console.log('donorDetailsModalContent element:', donorDetailsModalContent);
+            if (typeof bootstrap === 'undefined') {
+                console.error('❌ Bootstrap is not loaded!');
+            }
         };
         // Test function to directly test interviewer medical history workflow
         window.testOpenMedicalHistory = function(donorId = '123') {
