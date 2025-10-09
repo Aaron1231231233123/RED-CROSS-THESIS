@@ -68,32 +68,7 @@ Create the following files. These names are suggestions; keep “admin” contex
 4. Documentation
 - This document (DASHBOARD_INVENTORY_SYSTEM_OPTIMIZATION_admin.md).
 
-Admin Naming Conventions (Required)
-- All newly separated admin-only assets must include "-admin" in their filenames to prevent accidental reuse outside admin dashboards.
-- Required names:
-  - JS: `bootstrap-utils-admin.js`, `net-admin.js`, `donor-details-admin.js`, `workflow-admin.js`, `events-admin.js`
-  - CSS: `donor-details-admin.css`, `modals-admin.css`
-  - PHP partials: `donor-details-modal-admin.php`, `donor-details-legacy-modal-admin.php`
-- Optional admin-only variants should also use "-admin" (e.g., `phlebotomist_blood_collection_details_modal_admin.js`).
-
 Implementation Details
- 
-Implementation Log
-- [Added] assets/css/donor-details-admin.css — Admin-scoped styles for donor modals, skeletons, and status badges.
-- [Added] assets/js/bootstrap-utils-admin.js — Modal helpers: show/hide, ensureBackdropCleanup, watchModalLifecycle.
-- [Added] assets/js/net-admin.js — Fetch wrapper with timeout and optional retries; URL builder.
-- [Added] assets/js/donor-details-admin.js — Modal renderer with cached fetch and legacy fallback.
-- [Added] assets/js/workflow-admin.js — Parity-preserving phase openers with guards and fallbacks.
-- [Added] assets/js/events-admin.js — Delegated listeners for donor interactions; feature-flag aware.
-- [Added] src/views/admin-modals/donor-details-modal-admin.php — Modern role-sectioned modal shell.
-- [Added] src/views/admin-modals/donor-details-legacy-modal-admin.php — Legacy donor modal shell for fallback.
-- [Updated] public/Dashboards/dashboard-Inventory-System-list-of-donations.php — Linked admin CSS/JS, injected admin modal partials, and enabled feature flag `ADMIN_USE_MODULES`.
-- [Updated] assets/css/donor-details-admin.css — Red modal headers for admin donor modals; visible close icon.
-- [Added] assets/css/modals-admin.css — Admin z-index layering and backdrop tint; linked on dashboard.
-- [Updated] public/Dashboards/dashboard-Inventory-System-list-of-donations.php — Initialized modal lifecycle watchdogs for donor modals.
-- [Updated] public/Dashboards/dashboard-Inventory-System-list-of-donations.php — Emitted donor:updated after MH approve/decline and PE proceed to keep details cache fresh.
-- [Updated] public/Dashboards/dashboard-Inventory-System-list-of-donations.php — Routed actions to WorkflowAdmin under feature flag; conditional load for phlebotomist details admin script; emitted donor:updated before blood collection redirect.
-- [Updated] public/Dashboards/dashboard-Inventory-System-list-of-donations.php — Emitted donor:updated on initial screening proceed action to refresh details cache before opening screening.
 
 Step 1: Extract CSS
 - Move inline CSS pertaining to donor modals and role sections to assets/css/donor-details-admin.css.
@@ -247,7 +222,7 @@ The following URLs are used today in `public/Dashboards/dashboard-Inventory-Syst
 - Phlebotomist — Blood Collection
   - Primary modal include:
     - `../../src/views/modals/blood-collection-modal-admin.php`
-    - Optional details modal loader: `../../assets/js/phlebotomist_blood_collection_details_modal_admin.js` (only when `#phlebotomistBloodCollectionDetailsModal` exists)
+    - Optional details modal loader: `../../assets/js/phlebotomist_blood_collection_details_modal.js` (only when `#phlebotomistBloodCollectionDetailsModal` exists)
   - Page fallbacks (order of preference):
     - `../../src/views/forms/blood-collection-form.php?donor_id={DONOR_ID}`
     - `dashboard-staff-blood-collection-submission.php?donor_id={DONOR_ID}`
@@ -255,25 +230,6 @@ The following URLs are used today in `public/Dashboards/dashboard-Inventory-Syst
 Query parameters and encoding
 - All fallbacks use `donor_id` as the key parameter; values must be URL‑encoded.
 - Where a `source` parameter is used elsewhere (e.g., donor registration), preserve it if present when bouncing between routes.
-
-Script Loading Model and Paths (Localhost/XAMPP alignment)
-- Use globals-based scripts (no ESM) by default to match the current dashboard environment.
-- Always reference assets with dashboard-relative paths (not absolute `/assets/...`):
-  - `../../assets/js/bootstrap-utils-admin.js`
-  - `../../assets/js/net-admin.js`
-  - `../../assets/js/donor-details-admin.js`
-  - `../../assets/js/workflow-admin.js`
-  - `../../assets/js/events-admin.js`
-- Example includes (admin-only views):
-```html
-<link rel="stylesheet" href="../../assets/css/donor-details-admin.css">
-<script src="../../assets/js/bootstrap-utils-admin.js"></script>
-<script src="../../assets/js/net-admin.js"></script>
-<script src="../../assets/js/donor-details-admin.js"></script>
-<script src="../../assets/js/workflow-admin.js"></script>
-<script src="../../assets/js/events-admin.js"></script>
-```
-- Optional: If `type="module"` is adopted later, convert all admin scripts consistently and avoid mixing module and non-module loading on the same page.
 
 ### Function-to-Modal/Route Mapping (At-a-Glance)
 
@@ -289,10 +245,9 @@ Step 4: Extract JS – bootstrap-utils-admin.js
 - hideModal(id): getInstance + hide()
 - ensureBackdropCleanup(ids): attach hidden/ hide listeners; remove lingering backdrops; clear body.modal-open and overflow/padding.
 - Use this utility in donor-details-admin.js and anywhere else that opens modals.
- - Expose watchModalLifecycle(modalId): on hidden, remove ghost backdrops and body scroll locks (helper for local reload quirks). May internally delegate to ensureBackdropCleanup.
 
 Step 5: Extract JS – net-admin.js
-- apiGet(url, { timeoutMs = 10000, retries = 0 }): AbortController; optional simple retry loop for local flakiness; return JSON; clean error messages.
+- apiGet(url, { timeoutMs = 10000 }): AbortController; reject on timeout; return JSON; clean error messages.
 - buildUrl(base, params): safely adds query params.
 
 Step 6: Extract JS – events-admin.js
@@ -319,15 +274,6 @@ Step 9: Performance Enhancements
 - Virtualize rows if page size > 100 (optional future step).
 - Cache donor details for quick reopen; invalidate cache on known mutations (approval/decline events).
 - Avoid repeated innerHTML concatenations; build DOM via small templates or DocumentFragment.
-
-Cache Layer Consistency
-- Maintain a single, centralized cache in `donor-details-admin.js` keyed by `donor_id` (and `eligibility_id` when applicable) with a 60s TTL.
-- Invalidate cache on successful mutations across phases (MH submit, Screening submit, MH approve/decline, Physical Exam submit, Blood Collection complete).
-- Emit minimal custom events (e.g., `donor:updated`) on success to standardize invalidation hooks.
-
-Local Dev Helpers (optional, guarded by window.__DEBUG)
-- Listener leak check: guard `getEventListeners` availability before introspection to avoid runtime errors in non-Chrome browsers.
-- Modal watchdog: call `BootstrapUtilsAdmin.watchModalLifecycle('donorDetailsModal')` and for legacy `#donorModal` once on init to prevent ghost backdrops after local reloads.
 
 Step 10: Error Handling & Telemetry
 - Centralize error display to an in-modal alert UI.
@@ -423,3 +369,132 @@ Admin-only Specification (Required)
 - All newly created files listed here are intended exclusively for admin usage. Ensure they are only referenced from admin dashboard views and not exposed/linked in public or staff-only pages. If a build bundler is introduced, configure chunk splitting so admin bundles are not loaded outside admin routes.
 
 
+
+---
+
+## 🧩 Addendum — Localhost (XAMPP + Supabase) Performance & Resilience Enhancements
+
+### 🎯 Purpose
+This addendum supplements the *Admin Dashboard Inventory System Optimization Specification* with configurations and safeguards tailored for a **local XAMPP + Supabase** development environment. It ensures modular stability, consistent UI behavior, and measurable performance improvements during offline or LAN-only testing.
+
+### 1. Local Module Guards
+When using XAMPP without bundling tools, scripts may load out of order. Add the following guard to prevent undefined modules on slow or partial refresh:
+
+```html
+<script>
+window.ADMIN_MODULES_READY = false;
+Promise.allSettled([
+  import('/assets/js/bootstrap-utils-admin.js'),
+  import('/assets/js/net-admin.js'),
+  import('/assets/js/donor-details-admin.js'),
+  import('/assets/js/workflow-admin.js'),
+  import('/assets/js/events-admin.js')
+]).then(() => window.ADMIN_MODULES_READY = true);
+</script>
+```
+
+Before any function call:
+```js
+if (!window.ADMIN_MODULES_READY) {
+  console.warn("Modules not fully loaded. Please refresh the page.");
+  return;
+}
+```
+
+### 2. Supabase API Timeout + Retry (Local Context)
+Since local network latency may fluctuate, add a compact fetch wrapper to avoid hanging requests during testing:
+
+```js
+export async function apiGet(url, opts = {}) {
+  const { timeoutMs = 5000, retries = 2 } = opts;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) return res.json();
+    } catch (err) {
+      console.warn(`Retrying API call (attempt ${attempt + 1})`, err);
+    }
+  }
+  throw new Error("Local Supabase request failed after retries.");
+}
+```
+
+### 3. Modal Lifecycle Watchdog
+Bootstrap modals can leave scroll lock or ghost backdrops when reloaded locally. Add this in `bootstrap-utils-admin.js`:
+
+```js
+export function watchModalLifecycle(modalId) {
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
+  modal.addEventListener('hidden.bs.modal', () => {
+    document.body.classList.remove('modal-open');
+    document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+  });
+}
+```
+
+Call once per modal (e.g., `watchModalLifecycle('donorDetailsModal')`).
+
+### 4. Local Cache Layer
+Use lightweight caching to minimize redundant Supabase calls:
+
+```js
+const donorCache = new Map();
+export async function getDonorDetailsCached(id) {
+  const key = String(id);
+  if (donorCache.has(key)) return donorCache.get(key);
+  const data = await apiGet(`/api/donor_details.php?donor_id=${id}`);
+  donorCache.set(key, data);
+  setTimeout(() => donorCache.delete(key), 60000); // 1 min TTL
+  return data;
+}
+```
+
+### 5. Listener Leak Debug Tool
+XAMPP reloads don’t always clear JS memory cleanly. Use this to detect event handler leaks in DevTools:
+
+```js
+if (window.__DEBUG) {
+  let clickCountPrev = 0;
+  setInterval(() => {
+    const clickCount = getEventListeners(document.body)?.click?.length || 0;
+    if (clickCount > clickCountPrev + 10) console.warn('Potential duplicate listeners:', clickCount);
+    clickCountPrev = clickCount;
+  }, 5000);
+}
+```
+
+### 6. Evaluation Checklist (for Thesis Defense)
+For your **System Evaluation Phase**, demonstrate that your optimizations are measurable locally:
+
+| Evaluation Focus | Test Procedure | Expected Outcome |
+|------------------|----------------|------------------|
+| **Modal Stability** | Rapidly open/close 5 donor modals | No stuck backdrops or scroll freeze |
+| **API Response Time** | Measure with Chrome DevTools Network tab | < 2.5s average on localhost |
+| **Listener Management** | Reopen modals after page reload | No duplicate console warnings |
+| **Cache Efficiency** | Reopen the same donor details | Instant (<0.2s) load after first fetch |
+| **Error Resilience** | Disconnect Supabase temporarily | Error handled gracefully in-modal |
+
+### 7. Debug Logging (Local Only)
+Replace network telemetry with console-based performance logs:
+
+```js
+if (window.__DEBUG) {
+  const start = performance.now();
+  openDonorDetails(123);
+  setTimeout(() => {
+    console.log('Modal render time:', performance.now() - start, 'ms');
+  }, 1000);
+}
+```
+
+### 8. Summary
+These enhancements are tuned for **thesis evaluation under XAMPP + Supabase** conditions.  
+They strengthen **UI stability**, **API responsiveness**, and **error transparency**, ensuring consistent demo behavior without production infrastructure.
+
+---

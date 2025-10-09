@@ -270,6 +270,38 @@ try {
                 // PENDING STATUS DETERMINATION LOGIC
                 // Based on user specifications: Interviewer role as primary checking, needs_review as fallback
                 
+                // 0. Determine completion for Medical History and Initial Screening first.
+                // New donors (no records yet) should remain "Pending (Screening)" by default.
+                $medicalHistoryCompleted = false;
+                $screeningCompleted = false;
+                
+                // Medical History completion: Approved or Not Approved AND does not need review
+                if (isset($medicalByDonorId[$donorId])) {
+                    $medRecordForCompletion = $medicalByDonorId[$donorId];
+                    if (is_array($medRecordForCompletion)) {
+                        $medicalApprovalVal = $medRecordForCompletion['medical_approval'] ?? '';
+                        $medNeedsVal = $medRecordForCompletion['needs_review'] ?? null;
+                        if (in_array($medicalApprovalVal, ['Approved', 'Not Approved'], true) && $medNeedsVal !== true) {
+                            $medicalHistoryCompleted = true;
+                        }
+                    }
+                }
+                
+                // Initial Screening completion: no needs_review and no disapproval_reason
+                if (isset($screeningByDonorId[$donorId])) {
+                    $screenForCompletion = $screeningByDonorId[$donorId];
+                    if (is_array($screenForCompletion)) {
+                        $screenNeedsVal = $screenForCompletion['needs_review'] ?? null;
+                        $disapprovalReasonVal = $screenForCompletion['disapproval_reason'] ?? '';
+                        if ($screenNeedsVal !== true && empty($disapprovalReasonVal)) {
+                            $screeningCompleted = true;
+                        }
+                    }
+                }
+                
+                // Gate downstream stage checks to only run when both early stages are completed
+                $shouldCheckDownstreamStages = ($medicalHistoryCompleted && $screeningCompleted);
+                
                 // 1. PENDING (SCREENING) - Interviewer role: Screening needs review (primary)
                 $screeningNeedsReview = false;
                 $hasScreeningForm = false;
@@ -310,7 +342,7 @@ try {
                     if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120, 182])) {
                         error_log("DEBUG - Donor $donorId: medicalNeedsReview = " . ($medicalNeedsReview ? 'true' : 'false') . " (Physician role)");
                     }
-                } else {
+                } else if ($shouldCheckDownstreamStages) {
                     // 2. PENDING (EXAMINATION) - MH approval and Physical Examination process
                     $physicalExaminationCompleted = false;
                     
