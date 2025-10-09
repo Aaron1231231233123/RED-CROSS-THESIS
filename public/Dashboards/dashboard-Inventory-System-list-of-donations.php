@@ -415,14 +415,6 @@ function getCacheStats() {
                     loadingIndicator.style.visibility = 'hidden';
                 }
                 
-                // Hide medical history modal specifically
-                const medicalHistoryModal = document.getElementById('medicalHistoryModal');
-                if (medicalHistoryModal) {
-                    medicalHistoryModal.style.display = 'none !important';
-                    medicalHistoryModal.style.visibility = 'hidden';
-                    medicalHistoryModal.classList.remove('show');
-                }
-                
                 // Clear modal content that might show loading text
                 const modalContents = [
                     'medicalHistoryModalContent',
@@ -446,11 +438,7 @@ function getCacheStats() {
             // Also run on DOMContentLoaded
             document.addEventListener('DOMContentLoaded', hideLoadingIndicators);
             
-            // Run on window load as well
-            window.addEventListener('load', hideLoadingIndicators);
-            
-            // Run periodically to catch any that might appear
-            setInterval(hideLoadingIndicators, 100);
+            // Do not run on window load nor on an interval; this was hiding dynamic content
         })();
     </script>
     <!-- Bootstrap 5.3 CSS -->
@@ -471,13 +459,7 @@ function getCacheStats() {
         .modal-content [class*="loading"] {
             display: none !important;
         }
-        /* Hide medical history modal by default to prevent flash on hard refresh */
-        #medicalHistoryModal {
-            display: none !important;
-        }
-        .medical-history-modal {
-            display: none !important;
-        }
+        /* Do not force-hide MH modal; JS controls its visibility */
     </style>
     <!-- Allow spinners to be visible inside donor modals -->
     <style>
@@ -2400,16 +2382,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         </div>
     </div>
 </div>
-<!-- Immediately hide medical history modal to prevent flash on hard refresh -->
-<script>
-    (function() {
-        const medicalHistoryModal = document.getElementById('medicalHistoryModal');
-        if (medicalHistoryModal) {
-            medicalHistoryModal.style.display = 'none !important';
-            medicalHistoryModal.style.visibility = 'hidden';
-        }
-    })();
-</script>
+<!-- Removed forced hide script for medical history modal; visibility is controlled by JS show/hide functions -->
 <!-- Blood Collection Modal is included below from shared staff modal to avoid duplication/conflicts -->
 <!-- Edit Donor Modal -->
 <div class="modal fade" id="editDonorForm" tabindex="-1" aria-labelledby="editDonorFormLabel" aria-hidden="true">
@@ -3973,6 +3946,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             console.log('Medical history modal element:', modal);
             if (modal) {
                 console.log('Showing medical history modal for donor:', donorId);
+                // Clear any force-hidden inline styles
+                try { modal.removeAttribute('style'); } catch(_) {}
+                // Ensure visible above any remaining layers
                 modal.style.display = 'flex';
                 modal.classList.add('show');
                 // Debug: Check modal state after showing
@@ -3982,8 +3958,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     console.log('Modal computed style:', window.getComputedStyle(modal).display);
                     console.log('Modal computed opacity:', window.getComputedStyle(modal).opacity);
                 }, 100);
-                // Fetch medical history content from the physical dashboard specific file
-                fetch(`../../src/views/forms/medical-history-physical-modal-content.php?donor_id=${donorId}`)
+                // Fetch the admin medical history content
+                fetch(`../../src/views/forms/medical-history-modal-content-admin.php?donor_id=${donorId}`)
                     .then(response => {
                         if (!response.ok) {
                             throw new Error(`HTTP error! status: ${response.status}`);
@@ -4015,9 +3991,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             // Add interviewer workflow buttons
                             addInterviewerWorkflowButtons(donorId);
                         }
-                        // After loading content, generate the questions
-                        if (typeof generateMedicalHistoryQuestions === 'function') {
-                            generateMedicalHistoryQuestions();
+                        // After loading content, call the admin generator
+                        if (typeof window.generateAdminMedicalHistoryQuestions === 'function') {
+                            window.generateAdminMedicalHistoryQuestions();
                         }
                     })
                     .catch(error => {
@@ -5930,6 +5906,24 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             document.dispatchEvent(event);
         }
         // Removed heavy backdrop cleanup; rely on Bootstrap's modal lifecycle.
+        // Provide a local, lightweight backdrop cleanup used by this page.
+        // This matches other pages' exported helper but avoids a missing reference here.
+        function cleanupModalBackdrops() {
+            try {
+                // If no Bootstrap modals are currently shown, remove any stale backdrops
+                const openModals = document.querySelectorAll('.modal.show');
+                if (openModals.length === 0) {
+                    document.querySelectorAll('.modal-backdrop').forEach(function(backdrop){
+                        try { backdrop.remove(); } catch(_) {}
+                    });
+                    try { document.body.classList.remove('modal-open'); } catch(_) {}
+                    try { document.body.style.removeProperty('overflow'); } catch(_) {}
+                    try { document.body.style.removeProperty('paddingRight'); } catch(_) {}
+                }
+            } catch(_) {}
+        }
+        // Expose globally for any inline/onload consumers
+        try { window.cleanupModalBackdrops = cleanupModalBackdrops; } catch(_) {}
         // Function to safely show a modal with proper cleanup
         function showModalSafely(modalId, delay = 0) {
             return new Promise((resolve) => {
@@ -6094,6 +6088,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     </div>
                 `;
             }
+            // Ensure no Bootstrap backdrop remains before loading content
+            try { document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove()); } catch(_) {}
             // Load medical history content
             loadMedicalHistoryContent(donorId);
         }
@@ -6123,19 +6119,30 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 .then(html => {
                     // Update modal content
                     modalContent.innerHTML = html;
+                    // After injecting HTML, immediately try to trigger the admin generator if present
+                    setTimeout(() => {
+                        try {
+                            if (typeof window.generateAdminMedicalHistoryQuestions === 'function') {
+                                window.generateAdminMedicalHistoryQuestions();
+                            }
+                        } catch(_) {}
+                    }, 0);
                     // Execute any script tags in the loaded content
                     const scripts = modalContent.querySelectorAll('script');
                     scripts.forEach(script => {
+                        // Keep application/json data scripts in place; do not clone/move them
+                        const scriptType = (script.getAttribute('type') || '').toLowerCase();
+                        if (scriptType === 'application/json' && (script.id === 'modalData-admin' || script.id === 'modalData')) { return; }
                         try {
                             const newScript = document.createElement('script');
                             if (script.type) newScript.type = script.type;
                             if (script.src) {
                                 newScript.src = script.src;
                             } else {
-                                newScript.textContent = script.textContent;
+                                newScript.text = script.textContent || '';
                             }
-                            document.head.appendChild(newScript);
-                            document.head.removeChild(newScript);
+                            // Match staff behavior: append to body and do not immediately remove
+                            document.body.appendChild(newScript);
                         } catch (e) {
                             console.warn('Error executing script:', e);
                         }
@@ -6143,6 +6150,22 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     // Add interviewer workflow buttons
                     console.log('Adding interviewer workflow buttons to medical history modal');
                     addInterviewerWorkflowButtons(donorId);
+                    // Robustly wait for modalData-admin and generator, then render questions
+                    (function waitForModalDataAndGenerate(attempts){
+                        try {
+                            const dataEl = document.querySelector('#medicalHistoryModalContent #modalData-admin');
+                            const canGenerate = (typeof window.generateAdminMedicalHistoryQuestions === 'function');
+                            if (dataEl && canGenerate) {
+                                window.generateAdminMedicalHistoryQuestions();
+                                return;
+                            }
+                        } catch(_) {}
+                        if (attempts > 0) {
+                            setTimeout(() => waitForModalDataAndGenerate(attempts - 1), 100);
+                        } else {
+                            console.warn('modalData or generator not ready after retries');
+                        }
+                    })(25);
                     // Intercept medical history form submission for interviewer workflow
                     try {
                         const formEl = document.getElementById('modalMedicalHistoryForm');
@@ -6815,35 +6838,52 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     console.error('No donor ID available for medical history processing');
                     return;
                 }
-                // Close confirmation modal
-                const confirmModal = bootstrap.Modal.getInstance(document.getElementById('processMedicalHistoryConfirmModal'));
-                confirmModal.hide();
-                // Open medical history modal with donor data using existing function
-                console.log('Calling openMedicalHistoryModal with donor ID:', donorId);
-                // Test if modal element exists and can be shown
-                const testModal = document.getElementById('medicalHistoryModal');
-                console.log('Test modal element:', testModal);
-                if (testModal) {
-                    console.log('Modal classes before:', testModal.className);
-                    console.log('Modal style before:', testModal.style.display);
+                // Close confirmation modal and wait for full hide before showing custom MH modal
+                const confirmEl = document.getElementById('processMedicalHistoryConfirmModal');
+                const confirmModal = bootstrap.Modal.getInstance(confirmEl);
+                const openInterviewerMH = function(){
+                    console.log('Calling openMedicalHistoryModal with donor ID:', donorId);
+                    // Test if modal element exists and can be shown
+                    const testModal = document.getElementById('medicalHistoryModal');
+                    console.log('Test modal element:', testModal);
+                    if (testModal) {
+                        console.log('Modal classes before:', testModal.className);
+                        console.log('Modal style before:', testModal.style.display);
+                    }
+                    // For interviewer workflow, open the custom medical history form modal
+                    console.log('Opening medical history form for interviewer workflow');
+                    const medicalHistoryModal = document.getElementById('medicalHistoryModal');
+                    if (medicalHistoryModal) {
+                        console.log('Found medical history modal, opening it');
+                        // Ensure any lingering bootstrap backdrops are cleared first
+                        try { cleanupModalBackdrops(); } catch(_) {}
+                        // Reset modal state
+                        medicalHistoryModal.removeAttribute('style');
+                        medicalHistoryModal.className = 'medical-history-modal';
+                        // Show the modal
+                        medicalHistoryModal.style.display = 'flex';
+                        setTimeout(() => medicalHistoryModal.classList.add('show'), 10);
+                        // Load the medical history content for interviewer workflow
+                        loadMedicalHistoryContentForInterviewer(donorId);
+                    } else {
+                        console.error('Medical history modal not found!');
+                    }
+                };
+                if (confirmModal) {
+                    // Wait for Bootstrap to finish removing the backdrop
+                    confirmEl.addEventListener('hidden.bs.modal', function onHidden(){
+                        confirmEl.removeEventListener('hidden.bs.modal', onHidden);
+                        try { cleanupModalBackdrops(); } catch(_) {}
+                        // Force-remove any remaining backdrop nodes as requested
+                        try { document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove()); } catch(_) {}
+                        openInterviewerMH();
+                    }, { once: true });
+                    confirmModal.hide();
+                } else {
+                    try { cleanupModalBackdrops(); } catch(_) {}
+                    try { document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove()); } catch(_) {}
+                    openInterviewerMH();
                 }
-                        // For interviewer workflow, we need to open the medical history form (not approval modal)
-                        console.log('Opening medical history form for interviewer workflow');
-                        // Check if we have the medical history modal element
-                        const medicalHistoryModal = document.getElementById('medicalHistoryModal');
-                        if (medicalHistoryModal) {
-                            console.log('Found medical history modal, opening it');
-                            // Reset modal state
-                            medicalHistoryModal.removeAttribute('style');
-                            medicalHistoryModal.className = 'medical-history-modal';
-                            // Show the modal
-                            medicalHistoryModal.style.display = 'flex';
-                            setTimeout(() => medicalHistoryModal.classList.add('show'), 10);
-                            // Load the medical history content for interviewer workflow
-                            loadMedicalHistoryContentForInterviewer(donorId);
-                        } else {
-                            console.error('Medical history modal not found!');
-                        }
                     } catch (error) {
                         console.error('Error in proceed button handler:', error);
                     }
@@ -8115,6 +8155,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             opacity: 0;
             transition: opacity 0.3s ease;
         }
+        /* Temporarily disable Bootstrap backdrops sitewide for this page */
+        .modal-backdrop { display: none !important; opacity: 0 !important; }
         .medical-history-modal.show {
             opacity: 1;
         }

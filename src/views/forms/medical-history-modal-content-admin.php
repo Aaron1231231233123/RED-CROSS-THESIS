@@ -772,13 +772,21 @@ if ($http_code === 200) {
 </div>
 
 <!-- Data for JavaScript -->
- <script type="application/json" id="modalData">
- {
-     "medicalHistoryData": <?php echo $medical_history_data ? json_encode($medical_history_data) : 'null'; ?>,
-     "donorSex": <?php echo json_encode(strtolower($donor_sex)); ?>,
-     "userRole": <?php echo json_encode($user_role); ?>
- }
- </script>
+<?php
+    // Prepare robust JSON payload with safe escaping and UTF-8 substitution
+    $mh_json = json_encode(
+        $medical_history_data,
+        JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE
+    );
+    if ($mh_json === false) { $mh_json = 'null'; }
+
+    $sex_val = is_string($donor_sex) ? strtolower($donor_sex) : '';
+    $sex_json = json_encode($sex_val, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+
+    $role_val = isset($user_role) ? $user_role : '';
+    $role_json = json_encode($role_val, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+?>
+<script type="application/json" id="modalData">{"medicalHistoryData": <?php echo $mh_json; ?>, "donorSex": <?php echo $sex_json; ?>, "userRole": <?php echo $role_json; ?>}</script>
  
 <script>
 // Function to generate medical history questions (called from admin dashboard)
@@ -786,17 +794,14 @@ window.generateAdminMedicalHistoryQuestions = function() {
     try {
         console.log('=== ADMIN MEDICAL HISTORY QUESTIONS RENDERING START ===');
         const dataEl = document.getElementById('modalData');
-        if (!dataEl) {
-            console.error('âŒ modalData element not found');
-            return;
-        }
+        if (!dataEl) { console.error('modalData element not found'); return; }
         const parsed = JSON.parse(dataEl.textContent || '{}');
         const medicalHistoryData = parsed.medicalHistoryData || {};
         const donorSex = String(parsed.donorSex || '').toLowerCase();
         
-        console.log('ðŸ“Š Medical History Data:', medicalHistoryData);
-        console.log('ðŸ‘¤ Donor Sex:', donorSex);
-        console.log('ðŸ“ Parsed Data:', parsed);
+        console.log('Medical History Data:', medicalHistoryData);
+        console.log('Donor Sex:', donorSex);
+        console.log('Parsed Data:', parsed);
 
         // Map q# -> column name from medical_history to prefill accurately
         const fieldByQuestion = {
@@ -811,6 +816,61 @@ window.generateAdminMedicalHistoryQuestions = function() {
             33: 'pregnancy_history', 34: 'last_childbirth', 35: 'recent_miscarriage', 36: 'breastfeeding',
             37: 'last_menstruation'
         };
+
+        // Ensure structural hosts exist even if markup was trimmed by loader
+        (function ensureStructure(){
+            const root = document.getElementById('medicalHistoryModalContent') || document.body;
+            let form = document.getElementById('modalMedicalHistoryForm');
+            if (!form) {
+                form = document.createElement('form');
+                form.method = 'POST';
+                form.action = 'medical-history-process-admin.php';
+                form.id = 'modalMedicalHistoryForm';
+                const hiddenDonor = document.createElement('input');
+                hiddenDonor.type = 'hidden';
+                hiddenDonor.name = 'donor_id';
+                try { hiddenDonor.value = (parsed && parsed.medicalHistoryData && parsed.medicalHistoryData.donor_id) ? parsed.medicalHistoryData.donor_id : ''; } catch(_) {}
+                form.appendChild(hiddenDonor);
+                root.appendChild(form);
+            }
+            const stepTitleByNum = {
+                1: 'HEALTH & RISK ASSESSMENT:',
+                2: 'IN THE PAST 6 MONTHS HAVE YOU:',
+                3: 'IN THE PAST 12 MONTHS HAVE YOU:',
+                4: 'HAVE YOU EVER:',
+                5: 'HAD ANY OF THE FOLLOWING:',
+                6: 'FOR FEMALE DONORS ONLY:'
+            };
+            const stepDesc = 'Tick the appropriate answer.';
+            for (let n = 1; n <= 6; n++) {
+                let host = document.querySelector(`.form-step[data-step="${n}"]`);
+                if (!host) {
+                    host = document.createElement('div');
+                    host.className = 'form-step' + (n === 1 ? ' active' : '');
+                    host.setAttribute('data-step', String(n));
+                    const title = document.createElement('div');
+                    title.className = 'step-title';
+                    title.textContent = stepTitleByNum[n] || `STEP ${n}`;
+                    const desc = document.createElement('div');
+                    desc.className = 'step-description';
+                    desc.textContent = stepDesc;
+                    const container = document.createElement('div');
+                    container.className = 'form-container';
+                    container.setAttribute('data-step-container', String(n));
+                    container.innerHTML = [
+                        '<div class="form-header">#</div>',
+                        '<div class="form-header">Question</div>',
+                        '<div class="form-header">YES</div>',
+                        '<div class="form-header">NO</div>',
+                        '<div class="form-header">REMARKS</div>'
+                    ].join('');
+                    host.appendChild(title);
+                    host.appendChild(desc);
+                    host.appendChild(container);
+                    form.appendChild(host);
+                }
+            }
+        })();
 
         // Full question set mirroring staff modal
         const questionsByStep = {
@@ -874,17 +934,34 @@ window.generateAdminMedicalHistoryQuestions = function() {
 
         Object.keys(questionsByStep).forEach(stepNum => {
             const questions = questionsByStep[stepNum];
-            console.log(`ðŸ“‹ Processing Step ${stepNum}:`, questions);
+            console.log(`Processing Step ${stepNum}:`, questions);
             if (!questions || questions.length === 0) {
-                console.log(`âš ï¸ No questions for step ${stepNum}`);
+                console.log(`No questions for step ${stepNum}`);
                 return;
             }
-            const container = document.querySelector(`.form-container[data-step-container="${stepNum}"]`);
+            let container = document.querySelector(`.form-container[data-step-container="${stepNum}"]`);
             if (!container) {
-                console.error(`âŒ Container not found for step ${stepNum}`);
-                return;
+                // Create the container structure if missing (ensure idempotent rendering)
+                const stepHost = document.querySelector(`.form-step[data-step="${stepNum}"]`);
+                if (!stepHost) {
+                    console.error(`Step host not found for step ${stepNum}`);
+                    return;
+                }
+                const newContainer = document.createElement('div');
+                newContainer.className = 'form-container';
+                newContainer.setAttribute('data-step-container', String(stepNum));
+                // Header row to mirror expected structure
+                newContainer.innerHTML = [
+                    '<div class="form-header">#</div>',
+                    '<div class="form-header">Question</div>',
+                    '<div class="form-header">YES</div>',
+                    '<div class="form-header">NO</div>',
+                    '<div class="form-header">REMARKS</div>'
+                ].join('');
+                stepHost.appendChild(newContainer);
+                container = newContainer;
             }
-            console.log(`âœ… Found container for step ${stepNum}, adding ${questions.length} questions`);
+            console.log(`Found container for step ${stepNum}, adding ${questions.length} questions`);
 
             questions.forEach((q, idx) => {
                 const number = createCell(String(idx + 1), 'question-number');
@@ -934,25 +1011,25 @@ window.generateAdminMedicalHistoryQuestions = function() {
                 if (line56) line56.style.display = 'none';
                 const step6Form = document.querySelector('.form-step[data-step="6"]');
                 if (step6Form) step6Form.style.display = 'none';
-                console.log('ðŸ‘¨ Hiding female-only step 6 for male donor');
+                console.log('Hiding female-only step 6 for male donor');
             } catch (_) {}
         }
         
-        console.log('âœ… Medical history questions rendering completed successfully');
+        console.log('Medical history questions rendering completed successfully');
         
         // Additional verification: count total questions rendered
         const totalQuestions = document.querySelectorAll('.question-text').length;
-        console.log(`ðŸ“Š Total questions rendered: ${totalQuestions}`);
+        console.log(`Total questions rendered: ${totalQuestions}`);
         
         // Check if any containers have content
         const containers = document.querySelectorAll('.form-container[data-step-container]');
         containers.forEach((container, index) => {
             const questions = container.querySelectorAll('.question-text');
-            console.log(`ðŸ“‹ Step ${index + 1} container has ${questions.length} questions`);
+            console.log(`Step ${index + 1} container has ${questions.length} questions`);
         });
         
     } catch (e) {
-        console.error('âŒ Failed to render medical history questions:', e);
+        console.error('Failed to render medical history questions:', e);
         console.error('Stack trace:', e.stack);
     }
 };
@@ -963,7 +1040,7 @@ setTimeout(() => {
         // Check if questions are already rendered
         const existingQuestions = document.querySelectorAll('.question-text');
         if (existingQuestions.length === 0) {
-            console.log('ðŸ”„ Auto-calling question generation (fallback)');
+            console.log('Auto-calling question generation (fallback)');
             window.generateAdminMedicalHistoryQuestions();
         }
     }
