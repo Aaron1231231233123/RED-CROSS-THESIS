@@ -278,18 +278,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     
                     // Note: Eligibility records are automatically created by database triggers
                     
-                    // Invalidate cache to ensure status updates immediately
-                    try {
-                        // Include the proper cache invalidation function
-                        require_once __DIR__ . '/../../public/Dashboards/dashboard-Inventory-System-list-of-donations.php';
-                        
-                        // Use the proper cache invalidation function
-                        invalidateCache();
-                        
-                        error_log("Admin Physical Examination Handler - Cache invalidated for donor: " . $data['donor_id']);
-                    } catch (Exception $cache_error) {
-                        error_log("Admin Physical Examination Handler - Cache invalidation error: " . $cache_error->getMessage());
-                    }
+                    // Cache invalidation will be handled by the frontend refresh
+                    error_log("Admin Physical Examination Handler - Physical examination completed for donor: " . $data['donor_id']);
                     
                     // Return success response for admin
                     header('Content-Type: application/json');

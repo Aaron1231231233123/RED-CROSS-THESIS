@@ -153,14 +153,10 @@ class PhysicalExaminationModalAdmin {
         if (this.validateCurrentStep()) {
             if (this.currentStep < this.totalSteps) {
                 this.currentStep++;
-                // Skip step 3 (blood bag) for admin - go directly to step 4 (review)
-                if (this.currentStep === 3) {
-                    this.currentStep = 4;
-                }
                 this.showStep(this.currentStep);
                 this.updateProgressIndicator();
                 
-                if (this.currentStep === 4) {
+                if (this.currentStep === 3) {
                     this.updateSummary();
                 }
             }
@@ -172,10 +168,6 @@ class PhysicalExaminationModalAdmin {
         
         if (this.currentStep > 1) {
             this.currentStep--;
-            // Skip step 3 (blood bag) for admin - go directly to step 2
-            if (this.currentStep === 3) {
-                this.currentStep = 2;
-            }
             this.showStep(this.currentStep);
             this.updateProgressIndicator();
         }
@@ -185,15 +177,11 @@ class PhysicalExaminationModalAdmin {
         console.log('[PE ADMIN DEBUG] Going to step:', step);
         
         if (step >= 1 && step <= this.currentStep && step <= this.totalSteps) {
-            // Skip step 3 (blood bag) for admin
-            if (step === 3) {
-                step = 4; // Go to review step instead
-            }
             this.currentStep = step;
             this.showStep(this.currentStep);
             this.updateProgressIndicator();
             
-            if (this.currentStep === 4) {
+            if (this.currentStep === 3) {
                 this.updateSummary();
             }
         }
@@ -224,10 +212,10 @@ class PhysicalExaminationModalAdmin {
         const submitBtn = document.querySelector('#physicalExaminationModalAdmin .physical-submit-btn-admin');
         
         if (prevBtn) prevBtn.style.display = this.currentStep === 1 ? 'none' : 'inline-block';
-        if (nextBtn) nextBtn.style.display = this.currentStep === 4 ? 'none' : 'inline-block'; // Step 4 is final
+        if (nextBtn) nextBtn.style.display = this.currentStep === 3 ? 'none' : 'inline-block'; // Step 3 is final
         
         if (submitBtn) {
-            submitBtn.style.display = this.currentStep === 4 ? 'inline-block' : 'none'; // Step 4 is final
+            submitBtn.style.display = this.currentStep === 3 ? 'inline-block' : 'none'; // Step 3 is final
         }
     }
     
@@ -239,21 +227,12 @@ class PhysicalExaminationModalAdmin {
             const stepNumber = index + 1;
             step.classList.remove('active', 'completed');
             
-            // Hide step 3 (blood bag) for admin
-            if (stepNumber === 3) {
-                step.style.display = 'none';
-                return;
-            }
+            // Show all 3 steps (no hiding needed)
+            step.style.display = 'block';
             
-            // Adjust step numbers for display (step 4 becomes step 3 visually)
-            let visualStep = stepNumber;
-            if (stepNumber > 3) {
-                visualStep = stepNumber - 1; // Step 4 becomes step 3 visually
-            }
-            
-            if (visualStep < this.currentStep) {
+            if (stepNumber < this.currentStep) {
                 step.classList.add('completed');
-            } else if (visualStep === this.currentStep) {
+            } else if (stepNumber === this.currentStep) {
                 step.classList.add('active');
             }
         });
@@ -261,7 +240,7 @@ class PhysicalExaminationModalAdmin {
         // Update progress fill
         const progressFill = document.querySelector('#physicalExaminationModalAdmin .physical-progress-fill');
         if (progressFill) {
-            const progressPercentage = ((this.currentStep - 1) / (Math.max(this.totalSteps, 2) - 1)) * 100;
+            const progressPercentage = ((this.currentStep - 1) / (this.totalSteps - 1)) * 100;
             progressFill.style.width = progressPercentage + '%';
         }
     }
@@ -269,8 +248,8 @@ class PhysicalExaminationModalAdmin {
     validateCurrentStep() {
         console.log('[PE ADMIN DEBUG] Validating current step:', this.currentStep);
         
-        // Skip validation on review step (step 4) - we'll validate all fields during submission
-        if (this.currentStep === 4) {
+        // Skip validation on review step (step 3) - we'll validate all fields during submission
+        if (this.currentStep === 3) {
             return true;
         }
         

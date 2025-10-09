@@ -5305,8 +5305,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             try {
                 if (!donorId) return;
                 // Reuse the admin MH modal shell to avoid duplicate IDs and layout conflicts
-                // Also hide the Donor Details modal first to prevent stacking/layout issues
+                // Also hide the Donor Details/Profile modal first to prevent stacking/layout issues
                 try { const dd = bootstrap.Modal.getInstance(document.getElementById('donorDetailsModal')); if (dd) dd.hide(); } catch(_) {}
+                try {
+                    const dp = document.getElementById('donorProfileModal');
+                    if (dp) {
+                        const inst = bootstrap.Modal.getInstance(dp) || new bootstrap.Modal(dp);
+                        try { inst.hide(); } catch(_) {}
+                        try { dp.classList.remove('show'); dp.style.display='none'; dp.setAttribute('aria-hidden','true'); } catch(_) {}
+                    }
+                } catch(_) {}
                 // First, check current medical_approval to decide which UI to show
                 (async () => {
                     // Default to unknown; only treat as Approved when explicitly returned
@@ -5348,8 +5356,26 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 const modalEl = document.getElementById('medicalHistoryModalAdmin');
                 const contentEl = document.getElementById('medicalHistoryModalAdminContent');
                 if (!modalEl || !contentEl) return;
-                const bs = new bootstrap.Modal(modalEl, { backdrop: false, keyboard: true, focus: true });
+                // Clean up any existing modal/backdrop state to avoid z-index/visibility conflicts
+                try {
+                    document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove());
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow='';
+                    document.body.style.paddingRight='';
+                } catch(_) {}
+                // Ensure admin MH modal appears above anything else
+                try { modalEl.style.zIndex = '2000'; } catch(_) {}
+                const bs = new bootstrap.Modal(modalEl, { backdrop: true, keyboard: true, focus: true });
                 bs.show();
+                // Force visibility in case a global CSS sets .modal { visibility:hidden }
+                try {
+                    modalEl.style.visibility = 'visible';
+                    modalEl.style.opacity = '1';
+                    modalEl.removeAttribute('aria-hidden');
+                    modalEl.classList.add('show');
+                } catch(_) {}
+                // Re-assert after Bootstrap transition
+                setTimeout(() => { try { modalEl.style.visibility = 'visible'; modalEl.style.opacity = '1'; } catch(_) {} }, 50);
                 // Rely on Bootstrap to manage backdrops.
                 contentEl.innerHTML = '<div class="d-flex justify-content-center my-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
                 // Load admin MH form content
@@ -5363,18 +5389,23 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             scripts.forEach(script => {
                                 const s = document.createElement('script');
                                 if (script.type) s.type = script.type;
-                                if (script.src) { s.src = script.src; } else { s.textContent = script.textContent || ''; }
-                                document.head.appendChild(s);
-                                // remove after executing to avoid duplicates
-                                setTimeout(() => { try { document.head.removeChild(s); } catch(_) {} }, 0);
+                                if (script.src) { s.src = script.src; } else { s.text = script.textContent || ''; }
+                                // Append to body for reliable execution; don't remove immediately
+                                document.body.appendChild(s);
                             });
                         } catch(_) {}
                         // If the content relies on a generator, call it
-                        try { if (typeof generateMedicalHistoryQuestions === 'function') generateMedicalHistoryQuestions(); } catch(_) {}
+                        try {
+                            if (typeof window.generateAdminMedicalHistoryQuestions === 'function') {
+                                window.generateAdminMedicalHistoryQuestions();
+                            } else if (typeof window.generateMedicalHistoryQuestions === 'function') {
+                                window.generateMedicalHistoryQuestions();
+                            }
+                        } catch(_) {}
                         // Hide Edit/Next controls from interviewer UI for physician preview
                         try {
-                            const nextBtn = contentEl.querySelector('#nextButton');
-                            const prevBtn = contentEl.querySelector('#prevButton');
+                            const nextBtn = contentEl.querySelector('#modalNextButton') || contentEl.querySelector('#nextButton');
+                            const prevBtn = contentEl.querySelector('#modalPrevButton') || contentEl.querySelector('#prevButton');
                             if (nextBtn) nextBtn.style.display = 'none';
                             if (prevBtn) prevBtn.style.display = 'none';
                             contentEl.querySelectorAll('button').forEach(btn => {
@@ -6063,6 +6094,23 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             window.isOpeningMedicalHistory = true;
             // Track current donor ID
             window.currentDonorId = donorId;
+            // Ensure any existing Bootstrap modals are fully closed/hidden to avoid visibility conflicts
+            try {
+                const possibleIds = ['screeningFormModal', 'donorProfileModal', 'editDonorForm', 'medicalHistoryApprovalWorkflowModal'];
+                possibleIds.forEach(function(id){
+                    try {
+                        const el = document.getElementById(id);
+                        if (!el) return;
+                        const inst = bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el);
+                        try { inst.hide(); } catch(_) {}
+                        try { el.classList.remove('show'); el.style.display = 'none'; el.setAttribute('aria-hidden','true'); } catch(_) {}
+                    } catch(_) {}
+                });
+                // Normalize body state left by previous Bootstrap modals
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+            } catch(_) {}
             // Ensure the medical history modal starts with a clean state
             const mhElement = document.getElementById('medicalHistoryModal');
             if (!mhElement) {
@@ -6075,6 +6123,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             mhElement.className = 'medical-history-modal';
             // Show the custom modal (like physical examination modal)
             mhElement.style.display = 'flex';
+            mhElement.style.visibility = 'visible';
+            mhElement.style.opacity = '1';
+            try { mhElement.style.zIndex = '2000'; } catch(_) {}
             setTimeout(() => mhElement.classList.add('show'), 10);
             // Show loading state in modal content
             const modalContent = document.getElementById('medicalHistoryModalContent');
@@ -6092,9 +6143,61 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             try { document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove()); } catch(_) {}
             // Load medical history content
             loadMedicalHistoryContent(donorId);
+            // If physician path, reconfigure injected admin content to show Approve/Decline and hide navigation
+            (function configurePhysicianButtons(attempt){
+                try {
+                    if (!window.__physicianMHView) return; // only when physician flagged
+                    const host = document.getElementById('medicalHistoryModalContent');
+                    if (!host) { if ((attempt||0) < 30) return setTimeout(()=>configurePhysicianButtons((attempt||0)+1), 100); return; }
+                    const prevBtn = host.querySelector('#modalPrevButton');
+                    const nextBtn = host.querySelector('#modalNextButton');
+                    const submitBtn = host.querySelector('#modalSubmitButton');
+                    const approveBtn = host.querySelector('#modalApproveButton');
+                    const declineBtn = host.querySelector('#modalDeclineButton');
+                    if (!approveBtn || !declineBtn) { if ((attempt||0) < 30) return setTimeout(()=>configurePhysicianButtons((attempt||0)+1), 100); return; }
+                    try { if (prevBtn) prevBtn.style.display = 'none'; } catch(_) {}
+                    try { if (nextBtn) nextBtn.style.display = 'none'; } catch(_) {}
+                    try { if (submitBtn) submitBtn.style.display = 'none'; } catch(_) {}
+                    try { approveBtn.style.display = 'inline-block'; } catch(_) {}
+                    try { declineBtn.style.display = 'inline-block'; } catch(_) {}
+                    // Clear the flag so subsequent opens don't force this
+                    try { window.__physicianMHView = false; } catch(_) {}
+                } catch(_) {
+                    if ((attempt||0) < 30) return setTimeout(()=>configurePhysicianButtons((attempt||0)+1), 100);
+                }
+            })(0);
         }
         // Make the existing function globally accessible
         window.openMedicalHistoryApprovalModal = openMedicalHistoryApprovalModal;
+        // Back-compat wrapper used by physician action buttons; opens ADMIN MH approval modal
+        window.openMedicalreviewapproval = function(context){
+            try {
+                var donorId = null;
+                if (context && typeof context === 'object') {
+                    donorId = context.donor_id || context.donor_form_id || null;
+                } else if (context) {
+                    donorId = context;
+                }
+                donorId = donorId != null ? String(donorId) : '';
+                if (!donorId) {
+                    console.error('openMedicalreviewapproval: No donor ID provided');
+                    return;
+                }
+                // Mark that this open was triggered from the physician approval path
+                try { window.__physicianMHView = true; } catch(_) {}
+                if (typeof window.openMedicalHistoryApprovalModal === 'function') {
+                    window.openMedicalHistoryApprovalModal(donorId);
+                } else if (typeof window.openMedicalHistoryModal === 'function') {
+                    // Fallback to generic MH modal if admin loader is unavailable
+                    window.openMedicalHistoryModal(donorId);
+                } else {
+                    // Final fallback: navigate to page view
+                    window.location.href = `../../src/views/forms/medical-history.php?donor_id=${encodeURIComponent(donorId)}`;
+                }
+            } catch (e) {
+                console.error('openMedicalreviewapproval failed:', e);
+            }
+        };
         // Function to load medical history content for interviewer workflow
         function loadMedicalHistoryContentForInterviewer(donorId) {
             const modalContent = document.getElementById('medicalHistoryModalContent');
@@ -6245,7 +6348,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 .then(html => {
                     // Update modal content
                     modalContent.innerHTML = html;
-                    // Execute any script tags in the loaded content
+                    // Execute any script tags in the loaded content (append to body for consistent execution)
                     const scripts = modalContent.querySelectorAll('script');
                     scripts.forEach(script => {
                         try {
@@ -6254,10 +6357,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             if (script.src) {
                                 newScript.src = script.src;
                             } else {
-                                newScript.textContent = script.textContent;
+                                newScript.text = script.textContent || '';
                             }
-                            document.head.appendChild(newScript);
-                            document.head.removeChild(newScript);
+                            document.body.appendChild(newScript);
                         } catch (e) {
                             console.warn('Error executing script:', e);
                         }
@@ -6273,12 +6375,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             initializeMedicalHistoryApproval();
                         }
                         // Hide the submit button and show approve/decline buttons instead
-                        const submitBtn = document.getElementById('nextButton');
+                        const submitBtn = document.getElementById('nextButton') || document.getElementById('modalNextButton');
                         if (submitBtn) {
                             submitBtn.style.display = 'none';
                         }
                         // Add approve/decline buttons to the modal footer (only for staff workflow)
-                        const modalFooter = document.querySelector('#medicalHistoryModal .modal-footer');
+                        const modalFooter = document.querySelector('#medicalHistoryModal .modal-footer') || document.querySelector('.modal-footer');
                         if (modalFooter) {
                             // Check if buttons already exist
                             if (!document.getElementById('approveMedicalHistoryBtn')) {
@@ -6316,6 +6418,28 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             mhInitializeAdminFlow();
                         }
                     }, 100);
+                    // If physician path was requested, hide navigation and show decision buttons once present
+                    (function ensurePhysicianDecisionUI(attempt){
+                        try {
+                            if (!window.__physicianMHView) return; // only apply when flagged
+                            const host = document.getElementById('medicalHistoryModalContent');
+                            if (!host) { if ((attempt||0) < 30) return setTimeout(()=>ensurePhysicianDecisionUI((attempt||0)+1), 100); return; }
+                            const prevBtn = host.querySelector('#modalPrevButton');
+                            const nextBtn = host.querySelector('#modalNextButton');
+                            const submitBtn2 = host.querySelector('#modalSubmitButton');
+                            const approveBtn2 = host.querySelector('#modalApproveButton');
+                            const declineBtn2 = host.querySelector('#modalDeclineButton');
+                            if (!approveBtn2 || !declineBtn2) { if ((attempt||0) < 30) return setTimeout(()=>ensurePhysicianDecisionUI((attempt||0)+1), 100); return; }
+                            try { if (prevBtn) prevBtn.style.display = 'none'; } catch(_) {}
+                            try { if (nextBtn) nextBtn.style.display = 'none'; } catch(_) {}
+                            try { if (submitBtn2) submitBtn2.style.display = 'none'; } catch(_) {}
+                            try { approveBtn2.style.display = 'inline-block'; } catch(_) {}
+                            try { declineBtn2.style.display = 'inline-block'; } catch(_) {}
+                            try { window.__physicianMHView = false; } catch(_) {}
+                        } catch(_) {
+                            if ((attempt||0) < 30) return setTimeout(()=>ensurePhysicianDecisionUI((attempt||0)+1), 100);
+                        }
+                    })(0);
                     window.isOpeningMedicalHistory = false;
                 })
                 .catch(error => {
@@ -6402,6 +6526,114 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             } else {
                 alert('Medical history review editing not available');
             }
+        };
+        // Diagnostic: Run deep checks for MH approval modal visibility/behavior
+        window.runMHApprovalDiagnostics = async function(donorId){
+            const diag = { when: new Date().toISOString(), donorId: donorId || null, steps: [] };
+            const log = (name, data) => { try { console.log('[MH-DIAG]', name, data); } catch(_) {} diag.steps.push({ name, data }); };
+            try {
+                log('functions', {
+                    openPhysicianMedicalPreview: typeof window.openPhysicianMedicalPreview,
+                    openMedicalreviewapproval: typeof window.openMedicalreviewapproval,
+                    openMedicalHistoryApprovalModal: typeof window.openMedicalHistoryApprovalModal,
+                    openMedicalHistoryModal: typeof window.openMedicalHistoryModal,
+                    loadMedicalHistoryContent: typeof window.loadMedicalHistoryContent,
+                    initializeMedicalHistoryApproval: typeof window.initializeMedicalHistoryApproval,
+                    generateAdminMedicalHistoryQuestions: typeof window.generateAdminMedicalHistoryQuestions
+                });
+                const ids = [
+                    'medicalHistoryModalAdmin','medicalHistoryModal','medicalHistoryApprovalWorkflowModal',
+                    'medicalHistoryApprovalModal','medicalHistoryDeclinedModal','donorProfileModal','screeningFormModal'
+                ];
+                const snap = {};
+                ids.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (!el) { snap[id] = { exists:false }; return; }
+                    const cs = window.getComputedStyle(el);
+                    const r = el.getBoundingClientRect();
+                    snap[id] = {
+                        exists:true,
+                        classes: el.className,
+                        display: cs.display,
+                        visibility: cs.visibility,
+                        opacity: cs.opacity,
+                        zIndex: cs.zIndex,
+                        rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }
+                    };
+                });
+                log('elements.snapshot', snap);
+                // Backdrops and body state
+                const backdrops = Array.from(document.querySelectorAll('.modal-backdrop')).map(b=>({classes:b.className, z:getComputedStyle(b).zIndex, opacity:getComputedStyle(b).opacity}));
+                log('backdrops', backdrops);
+                log('body', { modalOpen: document.body.classList.contains('modal-open'), overflow: document.body.style.overflow, pr: document.body.style.paddingRight });
+                // Attempt a direct fetch of the admin content
+                if (donorId) {
+                    try {
+                        const url = `../../src/views/forms/medical-history-modal-content-admin.php?donor_id=${encodeURIComponent(String(donorId))}`;
+                        const res = await fetch(url, { cache:'no-store' });
+                        const txt = await res.text();
+                        log('fetch.adminContent', { ok: res.ok, status: res.status, length: txt.length, hasForm: /modalMedicalHistoryForm/.test(txt) });
+                    } catch (e) { log('fetch.adminContent.error', String(e && e.message || e)); }
+                }
+                // Attach temporary modal show/hide listeners for admin MH
+                try {
+                    const mhEl = document.getElementById('medicalHistoryModalAdmin');
+                    if (mhEl) {
+                        mhEl.addEventListener('show.bs.modal', () => log('event.show.adminMH', { fired:true }), { once:true });
+                        mhEl.addEventListener('shown.bs.modal', () => log('event.shown.adminMH', { fired:true }), { once:true });
+                        mhEl.addEventListener('hide.bs.modal', () => log('event.hide.adminMH', { fired:true }), { once:true });
+                    }
+                } catch(_) {}
+                // Try to open via the same handler used by the UI
+                if (donorId) {
+                    try { document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove()); document.body.classList.remove('modal-open'); document.body.style.overflow=''; document.body.style.paddingRight=''; } catch(_) {}
+                    if (typeof window.openPhysicianMedicalPreview === 'function') {
+                        log('action.openPhysicianMedicalPreview', { donorId });
+                        window.openPhysicianMedicalPreview(String(donorId));
+                    } else if (typeof window.openMedicalreviewapproval === 'function') {
+                        log('action.openMedicalreviewapproval', { donorId });
+                        window.openMedicalreviewapproval({ donor_id: String(donorId) });
+                    } else if (typeof window.openMedicalHistoryApprovalModal === 'function') {
+                        log('action.openMedicalHistoryApprovalModal', { donorId });
+                        window.openMedicalHistoryApprovalModal(String(donorId));
+                    }
+                    await new Promise(r => setTimeout(r, 800));
+                }
+                // Re-snapshot after attempting to open
+                const post = {};
+                ids.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (!el) { post[id] = { exists:false }; return; }
+                    const cs = window.getComputedStyle(el);
+                    const r = el.getBoundingClientRect();
+                    post[id] = {
+                        exists:true,
+                        hasShowClass: el.classList.contains('show'),
+                        display: cs.display,
+                        visibility: cs.visibility,
+                        opacity: cs.opacity,
+                        zIndex: cs.zIndex,
+                        rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }
+                    };
+                });
+                log('elements.afterOpen', post);
+                // Look for potential overlays with higher z-index than admin MH modal
+                try {
+                    const mh = document.getElementById('medicalHistoryModalAdmin');
+                    const mz = mh ? parseInt(getComputedStyle(mh).zIndex || '0', 10) || 0 : 0;
+                    const offenders = Array.from(document.querySelectorAll('body *'))
+                        .filter(n => n !== mh)
+                        .map(n => ({ n, cs: getComputedStyle(n) }))
+                        .filter(x => (x.cs.position === 'fixed' || x.cs.position === 'sticky') && (parseInt(x.cs.zIndex || '0', 10) || 0) >= mz)
+                        .slice(0, 10)
+                        .map(x => ({ tag: x.n.tagName, id: x.n.id, cls: x.n.className, z: x.cs.zIndex }));
+                    log('overlays.possible', offenders);
+                } catch(_) {}
+            } catch (e) {
+                log('error', String(e && e.message || e));
+            }
+            try { window.__mhDiagLast = diag; } catch(_) {}
+            return diag;
         };
         window.editPhysicalExamination = function(donorId) {
             console.log('Editing physical examination for donor:', donorId);

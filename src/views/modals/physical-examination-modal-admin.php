@@ -26,10 +26,9 @@
                     <div class="physical-step-number">2</div>
                     <div class="physical-step-label">Examination</div>
                 </div>
-                <!-- Review is now visual Stage 3 for admin -->
                 <div class="physical-step" data-step="3">
                     <div class="physical-step-number">3</div>
-                    <div class="physical-step-label">Review</div>
+                    <div class="physical-step-label">Review & Submit</div>
                 </div>
             </div>
                 <div class="physical-progress-line">
@@ -133,44 +132,10 @@
                 </div>
             </div>
 
-            <!-- Step 3: Blood Bag Selection (kept for future use; hidden in physician flow) -->
-            <div class="modal-body physical-step-content" id="physical-step-3-admin" style="display:none;">
+            <!-- Step 3: Review and Submit -->
+            <div class="modal-body physical-step-content" id="physical-step-3-admin">
                 <div class="physical-step-inner">
-                    <h4>Step 3: Blood Bag Selection</h4>
-                    <p class="text-muted">Please select the appropriate blood bag type</p>
-                    
-                    <div class="physical-blood-bag-section">
-                        <div class="physical-blood-bag-options">
-                            <label class="physical-option-card">
-                                <input type="radio" name="blood_bag_type" value="Single">
-                                <div class="physical-option-content">
-                                    <i class="fas fa-square"></i>
-                                    <span>Single</span>
-                                </div>
-                            </label>
-                            <label class="physical-option-card">
-                                <input type="radio" name="blood_bag_type" value="Multiple">
-                                <div class="physical-option-content">
-                                    <i class="fas fa-th"></i>
-                                    <span>Multiple</span>
-                                </div>
-                            </label>
-                            <label class="physical-option-card">
-                                <input type="radio" name="blood_bag_type" value="Top & Bottom">
-                                <div class="physical-option-content">
-                                    <i class="fas fa-align-justify"></i>
-                                    <span>Top & Bottom</span>
-                                </div>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Review and Submit (visual Stage 3) -->
-            <div class="modal-body physical-step-content" id="physical-step-4-admin">
-                <div class="physical-step-inner">
-                    <h4>Step 4: Review & Submit</h4>
+                    <h4>Step 3: Review & Submit</h4>
                     <p class="text-muted">Please review all information before submitting</p>
                     
                     <div class="examination-report">
