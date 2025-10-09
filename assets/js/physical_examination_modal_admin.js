@@ -383,6 +383,9 @@ class PhysicalExaminationModalAdmin {
             if (result.success) {
                 this.showToast('Physical examination completed successfully!', 'success');
                 
+                // Check if both medical history and physical examination are completed
+                this.checkAndUpdateDonorStatus(result.donor_id);
+                
                 // Close modal after a short delay
                 setTimeout(() => {
                     const modal = bootstrap.Modal.getInstance(document.getElementById('physicalExaminationModalAdmin'));
@@ -390,9 +393,9 @@ class PhysicalExaminationModalAdmin {
                         modal.hide();
                     }
                     
-                    // Refresh the page to update the donor status from "Pending (Examination)" to "Pending (Collection)"
+                    // Refresh the page to ensure all data is synchronized
                     window.location.reload();
-                }, 1500);
+                }, 800);
             } else {
                 this.showToast(result.message || 'Failed to submit physical examination', 'error');
             }
@@ -436,6 +439,115 @@ class PhysicalExaminationModalAdmin {
         this.formData[field.name] = field.value;
         
         // Real-time validation could be added here
+    }
+    
+    async checkAndUpdateDonorStatus(donorId) {
+        console.log('[PE ADMIN DEBUG] Checking completion status for donor', donorId);
+        
+        try {
+            // Fetch eligibility data to check physician section badge status
+            const eligibilityResponse = await fetch(`../../assets/php_func/fetch_donor_medical_info.php?donor_id=${donorId}&_=${Date.now()}`);
+            const eligibilityData = await eligibilityResponse.json();
+            
+            console.log('[PE ADMIN DEBUG] Eligibility response status:', eligibilityResponse.status);
+            console.log('[PE ADMIN DEBUG] Eligibility data:', eligibilityData);
+            
+            if (eligibilityData && eligibilityData.success && eligibilityData.data) {
+                const eligibility = eligibilityData.data;
+                
+                // Get physician section status values (same as donor information modal)
+                const physicianMedical = eligibility.review_status || '';
+                const physicianPhysical = eligibility.physical_status || '';
+                
+                console.log('[PE ADMIN DEBUG] Physician Medical status:', physicianMedical);
+                console.log('[PE ADMIN DEBUG] Physician Physical status:', physicianPhysical);
+                
+                // Check if both physician badges would show "Accepted" (same logic as donor modal)
+                const physicianMHAccepted = this.isAcceptedStatus(physicianMedical);
+                const physicianPEAccepted = this.isAcceptedStatus(physicianPhysical);
+                
+                console.log('[PE ADMIN DEBUG] Physician MH Accepted:', physicianMHAccepted);
+                console.log('[PE ADMIN DEBUG] Physician PE Accepted:', physicianPEAccepted);
+                
+                // Determine new status based on physician section completion
+                let newStatus;
+                if (physicianMHAccepted && physicianPEAccepted) {
+                    newStatus = 'Pending (Collection)';
+                } else {
+                    newStatus = 'Pending (Examination)';
+                }
+                
+                console.log('[PE ADMIN DEBUG] Updating status to:', newStatus);
+                this.updateDonorStatusBadge(donorId, newStatus);
+                
+            } else {
+                console.warn('[PE ADMIN DEBUG] No eligibility data found, using fallback');
+                this.updateDonorStatusBadge(donorId, 'Pending (Collection)');
+            }
+            
+        } catch (error) {
+            console.error('[PE ADMIN DEBUG] Error checking donor status:', error);
+            // Fallback to updating to Pending (Collection) if we can't check
+            this.updateDonorStatusBadge(donorId, 'Pending (Collection)');
+        }
+    }
+    
+    isAcceptedStatus(status) {
+        if (!status) return false;
+        const statusLower = String(status).toLowerCase();
+        return (
+            statusLower.includes('approved') ||
+            statusLower.includes('accepted') ||
+            statusLower.includes('completed') ||
+            statusLower.includes('passed') ||
+            statusLower.includes('success')
+        );
+    }
+    
+    updateDonorStatusBadge(donorId, newStatus) {
+        console.log('[PE ADMIN DEBUG] Updating status badge for donor', donorId, 'to', newStatus);
+        
+        // Find the donor row by donor ID
+        const donorRows = document.querySelectorAll('tr[data-donor-id]');
+        let targetRow = null;
+        
+        for (let row of donorRows) {
+            if (row.getAttribute('data-donor-id') === String(donorId)) {
+                targetRow = row;
+                break;
+            }
+        }
+        
+        if (targetRow) {
+            // Find the status badge in the row
+            const statusBadge = targetRow.querySelector('.badge');
+            if (statusBadge) {
+                // Update the badge text
+                statusBadge.textContent = newStatus;
+                
+                // Update the badge class based on status
+                statusBadge.className = 'badge'; // Reset classes
+                const statusLower = newStatus.toLowerCase();
+                
+                if (statusLower.includes('pending')) {
+                    statusBadge.classList.add('bg-warning', 'text-dark');
+                } else if (statusLower.includes('approved') || statusLower.includes('eligible') || statusLower.includes('success')) {
+                    statusBadge.classList.add('bg-success');
+                } else if (statusLower.includes('declined') || statusLower.includes('defer') || statusLower.includes('fail') || statusLower.includes('ineligible')) {
+                    statusBadge.classList.add('bg-danger');
+                } else if (statusLower.includes('review') || statusLower.includes('medical') || statusLower.includes('physical')) {
+                    statusBadge.classList.add('bg-info', 'text-dark');
+                } else {
+                    statusBadge.classList.add('bg-secondary');
+                }
+                
+                console.log('[PE ADMIN DEBUG] Status badge updated successfully');
+            } else {
+                console.warn('[PE ADMIN DEBUG] Status badge not found in donor row');
+            }
+        } else {
+            console.warn('[PE ADMIN DEBUG] Donor row not found for ID:', donorId);
+        }
     }
 }
 
