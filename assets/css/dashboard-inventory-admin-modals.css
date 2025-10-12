@@ -1,0 +1,299 @@
+/**
+ * Dashboard Inventory Admin - Modal Styles
+ * Extracted from dashboard-Inventory-System-list-of-donations.php
+ * Admin-specific modal styling and z-index management
+ */
+
+/* Modal z-index fixes */
+#medicalHistoryApprovalModal, #medicalHistoryDeclineModal { z-index: 1060 !important; }
+#deferDonorModal { z-index: 1065 !important; }
+#adminScreeningFormModal { z-index: 1070 !important; }
+#physicalExaminationModalAdmin { z-index: 1075 !important; }
+#bloodCollectionModal { z-index: 1080 !important; }
+#phlebotomistBloodCollectionDetailsModal { z-index: 1085 !important; }
+/* Ensure confirmation modals sit above screening */
+#submitMedicalHistoryConfirmModal, #initialScreeningConfirmationModal, #processMedicalHistoryConfirmModal { z-index: 1090 !important; }
+.modal-content { pointer-events: auto !important; }
+.modal-content * { pointer-events: auto !important; }
+
+
+/* Ensure proper modal stacking */
+.modal.show {
+    z-index: 1060 !important;
+}
+
+
+.modal {
+    z-index: 1060 !important;
+}
+
+.modal-dialog {
+    margin: 1.75rem auto;
+}
+
+.modal-content {
+    border: none;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+/* Wireframe-matching Donor Details Modal Styles */
+#donorDetailsModal .modal-dialog {
+    max-width: 1000px;
+}
+
+/* Screening Summary Modal Styles */
+#screeningSummaryModal .modal-dialog {
+    max-width: 600px;
+}
+
+.screening-summary-section {
+    margin-bottom: 2rem;
+}
+
+.screening-summary-title {
+    color: #dc3545;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.screening-summary-description {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+}
+
+.screening-info-grid {
+    display: grid;
+    gap: 1rem;
+}
+
+.screening-category {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.screening-category-header {
+    background: #f8f9fa;
+    color: #dc3545;
+    font-weight: 600;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 0.9rem;
+}
+
+.screening-category-content {
+    padding: 1rem;
+}
+
+.screening-field {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.screening-field:last-child {
+    border-bottom: none;
+}
+
+.screening-field-label {
+    color: #495057;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.screening-field-value {
+    color: #6c757d;
+    font-size: 0.9rem;
+    text-align: right;
+}
+
+.blood-type-plain {
+    color: #6c757d;
+    font-size: 0.9rem;
+    text-align: right;
+}
+
+/* Physician Section Modal Styles */
+#physicianSectionModal .modal-dialog {
+    max-width: 600px;
+}
+
+.physician-section {
+    margin-bottom: 1.5rem;
+}
+
+.physician-section-title {
+    color: #dc3545;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1rem;
+}
+
+.physician-section-description {
+    color: #6c757d;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+}
+
+.physician-info-grid {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.physician-category {
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.physician-category-header {
+    background: #f8f9fa;
+    color: #dc3545;
+    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 0.85rem;
+}
+
+.physician-category-content {
+    padding: 0.75rem;
+}
+
+.physician-field {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.physician-field:last-child {
+    border-bottom: none;
+}
+
+.physician-field-label {
+    color: #495057;
+    font-weight: 500;
+    font-size: 0.85rem;
+}
+
+.physician-field-value {
+    color: #6c757d;
+    font-size: 0.85rem;
+    text-align: right;
+}
+
+.physician-remarks {
+    background: #e8f5e8;
+    border: 1px solid #c3e6c3;
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.physician-remarks-label {
+    font-weight: 600;
+    color: #28a745;
+    margin-bottom: 0.25rem;
+    font-size: 0.85rem;
+}
+
+.physician-remarks-content {
+    color: #495057;
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.physician-field-compact {
+    display: inline-block;
+    width: 48%;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.physician-field-compact .physician-field-label {
+    font-weight: 500;
+    color: #495057;
+    margin-right: 0.5rem;
+}
+
+.physician-field-compact .physician-field-value {
+    font-weight: 600;
+    color: #6c757d;
+}
+
+/* Admin Defer Modal Styles */
+.duration-options-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.duration-option {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.duration-option:hover {
+    border-color: #dc3545;
+    background: #f8f9fa;
+}
+
+.duration-option input[type="radio"] {
+    display: none;
+}
+
+.duration-option:has(input[type="radio"]:checked) {
+    border-color: #dc3545;
+    background: #fff5f5;
+}
+
+.duration-option-content {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    color: #495057;
+}
+
+.duration-option:has(input[type="radio"]:checked) .duration-option-content {
+    color: #dc3545;
+}
+
+.duration-option-content i {
+    font-size: 1.1rem;
+}
+
+/* Minimal styles to ensure screening modal layout in admin */
+.screening-modal-header { background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: #fff; }
+.screening-detail-card { background: #ffffff; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; }
+.screening-label { font-weight: 600; color: #343a40; margin-bottom: 6px; display: block; }
+.screening-input { width: 100%; border: 1px solid #dee2e6; border-radius: 6px; padding: 8px 10px; }
+.screening-input-group { position: relative; }
+.screening-input-suffix { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #6c757d; }
+.screening-progress-container { padding: 10px 16px; background: #fff; border-bottom: 1px solid #eee; }
+.screening-progress-steps { display: flex; gap: 16px; align-items: center; }
+.screening-step { display: flex; flex-direction: column; align-items: center; opacity: .6; }
+.screening-step.active, .screening-step.completed { opacity: 1; }
+.screening-step-number { width: 28px; height: 28px; border-radius: 50%; background: #dc3545; color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; }
+.screening-step-label { font-size: 0.8rem; color: #b22222; margin-top: 6px; }
+.screening-progress-line { height: 4px; background: #f1f3f5; border-radius: 2px; margin-top: 6px; position: relative; }
+.screening-progress-fill { height: 4px; background: #dc3545; border-radius: 2px; width: 0; transition: width .3s ease; }
+.screening-step-title h6 { margin-bottom: 4px; font-weight: 700; color: #b22222; }
+.screening-review-card { border: 1px solid #eee; border-radius: 8px; padding: 12px; background: #fff; }

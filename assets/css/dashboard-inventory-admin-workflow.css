@@ -1,0 +1,341 @@
+/**
+ * Dashboard Inventory Admin - Workflow Styles
+ * Extracted from dashboard-Inventory-System-list-of-donations.php
+ * Admin-specific workflow progression and physical examination styles
+ */
+
+/* Physical Examination Modal Step Visibility */
+.physical-step-content {
+    display: none;
+}
+
+.physical-step-content.active {
+    display: block;
+}
+
+/* Physical Examination Progress Indicator */
+.physical-progress-container {
+    padding: 1rem 1.5rem 0.5rem;
+    background: #fff;
+}
+
+.physical-progress-steps {
+    display: flex;
+    gap: 10px;
+}
+
+.physical-step {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    opacity: 0.6;
+    cursor: pointer;
+}
+
+.physical-step.active {
+    opacity: 1;
+    font-weight: 600;
+}
+
+.physical-step.completed {
+    opacity: 1;
+}
+
+.physical-step-number {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.physical-step.active .physical-step-number,
+.physical-step.completed .physical-step-number {
+    background: #b22222;
+    color: #fff;
+}
+
+.physical-progress-line {
+    height: 4px;
+    background: #f1f3f5;
+    border-radius: 2px;
+    margin: 8px 0 0;
+    position: relative;
+    overflow: hidden;
+}
+
+.physical-progress-fill {
+    height: 100%;
+    width: 0;
+    background: #b22222;
+    transition: width .3s ease;
+}
+
+/* Physical Examination Form Styles */
+.physical-modal-form .modal-body {
+    padding: 1.5rem;
+    min-height: 400px;
+}
+
+.physical-step-inner h4 {
+    color: #b22222;
+    margin-bottom: 0.5rem;
+}
+
+.physical-step-inner .text-muted {
+    margin-bottom: 1.5rem;
+}
+
+/* Blood Bag Selection Styles */
+.physical-blood-bag-section {
+    margin-top: 1rem;
+}
+
+.physical-blood-bag-options {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.physical-option-card {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: white;
+    min-width: 120px;
+}
+
+.physical-option-card:hover {
+    border-color: #b22222;
+    background: #f8f9fa;
+}
+
+.physical-option-card input[type="radio"] {
+    display: none;
+}
+
+.physical-option-card input[type="radio"]:checked + .physical-option-content {
+    color: #b22222;
+}
+
+.physical-option-card:has(input[type="radio"]:checked) {
+    border-color: #b22222;
+    background: #fff5f5;
+}
+
+.physical-option-content {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+}
+
+.physical-option-content i {
+    font-size: 1.2rem;
+}
+
+/* Examination Report Styles */
+.examination-report {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-top: 1rem;
+}
+
+.report-header {
+    border-bottom: 2px solid #b22222;
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.report-title h5 {
+    color: #b22222;
+    margin-bottom: 0.5rem;
+}
+
+.report-meta {
+    display: flex;
+    gap: 2rem;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.report-section {
+    margin-bottom: 1.5rem;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #b22222;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+}
+
+.section-header i {
+    font-size: 1.1rem;
+}
+
+.vital-signs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.vital-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.vital-label {
+    font-weight: 500;
+    color: #495057;
+}
+
+.vital-value {
+    color: #b22222;
+    font-weight: 600;
+}
+
+.vital-unit {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.examination-findings {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.finding-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.finding-label {
+    font-weight: 500;
+    color: #495057;
+    min-width: 150px;
+}
+
+.finding-value {
+    color: #b22222;
+    font-weight: 600;
+}
+
+.assessment-content {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.assessment-result, .assessment-collection {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.result-label, .collection-label {
+    font-weight: 500;
+    color: #495057;
+}
+
+.result-value, .collection-value {
+    color: #28a745;
+    font-weight: 600;
+}
+
+.report-signature {
+    border-top: 1px solid #dee2e6;
+    padding-top: 1rem;
+    margin-top: 1.5rem;
+}
+
+.signature-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.physician-name {
+    color: #b22222;
+    font-weight: 600;
+}
+
+.signature-note {
+    color: #6c757d;
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+/* Navigation Buttons */
+.physical-nav-buttons {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.physical-defer-btn {
+    margin-right: auto;
+}
+
+.physical-next-btn, .physical-submit-btn {
+    margin-left: auto;
+}
+
+/* Step Navigation Hover Effects */
+.physical-step:hover {
+    opacity: 0.8;
+    transform: translateY(-1px);
+    transition: all 0.2s ease;
+}
+
+/* Form Validation Styles */
+.is-invalid {
+    border-color: #dc3545 !important;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+}
+
+.is-valid {
+    border-color: #28a745 !important;
+    box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25) !important;
+}
+
+/* Physical Examination Modal Specific Styles */
+#physicalExaminationModalAdmin .modal-dialog {
+    max-width: 900px;
+}
+
+#physicalExaminationModalAdmin .modal-body {
+    min-height: 500px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+/* Progress Indicator Responsive */
+@media (max-width: 768px) {
+    .physical-progress-steps {
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+    .physical-step {
+        font-size: 0.9rem;
+    }
+    .physical-step-number {
+        width: 22px;
+        height: 22px;
+        font-size: 11px;
+    }
+}

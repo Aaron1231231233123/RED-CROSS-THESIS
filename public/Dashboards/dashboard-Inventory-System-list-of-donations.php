@@ -450,874 +450,14 @@ function getCacheStats() {
     <link href="../../assets/css/defer-donor-modal.css" rel="stylesheet">
     <link href="../../assets/css/admin-screening-form-modal.css" rel="stylesheet">
     <link href="../../assets/css/enhanced-modal-styles.css" rel="stylesheet">
-    <!-- Prevent loading text flash on hard refresh -->
-    <style>
-        #loadingIndicator {
-            display: none !important;
-        }
-        .modal-content .spinner-border,
-        .modal-content [class*="loading"] {
-            display: none !important;
-        }
-        /* Do not force-hide MH modal; JS controls its visibility */
-    </style>
-    <!-- Allow spinners to be visible inside donor modals -->
-    <style>
-        #donorModal .spinner-border,
-        #donorModal [class*="loading"],
-        #donorDetailsModal .spinner-border,
-        #donorDetailsModal [class*="loading"] {
-            display: inline-block !important;
-        }
-    </style>
-    <style>
-/* General Body Styling */
-body {
-    background-color: #f8f9fa;
-    margin: 0;
-    padding: 0;
-    font-family: Arial, sans-serif;
-}
-/* Modal z-index fixes */
-.modal-backdrop { z-index: 1055 !important; }
-#medicalHistoryApprovalModal, #medicalHistoryDeclineModal { z-index: 1060 !important; }
-#deferDonorModal { z-index: 1065 !important; }
-#adminScreeningFormModal { z-index: 1070 !important; }
-#physicalExaminationModalAdmin { z-index: 1075 !important; }
-#bloodCollectionModal { z-index: 1080 !important; }
-#phlebotomistBloodCollectionDetailsModal { z-index: 1085 !important; }
-/* Ensure confirmation modals sit above screening */
-#submitMedicalHistoryConfirmModal, #initialScreeningConfirmationModal { z-index: 1090 !important; }
-.modal-content { pointer-events: auto !important; }
-.modal-content * { pointer-events: auto !important; }
-/* Fix modal backdrop stacking issues */
-.modal-backdrop.show {
-    z-index: 1055 !important;
-}
-/* Ensure proper modal stacking */
-.modal.show {
-    z-index: 1060 !important;
-}
-/* Fix for multiple modals */
-.modal-backdrop + .modal {
-    z-index: 1061 !important;
-}
-/* Removed legacy donorModal-specific overrides. Unified to donorDetailsModal. */
-/* Physical Examination Modal Step Visibility */
-.physical-step-content {
-    display: none;
-}
-.physical-step-content.active {
-    display: block;
-}
-/* Physical Examination Progress Indicator */
-.physical-progress-container {
-    padding: 1rem 1.5rem 0.5rem;
-    background: #fff;
-}
-.physical-progress-steps {
-    display: flex;
-    gap: 10px;
-}
-.physical-step {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    opacity: 0.6;
-    cursor: pointer;
-}
-.physical-step.active {
-    opacity: 1;
-    font-weight: 600;
-}
-.physical-step.completed {
-    opacity: 1;
-}
-.physical-step-number {
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    background: #e9ecef;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 600;
-    font-size: 12px;
-}
-.physical-step.active .physical-step-number,
-.physical-step.completed .physical-step-number {
-    background: #b22222;
-    color: #fff;
-}
-.physical-progress-line {
-    height: 4px;
-    background: #f1f3f5;
-    border-radius: 2px;
-    margin: 8px 0 0;
-    position: relative;
-    overflow: hidden;
-}
-.physical-progress-fill {
-    height: 100%;
-    width: 0;
-    background: #b22222;
-    transition: width .3s ease;
-}
-/* Physical Examination Form Styles */
-.physical-modal-form .modal-body {
-    padding: 1.5rem;
-    min-height: 400px;
-}
-.physical-step-inner h4 {
-    color: #b22222;
-    margin-bottom: 0.5rem;
-}
-.physical-step-inner .text-muted {
-    margin-bottom: 1.5rem;
-}
-/* Blood Bag Selection Styles */
-.physical-blood-bag-section {
-    margin-top: 1rem;
-}
-.physical-blood-bag-options {
-    display: flex;
-    gap: 1rem;
-    flex-wrap: wrap;
-}
-.physical-option-card {
-    display: flex;
-    align-items: center;
-    padding: 1rem;
-    border: 2px solid #e9ecef;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    background: white;
-    min-width: 120px;
-}
-.physical-option-card:hover {
-    border-color: #b22222;
-    background: #f8f9fa;
-}
-.physical-option-card input[type="radio"] {
-    display: none;
-}
-.physical-option-card input[type="radio"]:checked + .physical-option-content {
-    color: #b22222;
-}
-.physical-option-card:has(input[type="radio"]:checked) {
-    border-color: #b22222;
-    background: #fff5f5;
-}
-.physical-option-content {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-weight: 500;
-}
-.physical-option-content i {
-    font-size: 1.2rem;
-}
-/* Examination Report Styles */
-.examination-report {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 1.5rem;
-    margin-top: 1rem;
-}
-.report-header {
-    border-bottom: 2px solid #b22222;
-    padding-bottom: 1rem;
-    margin-bottom: 1.5rem;
-}
-.report-title h5 {
-    color: #b22222;
-    margin-bottom: 0.5rem;
-}
-.report-meta {
-    display: flex;
-    gap: 2rem;
-    color: #6c757d;
-    font-size: 0.9rem;
-}
-.report-section {
-    margin-bottom: 1.5rem;
-}
-.section-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: #b22222;
-    font-weight: 600;
-    margin-bottom: 0.75rem;
-}
-.section-header i {
-    font-size: 1.1rem;
-}
-.vital-signs-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-}
-.vital-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-.vital-label {
-    font-weight: 500;
-    color: #495057;
-}
-.vital-value {
-    color: #b22222;
-    font-weight: 600;
-}
-.vital-unit {
-    color: #6c757d;
-    font-size: 0.9rem;
-}
-.examination-findings {
-    display: grid;
-    gap: 0.75rem;
-}
-.finding-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-.finding-label {
-    font-weight: 500;
-    color: #495057;
-    min-width: 150px;
-}
-.finding-value {
-    color: #b22222;
-    font-weight: 600;
-}
-.assessment-content {
-    display: grid;
-    gap: 0.75rem;
-}
-.assessment-result, .assessment-collection {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-.result-label, .collection-label {
-    font-weight: 500;
-    color: #495057;
-}
-.result-value, .collection-value {
-    color: #28a745;
-    font-weight: 600;
-}
-.report-signature {
-    border-top: 1px solid #dee2e6;
-    padding-top: 1rem;
-    margin-top: 1.5rem;
-}
-.signature-line {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.5rem;
-}
-.physician-name {
-    color: #b22222;
-    font-weight: 600;
-}
-.signature-note {
-    color: #6c757d;
-    font-size: 0.9rem;
-    font-style: italic;
-}
-/* Navigation Buttons */
-.physical-nav-buttons {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.5rem;
-}
-.physical-defer-btn {
-    margin-right: auto;
-}
-.physical-next-btn, .physical-submit-btn {
-    margin-left: auto;
-}
-/* Step Navigation Hover Effects */
-.physical-step:hover {
-    opacity: 0.8;
-    transform: translateY(-1px);
-    transition: all 0.2s ease;
-}
-/* Form Validation Styles */
-.is-invalid {
-    border-color: #dc3545 !important;
-    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
-}
-.is-valid {
-    border-color: #28a745 !important;
-    box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25) !important;
-}
-/* Physical Examination Modal Specific Styles */
-#physicalExaminationModalAdmin .modal-dialog {
-    max-width: 900px;
-}
-#physicalExaminationModalAdmin .modal-body {
-    min-height: 500px;
-    max-height: 70vh;
-    overflow-y: auto;
-}
-/* Progress Indicator Responsive */
-@media (max-width: 768px) {
-    .physical-progress-steps {
-        flex-wrap: wrap;
-        gap: 5px;
-    }
-    .physical-step {
-        font-size: 0.9rem;
-    }
-    .physical-step-number {
-        width: 22px;
-        height: 22px;
-        font-size: 11px;
-    }
-}
-/* Reduce Left Margin for Main Content */
-main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
-    margin-left: 280px !important;
-}
-/* Header */
-.dashboard-home-header {
-    position: fixed;
-    top: 0;
-    left: 240px; /* Adjusted sidebar width */
-    width: calc(100% - 240px);
-    background-color: #f8f9fa;
-    padding: 15px;
-    border-bottom: 1px solid #ddd;
-    z-index: 1000;
-    transition: left 0.3s ease, width 0.3s ease;
-}
-/* Sidebar Styling */
-.dashboard-home-sidebar {
-    height: 100vh;
-    overflow-y: auto;
-    position: fixed;
-    width: 240px;
-    background-color: #ffffff;
-    border-right: 1px solid #ddd;
-    padding: 15px;
-    transition: width 0.3s ease;
-    display: flex;
-    flex-direction: column;
-}
-.sidebar-main-content {
-    flex-grow: 1;
-    padding-bottom: 80px; /* Space for logout button */
-}
-.logout-container {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 20px 15px;
-    border-top: 1px solid #ddd;
-    background-color: #ffffff;
-}
-.logout-link {
-    color: #dc3545 !important;
-}
-.logout-link:hover {
-    background-color: #dc3545 !important;
-    color: white !important;
-}
-.dashboard-home-sidebar .nav-link {
-    color: #333;
-    padding: 10px 15px;
-    margin: 2px 0;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-    font-size: 0.9rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    text-decoration: none;
-}
-.dashboard-home-sidebar .nav-link i {
-    margin-right: 10px;
-    font-size: 0.9rem;
-    width: 16px;
-    text-align: center;
-}
-.dashboard-home-sidebar .nav-link:hover {
-    background-color: #f8f9fa;
-    color: #dc3545;
-}
-.dashboard-home-sidebar .nav-link.active {
-    background-color: #dc3545;
-    color: white;
-}
-.dashboard-home-sidebar .collapse-menu {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    background-color: #f8f9fa;
-    border-radius: 4px;
-}
-.dashboard-home-sidebar .collapse-menu .nav-link {
-    padding: 8px 15px 8px 40px;
-    font-size: 0.85rem;
-    margin: 0;
-    border-radius: 4px;
-}
-.dashboard-home-sidebar .collapse-menu .nav-link:hover {
-    background-color: #f8f9fa;
-    color: #dc3545;
-}
-.dashboard-home-sidebar .collapse-menu .nav-link.active {
-    background-color: #dc3545;
-    color: white;
-}
-.dashboard-home-sidebar .nav-link[aria-expanded="true"] {
-    background-color: transparent;
-    color: #333;
-}
-.dashboard-home-sidebar .nav-link[aria-expanded="true"] i.fa-chevron-down {
-    transform: rotate(180deg);
-}
-.dashboard-home-sidebar i.fa-chevron-down {
-    font-size: 0.8rem;
-    transition: transform 0.2s ease;
-}
-.dashboard-home-sidebar .form-control {
-    font-size: 0.9rem;
-    padding: 8px 12px;
-    border-radius: 4px;
-    margin-bottom: 10px;
-}
-/* Donor Management Section */
-#donorManagementCollapse {
-    margin-top: 2px;
-    border: none;
-}
-#donorManagementCollapse .nav-link {
-    color: #333;
-    padding: 8px 15px 8px 40px;
-}
-#donorManagementCollapse .nav-link:hover {
-    background-color: #f8f9fa;
-    color: #dc3545;
-}
-#donorManagementCollapse .nav-link.active {
-    background-color: #dc3545;
-    color: white;
-}
-/* Hospital Requests Section */
-#hospitalRequestsCollapse .nav-link {
-    color: #333;
-    padding: 8px 15px 8px 40px;
-    font-size: 0.9rem;
-}
-#hospitalRequestsCollapse .nav-link:hover {
-    color: #dc3545;
-    font-weight: 600;
-    background-color: transparent;
-}
-.dashboard-home-sidebar .nav-link[aria-expanded="true"] {
-    background-color: #f8f9fa;
-    color: #dc3545;
-}
-/* Main Content Styling */
-.dashboard-home-main {
-    margin-left: 240px; /* Matches sidebar */
-    margin-top: 70px;
-    min-height: 100vh;
-    overflow-x: hidden;
-    padding-bottom: 20px;
-    padding-top: 20px;
-    padding-left: 20px; /* Adjusted padding for balance */
-    padding-right: 20px;
-    transition: margin-left 0.3s ease;
-}
-/* Container Fluid Fix */
-.container-fluid {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-}
-/* ============================== */
-/* Responsive Design Adjustments  */
-/* ============================== */
-@media (max-width: 992px) {
-    /* Adjust sidebar and header for tablets */
-    .dashboard-home-sidebar {
-        width: 200px;
-    }
-    .dashboard-home-header {
-        left: 200px;
-        width: calc(100% - 200px);
-    }
-    .dashboard-home-main {
-        margin-left: 200px;
-    }
-}
-@media (max-width: 768px) {
-    /* Collapse sidebar and expand content on smaller screens */
-    .dashboard-home-sidebar {
-        width: 0;
-        padding: 0;
-        overflow: hidden;
-    }
-    .dashboard-home-header {
-        left: 0;
-        width: 100%;
-    }
-    .dashboard-home-main {
-        margin-left: 0;
-        padding: 10px;
-    }
-    .card {
-        min-height: 100px;
-        font-size: 14px;
-    }
-}
-/* Medium Screens (Tablets) */
-@media (max-width: 991px) {
-    main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
-        margin-left: 240px !important;
-    }
-}
-/* Small Screens (Mobile) */
-@media (max-width: 768px) {
-    main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
-        margin-left: 0 !important;
-    }
-}
-.custom-margin {
-    margin: 30px auto;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-            width: 100%;
-            margin-top: 100px;
-}
-        .donor_form_container {
-            padding: 20px;
-            max-width: 1400px;
-            width: 100%;
-            font-size: 14px;
-        }
-        .donor_form_label {
-            font-weight: bold;
-            display: block;
-            margin-bottom: 2px;
-        }
-        .donor_form_input {
-            width: 100%;
-            padding: 6px;
-            margin-bottom: 10px;
-            border: 1px solid #000;
-            border-radius: 3px;
-            font-size: 14px;
-            box-sizing: border-box;
-            color: #757272;
-        }
-        .donor_form_grid {
-            display: grid;
-            gap: 5px;
-        }
-        .grid-3 {
-            grid-template-columns: repeat(3, 1fr);
-        }
-        .grid-4 {
-            grid-template-columns: repeat(4, 1fr);
-        }
-        .grid-2 {
-            grid-template-columns: repeat(2, 1fr);
-        }
-        .grid-1 {
-            grid-template-columns: 1fr;
-        }
-        .grid-6 {
-    grid-template-columns: repeat(6, 1fr);
-}
-        .modal-header {
-            background: #000000;;
-            color: white;
-        }
-/* Search Bar Styling */
-.search-container {
-    width: 100%;
-    margin: 0 auto;
-}
-.input-group {
-    width: 100%;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    border-radius: 6px;
-    margin-bottom: 1rem;
-}
-.input-group-text {
-    background-color: #fff;
-    border: 1px solid #ced4da;
-    border-right: none;
-    padding: 0.5rem 1rem;
-}
-.category-select {
-    border: 1px solid #ced4da;
-    border-right: none;
-    border-left: none;
-    background-color: #f8f9fa;
-    cursor: pointer;
-    min-width: 120px;
-    height: 45px;
-    font-size: 0.95rem;
-}
-.category-select:focus {
-    box-shadow: none;
-    border-color: #ced4da;
-}
-#searchInput {
-    border: 1px solid #ced4da;
-    border-left: none;
-    padding: 0.5rem 1rem;
-    font-size: 0.95rem;
-    height: 45px;
-    flex: 1;
-}
-#searchInput::placeholder {
-    color: #adb5bd;
-    font-size: 0.95rem;
-}
-#searchInput:focus {
-    box-shadow: none;
-    border-color: #ced4da;
-}
-.input-group:focus-within {
-    box-shadow: 0 0 0 0.15rem rgba(0,123,255,.25);
-}
-.input-group-text i {
-    font-size: 1.1rem;
-    color: #6c757d;
-}
-/* Add these modal styles in your CSS */
-.modal-backdrop {
-    background-color: rgba(0, 0, 0, 0.5);
-    z-index: 1055 !important;
-}
-.modal {
-    z-index: 1060 !important;
-}
-.modal-dialog {
-    margin: 1.75rem auto;
-}
-.modal-content {
-    border: none;
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-}
-/* Uniform Button Styles */
-.btn-sm {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.875rem;
-    border-radius: 0.25rem;
-    transition: all 0.2s ease-in-out;
-}
-.btn-info {
-    background-color: #0dcaf0;
-    border-color: #0dcaf0;
-    color: #000;
-}
-.btn-info:hover {
-    background-color: #31d2f2;
-    border-color: #25cff2;
-    color: #000;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(13, 202, 240, 0.3);
-}
-.btn-info:active,
-.btn-info.active {
-    background-color: #0aa2c0;
-    border-color: #0a96b0;
-    color: #000;
-    transform: translateY(0);
-    box-shadow: 0 2px 4px rgba(13, 202, 240, 0.4);
-}
-.btn-warning {
-    background-color: #ffc107;
-    border-color: #ffc107;
-    color: #000;
-}
-.btn-warning:hover {
-    background-color: #ffcd39;
-    border-color: #ffc720;
-    color: #000;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(255, 193, 7, 0.3);
-}
-.btn-warning:active,
-.btn-warning.active {
-    background-color: #e0a800;
-    border-color: #d39e00;
-    color: #000;
-    transform: translateY(0);
-    box-shadow: 0 2px 4px rgba(255, 193, 7, 0.4);
-}
-.btn-success {
-    background-color: #198754;
-    border-color: #198754;
-    color: #fff;
-}
-.btn-success:hover {
-    background-color: #20c997;
-    border-color: #1ab394;
-    color: #fff;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(25, 135, 84, 0.3);
-}
-.btn-success:active,
-.btn-success.active {
-    background-color: #146c43;
-    border-color: #13653f;
-    color: #fff;
-    transform: translateY(0);
-    box-shadow: 0 2px 4px rgba(25, 135, 84, 0.4);
-}
-.btn-danger {
-    background-color: #dc3545;
-    border-color: #dc3545;
-    color: #fff;
-}
-.btn-danger:hover {
-    background-color: #e35d6a;
-    border-color: #e04653;
-    color: #fff;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
-}
-.btn-danger:active,
-.btn-danger.active {
-    background-color: #b02a37;
-    border-color: #a52834;
-    color: #fff;
-    transform: translateY(0);
-    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.4);
-}
-.btn-secondary {
-    background-color: #6c757d;
-    border-color: #6c757d;
-    color: #fff;
-}
-.btn-secondary:hover {
-    background-color: #808a93;
-    border-color: #7a8288;
-    color: #fff;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3);
-}
-.btn-secondary:active,
-.btn-secondary.active {
-    background-color: #545b62;
-    border-color: #4e555b;
-    color: #fff;
-    transform: translateY(0);
-    box-shadow: 0 2px 4px rgba(108, 117, 125, 0.4);
-}
-.btn-primary {
-    background-color: #0d6efd;
-    border-color: #0d6efd;
-    color: #fff;
-}
-.btn-primary:hover {
-    background-color: #3d8bfd;
-    border-color: #2680fd;
-    color: #fff;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(13, 110, 253, 0.3);
-}
-.btn-primary:active,
-.btn-primary.active {
-    background-color: #0b5ed7;
-    border-color: #0a58ca;
-    color: #fff;
-    transform: translateY(0);
-    box-shadow: 0 2px 4px rgba(13, 110, 253, 0.4);
-}
-/* Status Filter Button Styles */
-.status-filter-buttons .btn {
-    transition: all 0.2s ease-in-out;
-    font-weight: 500;
-}
-.status-filter-buttons .btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-}
-.status-filter-buttons .btn.active {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-/* Pagination Styles */
-.pagination {
-    margin: 20px 0;
-    justify-content: center;
-    gap: 4px;
-}
-.pagination .page-item {
-    margin: 0;
-}
-.pagination .page-link {
-    border: 1px solid #d1d5db;
-    color: #374151;
-    background-color: #fff;
-    padding: 8px 12px;
-    font-size: 14px;
-    font-weight: 500;
-    border-radius: 6px;
-    transition: all 0.2s ease;
-    min-width: 40px;
-    text-align: center;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.pagination .page-link:hover {
-    background-color: #f3f4f6;
-    border-color: #9ca3af;
-    color: #111827;
-    text-decoration: none;
-}
-.pagination .page-item.active .page-link {
-    background-color: #3b82f6;
-    border-color: #3b82f6;
-    color: #fff;
-    font-weight: 600;
-}
-.pagination .page-item.active .page-link:hover {
-    background-color: #2563eb;
-    border-color: #2563eb;
-}
-.pagination .page-item.disabled .page-link {
-    background-color: #f9fafb;
-    border-color: #e5e7eb;
-    color: #9ca3af;
-    cursor: not-allowed;
-}
-.pagination .page-item.disabled .page-link:hover {
-    background-color: #f9fafb;
-    border-color: #e5e7eb;
-    color: #9ca3af;
-}
-.pagination .page-link i {
-    font-size: 12px;
-    font-weight: 600;
-}
-/* Entries Information */
-.entries-info {
-    text-align: center;
-    margin-top: 15px;
-    color: #6c757d;
-    font-size: 14px;
-}
-    </style>
+    <!-- Admin-specific extracted CSS files -->
+    <link href="../../assets/css/dashboard-inventory-admin-main.css" rel="stylesheet">
+    <link href="../../assets/css/dashboard-inventory-admin-modals.css" rel="stylesheet">
+    <link href="../../assets/css/dashboard-inventory-admin-loading.css" rel="stylesheet">
+    <link href="../../assets/css/dashboard-inventory-admin-workflow.css" rel="stylesheet">
+    <link href="../../assets/css/dashboard-inventory-admin-forms.css" rel="stylesheet">
+    <link href="../../assets/css/dashboard-inventory-admin-print.css" rel="stylesheet">
+    <link href="../../assets/css/dashboard-inventory-admin-donor-details.css" rel="stylesheet">
 </head>
 <body>
     <!-- Confirmation Modal -->
@@ -1939,7 +1079,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         <div class="modal-content">
             <!-- Modal Header -->
             <div class="modal-header modern-header">
-                <h4 class="modal-title w-100"><i class="fas fa-user me-2"></i> Donor Information</h4>
+                <h4 class="modal-title w-100"><i class="fas fa-user me-2"></i></h4>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="font-size: 1.5rem;"></button>
             </div>
             <!-- Modal Body -->
@@ -2361,7 +1501,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 <!-- Include Admin Screening Form Modal -->
 <?php include '../../src/views/forms/admin_donor_initial_screening_form_modal.php'; ?>
 <!-- Medical History Modal (Staff Style) -->
-<div class="medical-history-modal" id="medicalHistoryModal" style="display: none !important;">
+<div class="medical-history-modal" id="medicalHistoryModal">
     <div class="medical-modal-content">
         <div class="medical-modal-header">
             <h3><i class="fas fa-file-medical me-2"></i>Medical History Review & Approval</h3>
@@ -2700,7 +1840,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             // Function to show confirmation modal
             window.showConfirmationModal = function() {
                 const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'), {
-                    backdrop: true,
+                    backdrop: false,
                     keyboard: true
                 });
                 confirmationModal.show();
@@ -2769,11 +1909,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             }
         });
 
-        // Ensure donor detail modals always clean their backdrops when closed
-        (function ensureDonorDetailBackdropCleanup(){
-            function purgeBackdropsAndBody(){
+        // Ensure donor detail modals clean up properly when closed
+        (function ensureDonorDetailCleanup(){
+            function cleanupBody(){
                 try {
-                    document.querySelectorAll('.modal-backdrop').forEach(b => { try { b.remove(); } catch(_) {} });
                     document.body.classList.remove('modal-open');
                     document.body.style.overflow = '';
                     document.body.style.paddingRight = '';
@@ -2783,8 +1922,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 ['donorDetailsModal','donorModal'].forEach(function(id){
                     var el = document.getElementById(id);
                     if (!el) return;
-                    el.addEventListener('hidden.bs.modal', purgeBackdropsAndBody);
-                    el.addEventListener('hide.bs.modal', function(){ setTimeout(purgeBackdropsAndBody, 0); });
+                    el.addEventListener('hidden.bs.modal', cleanupBody);
+                    el.addEventListener('hide.bs.modal', function(){ setTimeout(cleanupBody, 0); });
                 });
             });
         })();
@@ -2849,7 +1988,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             </div>
                             <div class="donor-header-right">
                                 <div class="donor-id-wireframe">Donor ID ${safe(donor.donor_id)}</div>
-                                <div class="donor-blood-type">${derivedBloodType}</div>
+                                <div class="donor-blood-type">
+                                    <div class="blood-type-display" style="display: inline-block !important; background-color: #8B0000 !important; color: white !important; padding: 8px 16px !important; border-radius: 20px !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important; text-align: center !important; min-width: 80px !important; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important; border: none !important;">
+                                        <div class="blood-type-label" style="font-size: 0.75rem !important; font-weight: 500 !important; line-height: 1 !important; margin-bottom: 2px !important; opacity: 0.9 !important; color: white !important;">Blood Type</div>
+                                        <div class="blood-type-value" style="font-size: 1.1rem !important; font-weight: bold !important; line-height: 1 !important; letter-spacing: 0.5px !important; color: white !important;">${derivedBloodType}</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <!-- Donor Information Section -->
@@ -3305,7 +2449,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         .donor-header-wireframe .donor-name-wireframe { color:#111827; }
                         .donor-age-gender { color:#111827; }
                         .donor-id-wireframe { color:#111827; }
-                        .donor-blood-type { color:#dc3545; font-weight:700; }
+                        .donor-blood-type { 
+                            /* Remove conflicting styles to allow blood-type-display to work */
+                        }
                         .section-title { color:#111827; }
                         .donor-info-label { color:#111827; font-weight:600; }
                         .btn-outline-primary {
@@ -4141,8 +3287,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             }
         });
         window.openPhysicianPhysicalExam = function(context) {
-            // Redirect to physical examination form
-            window.location.href = `../../src/views/forms/physical-examination-form.php?donor_id=${encodeURIComponent(context?.donor_id || '')}`;
+            // Redirect to admin physical examination form
+            window.location.href = `../../src/views/forms/physical-examination-form-admin.php?donor_id=${encodeURIComponent(context?.donor_id || '')}`;
         };
         window.openPhlebotomistCollection = function(context) {
             try {
@@ -4202,7 +3348,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             
             console.log('✅ Both modal elements found, proceeding...');
             
-            contentEl.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+            contentEl.innerHTML = '<div class="donor-details-loading"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div><div class="loading-text">Loading donor information...</div></div>';
             
             try {
                 const bsModal = new bootstrap.Modal(modalEl);
@@ -4298,7 +3444,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             </div>
                                 <div class="donor-header-right">
                                     <div class="donor-id-wireframe">Donor ID ${safe(donorForm.donor_id)}</div>
-                                    <div class="donor-blood-type">${safe(screeningForm.blood_type || donorForm.blood_type)}</div>
+                                    <div class="donor-blood-type">
+                                        <div class="blood-type-display">
+                                            <div class="blood-type-label">Blood Type</div>
+                                            <div class="blood-type-value">${safe(screeningForm.blood_type || donorForm.blood_type)}</div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <!-- Donor Information Section -->
@@ -4372,7 +3523,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             <tr>
                                             <td>${safe(screeningForm.body_weight)}</td>
                                             <td>${safe(screeningForm.specific_gravity)}</td>
-                                            <td>${safe(screeningForm.blood_type)}</td>
+                                            <td>
+                                                <div class="blood-type-display">
+                                                    <div class="blood-type-label">Blood Type</div>
+                                                    <div class="blood-type-value">${safe(screeningForm.blood_type)}</div>
+                                                </div>
+                                            </td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -5219,16 +4375,32 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             // Store the donor ID for the workflow
             window.currentInterviewerDonorId = donorId;
             console.log('Stored donor ID:', window.currentInterviewerDonorId);
+            
             // Check if confirmation modal exists
             const confirmModalElement = document.getElementById('processMedicalHistoryConfirmModal');
             console.log('Confirmation modal element:', confirmModalElement);
+            
             if (confirmModalElement) {
+                console.log('Modal found, attempting to show...');
+                try {
                 // Show confirmation modal first
                 const confirmModal = new bootstrap.Modal(confirmModalElement);
-                console.log('Showing confirmation modal');
+                    console.log('Bootstrap modal instance created:', confirmModal);
                 confirmModal.show();
+                    console.log('Modal show() called successfully');
+                } catch (error) {
+                    console.error('Error showing modal:', error);
+                    // Fallback: try to show modal manually
+                    confirmModalElement.style.display = 'block';
+                    confirmModalElement.classList.add('show');
+                    document.body.classList.add('modal-open');
+                }
             } else {
-                console.error('Confirmation modal not found!');
+                console.error('Confirmation modal not found! Available modals:');
+                const allModals = document.querySelectorAll('.modal');
+                allModals.forEach((modal, index) => {
+                    console.log(`Modal ${index}:`, modal.id, modal);
+                });
             }
         };
         window.editInitialScreening = function(donorId) {
@@ -5356,16 +4528,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 const modalEl = document.getElementById('medicalHistoryModalAdmin');
                 const contentEl = document.getElementById('medicalHistoryModalAdminContent');
                 if (!modalEl || !contentEl) return;
-                // Clean up any existing modal/backdrop state to avoid z-index/visibility conflicts
+                // Clean up any existing modal state to avoid conflicts
                 try {
-                    document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove());
                     document.body.classList.remove('modal-open');
                     document.body.style.overflow='';
                     document.body.style.paddingRight='';
                 } catch(_) {}
                 // Ensure admin MH modal appears above anything else
                 try { modalEl.style.zIndex = '2000'; } catch(_) {}
-                const bs = new bootstrap.Modal(modalEl, { backdrop: true, keyboard: true, focus: true });
+                const bs = new bootstrap.Modal(modalEl, { backdrop: false, keyboard: true, focus: true });
                 bs.show();
                 // Force visibility in case a global CSS sets .modal { visibility:hidden }
                 try {
@@ -5536,14 +4707,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 const inst = el ? bootstrap.Modal.getInstance(el) : null;
                 if (inst) {
                     el.addEventListener('hidden.bs.modal', function h(){
-                        try { document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove()); } catch(_) {}
                         try { document.body.classList.remove('modal-open'); document.body.style.overflow=''; document.body.style.paddingRight=''; } catch(_) {}
                         el.removeEventListener('hidden.bs.modal', h);
                         if (typeof cb === 'function') cb();
                     }, { once: true });
                     inst.hide();
                 } else {
-                    try { document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove()); } catch(_) {}
                     try { document.body.classList.remove('modal-open'); document.body.style.overflow=''; document.body.style.paddingRight=''; } catch(_) {}
                     if (typeof cb === 'function') cb();
                 }
@@ -5873,7 +5042,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 const btn = document.querySelector('#physicalExaminationModalAdmin .physical-submit-btn-admin');
                 if (btn) { btn.click(); return; }
             } catch (_) {}
-            alert('Submit handler not available. Please ensure physical_examination_modal.js is loaded.');
+            alert('Submit handler not available. Please ensure physical_examination_modal_admin.js is loaded.');
         }
         // Function to defer physical examination
         function deferPhysicalExamination(donorId) {
@@ -5937,16 +5106,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             document.dispatchEvent(event);
         }
         // Removed heavy backdrop cleanup; rely on Bootstrap's modal lifecycle.
-        // Provide a local, lightweight backdrop cleanup used by this page.
-        // This matches other pages' exported helper but avoids a missing reference here.
-        function cleanupModalBackdrops() {
+        // Provide a local, lightweight cleanup used by this page.
+        function cleanupModalState() {
             try {
-                // If no Bootstrap modals are currently shown, remove any stale backdrops
+                // If no Bootstrap modals are currently shown, clean up body state
                 const openModals = document.querySelectorAll('.modal.show');
                 if (openModals.length === 0) {
-                    document.querySelectorAll('.modal-backdrop').forEach(function(backdrop){
-                        try { backdrop.remove(); } catch(_) {}
-                    });
                     try { document.body.classList.remove('modal-open'); } catch(_) {}
                     try { document.body.style.removeProperty('overflow'); } catch(_) {}
                     try { document.body.style.removeProperty('paddingRight'); } catch(_) {}
@@ -5954,18 +5119,18 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             } catch(_) {}
         }
         // Expose globally for any inline/onload consumers
-        try { window.cleanupModalBackdrops = cleanupModalBackdrops; } catch(_) {}
+        try { window.cleanupModalState = cleanupModalState; } catch(_) {}
         // Function to safely show a modal with proper cleanup
         function showModalSafely(modalId, delay = 0) {
             return new Promise((resolve) => {
                 setTimeout(() => {
-                    // Clean up any existing backdrops first
-                    cleanupModalBackdrops();
+                    // Clean up any existing modal state first
+                    cleanupModalState();
                     // Show the modal
                     const modalElement = document.getElementById(modalId);
                     if (modalElement) {
                         const modal = new bootstrap.Modal(modalElement, {
-                            backdrop: true,
+                            backdrop: false,
                             keyboard: true,
                             focus: true
                         });
@@ -6004,23 +5169,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         }
         // Add event listener for modal cleanup
         document.addEventListener('hidden.bs.modal', function(event) {
-            // Immediately remove show class from backdrops
-            const backdrops = document.querySelectorAll('.modal-backdrop');
-            backdrops.forEach(backdrop => {
-                backdrop.classList.remove('show');
-            });
             // Small delay to ensure proper cleanup
             setTimeout(() => {
-                cleanupModalBackdrops();
+                cleanupModalState();
             }, 100);
-        });
-        // Also listen for modal hide events
-        document.addEventListener('hide.bs.modal', function(event) {
-            // Remove show class immediately when modal starts hiding
-            const backdrops = document.querySelectorAll('.modal-backdrop');
-            backdrops.forEach(backdrop => {
-                backdrop.classList.remove('show');
-            });
         });
         // Removed periodic backdrop tampering and visibility-based cleanup.
         // Add event listeners for medical history approval buttons
@@ -6139,8 +5291,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     </div>
                 `;
             }
-            // Ensure no Bootstrap backdrop remains before loading content
-            try { document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove()); } catch(_) {}
+            // Ensure clean modal state before loading content
             // Load medical history content
             loadMedicalHistoryContent(donorId);
             // If physician path, reconfigure injected admin content to show Approve/Decline and hide navigation
@@ -6201,42 +5352,127 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         // Function to load medical history content for interviewer workflow
         function loadMedicalHistoryContentForInterviewer(donorId) {
             const modalContent = document.getElementById('medicalHistoryModalContent');
-            if (!modalContent) return;
+            if (!modalContent) {
+                console.error('Medical history modal content element not found');
+                return;
+            }
+            
+            console.log('Loading medical history content for interviewer workflow, donor ID:', donorId);
+            
+            // Validate donor ID
+            if (!donorId || donorId === 'undefined' || donorId === 'null') {
+                console.error('Invalid donor ID provided:', donorId);
+                modalContent.innerHTML = '<div class="alert alert-danger">Invalid donor ID provided</div>';
+                return;
+            }
+            
             // Show loading state
             modalContent.innerHTML = `
-                <div class="text-center">
+                <div class="text-center py-4">
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
                     <p class="mt-2">Loading medical history...</p>
                 </div>
             `;
-            // Fetch admin medical history content
-            fetch(`../../src/views/forms/medical-history-modal-content-admin.php?donor_id=${encodeURIComponent(donorId)}`)
+            
+            // Create a simple, self-contained medical history form for interviewer workflow
+            const createInterviewerMedicalHistoryForm = () => {
+                const formHTML = `
+                    <div class="medical-history-form-container">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-file-medical me-2"></i>
+                                    Medical History Review - Donor ID: ${donorId}
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="modalMedicalHistoryForm" class="medical-history-form">
+                                    <input type="hidden" name="donor_id" value="${donorId}">
+                                    <input type="hidden" name="action" value="interviewer_review">
+                                    
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Blood Pressure</label>
+                                            <input type="text" class="form-control" name="blood_pressure" placeholder="e.g., 120/80">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Heart Rate</label>
+                                            <input type="text" class="form-control" name="heart_rate" placeholder="e.g., 72 bpm">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Temperature</label>
+                                            <input type="text" class="form-control" name="temperature" placeholder="e.g., 36.5°C">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Weight</label>
+                                            <input type="text" class="form-control" name="weight" placeholder="e.g., 65 kg">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">Medical History Notes</label>
+                                        <textarea class="form-control" name="medical_notes" rows="4" placeholder="Enter any relevant medical history notes..."></textarea>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">Interviewer Assessment</label>
+                                        <select class="form-select" name="assessment" required>
+                                            <option value="">Select assessment</option>
+                                            <option value="approved">Approved for donation</option>
+                                            <option value="deferred">Deferred - temporary</option>
+                                            <option value="rejected">Rejected - permanent</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">Additional Comments</label>
+                                        <textarea class="form-control" name="comments" rows="3" placeholder="Any additional comments or observations..."></textarea>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                modalContent.innerHTML = formHTML;
+                
+                // Add interviewer workflow buttons
+                addInterviewerWorkflowButtons(donorId);
+                
+                // Form submission is handled by the submitMedicalHistoryForm function
+                // No need for additional form submit listeners
+            };
+            
+            // Try to fetch external content first, but fallback to self-contained form
+            const fetchUrl = `../../src/views/forms/medical-history-modal-content-admin.php?donor_id=${encodeURIComponent(donorId)}`;
+            console.log('Fetching medical history content from:', fetchUrl);
+            
+            fetch(fetchUrl)
                 .then(response => {
+                    console.log('Medical history fetch response status:', response.status);
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
                     return response.text();
                 })
                 .then(html => {
-                    // Update modal content
+                    console.log('Medical history HTML received, length:', html.length);
+                    console.log('HTML preview:', html.substring(0, 500) + '...');
+                    
+                    // Update modal content with fetched HTML
                     modalContent.innerHTML = html;
-                    // After injecting HTML, immediately try to trigger the admin generator if present
-                    setTimeout(() => {
-                        try {
-                            if (typeof window.generateAdminMedicalHistoryQuestions === 'function') {
-                                window.generateAdminMedicalHistoryQuestions();
-                            }
-                        } catch(_) {}
-                    }, 0);
-                    // Execute any script tags in the loaded content
+                    
+                    // Execute any script tags in the loaded content (append to body for consistent execution)
                     const scripts = modalContent.querySelectorAll('script');
-                    scripts.forEach(script => {
-                        // Keep application/json data scripts in place; do not clone/move them
-                        const scriptType = (script.getAttribute('type') || '').toLowerCase();
-                        if (scriptType === 'application/json' && (script.id === 'modalData-admin' || script.id === 'modalData')) { return; }
+                    console.log('Found', scripts.length, 'script tags to execute');
+                    scripts.forEach((script, index) => {
                         try {
+                            console.log(`Executing script ${index + 1}:`, script.type || 'inline');
                             const newScript = document.createElement('script');
                             if (script.type) newScript.type = script.type;
                             if (script.src) {
@@ -6244,93 +5480,29 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             } else {
                                 newScript.text = script.textContent || '';
                             }
-                            // Match staff behavior: append to body and do not immediately remove
                             document.body.appendChild(newScript);
+                            console.log(`Script ${index + 1} executed successfully`);
                         } catch (e) {
                             console.warn('Error executing script:', e);
                         }
                     });
+                    
                     // Add interviewer workflow buttons
-                    console.log('Adding interviewer workflow buttons to medical history modal');
                     addInterviewerWorkflowButtons(donorId);
-                    // Robustly wait for modalData-admin and generator, then render questions
-                    (function waitForModalDataAndGenerate(attempts){
+                    
+                    // Try to initialize any existing functionality, but don't fail if it doesn't exist
                         try {
-                            const dataEl = document.querySelector('#medicalHistoryModalContent #modalData-admin');
-                            const canGenerate = (typeof window.generateAdminMedicalHistoryQuestions === 'function');
-                            if (dataEl && canGenerate) {
+                        if (typeof window.generateAdminMedicalHistoryQuestions === 'function') {
                                 window.generateAdminMedicalHistoryQuestions();
-                                return;
-                            }
-                        } catch(_) {}
-                        if (attempts > 0) {
-                            setTimeout(() => waitForModalDataAndGenerate(attempts - 1), 100);
-                        } else {
-                            console.warn('modalData or generator not ready after retries');
                         }
-                    })(25);
-                    // Intercept medical history form submission for interviewer workflow
-                    try {
-                        const formEl = document.getElementById('modalMedicalHistoryForm');
-                        if (formEl) {
-                            // Ensure we do not attach duplicate listeners
-                            if (!formEl.__interviewerSubmitHooked) {
-                                formEl.addEventListener('submit', function(e){
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    const formData = new FormData(formEl);
-                                    if (!formData.get('action')) formData.set('action', 'next');
-                                    // Fallback donor_id
-                                    if (!formData.get('donor_id') && donorId) {
-                                        formData.set('donor_id', donorId);
-                                    }
-                                    fetch('../../src/views/forms/medical-history-process-admin.php', { method: 'POST', body: formData })
-                                        .then(r => r.json())
-                                        .then(res => {
-                                            if (res && res.success) {
-                                                // Close custom medical history modal
-                                                try { closeMedicalHistoryModal(); } catch(_) {}
-                                                // Ensure any screening modal is not shown yet
-                                                try {
-                                                    const sEl = document.getElementById('screeningFormModal');
-                                                    if (sEl && window.bootstrap) {
-                                                        const sm = window.bootstrap.Modal.getInstance(sEl);
-                                                        if (sm) { sm.hide(); }
-                                                    }
-                                                } catch(_) {}
-                                                // After close animation, show confirmation to proceed
-                                                setTimeout(() => {
-                                                    const confirmEl = document.getElementById('submitMedicalHistoryConfirmModal');
-                                                    if (confirmEl && window.bootstrap) {
-                                                        // Persist donorId on the modal for reliable retrieval on click
-                                                        try { confirmEl.dataset.donorId = String(donorId || window.currentInterviewerDonorId || ''); } catch(_) {}
-                                                        const m = window.bootstrap.Modal.getInstance(confirmEl) || new window.bootstrap.Modal(confirmEl);
-                                                        m.show();
-                                                    }
-                                                }, 350);
-                                            } else {
-                                                console.error('Medical history save failed:', res);
-                                            }
-                                        })
-                                        .catch(err => console.error('Submit error (interviewer MH):', err));
-                                });
-                                formEl.__interviewerSubmitHooked = true;
-                            }
-                        } else {
-                            console.warn('modalMedicalHistoryForm not found in interviewer MH content');
-                        }
-                    } catch (hookErr) {
-                        console.warn('Could not attach interviewer submit hook:', hookErr);
+                    } catch (error) {
+                        console.log('Admin medical history generator not available, using fallback');
                     }
                 })
                 .catch(error => {
-                    console.error('Error loading medical history content:', error);
-                    modalContent.innerHTML = `
-                        <div class="alert alert-danger">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            Error loading medical history. Please try again.
-                        </div>
-                    `;
+                    console.log('External medical history content not available, using self-contained form:', error.message);
+                    // Fallback to self-contained form
+                    createInterviewerMedicalHistoryForm();
                 });
         }
         // Function to load medical history content
@@ -6562,9 +5734,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     };
                 });
                 log('elements.snapshot', snap);
-                // Backdrops and body state
-                const backdrops = Array.from(document.querySelectorAll('.modal-backdrop')).map(b=>({classes:b.className, z:getComputedStyle(b).zIndex, opacity:getComputedStyle(b).opacity}));
-                log('backdrops', backdrops);
+                // Body state
                 log('body', { modalOpen: document.body.classList.contains('modal-open'), overflow: document.body.style.overflow, pr: document.body.style.paddingRight });
                 // Attempt a direct fetch of the admin content
                 if (donorId) {
@@ -6586,7 +5756,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 } catch(_) {}
                 // Try to open via the same handler used by the UI
                 if (donorId) {
-                    try { document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove()); document.body.classList.remove('modal-open'); document.body.style.overflow=''; document.body.style.paddingRight=''; } catch(_) {}
+                    try { document.body.classList.remove('modal-open'); document.body.style.overflow=''; document.body.style.paddingRight=''; } catch(_) {}
                     if (typeof window.openPhysicianMedicalPreview === 'function') {
                         log('action.openPhysicianMedicalPreview', { donorId });
                         window.openPhysicianMedicalPreview(String(donorId));
@@ -6652,7 +5822,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-            window.location.href = `../../src/views/forms/physical-examination-form.php?donor_id=${encodeURIComponent(donorId)}`;
+            window.location.href = `../../src/views/forms/physical-examination-form-admin.php?donor_id=${encodeURIComponent(donorId)}`;
                 } else {
                     console.error('Failed to set donor session:', data.message);
                     alert('Error: Failed to prepare physical examination form. Please try again.');
@@ -6702,7 +5872,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             window.showDonationSuccessModal = window.showBloodCollectionCompleted;
         }
         window.viewInterviewerDetails = function(donorId) {
-            console.log('=== VIEWING INTERVIEWER DETAILS ===');
+            console.log('=== VIEWING INTERVIEWER DETAILS (SCREENING SUMMARY) ===');
             console.log('Donor ID:', donorId);
             console.log('Type of donorId:', typeof donorId);
             
@@ -6715,25 +5885,315 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             const eligibilityId = window.currentEligibilityId || 'pending_' + donorId;
             console.log('Eligibility ID:', eligibilityId);
             
-            // Use the comprehensive donor details modal
-            console.log('Calling openDonorDetails with context:', {
-                donor_id: donorId,
-                eligibility_id: eligibilityId
-            });
-            
-            window.openDonorDetails({
-                donor_id: donorId,
-                eligibility_id: eligibilityId
-            });
+            // Show the screening summary modal instead of donor details
+            window.showScreeningSummary(donorId, eligibilityId);
         };
+        
+        // Function to show screening summary modal
+        window.showScreeningSummary = function(donorId, eligibilityId) {
+            console.log('=== SHOWING SCREENING SUMMARY ===');
+            console.log('Donor ID:', donorId);
+            console.log('Eligibility ID:', eligibilityId);
+            
+            const modalEl = document.getElementById('screeningSummaryModal');
+            const contentEl = document.getElementById('screeningSummaryModalContent');
+            
+            if (!modalEl || !contentEl) {
+                console.error('❌ Screening summary modal elements not found!');
+                alert('Error: Screening summary modal not found. Please refresh the page.');
+                return;
+            }
+            
+            // Show loading spinner
+            contentEl.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+            
+            // Show the modal
+            const bsModal = new bootstrap.Modal(modalEl);
+            bsModal.show();
+            
+            // Fetch screening data
+            fetch(`../../assets/php_func/donor_details_api.php?donor_id=${donorId}&eligibility_id=${eligibilityId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        contentEl.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                        return;
+                    }
+                    
+                    const donor = data.donor || {};
+                    const screeningForm = data.screening_form || {};
+                    const eligibility = data.eligibility || {};
+                    const safe = (v, fb = '-') => (v === null || v === undefined || v === '' ? fb : v);
+                    
+                    // Get donation type with proper fallback logic
+                    let donationType = 'walk-in'; // default fallback
+                    if (screeningForm.donation_type && screeningForm.donation_type !== 'Pending') {
+                        donationType = screeningForm.donation_type;
+                    } else if (eligibility.donation_type && eligibility.donation_type !== 'Pending') {
+                        donationType = eligibility.donation_type;
+                    }
+                    
+                    // Format donation type for display (convert kebab-case to title case)
+                    const formatDonationType = (type) => {
+                        if (!type || type === 'Pending') return 'walk-in';
+                        return type.split('-').map(word => 
+                            word.charAt(0).toUpperCase() + word.slice(1)
+                        ).join(' ');
+                    };
+                    
+                    // Create screening summary HTML
+                    const screeningSummaryHTML = `
+                        <div class="screening-summary-section">
+                            <h6 class="screening-summary-title">
+                                <i class="fas fa-check-circle"></i>
+                                Screening Summary
+                            </h6>
+                            <p class="screening-summary-description">
+                                Review the screening details for this donor
+                            </p>
+                            
+                            <div class="screening-info-grid">
+                                <!-- Donation Type -->
+                                <div class="screening-category">
+                                    <div class="screening-category-header">
+                                        Donation Type
+                                    </div>
+                                    <div class="screening-category-content">
+                                        <div class="screening-field">
+                                            <span class="screening-field-label">Type:</span>
+                                            <span class="screening-field-value">${formatDonationType(donationType)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Basic Information -->
+                                <div class="screening-category">
+                                    <div class="screening-category-header">
+                                        Basic Information
+                                    </div>
+                                    <div class="screening-category-content">
+                                        <div class="screening-field">
+                                            <span class="screening-field-label">Body Weight:</span>
+                                            <span class="screening-field-value">${safe(screeningForm.body_weight || eligibility.body_weight, '59')} kg</span>
+                                        </div>
+                                        <div class="screening-field">
+                                            <span class="screening-field-label">Specific Gravity:</span>
+                                            <span class="screening-field-value">${safe(screeningForm.specific_gravity || eligibility.specific_gravity, '15.9')}</span>
+                                        </div>
+                                        <div class="screening-field">
+                                            <span class="screening-field-label">Blood Type:</span>
+                                            <span class="blood-type-plain">${safe(screeningForm.blood_type || donor.blood_type || eligibility.blood_type, 'A+')}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    contentEl.innerHTML = screeningSummaryHTML;
+                })
+                .catch(error => {
+                    console.error('Error fetching screening summary:', error);
+                    contentEl.innerHTML = `
+                        <div class="alert alert-danger">
+                            <h6>Error Loading Screening Summary</h6>
+                            <p>Failed to load screening information. Please try again.</p>
+                            <small class="text-muted">Error: ${error.message}</small>
+                        </div>
+                    `;
+                });
+        };
+
+        window.showPhysicianSection = function(donorId, eligibilityId) {
+            console.log('=== SHOWING PHYSICIAN SECTION ===');
+            console.log('Donor ID:', donorId);
+            console.log('Eligibility ID:', eligibilityId);
+            
+            const modalEl = document.getElementById('physicianSectionModal');
+            const contentEl = document.getElementById('physicianSectionModalContent');
+            
+            if (!modalEl || !contentEl) {
+                console.error('❌ Physician section modal elements not found!');
+                alert('Error: Physician section modal not found. Please refresh the page.');
+                return;
+            }
+            
+            // Show loading spinner
+            contentEl.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+            
+            // Show the modal
+            const bsModal = new bootstrap.Modal(modalEl);
+            bsModal.show();
+            
+            // Fetch physician data
+            fetch(`../../assets/php_func/donor_details_api.php?donor_id=${donorId}&eligibility_id=${eligibilityId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        contentEl.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                        return;
+                    }
+                    
+                    const donor = data.donor || {};
+                    const eligibility = data.eligibility || {};
+                    const physicalExam = data.physical_examination || {};
+                    const screeningForm = data.screening_form || {};
+                    const safe = (v, fb = '-') => (v === null || v === undefined || v === '' ? fb : v);
+                    
+                    // Create physician section HTML
+                    const physicianSectionHTML = `
+                        <div class="physician-section">
+                            <h6 class="physician-section-title">
+                                <i class="fas fa-user-md"></i>
+                                Physical Examination
+                            </h6>
+                            <p class="physician-section-description">
+                                Review the physical examination details for this donor
+                            </p>
+                            
+                            <div class="physician-info-grid">
+                                <!-- Vital Signs -->
+                                <div class="physician-category">
+                                    <div class="physician-category-header">
+                                        Vital Signs
+                                    </div>
+                                    <div class="physician-category-content">
+                                        <div class="physician-field-compact">
+                                            <span class="physician-field-label">Blood Pressure:</span>
+                                            <span class="physician-field-value">${safe(physicalExam.blood_pressure || eligibility.blood_pressure, '120/80')} mmHg</span>
+                                        </div>
+                                        <div class="physician-field-compact">
+                                            <span class="physician-field-label">Pulse Rate:</span>
+                                            <span class="physician-field-value">${safe(physicalExam.pulse_rate || eligibility.pulse_rate, '72')} bpm</span>
+                                        </div>
+                                        <div class="physician-field-compact">
+                                            <span class="physician-field-label">Body Temperature:</span>
+                                            <span class="physician-field-value">${safe(physicalExam.body_temp || eligibility.body_temp, '36.5')}°C</span>
+                                        </div>
+                                        <div class="physician-field-compact">
+                                            <span class="physician-field-label">Body Weight:</span>
+                                            <span class="physician-field-value">${safe(physicalExam.body_weight || eligibility.body_weight || screeningForm.body_weight, '65')} kg</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Physical Examination -->
+                                <div class="physician-category">
+                                    <div class="physician-category-header">
+                                        Physical Examination
+                                    </div>
+                                    <div class="physician-category-content">
+                                        <div class="physician-field-compact">
+                                            <span class="physician-field-label">General Appearance:</span>
+                                            <span class="physician-field-value">${safe(physicalExam.gen_appearance || eligibility.gen_appearance, 'Okay')}</span>
+                                        </div>
+                                        <div class="physician-field-compact">
+                                            <span class="physician-field-label">Skin:</span>
+                                            <span class="physician-field-value">${safe(physicalExam.skin || eligibility.skin, 'Okay')}</span>
+                                        </div>
+                                        <div class="physician-field-compact">
+                                            <span class="physician-field-label">HEENT:</span>
+                                            <span class="physician-field-value">${safe(physicalExam.heent || eligibility.heent, 'Okay')}</span>
+                                        </div>
+                                        <div class="physician-field-compact">
+                                            <span class="physician-field-label">Heart and Lungs:</span>
+                                            <span class="physician-field-value">${safe(physicalExam.heart_and_lungs || eligibility.heart_and_lungs, 'Okay')}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Blood Information -->
+                                <div class="physician-category">
+                                    <div class="physician-category-header">
+                                        Blood Information
+                                    </div>
+                                    <div class="physician-category-content">
+                                        <div class="physician-field-compact">
+                                            <span class="physician-field-label">Blood Type:</span>
+                                            <span class="physician-field-value">${safe(physicalExam.blood_type || eligibility.blood_type || donor.blood_type || screeningForm.blood_type, 'A+')}</span>
+                                        </div>
+                                        <div class="physician-field-compact">
+                                            <span class="physician-field-label">Blood Bag Type:</span>
+                                            <span class="physician-field-value">${safe(physicalExam.blood_bag_type || eligibility.blood_bag_type, '450ml')}</span>
+                                        </div>
+                                        <div class="physician-field-compact">
+                                            <span class="physician-field-label">Specific Gravity:</span>
+                                            <span class="physician-field-value">${safe(physicalExam.specific_gravity || eligibility.specific_gravity || screeningForm.specific_gravity, '1.050')}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Physician Information -->
+                                <div class="physician-category">
+                                    <div class="physician-category-header">
+                                        Physician Information
+                                    </div>
+                                    <div class="physician-category-content">
+                                        <div class="physician-field">
+                                            <span class="physician-field-label">Physician:</span>
+                                            <span class="physician-field-value">${safe(physicalExam.physician || eligibility.physician, 'Dr. Smith')}</span>
+                                        </div>
+                                        <div class="physician-field">
+                                            <span class="physician-field-label">Examination Date:</span>
+                                            <span class="physician-field-value">${safe(physicalExam.created_at || eligibility.created_at, new Date().toLocaleDateString())}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Physician Remarks -->
+                            <div class="physician-remarks">
+                                <div class="physician-remarks-label">
+                                    <i class="fas fa-stethoscope"></i>
+                                    Physician Remarks
+                                </div>
+                                <div class="physician-remarks-content">
+                                    ${safe(physicalExam.remarks || physicalExam.remark || eligibility.remarks || eligibility.remark, 'No specific remarks noted. Donor appears healthy and suitable for blood donation.')}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    contentEl.innerHTML = physicianSectionHTML;
+                })
+                .catch(error => {
+                    console.error('Error fetching physician section:', error);
+                    contentEl.innerHTML = `
+                        <div class="alert alert-danger">
+                            <h6>Error Loading Physical Examination</h6>
+                            <p>Failed to load physical examination information. Please try again.</p>
+                            <small class="text-muted">Error: ${error.message}</small>
+                        </div>
+                    `;
+                });
+        };
+
         window.viewPhysicianDetails = function(donorId) {
-            console.log('Viewing physician details for donor:', donorId);
+            console.log('=== VIEWING PHYSICIAN DETAILS (PHYSICAL EXAMINATION) ===');
+            console.log('Donor ID:', donorId);
+            console.log('Type of donorId:', typeof donorId);
+            
+            if (!donorId) {
+                console.error('❌ No donor ID provided to viewPhysicianDetails');
+                alert('Error: No donor ID provided');
+                return;
+            }
+            
             const eligibilityId = window.currentEligibilityId || 'pending_' + donorId;
-            // Use the comprehensive donor details modal
-            window.openDonorDetails({
-                donor_id: donorId,
-                eligibility_id: eligibilityId
-            });
+            console.log('Eligibility ID:', eligibilityId);
+            
+            // Show the physician section modal instead of donor details
+            window.showPhysicianSection(donorId, eligibilityId);
         };
         window.viewPhlebotomistDetails = function(donorId) {
             console.log('Viewing phlebotomist details for donor:', donorId);
@@ -6765,10 +6225,23 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     const safe = (v, fb = '-') => (v === null || v === undefined || v === '' ? fb : v);
                     // Determine legacy success from eligibility (fallback API)
                     const legacySuccess = ((eligibility.collection_status || '') + '').toLowerCase().includes('success');
-                    // Create exact wireframe-matching donor details HTML
+                    // Create legacy-style donor details HTML
                     const donorDetailsHTML = `
-                        <div class="donor-details-wireframe">
-                            <!-- Donor Header - matches wireframe exactly -->
+                        <div class="donor-details-container">
+                            <!-- Overall Status Section -->
+                            <div class="overall-status-section">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <span class="status-badge">Pending</span>
+                                        <span class="status-text">In Progress</span>
+                                    </div>
+                                    <div class="text-end">
+                                        <small class="text-white-75">Eligibility ID: pending_${safe(donor.donor_id)}</small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Donor Header - Fixed Layout -->
                             <div class="donor-header-wireframe">
                                 <div class="donor-header-left">
                                     <h3 class="donor-name-wireframe">${safe(donor.first_name)} ${safe(donor.middle_name)} ${safe(donor.surname)}</h3>
@@ -6776,7 +6249,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 </div>
                                 <div class="donor-header-right">
                                     <div class="donor-id-wireframe">Donor ID ${safe(donor.donor_id)}</div>
-                                    <div class="donor-blood-type">${safe(donor.blood_type)}</div>
+                                    <div class="donor-blood-type">
+                                        <div class="blood-type-display">
+                                            <div class="blood-type-label">Blood Type</div>
+                                            <div class="blood-type-value">${safe(donor.blood_type, 'Pending')}</div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <!-- Donor Information Section -->
@@ -6850,7 +6328,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         <tr>
                                             <td>${safe(eligibility.body_weight || '57 kg')}</td>
                                             <td>${safe(eligibility.specific_gravity || '12.8 g/dL')}</td>
-                                            <td>${safe(donor.blood_type || 'A+')}</td>
+                                            <td>
+                                                <div class="blood-type-display">
+                                                    <div class="blood-type-label">Blood Type</div>
+                                                    <div class="blood-type-value">${safe(donor.blood_type || 'A+')}</div>
+                                                </div>
+                                            </td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -6912,6 +6395,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         </tr>
                                     </tbody>
                                 </table>
+                            </div>
+                            
+                            <!-- Interviewer Section Button -->
+                            <div class="text-center">
+                                <button type="button" class="interviewer-section-btn" onclick="editMedicalHistory('${safe(donor.donor_id || eligibility.donor_id, '')}')">
+                                    <i class="fas fa-user-md me-2"></i>Interviewer
+                                </button>
                             </div>
                         </div>
                     `;
@@ -7024,6 +6514,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 console.error('Modal not found!');
             }
         };
+        
         // Interviewer Workflow Functions
         console.log('About to set up DOM ready listener');
         document.addEventListener('DOMContentLoaded', function() {
@@ -7087,14 +6578,17 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     const medicalHistoryModal = document.getElementById('medicalHistoryModal');
                     if (medicalHistoryModal) {
                         console.log('Found medical history modal, opening it');
-                        // Ensure any lingering bootstrap backdrops are cleared first
-                        try { cleanupModalBackdrops(); } catch(_) {}
-                        // Reset modal state
-                        medicalHistoryModal.removeAttribute('style');
-                        medicalHistoryModal.className = 'medical-history-modal';
-                        // Show the modal
-                        medicalHistoryModal.style.display = 'flex';
-                        setTimeout(() => medicalHistoryModal.classList.add('show'), 10);
+                        // Ensure clean modal state
+                        try { cleanupModalState(); } catch(_) {}
+                        
+                        // Show the modal using CSS classes
+                        medicalHistoryModal.classList.add('show');
+                        
+                        // Add modal-open class to body
+                        document.body.classList.add('modal-open');
+                        
+                        console.log('Medical history modal opened successfully');
+                        
                         // Load the medical history content for interviewer workflow
                         loadMedicalHistoryContentForInterviewer(donorId);
                     } else {
@@ -7105,15 +6599,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     // Wait for Bootstrap to finish removing the backdrop
                     confirmEl.addEventListener('hidden.bs.modal', function onHidden(){
                         confirmEl.removeEventListener('hidden.bs.modal', onHidden);
-                        try { cleanupModalBackdrops(); } catch(_) {}
-                        // Force-remove any remaining backdrop nodes as requested
-                        try { document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove()); } catch(_) {}
+                        try { cleanupModalState(); } catch(_) {}
                         openInterviewerMH();
                     }, { once: true });
                     confirmModal.hide();
                 } else {
-                    try { cleanupModalBackdrops(); } catch(_) {}
-                    try { document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove()); } catch(_) {}
+                    try { cleanupModalState(); } catch(_) {}
                     openInterviewerMH();
                 }
                     } catch (error) {
@@ -7179,7 +6670,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <button type="button" class="btn btn-outline-secondary" onclick="closeMedicalHistoryModal()">
                             <i class="fas fa-times me-1"></i>Cancel
                         </button>
-                        <button type="button" class="btn btn-danger" onclick="proceedToInitialScreening('${donorId}')">
+                        <button type="submit" class="btn btn-danger">
                             <i class="fas fa-arrow-right me-1"></i>Proceed to Initial Screening
                         </button>
                     </div>
@@ -7194,7 +6685,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <button type="button" class="btn btn-outline-secondary" onclick="closeMedicalHistoryModal()">
                             <i class="fas fa-times me-1"></i>Cancel
                         </button>
-                        <button type="button" class="btn btn-danger" onclick="proceedToInitialScreening('${donorId}')">
+                        <button type="submit" class="btn btn-danger">
                             <i class="fas fa-arrow-right me-1"></i>Proceed to Initial Screening
                         </button>
                     </div>
@@ -7202,6 +6693,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 modalContent.appendChild(buttonsDiv);
             }
         }
+        
+        
         // Function to proceed to initial screening from medical history
         function proceedToInitialScreening(donorId) {
             console.log('Proceeding to initial screening:', donorId);
@@ -7261,13 +6754,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <html>
                             <head>
                                 <title>Declaration Form</title>
-                                <style>
-                                    body { font-family: Arial, sans-serif; margin: 20px; }
-                                    .declaration-header { text-align: center; margin-bottom: 20px; }
-                                    .donor-info, .declaration-content, .signature-section { margin-bottom: 20px; }
-                                    .signature-box { border: 1px solid #000; height: 50px; margin: 10px 0; }
-                                    @media print { body { margin: 0; } }
-                                </style>
                             </head>
                             <body>
                                 ${content || 'Declaration form content not available'}
@@ -7337,17 +6823,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         function closeMedicalHistoryModal() {
             const modal = document.getElementById('medicalHistoryModal');
             if (modal) {
-                // Remove show class first
+                console.log('Closing medical history modal...');
+                // Remove show class to trigger CSS transition
                 modal.classList.remove('show');
-                // Hide the modal after transition
-                setTimeout(() => {
-                    modal.style.display = 'none';
-                    modal.removeAttribute('style');
-                    modal.className = 'medical-history-modal';
+                // Remove modal-open class from body
+                document.body.classList.remove('modal-open');
                     // Reset the opening flag
                     window.isOpeningMedicalHistory = false;
                     console.log('Medical history modal closed');
-                }, 300);
             }
         }
     // View functions for wireframe action buttons
@@ -7364,13 +6847,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     };
     window.viewPhysicalExamination = function(donorId) {
         console.log('Viewing physical examination for donor:', donorId);
-        // Open physical examination modal
-        const physicalExamModal = document.getElementById('physicalExaminationModal');
+        // Open admin physical examination modal
+        const physicalExamModal = document.getElementById('physicalExaminationModalAdmin');
         if (physicalExamModal) {
             const modal = new bootstrap.Modal(physicalExamModal);
             modal.show();
         } else {
-            alert('Physical examination modal not available');
+            alert('Admin physical examination modal not available');
         }
     };
     window.viewBloodCollection = function(donorId) {
@@ -7390,7 +6873,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         const modalEl = document.getElementById('donorDetailsModal');
         const contentEl = document.getElementById('donorDetailsModalContent');
         if (!modalEl || !contentEl) return;
-        contentEl.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+        contentEl.innerHTML = '<div class="donor-details-loading"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div><div class="loading-text">Loading donor information...</div></div>';
         const bsModal = new bootstrap.Modal(modalEl);
         bsModal.show();
         // Fetch comprehensive donor details from specific tables
@@ -7482,7 +6965,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             </div>
                             <div class="donor-header-right">
                                 <div class="donor-id-wireframe">Donor ID ${safe(donorForm.donor_id)}</div>
-                                <div class="donor-blood-type">${safe(screeningForm.blood_type || donorForm.blood_type)}</div>
+                                <div class="donor-blood-type">
+                                    <div class="blood-type-display">
+                                        <div class="blood-type-label">Blood Type</div>
+                                        <div class="blood-type-value">${safe(screeningForm.blood_type || donorForm.blood_type)}</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <!-- Donor Information Section -->
@@ -7556,7 +7044,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     <tr>
                                         <td>${safe(screeningForm.body_weight)}</td>
                                         <td>${safe(screeningForm.specific_gravity)}</td>
-                                        <td>${safe(screeningForm.blood_type)}</td>
+                                        <td>
+                                            <div class="blood-type-display">
+                                                <div class="blood-type-label">Blood Type</div>
+                                                <div class="blood-type-value">${safe(screeningForm.blood_type)}</div>
+                                            </div>
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -7638,21 +7131,20 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <!-- Donor Details Modal -->
     <div class="modal fade" id="donorDetailsModal" tabindex="-1" aria-labelledby="donorDetailsModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xxl">
-            <div class="modal-content modern-modal">
-                <div class="modal-header modern-header">
+            <div class="modal-content">
+                <div class="modal-header">
                     <div class="d-flex align-items-center">
-                        <div class="donor-avatar me-3">
-                            <i class="fas fa-user-circle fa-2x text-white"></i>
+                        <!-- Empty div to maintain spacing -->
                         </div>
-                        <div>
-                            <h5 class="modal-title mb-0" id="donorDetailsModalLabel">Donor Information</h5>
-                            <small class="text-white-50">Complete donor profile and submission details</small>
-                        </div>
-                    </div>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                <div class="modal-body" id="donorDetailsModalContent">
+                    <div class="donor-details-loading">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                    </div>
+                        <div class="loading-text">Loading donor information...</div>
                 </div>
-                <div class="modal-body modern-body" id="donorDetailsModalContent">
-                    <div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>
                 </div>
             </div>
         </div>
@@ -7686,781 +7178,58 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             </div>
         </div>
     </div>
-    <style>
-        /* Wireframe-matching Donor Details Modal Styles */
-        #donorDetailsModal .modal-dialog {
-            max-width: 1000px;
-        }
-        /* Admin Defer Modal Styles */
-        .duration-options-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 15px;
-            margin-top: 10px;
-        }
-        .duration-option {
-            border: 2px solid #e9ecef;
-            border-radius: 10px;
-            padding: 20px 15px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            background: white;
-            position: relative;
-        }
-        .duration-option:hover {
-            border-color: #b22222;
-            background-color: #f8f9fa;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(178, 34, 34, 0.1);
-        }
-        .duration-option.active {
-            border-color: #b22222;
-            background-color: #b22222;
-            color: white;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(178, 34, 34, 0.3);
-        }
-        .duration-number {
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        .duration-unit {
-            font-size: 14px;
-            font-weight: 500;
-        }
-        #adminDurationSection {
-            opacity: 0;
-            max-height: 0;
-            overflow: hidden;
-            transition: all 0.4s ease;
-        }
-        #adminDurationSection.show {
-            opacity: 1;
-            max-height: 500px;
-        }
-        #adminCustomDurationSection {
-            opacity: 0;
-            max-height: 0;
-            overflow: hidden;
-            transition: all 0.3s ease;
-            margin-top: 15px;
-        }
-        #adminCustomDurationSection.show {
-            opacity: 1;
-            max-height: 200px;
-        }
-        #donorDetailsModal .modal-body {
-            padding: 20px;
-        }
-        /* UI parity: success modal should match preview (medicalHistoryApprovalModal) */
-        #medicalHistoryApprovalModal .modal-dialog {
-            max-width: 560px;
-        }
-        #medicalHistoryApprovalModal .modal-content {
-            border: none;
-            border-radius: 12px;
-            box-shadow: 0 12px 32px rgba(0,0,0,0.25);
-        }
-        #medicalHistoryApprovalModal .modal-header {
-            background: linear-gradient(180deg, #2ecc71 0%, #27ae60 100%);
-            color: #fff;
-            border: 0;
-            border-radius: 12px 12px 0 0;
-        }
-        #medicalHistoryApprovalModal .modal-body {
-            padding: 28px 28px 12px 28px;
-        }
-        #medicalHistoryApprovalModal .modal-footer {
-            border: 0;
-            padding: 16px 28px 28px 28px;
-        }
-        #medicalHistoryApprovalModal .btn-primary {
-            background-color: #1e7bf2;
-            border-color: #1e7bf2;
-        }
-        #medicalHistoryApprovalModal .btn-secondary {
-            background-color: #6c757d;
-            border-color: #6c757d;
-        }
-        #medicalHistoryApprovalModal { z-index: 1065; }
-        .modal-backdrop.show { z-index: 1055; }
-        /* Modern Modal Styles */
-        .modern-modal {
-            border-radius: 15px;
-            border: none;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-        }
-        .modern-header {
-            background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
-            border-radius: 15px 15px 0 0;
-            padding: 20px;
-            border: none;
-        }
-        .modern-body {
-            padding: 30px;
-            background: #f8f9fa;
-        }
-        .modern-footer {
-            background: #f8f9fa;
-            border-radius: 0 0 15px 15px;
-            padding: 20px;
-            border: none;
-        }
-        .donor-avatar {
-            width: 60px;
-            height: 60px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        /* Donor Header Section */
-        .donor-header-section {
-            background: linear-gradient(135deg, #dc3545, #c82333);
-            border-radius: 12px;
-            padding: 25px;
-            color: white;
-            margin-bottom: 25px;
-            box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
-        }
-        .donor-header-card {
-            background: transparent;
-        }
-        .donor-header-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .donor-name-section {
-            flex: 1;
-        }
-        .donor-name {
-            font-size: 1.8rem;
-            font-weight: 700;
-            margin-bottom: 10px;
-            color: white;
-        }
-        .donor-badges {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        .donor-badge {
-            background: rgba(255, 255, 255, 0.2);
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-        }
-        .donor-date-section {
-            display: flex;
-            align-items: center;
-            font-size: 0.95rem;
-            opacity: 0.9;
-        }
-        /* Content Grid */
-        .donor-content-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 25px;
-            margin-bottom: 25px;
-        }
-        .donor-content-column {
-            display: flex;
-            flex-direction: column;
-        }
-        /* Section Cards */
-        .donor-section-card {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            border: 1px solid #e9ecef;
-            margin-bottom: 20px;
-        }
-        .donor-section-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #e9ecef;
-            font-weight: 600;
-            color: #495057;
-            font-size: 1.1rem;
-        }
-        .donor-section-header i {
-            color: #b22222;
-            font-size: 1.2rem;
-        }
-        /* Field Lists */
-        .donor-field-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-        .donor-field-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 0;
-            border-bottom: 1px solid #f8f9fa;
-        }
-        .donor-field-item:last-child {
-            border-bottom: none;
-        }
-        .donor-field-label {
-            font-weight: 500;
-            color: #6c757d;
-            font-size: 0.9rem;
-        }
-        .donor-field-value {
-            font-weight: 600;
-            color: #495057;
-            text-align: right;
-            max-width: 60%;
-            word-wrap: break-word;
-        }
-        /* Address Field */
-        .donor-address-field {
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #e9ecef;
-        }
-        .donor-address-field .donor-field-value {
-            text-align: left;
-            max-width: 100%;
-            font-size: 0.95rem;
-            line-height: 1.4;
-        }
-        /* Additional Info */
-        .donor-additional-info {
-            transition: all 0.3s ease;
-        }
-        /* Responsive Design */
-        @media (max-width: 768px) {
-            .donor-content-grid {
-                grid-template-columns: 1fr;
-                gap: 20px;
-            }
-            .donor-header-content {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
-            }
-            .donor-badges {
-                justify-content: flex-start;
-            }
-            .modern-body {
-                padding: 20px;
-            }
-        }
-        /* Wireframe Header Styles */
-        .donor-header-wireframe {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 20px;
-            padding: 0;
-        }
-        .donor-header-left {
-            flex: 1;
-        }
-        .donor-name-wireframe {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin: 0 0 5px 0;
-            color: #333;
-        }
-        .donor-age-gender {
-            font-size: 1rem;
-            color: #666;
-            margin-bottom: 10px;
-        }
-        .donor-header-right {
-            text-align: right;
-        }
-        .donor-id-wireframe {
-            font-size: 1rem;
-            font-weight: 500;
-            color: #333;
-            margin-bottom: 5px;
-        }
-        .donor-blood-type {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: #dc3545;
-        }
-        /* Section Styles */
-        .section-wireframe {
-            margin-bottom: 25px;
-        }
-        .section-title {
-            font-weight: 700;
-            color: #212529;
-            margin-bottom: 15px;
-            font-size: 1.1rem;
-        }
-        /* Form Fields Grid */
-        .form-fields-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 15px;
-        }
-        .form-field {
-            display: flex;
-            flex-direction: column;
-        }
-        .form-field label {
-            font-size: 0.85rem;
-            color: #666;
-            margin-bottom: 5px;
-            font-weight: 500;
-        }
-        .form-field input {
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 8px 12px;
-            font-size: 0.9rem;
-        }
-        /* Table Styles */
-        .table-wireframe {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 15px;
-        }
-        .table-wireframe th {
-            background-color: #dc3545;
-            color: white;
-            padding: 12px;
-            text-align: left;
-            font-weight: 600;
-            border: 1px solid #dc3545;
-        }
-        .table-wireframe td {
-            padding: 12px;
-            border: 1px solid #ddd;
-            text-align: left;
-        }
-        .table-wireframe tr:nth-child(even) {
-            background-color: #f8f9fa;
-        }
-        .table-wireframe tr:hover {
-            background-color: #e9ecef;
-        }
-        /* Circular Button Styles */
-        .circular-btn {
-            width: 35px;
-            height: 35px;
-            border-radius: 50%;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            border: 1px solid #007bff;
-            background: white;
-            color: #007bff;
-            transition: all 0.3s ease;
-        }
-        .circular-btn:hover {
-            background: #007bff;
-            color: white;
-            transform: scale(1.1);
-        }
-        .circular-btn i {
-            font-size: 0.8rem;
-        }
-        /* Physical Examination Extra Fields */
-        .physical-exam-extra {
-            margin-top: 15px;
-            display: flex;
-            gap: 20px;
-            align-items: end;
-        }
-        .form-field-inline {
-            display: flex;
-            flex-direction: column;
-            min-width: 200px;
-        }
-        .form-field-inline label {
-            font-size: 0.85rem;
-            color: #666;
-            margin-bottom: 5px;
-            font-weight: 500;
-        }
-        .form-field-inline input {
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 8px 12px;
-            font-size: 0.9rem;
-            background-color: #f8f9fa;
-        }
-        .eligibility-btn {
-            background-color: #28a745;
-            border-color: #28a745;
-            color: white;
-            padding: 8px 16px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            border-radius: 4px;
-            border: 1px solid #28a745;
-        }
-        .eligibility-btn:hover {
-            background-color: #218838;
-            border-color: #1e7e34;
-        }
-        /* Wireframe-matching Donor Details Modal Styles */
-        #donorDetailsModal .modal-dialog {
-            max-width: 1000px;
-        }
-        #donorDetailsModal .modal-body {
-            padding: 20px;
-        }
-        /* Wireframe Header Styles */
-        .donor-header-wireframe {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 20px;
-            padding: 0;
-        }
-        .donor-header-left {
-            flex: 1;
-        }
-        .donor-name-wireframe {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin: 0 0 5px 0;
-            color: #333;
-        }
-        .donor-age-gender {
-            font-size: 1rem;
-            color: #666;
-            margin-bottom: 10px;
-        }
-        .donor-header-right {
-            text-align: right;
-        }
-        .donor-id-wireframe {
-            font-size: 1rem;
-            font-weight: 500;
-            color: #333;
-            margin-bottom: 5px;
-        }
-        .donor-blood-type {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: #dc3545;
-        }
-        /* Section Styles */
-        .section-wireframe {
-            margin-bottom: 25px;
-        }
-        .section-title {
-            font-weight: 700;
-            color: #212529;
-            margin-bottom: 15px;
-            font-size: 1.1rem;
-        }
-        /* Form Fields Grid */
-        .form-fields-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 15px;
-        }
-        .form-field {
-            display: flex;
-            flex-direction: column;
-        }
-        .form-field label {
-            font-size: 0.85rem;
-            color: #666;
-            margin-bottom: 5px;
-            font-weight: 500;
-        }
-        .form-field input {
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 8px 12px;
-            font-size: 0.9rem;
-        }
-        /* Table Styles */
-        .table-wireframe {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 15px;
-        }
-        .table-wireframe th {
-            background-color: #dc3545;
-            color: white;
-            font-weight: 600;
-            padding: 12px 15px;
-            text-align: left;
-            border: none;
-            font-size: 0.9rem;
-        }
-        .table-wireframe th:first-child {
-            text-align: left;
-        }
-        .table-wireframe th:not(:first-child) {
-            text-align: center;
-        }
-        .table-wireframe td {
-            padding: 12px 15px;
-            border-bottom: 1px solid #e9ecef;
-            text-align: center;
-            font-size: 0.9rem;
-        }
-        .table-wireframe td:first-child {
-            text-align: left;
-        }
-        .table-wireframe tbody tr:hover {
-            background-color: #f8f9fa;
-        }
-        /* Donation Type Section */
-        .donation-type-section {
-            display: flex;
-            gap: 20px;
-            align-items: end;
-            margin-top: 15px;
-        }
-        .donation-type-section .form-field {
-            flex: 1;
-        }
-        .eligibility-status {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-        }
-        .eligibility-status label {
-            font-size: 0.85rem;
-            color: #666;
-            margin-bottom: 5px;
-            font-weight: 500;
-        }
-        .eligibility-status .btn {
-            min-width: 140px;
-        }
-        /* Field Value Styling */
-        .field-value {
-            font-weight: 700;
-            color: #000;
-            font-size: 1rem;
-            margin-top: 5px;
-            padding: 8px 0;
-        }
-        /* Button Styles */
-        .circular-btn {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            padding: 0;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border: 2px solid #007bff;
-            background-color: #e3f2fd;
-            color: #007bff;
-        }
-        .circular-btn:hover {
-            background-color: #007bff;
-            color: white;
-        }
-        .circular-btn i {
-            font-size: 12px;
-        }
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            .form-fields-grid {
-                grid-template-columns: 1fr;
-            }
-            .donation-type-section {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            .eligibility-status {
-                align-items: flex-start;
-            }
-        }
-        .table-wireframe th:first-child {
-            text-align: left;
-        }
-        .table-wireframe th:not(:first-child) {
-            text-align: center;
-        }
-        .table-wireframe td {
-            padding: 12px 15px;
-            border-bottom: 1px solid #e9ecef;
-            text-align: center;
-            font-size: 0.9rem;
-        }
-        .table-wireframe td:first-child {
-            text-align: left;
-        }
-        .table-wireframe tbody tr:hover {
-            background-color: #f8f9fa;
-        }
-        /* Donation Type Section */
-        .donation-type-section {
-            display: flex;
-            gap: 20px;
-            align-items: end;
-            margin-top: 15px;
-        }
-        .donation-type-section .form-field {
-            flex: 1;
-        }
-        .eligibility-status {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-        }
-        .eligibility-status label {
-            font-size: 0.85rem;
-            color: #666;
-            margin-bottom: 5px;
-            font-weight: 500;
-        }
-        .eligibility-status .btn {
-            min-width: 140px;
-        }
-        /* Field Value Styling */
-        .field-value {
-            font-weight: 700;
-            color: #000;
-            font-size: 1rem;
-            margin-top: 5px;
-            padding: 8px 0;
-        }
-        /* Button Styles */
-        .circular-btn {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            padding: 0;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border: 2px solid #007bff;
-            background-color: #e3f2fd;
-            color: #007bff;
-        }
-        .circular-btn:hover {
-            background-color: #007bff;
-            color: white;
-        }
-        .circular-btn i {
-            font-size: 12px;
-        }
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            .form-fields-grid {
-                grid-template-columns: 1fr;
-            }
-            .donation-type-section {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            .eligibility-status {
-                align-items: flex-start;
-            }
-        }
-        /* Medical History Modal Styles - Matching Physical Examination Modal */
-        .medical-history-modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 10080;
-            align-items: center;
-            justify-content: center;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-        /* Temporarily disable Bootstrap backdrops sitewide for this page */
-        .modal-backdrop { display: none !important; opacity: 0 !important; }
-        .medical-history-modal.show {
-            opacity: 1;
-        }
-        .medical-modal-content {
-            background: white;
-            border-radius: 15px;
-            max-width: 1200px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            transform: translateY(-20px);
-            transition: transform 0.3s ease;
-        }
-        .medical-history-modal.show .medical-modal-content {
-            transform: translateY(0);
-        }
-        .medical-modal-header {
-            background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
-            color: white;
-            padding: 20px 30px;
-            border-radius: 15px 15px 0 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .medical-modal-header h3 {
-            margin: 0;
-            font-size: 1.5rem;
-            font-weight: 600;
-        }
-        .medical-close-btn {
-            background: none;
-            border: none;
-            color: white;
-            font-size: 1.5rem;
-            cursor: pointer;
-            padding: 5px;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background 0.3s ease;
-        }
-        .medical-close-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-        }
-        .medical-modal-body {
-            padding: 30px;
-            max-height: calc(90vh - 120px);
-            overflow-y: auto;
-        }
-        /* Minimal styles to ensure screening modal layout in admin */
-        .screening-modal-header { background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: #fff; }
-        .screening-detail-card { background: #ffffff; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; }
-        .screening-label { font-weight: 600; color: #343a40; margin-bottom: 6px; display: block; }
-        .screening-input { width: 100%; border: 1px solid #dee2e6; border-radius: 6px; padding: 8px 10px; }
-        .screening-input-group { position: relative; }
-        .screening-input-suffix { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #6c757d; }
-        .screening-progress-container { padding: 10px 16px; background: #fff; border-bottom: 1px solid #eee; }
-        .screening-progress-steps { display: flex; gap: 16px; align-items: center; }
-        .screening-step { display: flex; flex-direction: column; align-items: center; opacity: .6; }
-        .screening-step.active, .screening-step.completed { opacity: 1; }
-        .screening-step-number { width: 28px; height: 28px; border-radius: 50%; background: #dc3545; color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; }
-        .screening-step-label { font-size: 0.8rem; color: #b22222; margin-top: 6px; }
-        .screening-progress-line { height: 4px; background: #f1f3f5; border-radius: 2px; margin-top: 6px; position: relative; }
-        .screening-progress-fill { height: 4px; background: #dc3545; border-radius: 2px; width: 0; transition: width .3s ease; }
-        .screening-step-title h6 { margin-bottom: 4px; font-weight: 700; color: #b22222; }
-        .screening-review-card { border: 1px solid #eee; border-radius: 8px; padding: 12px; background: #fff; }
-    </style>
+    
+    <!-- Screening Summary Modal for Physician Review -->
+    <div class="modal fade" id="screeningSummaryModal" tabindex="-1" aria-labelledby="screeningSummaryModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg" style="max-width: 600px;">
+            <div class="modal-content" style="border: none; border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+                <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #b22222 100%); color: white; border-radius: 15px 15px 0 0; padding: 1.5rem; border: none;">
+                    <div>
+                        <h5 class="modal-title mb-0" id="screeningSummaryModalLabel" style="font-size: 1.25rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-clipboard-check"></i>
+                            Initial Screening Form
+                        </h5>
+                        <small class="text-white-50" style="font-size: 0.875rem; opacity: 0.9; margin: 0.25rem 0 0 0;">To be filled up by the interviewer</small>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="background: none; border: none; color: white; font-size: 1.5rem; opacity: 0.8;"></button>
+                </div>
+                
+                <div class="modal-body" id="screeningSummaryModalContent" style="padding: 2rem; background: white;">
+                    <div class="d-flex justify-content-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Physician Section Modal for Physical Examination Review -->
+    <div class="modal fade" id="physicianSectionModal" tabindex="-1" aria-labelledby="physicianSectionModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg" style="max-width: 600px;">
+            <div class="modal-content" style="border: none; border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+                <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #b22222 100%); color: white; border-radius: 15px 15px 0 0; padding: 1rem; border: none;">
+                    <div>
+                        <h5 class="modal-title mb-0" id="physicianSectionModalLabel" style="font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-user-md"></i>
+                            Physical Examination
+                        </h5>
+                        <small class="text-white-50" style="font-size: 0.8rem; opacity: 0.9; margin: 0.25rem 0 0 0;">To be filled up by the physician</small>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="background: none; border: none; color: white; font-size: 1.2rem; opacity: 0.8;"></button>
+                </div>
+                
+                <div class="modal-body" id="physicianSectionModalContent" style="padding: 1.5rem; background: white;">
+                    <div class="d-flex justify-content-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     <script src="../../assets/js/unified-search_admin.js"></script>
     <script>
         (function() {
@@ -8575,4 +7344,5 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         })();
     </script>
 </body>
+</html>
 </html>

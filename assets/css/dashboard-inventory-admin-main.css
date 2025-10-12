@@ -1,0 +1,319 @@
+/**
+ * Dashboard Inventory Admin - Main Styles
+ * Extracted from dashboard-Inventory-System-list-of-donations.php
+ * Admin-specific styling for the main dashboard interface
+ */
+
+/* General Body Styling */
+body {
+    background-color: #f8f9fa;
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+}
+
+/* Reduce Left Margin for Main Content */
+main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
+    margin-left: 280px !important;
+}
+
+/* Header */
+.dashboard-home-header {
+    position: fixed;
+    top: 0;
+    left: 240px; /* Adjusted sidebar width */
+    width: calc(100% - 240px);
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-bottom: 1px solid #ddd;
+    z-index: 1000;
+    transition: left 0.3s ease, width 0.3s ease;
+}
+
+/* Sidebar Styling */
+.dashboard-home-sidebar {
+    height: 100vh;
+    overflow-y: auto;
+    position: fixed;
+    width: 240px;
+    background-color: #ffffff;
+    border-right: 1px solid #ddd;
+    padding: 15px;
+    transition: width 0.3s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-main-content {
+    flex-grow: 1;
+    padding-bottom: 80px; /* Space for logout button */
+}
+
+.logout-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 20px 15px;
+    border-top: 1px solid #ddd;
+    background-color: #ffffff;
+}
+
+.logout-link {
+    color: #dc3545 !important;
+}
+
+.logout-link:hover {
+    background-color: #dc3545 !important;
+    color: white !important;
+}
+
+.dashboard-home-sidebar .nav-link {
+    color: #333;
+    padding: 10px 15px;
+    margin: 2px 0;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    text-decoration: none;
+}
+
+.dashboard-home-sidebar .nav-link i {
+    margin-right: 10px;
+    font-size: 0.9rem;
+    width: 16px;
+    text-align: center;
+}
+
+.dashboard-home-sidebar .nav-link:hover {
+    background-color: #f8f9fa;
+    color: #dc3545;
+}
+
+.dashboard-home-sidebar .nav-link.active {
+    background-color: #dc3545;
+    color: white;
+}
+
+.dashboard-home-sidebar .collapse-menu {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+.dashboard-home-sidebar .collapse-menu .nav-link {
+    padding: 8px 15px 8px 40px;
+    font-size: 0.85rem;
+    margin: 0;
+    border-radius: 4px;
+}
+
+.dashboard-home-sidebar .collapse-menu .nav-link:hover {
+    background-color: #f8f9fa;
+    color: #dc3545;
+}
+
+.dashboard-home-sidebar .collapse-menu .nav-link.active {
+    background-color: #dc3545;
+    color: white;
+}
+
+.dashboard-home-sidebar .nav-link[aria-expanded="true"] {
+    background-color: transparent;
+    color: #333;
+}
+
+.dashboard-home-sidebar .nav-link[aria-expanded="true"] i.fa-chevron-down {
+    transform: rotate(180deg);
+}
+
+.dashboard-home-sidebar i.fa-chevron-down {
+    font-size: 0.8rem;
+    transition: transform 0.2s ease;
+}
+
+.dashboard-home-sidebar .form-control {
+    font-size: 0.9rem;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+/* Donor Management Section */
+#donorManagementCollapse {
+    margin-top: 2px;
+    border: none;
+}
+
+#donorManagementCollapse .nav-link {
+    color: #333;
+    padding: 8px 15px 8px 40px;
+}
+
+#donorManagementCollapse .nav-link:hover {
+    background-color: #f8f9fa;
+    color: #dc3545;
+}
+
+#donorManagementCollapse .nav-link.active {
+    background-color: #dc3545;
+    color: white;
+}
+
+/* Hospital Requests Section */
+#hospitalRequestsCollapse .nav-link {
+    color: #333;
+    padding: 8px 15px 8px 40px;
+    font-size: 0.9rem;
+}
+
+#hospitalRequestsCollapse .nav-link:hover {
+    color: #dc3545;
+    font-weight: 600;
+    background-color: transparent;
+}
+
+.dashboard-home-sidebar .nav-link[aria-expanded="true"] {
+    background-color: #f8f9fa;
+    color: #dc3545;
+}
+
+/* Main Content Styling */
+.dashboard-home-main {
+    margin-left: 240px; /* Matches sidebar */
+    margin-top: 70px;
+    min-height: 100vh;
+    overflow-x: hidden;
+    padding-bottom: 20px;
+    padding-top: 20px;
+    padding-left: 20px; /* Adjusted padding for balance */
+    padding-right: 20px;
+    transition: margin-left 0.3s ease;
+}
+
+/* Container Fluid Fix */
+.container-fluid {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.custom-margin {
+    margin: 30px auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    margin-top: 100px;
+}
+
+.donor_form_container {
+    padding: 20px;
+    max-width: 1400px;
+    width: 100%;
+    font-size: 14px;
+}
+
+.donor_form_label {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.donor_form_input {
+    width: 100%;
+    padding: 6px;
+    margin-bottom: 10px;
+    border: 1px solid #000;
+    border-radius: 3px;
+    font-size: 14px;
+    box-sizing: border-box;
+    color: #757272;
+}
+
+.donor_form_grid {
+    display: grid;
+    gap: 5px;
+}
+
+.grid-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.grid-4 {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.grid-2 {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.grid-1 {
+    grid-template-columns: 1fr;
+}
+
+.grid-6 {
+    grid-template-columns: repeat(6, 1fr);
+}
+
+.modal-header {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+}
+
+/* ============================== */
+/* Responsive Design Adjustments  */
+/* ============================== */
+@media (max-width: 992px) {
+    /* Adjust sidebar and header for tablets */
+    .dashboard-home-sidebar {
+        width: 200px;
+    }
+    .dashboard-home-header {
+        left: 200px;
+        width: calc(100% - 200px);
+    }
+    .dashboard-home-main {
+        margin-left: 200px;
+    }
+}
+
+@media (max-width: 768px) {
+    /* Collapse sidebar and expand content on smaller screens */
+    .dashboard-home-sidebar {
+        width: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+    .dashboard-home-header {
+        left: 0;
+        width: 100%;
+    }
+    .dashboard-home-main {
+        margin-left: 0;
+        padding: 10px;
+    }
+    .card {
+        min-height: 100px;
+        font-size: 14px;
+    }
+}
+
+/* Medium Screens (Tablets) */
+@media (max-width: 991px) {
+    main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
+        margin-left: 240px !important;
+    }
+}
+
+/* Small Screens (Mobile) */
+@media (max-width: 768px) {
+    main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
+        margin-left: 0 !important;
+    }
+}

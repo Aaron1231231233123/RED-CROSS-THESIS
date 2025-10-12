@@ -497,3 +497,107 @@
     background-color: #fff3cd;
     border-color: #ffeaa7;
 }
+
+/* Blood Type Display Styling */
+.blood-type-display {
+    display: inline-block !important;
+    background-color: #8B0000 !important;
+    color: white !important;
+    padding: 8px 16px !important;
+    border-radius: 20px !important;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+    text-align: center !important;
+    min-width: 80px !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    transition: all 0.3s ease !important;
+    border: none !important;
+    font-size: inherit !important;
+    font-weight: inherit !important;
+}
+
+.blood-type-display:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.blood-type-label {
+    font-size: 0.75rem !important;
+    font-weight: 500 !important;
+    line-height: 1 !important;
+    margin-bottom: 2px !important;
+    opacity: 0.9 !important;
+    color: white !important;
+}
+
+.blood-type-value {
+    font-size: 1.1rem !important;
+    font-weight: bold !important;
+    line-height: 1 !important;
+    letter-spacing: 0.5px !important;
+    color: white !important;
+}
+
+/* Higher specificity for legacy modal */
+#donorModal .blood-type-display,
+.modal .blood-type-display,
+.donor-blood-type .blood-type-display {
+    display: inline-block !important;
+    background-color: #8B0000 !important;
+    color: white !important;
+    padding: 8px 16px !important;
+    border-radius: 20px !important;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+    text-align: center !important;
+    min-width: 80px !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    transition: all 0.3s ease !important;
+    border: none !important;
+    font-size: inherit !important;
+    font-weight: inherit !important;
+}
+
+#donorModal .blood-type-label,
+.modal .blood-type-label,
+.donor-blood-type .blood-type-label {
+    font-size: 0.75rem !important;
+    font-weight: 500 !important;
+    line-height: 1 !important;
+    margin-bottom: 2px !important;
+    opacity: 0.9 !important;
+    color: white !important;
+}
+
+#donorModal .blood-type-value,
+.modal .blood-type-value,
+.donor-blood-type .blood-type-value {
+    font-size: 1.1rem !important;
+    font-weight: bold !important;
+    line-height: 1 !important;
+    letter-spacing: 0.5px !important;
+    color: white !important;
+}
+
+/* Responsive blood type display */
+@media (max-width: 768px) {
+    .blood-type-display,
+    #donorModal .blood-type-display,
+    .modal .blood-type-display,
+    .donor-blood-type .blood-type-display {
+        padding: 6px 12px !important;
+        min-width: 70px !important;
+    }
+    
+    .blood-type-label,
+    #donorModal .blood-type-label,
+    .modal .blood-type-label,
+    .donor-blood-type .blood-type-label {
+        font-size: 0.7rem !important;
+    }
+    
+    .blood-type-value,
+    #donorModal .blood-type-value,
+    .modal .blood-type-value,
+    .donor-blood-type .blood-type-value {
+        font-size: 1rem !important;
+    }
+}

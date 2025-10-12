@@ -1,0 +1,25 @@
+/**
+ * Dashboard Inventory Admin - Loading Styles
+ * Extracted from dashboard-Inventory-System-list-of-donations.php
+ * Admin-specific loading indicator and spinner styles
+ */
+
+/* Prevent loading text flash on hard refresh */
+#loadingIndicator {
+    display: none !important;
+}
+
+.modal-content .spinner-border,
+.modal-content [class*="loading"] {
+    display: none !important;
+}
+
+/* Do not force-hide MH modal; JS controls its visibility */
+
+/* Allow spinners to be visible inside donor modals */
+#donorModal .spinner-border,
+#donorModal [class*="loading"],
+#donorDetailsModal .spinner-border,
+#donorDetailsModal [class*="loading"] {
+    display: inline-block !important;
+}
