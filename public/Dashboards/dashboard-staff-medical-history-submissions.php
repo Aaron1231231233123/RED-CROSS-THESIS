@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 session_start();
 require_once '../../assets/conn/db_conn.php';
 require '../../assets/php_func/user_roles_staff.php';
@@ -951,19 +951,22 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 } catch (Exception $e) {}
             }
             ?>
-            <tr data-donor-id="<?php echo $entry['donor_id']; ?>" data-stage="<?php echo htmlspecialchars($entry['stage']); ?>" data-donor-type="<?php echo htmlspecialchars($entry['donor_type']); ?>">
-                <td><?php echo $entry['no']; ?></td>
-                <td><?php 
+            <tr class="clickable-row" data-donor-id="<?php echo $entry['donor_id']; ?>" data-stage="<?php echo htmlspecialchars($entry['stage']); ?>" data-donor-type="<?php echo htmlspecialchars($entry['donor_type']); ?>">
+                <td class="text-center"><?php echo $entry['no']; ?></td>
+                <td class="text-center"><?php 
                     if (isset($entry['date'])) {
-                        try { $date = new DateTime($entry['date']); echo $date->format('F d, Y'); } catch (Exception $e) { echo 'N/A'; }
-                    } else { echo 'N/A'; }
+                        $date = new DateTime($entry['date']);
+                        echo $date->format('F d, Y');
+                    } else {
+                        echo 'N/A';
+                    }
                 ?></td>
-                <td><?php echo isset($entry['surname']) ? htmlspecialchars($entry['surname']) : ''; ?></td>
-                <td><?php echo isset($entry['first_name']) ? htmlspecialchars($entry['first_name']) : ''; ?></td>
-                <td><?php echo isset($entry['interviewer']) ? htmlspecialchars($entry['interviewer']) : 'N/A'; ?></td>
-                <td><span class="<?php echo stripos($entry['donor_type'],'returning')===0 ? 'type-returning' : 'type-new'; ?>"><?php echo htmlspecialchars($entry['donor_type']); ?></span></td>
-                <td>
-                    <span class="status-text">
+                <td class="text-center"><?php echo isset($entry['surname']) ? htmlspecialchars($entry['surname']) : ''; ?></td>
+                <td class="text-center"><?php echo isset($entry['first_name']) ? htmlspecialchars($entry['first_name']) : ''; ?></td>
+                <td class="text-center"><?php echo isset($entry['interviewer']) ? htmlspecialchars($entry['interviewer']) : 'N/A'; ?></td>
+                <td class="text-center"><span class="<?php echo stripos($entry['donor_type'],'returning')===0 ? 'type-returning' : 'type-new'; ?>"><?php echo htmlspecialchars($entry['donor_type']); ?></span></td>
+                <td class="text-center">
+                    <span style="display: block; text-align: center; width: 100%;">
                         <?php 
                             $status = $entry['status'] ?? '-';
                             $lower = strtolower($status);
@@ -979,10 +982,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         ?>
                     </span>
                 </td>
-                <td><span class="badge-tag badge-registered <?php echo strtolower($entry['registered_via'])==='mobile' ? 'badge-mobile' : 'badge-system'; ?>"><?php echo htmlspecialchars($entry['registered_via']); ?></span></td>
+                <td class="text-center"><span class="badge-tag badge-registered <?php echo strtolower($entry['registered_via'])==='mobile' ? 'badge-mobile' : 'badge-system'; ?>"><?php echo htmlspecialchars($entry['registered_via']); ?></span></td>
                 <td class="text-center">
                     <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" 
-                            onclick="viewDonorFromRow('<?php echo $entry['donor_id']; ?>','<?php echo htmlspecialchars($entry['stage']); ?>','<?php echo htmlspecialchars($entry['donor_type']); ?>')"
+                            onclick="checkAndShowDonorStatus('<?php echo $entry['donor_id']; ?>')"
                             title="View Details"
                             style="width: 35px; height: 30px;">
                         <i class="fas fa-eye"></i>
@@ -994,7 +997,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
     } else {
         ?>
         <tr>
-            <td colspan="9" class="text-muted">Name can't be found</td>
+            <td colspan="9" class="text-center text-muted">Name can't be found</td>
         </tr>
         <?php
     }
@@ -1237,27 +1240,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             font-size: 0.95rem;
         }
 
-        /* Force left alignment for table cells, override any center classes */
-        .dashboard-staff-tables thead th,
-        .dashboard-staff-tables tbody td {
-            text-align: left !important;
-        }
-
-        /* Keep the last column (View) centered */
-        .dashboard-staff-tables thead th:nth-child(9),
-        .dashboard-staff-tables tbody td:nth-child(9) {
-            text-align: center !important;
-        }
-
-        /* Status text should not look like a badge; keep inline and left */
-        .dashboard-staff-tables tbody td:nth-child(7) span.status-text {
-            display: inline !important;
-            text-align: left !important;
-            width: auto !important;
-            padding: 0 !important;
-            background: transparent !important;
-        }
-
         .dashboard-staff-tables tbody tr:nth-child(odd) {
             background-color: #f8f9fa;
         }
@@ -1271,13 +1253,20 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
         }
 
         .dashboard-staff-tables tbody tr{
-            cursor: default;
+            cursor: pointer;
         }
 
-        /* Remove legacy center helpers impact */
-        .dashboard-staff-tables tbody td.text-center,
-        .dashboard-staff-tables tbody td.text-center strong { text-align: left !important; }
-        .dashboard-staff-tables tbody td.text-center strong { display: inline !important; }
+        /* Center status column specifically */
+        .dashboard-staff-tables tbody td.text-center {
+            text-align: center !important;
+            vertical-align: middle !important;
+        }
+
+        /* Ensure strong elements in status column are properly centered */
+        .dashboard-staff-tables tbody td.text-center strong {
+            text-align: center !important;
+            display: inline !important;
+        }
 
 
 
@@ -2385,7 +2374,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                             $entry['age'] = $birthDate->diff($today)->y;
                                         }
                                         ?>
-                                        <tr data-donor-id="<?php echo $entry['donor_id']; ?>" data-stage="<?php echo htmlspecialchars($entry['stage']); ?>" data-donor-type="<?php echo htmlspecialchars($entry['donor_type']); ?>">
+                                        <tr class="clickable-row" data-donor-id="<?php echo $entry['donor_id']; ?>" data-stage="<?php echo htmlspecialchars($entry['stage']); ?>" data-donor-type="<?php echo htmlspecialchars($entry['donor_type']); ?>">
                                             <td class="text-center"><?php echo $entry['no']; ?></td>
                                             <td class="text-center"><?php 
                                                 if (isset($entry['date'])) {
@@ -2400,8 +2389,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                             <td class="text-center"><?php echo isset($entry['first_name']) ? htmlspecialchars($entry['first_name']) : ''; ?></td>
                                             <td class="text-center"><?php echo isset($entry['interviewer']) ? htmlspecialchars($entry['interviewer']) : 'N/A'; ?></td>
                                             <td class="text-center"><span class="<?php echo stripos($entry['donor_type'],'returning')===0 ? 'type-returning' : 'type-new'; ?>"><?php echo htmlspecialchars($entry['donor_type']); ?></span></td>
-                                            <td>
-                                                <span class="status-text">
+                                            <td class="text-center">
+                                                <span style="display: block; text-align: center; width: 100%;">
                                                     <?php 
                                                         $status = $entry['status'] ?? '-';
                                                         $lower = strtolower($status);
@@ -2420,7 +2409,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                             <td class="text-center"><span class="badge-tag badge-registered <?php echo strtolower($entry['registered_via'])==='mobile' ? 'badge-mobile' : 'badge-system'; ?>"><?php echo htmlspecialchars($entry['registered_via']); ?></span></td>
                                             <td class="text-center">
                                                 <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" 
-                                                        onclick="viewDonorFromRow('<?php echo $entry['donor_id']; ?>','<?php echo htmlspecialchars($entry['stage']); ?>','<?php echo htmlspecialchars($entry['donor_type']); ?>')"
+                                                        onclick="checkAndShowDonorStatus('<?php echo $entry['donor_id']; ?>')"
                                                         title="View Details"
                                                         style="width: 35px; height: 30px;">
                                                     <i class="fas fa-eye"></i>
@@ -2754,26 +2743,28 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             const confirmationModal = bootstrap.Modal.getInstance(document.getElementById('confirmationModal'));
             confirmationModal.hide();
 
-            // Show loading modal
+            // Show loading modal briefly
             const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
             loadingModal.show();
 
-            // Redirect after a short delay to show loading animation
-            setTimeout(() => {
+            // Redirect immediately - browser naturally shows transition
                 window.location.href = '../../src/views/forms/donor-form-modal.php';
-            }, 800);
         }
         document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('searchInput');
             const searchLoading = document.getElementById('searchLoading');
             const searchCategory = document.getElementById('searchCategory');
             const donorTableBody = document.getElementById('donorTableBody');
-            const deferralStatusModal = new bootstrap.Modal(document.getElementById('deferralStatusModal'));
+            // Cache modal instances for better performance
+            const deferralStatusModalEl = document.getElementById('deferralStatusModal');
+            const deferralStatusModal = deferralStatusModalEl ? new bootstrap.Modal(deferralStatusModalEl) : null;
             const deferralStatusContent = document.getElementById('deferralStatusContent');
-            const stageNoticeModal = new bootstrap.Modal(document.getElementById('stageNoticeModal'));
+            const stageNoticeModalEl = document.getElementById('stageNoticeModal');
+            const stageNoticeModal = stageNoticeModalEl ? new bootstrap.Modal(stageNoticeModalEl) : null;
             const stageNoticeBody = document.getElementById('stageNoticeBody');
             const stageNoticeViewBtn = document.getElementById('stageNoticeViewBtn');
-            const returningInfoModal = new bootstrap.Modal(document.getElementById('returningInfoModal'));
+            const returningInfoModalEl = document.getElementById('returningInfoModal');
+            const returningInfoModal = returningInfoModalEl ? new bootstrap.Modal(returningInfoModalEl) : null;
             const returningInfoViewBtn = document.getElementById('returningInfoViewBtn');
             const markReturningReviewBtn = document.getElementById('markReturningReviewBtn');
             const markReviewFromMain = document.getElementById('markReviewFromMain');
@@ -2794,37 +2785,331 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 } catch (e) {}
             }
             
-            // Store original rows for search reset
-            const originalRows = Array.from(donorTableBody.getElementsByTagName('tr'));
+            // Search functionality now handled by external JS files:
+            // - search_account_medical_history.js
+            // - filter_search_account_medical_history.js
             
-            // Search is handled by ../../assets/js/search_func/search_account_medical_history.js
-            
-            // Remove row click behavior in favor of explicit Eye button
+            // Use event delegation for row clicks to work with dynamically loaded search results
+            donorTableBody.addEventListener('click', function(e) {
+                // Find the closest tr with clickable-row class
+                const row = e.target.closest('tr.clickable-row');
+                if (!row) return;
+                
+                const donorId = row.getAttribute('data-donor-id');
+                const stageAttr = row.getAttribute('data-stage');
+                const donorTypeLabel = row.getAttribute('data-donor-type');
+                if (!donorId) return;
+                    
+                    // Set global variables for modal context
+                    window.currentDonorId = donorId;
+                    window.currentDonorType = donorTypeLabel || 'New';
+                    window.currentDonorStage = stageAttr || 'Medical';
+                    
+                        currentDonorId = donorId;
+                    const lowerType = (donorTypeLabel || '').toLowerCase();
+                    const isNew = lowerType.startsWith('new');
+                    const isReturning = lowerType.startsWith('returning');
+                    // Derive stage from donor type text to avoid mismatches
+                    const typeText = lowerType;
+                    let stageFromType = 'unknown';
+                    if (typeText.includes('medical')) stageFromType = 'medical_review';
+                    else if (typeText.includes('screening')) stageFromType = 'screening_form';
+                    else if (typeText.includes('physical')) stageFromType = 'physical_examination';
+                    else if (typeText.includes('collection') || typeText.includes('completed')) stageFromType = 'blood_collection';
+                    const effectiveStage = stageFromType !== 'unknown' ? stageFromType : stageAttr;
+                    currentStage = effectiveStage;
+                    // Allow processing for new donors in medical_review OR any donor with needs_review=true
+                    allowProcessing = (isNew && (effectiveStage === 'medical_review')) || 
+                                    (effectiveStage === 'medical_review' && currentDonorId && medicalByDonor[currentDonorId] && medicalByDonor[currentDonorId].needs_review);
+                    // Determine modal context type
+                    if (allowProcessing) {
+                        modalContextType = 'new_medical'; // Can process medical history
+                    } else if (isNew) {
+                        modalContextType = 'new_other_stage';
+                    } else if (isReturning) {
+                        modalContextType = 'returning';
+                    } else {
+                        modalContextType = 'other';
+                    }
+                    window.modalContextType = modalContextType;
+                    
+                    if (!allowProcessing && !isReturning) {
+                        // Show read-only notice modal
+                        const stageTitleMap = {
+                            'screening_form': 'Screening Stage',
+                            'physical_examination': 'Physical Examination Stage',
+                            'blood_collection': 'Blood Collection Stage'
+                        };
+                        const friendlyStage = stageTitleMap[effectiveStage] || 'Different Stage';
+                        const newOrReturningNote = isNew
+                            ? `This record is <strong>New</strong> but not in the Medical stage (<strong>${friendlyStage}</strong>).`
+                            : `This record is <strong>Returning</strong>. This page is dedicated to processing <strong>New (Medical)</strong> only.`;
+                        stageNoticeBody.innerHTML = `
+                            <p>${newOrReturningNote}</p>
+                            <p><strong>Note:</strong> Medical history processing on this page is available only for <strong>New (Medical)</strong> records.</p>
+                            <div class="alert alert-info mb-0">
+                                <div><strong>Donor type:</strong> ${donorTypeLabel || ''}</div>
+                                <div class="small text-muted">You can view read-only details for reference.</div>
+                            </div>`;
+                        if (stageNoticeModal) stageNoticeModal.show();
+                        
+                        // Bind view details to open the existing details modal without processing
+                        if (stageNoticeViewBtn) {
+                            stageNoticeViewBtn.onclick = () => {
+                            if (stageNoticeModal) stageNoticeModal.hide();
+                            // Prepare details modal in read-only mode
+                            deferralStatusContent.innerHTML = `
+                                <div class=\"d-flex justify-content-center\">\n                                    <div class=\"spinner-border text-primary\" role=\"status\">\n                                        <span class=\"visually-hidden\">Loading...</span>\n                                    </div>\n                                </div>`;
+                            
+                            // Hide proceed button in read-only mode
+                            const proceedButton = getProceedButton();
+                            if (proceedButton && proceedButton.style) {
+                                proceedButton.style.display = 'none';
+                                proceedButton.textContent = 'Proceed to Medical History';
+                            }
+                            if (deferralStatusModal) deferralStatusModal.show();
+                            fetchDonorStatusInfo(donorId);
+                        };
+                        }
+                        return;
+                    }
+                    
+                    if (isReturning) {
+                        // Check if returning donor has needs_review=true
+                        const hasNeedsReview = currentDonorId && medicalByDonor[currentDonorId] && medicalByDonor[currentDonorId].needs_review;
+                        
+                        if (effectiveStage === 'medical_review' || hasNeedsReview) {
+                            // Returning (Medical) OR Returning with needs_review: go straight to details with Review available
+                        deferralStatusContent.innerHTML = `
+                            <div class="d-flex justify-content-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                    </div>
+                            </div>`;
+                            const proceedButton = getProceedButton();
+                            if (proceedButton && proceedButton.style) {
+                                proceedButton.style.display = 'inline-block';
+                                proceedButton.textContent = 'Proceed to Medical History';
+                            }
+                            if (markReviewFromMain) markReviewFromMain.style.display = 'none';
+                        if (deferralStatusModal) deferralStatusModal.show();
+                        fetchDonorStatusInfo(donorId);
+                            return;
+                        }
+                        // Returning but not Medical and no needs_review: directly show donor modal
+                        deferralStatusContent.innerHTML = `
+                            <div class="d-flex justify-content-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>`;
+                        const proceedButton = getProceedButton();
+                        if (proceedButton && proceedButton.style) proceedButton.style.display = 'none';
+                        if (deferralStatusModal) deferralStatusModal.show();
+                        fetchDonorStatusInfo(donorId);
+                        // Mark for review handler
+                        if (markReturningReviewBtn) {
+                            markReturningReviewBtn.onclick = () => {
+                                const confirmMsg = 'This action will mark the donor for Medical Review and move them back to the medical stage for reassessment. Do you want to proceed?';
+                                if (window.customConfirm) {
+                                    window.customConfirm(confirmMsg, function() {
+                                        fetch('../../assets/php_func/update_needs_review.php', {
+                                            method: 'POST',
+                                            headers: { 'Accept': 'application/json' },
+                                            body: new URLSearchParams({ donor_id: donorId })
+                                        })
+                                        .then(r => r.json())
+                                        .then(res => {
+                                            if (res && res.success) {
+                                                returningInfoModal.hide();
+                                                // Silent success + refresh without opening another modal
+                                                // Show centered success modal (auto-closes, no buttons)
+                                                try {
+                                                    const existing = document.getElementById('successAutoModal');
+                                                    if (existing) existing.remove();
+                                                    const successHTML = `
+                                                        <div id="successAutoModal" style="
+                                                            position: fixed;
+                                                            top: 0;
+                                                            left: 0;
+                                                            width: 100%;
+                                                            height: 100%;
+                                                            background: rgba(0,0,0,0.5);
+                                                            z-index: 99999;
+                                                            display: flex;
+                                                            align-items: center;
+                                                            justify-content: center;
+                                                        ">
+                                                            <div style="
+                                                                background: #ffffff;
+                                                                border-radius: 10px;
+                                                                max-width: 520px;
+                                                                width: 90%;
+                                                                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                                                                overflow: hidden;
+                                                            ">
+                                                                <div style="
+                                                                    background: #9c0000;
+                                                                    color: white;
+                                                                    padding: 14px 18px;
+                                                                    font-weight: 700;
+                                                                ">Marked</div>
+                                                                <div style="padding: 22px;">
+                                                                    <p style="margin: 0;">The donor is medically cleared for donation.</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>`;
+                                                    document.body.insertAdjacentHTML('beforeend', successHTML);
+                                                } catch(_) {}
+                                                setTimeout(() => { 
+                                                    const m = document.getElementById('successAutoModal');
+                                                    if (m) m.remove();
+                                                    window.location.href = window.location.pathname + '?page=1'; 
+                                                }, 1800);
+                                                const row = document.querySelector(`tr[data-donor-id="${donorId}"]`);
+                                                if (row) {
+                                                    const donorTypeCell = row.querySelector('td:nth-child(6)');
+                                                    if (donorTypeCell && donorTypeCell.textContent.toLowerCase().includes('returning')) {
+                                                        donorTypeCell.textContent = 'Returning (Medical)';
+                                                        row.setAttribute('data-donor-type', 'Returning (Medical)');
+                                                    }
+                                                }
+                                            } else {
+                                                window.customConfirm('Failed to mark for review.', function() {});
+                                            }
+                                        })
+                                        .catch(() => {
+                                            window.customConfirm('Failed to mark for review.', function() {});
+                                        });
+                                    });
+                                }
+                            };
+                        }
+                        // Enable main modal mark button only for returning
+                        if (markReviewFromMain) {
+                            // Don't force display here - let button control logic handle it
+                            markReviewFromMain.onclick = () => {
+                                const confirmMsg = 'This action will mark the donor for Medical Review and return them to the medical stage for reassessment. Do you want to proceed?';
+                                if (window.customConfirm) {
+                                    window.customConfirm(confirmMsg, function() {
+                                        fetch('../../assets/php_func/update_needs_review.php', {
+                                            method: 'POST',
+                                            headers: { 'Accept': 'application/json' },
+                                            body: new URLSearchParams({ donor_id: donorId })
+                                        })
+                                        .then(r => r.json())
+                                        .then(res => {
+                                            if (res && res.success) {
+                                                // Silent success + refresh without opening another modal
+                                                // Show centered success modal (auto-closes, no buttons)
+                                                try {
+                                                    const existing = document.getElementById('successAutoModal');
+                                                    if (existing) existing.remove();
+                                                    const successHTML = `
+                                                        <div id="successAutoModal" style="
+                                                            position: fixed;
+                                                            top: 0;
+                                                            left: 0;
+                                                            width: 100%;
+                                                            height: 100%;
+                                                            background: rgba(0,0,0,0.5);
+                                                            z-index: 99999;
+                                                            display: flex;
+                                                            align-items: center;
+                                                            justify-content: center;
+                                                        ">
+                                                            <div style="
+                                                                background: #ffffff;
+                                                                border-radius: 10px;
+                                                                max-width: 520px;
+                                                                width: 90%;
+                                                                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                                                                overflow: hidden;
+                                                            ">
+                                                                <div style="
+                                                                    background: #9c0000;
+                                                                    color: white;
+                                                                    padding: 14px 18px;
+                                                                    font-weight: 700;
+                                                                ">Marked</div>
+                                                                <div style="padding: 22px;">
+                                                                    <p style="margin: 0;">The donor is medically cleared for donation.</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>`;
+                                                    document.body.insertAdjacentHTML('beforeend', successHTML);
+                                                } catch(_) {}
+                                                setTimeout(() => { 
+                                                    const m = document.getElementById('successAutoModal');
+                                                    if (m) m.remove();
+                                                    window.location.href = window.location.pathname + '?page=1'; 
+                                                }, 1800);
+                                                const row = document.querySelector(`tr[data-donor-id="${donorId}"]`);
+                                                if (row) {
+                                                    const donorTypeCell = row.querySelector('td:nth-child(6)');
+                                                    if (donorTypeCell && donorTypeCell.textContent.toLowerCase().includes('returning')) {
+                                                        donorTypeCell.textContent = 'Returning (Medical)';
+                                                        row.setAttribute('data-donor-type', 'Returning (Medical)');
+                                                    }
+                                                    const dateCell = row.querySelector('td:nth-child(2)');
+                                                    if (dateCell && res.updated_at) {
+                                                        const d = new Date(res.updated_at);
+                                                        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                                                        dateCell.textContent = d.toLocaleDateString('en-US', options);
+                                                    }
+                                                }
+                                            } else {
+                                                window.customConfirm('Failed to mark for review.', function() {});
+                                            }
+                                        })
+                                        .catch(() => {
+                                            window.customConfirm('Failed to mark for review.', function() {});
+                                        });
+                                    });
+                                }
+                            };
+                        }
+                        return;
+                    }
+                    
+                    // Allow processing: show details and keep proceed button visible
+                    deferralStatusContent.innerHTML = `
+                        <div class="d-flex justify-content-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>`;
+                    
+                    const proceedButton = getProceedButton();
+                    if (proceedButton && proceedButton.style) {
+                        proceedButton.style.display = 'inline-block';
+                        proceedButton.textContent = 'Proceed to Medical History';
+                    }
+                    // Hide mark button for non-returning/new-medical flow
+                    if (markReviewFromMain) markReviewFromMain.style.display = 'none';
+                    if (deferralStatusModal) deferralStatusModal.show();
+                    fetchDonorStatusInfo(donorId);
+            });
             
             // Function to fetch donor status information
+            // OPTIMIZED: Single unified endpoint with parallel backend processing for instant data loading
             function fetchDonorStatusInfo(donorId) {
-                // First, fetch donor information
-                fetch('../../assets/php_func/fetch_donor_info.php?donor_id=' + donorId)
-                    .then(response => response.json())
-                    .then(donorData => {
-                        // Next, check physical examination table for deferral status
-                        fetch('../../assets/php_func/check_deferral_status.php?donor_id=' + donorId)
-                            .then(response => response.json())
-                            .then(deferralData => {
+                // Fetch all data with one request - backend handles parallel API calls
+                fetch('../../assets/php_func/fetch_donor_complete_info_staff-medical-history.php?donor_id=' + donorId)
+                    .then(r => r.json())
+                    .then(response => {
+                        if (response && response.success && response.data) {
+                            // Extract the data and deferral info from unified response
+                            const donorData = { success: true, data: response.data };
+                            const deferralData = response.deferral || null;
+                    // Display immediately with all data ready
                                 displayDonorInfo(donorData, deferralData);
-                                
-                                // After getting deferral info, fetch screening info
-                                fetch('../../assets/php_func/fetch_screening_info.php?donor_id=' + donorId)
-                                    .then(response => response.json())
-                                    .then(() => {})
-                                    .catch(error => { /* Silent error handling */ });
+                        } else {
+                            deferralStatusContent.innerHTML = `<div class="alert alert-danger">Failed to load donor information</div>`;
+                        }
                             })
                             .catch(error => {
-                                deferralStatusContent.innerHTML = `<div class="alert alert-danger">Error checking deferral status: ${error.message}</div>`;
-                            });
-                    })
-                    .catch(error => {
-                        deferralStatusContent.innerHTML = `<div class="alert alert-danger">Error fetching donor information: ${error.message}</div>`;
+                    deferralStatusContent.innerHTML = `<div class="alert alert-danger">Error loading donor information: ${error.message}</div>`;
                     });
             }
             
@@ -3404,7 +3689,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             // Function to proceed to medical history modal
             function proceedToMedicalHistoryModal() {
                 // Hide the deferral status modal first
-                deferralStatusModal.hide();
+                const modalEl = document.getElementById('deferralStatusModal');
+                const modalInstance = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
+                if (modalInstance) modalInstance.hide();
                 
                 // Reset initialization flags to ensure fresh initialization
                 window.editFunctionalityInitialized = false;
@@ -3412,8 +3699,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 // Allow MH modal script to re-initialize cleanly on reopen
                 try { window.__mhEditInit = false; } catch (e) {}
                 
-                // Show the medical history modal
-                const medicalHistoryModal = new bootstrap.Modal(document.getElementById('medicalHistoryModal'));
+                // Get or create the medical history modal instance - reuse for better performance
+                const medicalHistoryModalEl = document.getElementById('medicalHistoryModal');
+                let medicalHistoryModal = medicalHistoryModalEl ? bootstrap.Modal.getInstance(medicalHistoryModalEl) : null;
+                if (!medicalHistoryModal) {
+                    medicalHistoryModal = new bootstrap.Modal(medicalHistoryModalEl);
+                }
                 const modalContent = document.getElementById('medicalHistoryModalContent');
                 
                 // Reset modal content to loading state
@@ -3479,8 +3770,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 return document.getElementById('proceedToMedicalHistory');
             }
             
-            // Bind proceed button event listener after DOM is ready
-            setTimeout(() => {
+            // Bind proceed button event listener immediately - no delay needed
                 const proceedButton = getProceedButton();
                 if (proceedButton && proceedButton.addEventListener) {
                     proceedButton.addEventListener('click', function() {
@@ -3496,7 +3786,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         dupBtn.parentNode.removeChild(dupBtn);
                     }
                 } catch (_) {}
-            }, 100);
 
             // Ensure backdrops are cleaned up when key modals are closed
             ['deferralStatusModal', 'eligibilityAlertModal', 'stageNoticeModal', 'returningInfoModal']
@@ -3507,7 +3796,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     }
                 });
             
-            // Global search moved to assets/js/search_func/search_account_medical_history.js
+            // performOptimizedSearch function removed - now handled by external JS files
             
             // Update placeholder based on selected category
             if (searchCategory && searchCategory.addEventListener) {
@@ -3731,7 +4020,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             dashboardInitializeModalStepNavigation(modalUserRole, modalIsMale);
             
             // Default behavior: make all fields read-only until Edit is pressed (for all roles)
-            setTimeout(() => {
+            // Use requestAnimationFrame for instant DOM update without blocking
+            requestAnimationFrame(() => {
                 const radioButtons = document.querySelectorAll('#modalMedicalHistoryForm input[type="radio"]');
                 const selectFields = document.querySelectorAll('#modalMedicalHistoryForm select.remarks-input');
                 const textFields = document.querySelectorAll('#modalMedicalHistoryForm input[type="text"], #modalMedicalHistoryForm textarea');
@@ -3742,7 +4032,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
 
                 // Initialize edit functionality after locking inputs
                 dashboardInitializeEditFunctionality();
-            }, 100);
+            });
         }
         
         // Single edit functionality function to avoid duplicates
@@ -4455,9 +4745,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         `);
                         printWindow.document.close();
                         printWindow.focus();
-                        setTimeout(() => {
+                        // Print immediately when ready
                             printWindow.print();
-                        }, 500);
                     };
                     
                     // Re-introduce explicit confirmation: only proceed and close after user agrees
@@ -5274,12 +5563,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 });
         }
 
-        // Function to check if donor is new (no eligibility record)
-        function checkAndShowDonorStatus(donorId) {
-            showDonorStatusModal(donorId);
-        }
-
-        // Helper triggered by Eye button; preserves stage/type context without row clicks
+        // Helper function for dynamically loaded search results
         function viewDonorFromRow(donorId, stage, donorTypeLabel) {
             if (!donorId) return;
             window.currentDonorId = donorId;
@@ -5288,13 +5572,24 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             checkAndShowDonorStatus(donorId);
         }
 
+        // Function to check if donor is new (no eligibility record)
+        function checkAndShowDonorStatus(donorId) {
+            // Directly show the donor status modal
+            showDonorStatusModal(donorId);
+        }
+
         // Function to show donor status modal
+        // OPTIMIZED: Removed 800ms artificial delay, uses parallel data fetching, reuses modal instances
         function showDonorStatusModal(donorId) {
             // Set current donor ID
             window.currentDonorId = donorId;
 
-            // Get the donor status modal
-            const deferralStatusModal = new bootstrap.Modal(document.getElementById('deferralStatusModal'));
+            // Get or create the donor status modal instance - reuse for better performance
+            const deferralStatusModalEl = document.getElementById('deferralStatusModal');
+            let deferralStatusModal = deferralStatusModalEl ? bootstrap.Modal.getInstance(deferralStatusModalEl) : null;
+            if (!deferralStatusModal) {
+                deferralStatusModal = new bootstrap.Modal(deferralStatusModalEl);
+            }
             const deferralStatusContent = document.getElementById('deferralStatusContent');
             
             // Clear any previous content immediately and show loading
@@ -5315,15 +5610,17 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             // Control "Mark for Medical Review" button visibility
             controlMarkReviewButton(donorId);
 
-            // Fetch and display donor info with longer delay to ensure smooth loading
-            setTimeout(() => {
-                fetch('../../assets/php_func/fetch_donor_info.php?donor_id=' + donorId)
-                    .then(response => response.json())
-                    .then(data => {
+            // Fetch and display donor info immediately - OPTIMIZED: Single unified endpoint with parallel backend processing
+            fetch('../../assets/php_func/fetch_donor_complete_info_staff-medical-history.php?donor_id=' + donorId)
+                .then(r => r.json())
+                .then(response => {
                         // Double-check we're still showing the correct donor
                         if (window.currentDonorId === donorId) {
-                            if (data.success) {
-                                displayDonorInfo(data.data);
+                        if (response && response.success && response.data) {
+                            // Extract the data and deferral info from unified response
+                            const donorData = { success: true, data: response.data };
+                            const deferralData = response.deferral || null;
+                        displayDonorInfo(donorData, deferralData);
                             } else {
                                 deferralStatusContent.innerHTML = `
                                     <div class="alert alert-danger">
@@ -5341,7 +5638,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                 </div>`;
                         }
                     });
-            }, 800); // Increased delay to 800ms for smoother experience
         }
 
 

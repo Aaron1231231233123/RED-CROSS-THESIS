@@ -293,11 +293,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         }
                         
-                        // Update medical_history needs_review to true (physician needs to review)
-                        // The physician will decide the medical_approval status during the physician section
+                        // Update medical_history needs_review to false (staff has completed the medical history interview)
+                        // The physician will review during the physical examination stage
                         $medical_update_data = [
                             'donor_id' => $donor_id, // Use donor_id for medical_history table
-                            'needs_review' => true, // Set to true so physician knows to review
+                            'needs_review' => false, // Set to false - staff has completed the interview
                             'updated_at' => date('Y-m-d H:i:s')
                         ];
                         
@@ -323,7 +323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         
                         if ($mh_http_code === 200) {
-                            $log_message = "[" . date('Y-m-d H:i:s') . "] Medical history updated successfully - needs_review=true (physician needs to review, medical_approval left unchanged)\n";
+                            $log_message = "[" . date('Y-m-d H:i:s') . "] Medical history updated successfully - needs_review=false (staff has completed the medical history interview)\n";
                             file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         } else {
                             $log_message = "[" . date('Y-m-d H:i:s') . "] Failed to update medical history: " . $mh_response . "\n";

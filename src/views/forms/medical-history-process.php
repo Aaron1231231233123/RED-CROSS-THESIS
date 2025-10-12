@@ -105,7 +105,7 @@ try {
         $medical_history_data['needs_review'] = false;
         error_log("Processing approve action");
     } elseif ($action === 'decline') {
-        $medical_history_data['medical_approval'] = 'Declined';
+        $medical_history_data['medical_approval'] = 'Not Approved';
         $medical_history_data['needs_review'] = false;
         error_log("Processing decline action");
     } elseif ($action === 'next') {

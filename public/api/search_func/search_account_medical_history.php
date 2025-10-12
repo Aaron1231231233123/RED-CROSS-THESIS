@@ -32,15 +32,15 @@ ob_start();
 if (!empty($rows)) {
     foreach ($rows as $entry) {
         ?>
-        <tr data-donor-id="<?php echo $entry['donor_id']; ?>" data-stage="<?php echo htmlspecialchars($entry['stage']); ?>" data-donor-type="<?php echo htmlspecialchars($entry['donor_type']); ?>">
-            <td><?php echo $entry['no']; ?></td>
-            <td><?php try { $date = new DateTime($entry['date']); echo $date->format('F d, Y'); } catch (Exception $e) { echo 'N/A'; } ?></td>
-            <td><?php echo htmlspecialchars($entry['surname']); ?></td>
-            <td><?php echo htmlspecialchars($entry['first_name']); ?></td>
-            <td><?php echo htmlspecialchars($entry['interviewer']); ?></td>
-            <td><span class="<?php echo stripos($entry['donor_type'],'Returning')===0 ? 'type-returning' : 'type-new'; ?>"><?php echo htmlspecialchars($entry['donor_type']); ?></span></td>
-            <td><span class="status-text"><?php echo $entry['status'] === '-' ? '-' : '<strong>' . htmlspecialchars($entry['status']) . '</strong>'; ?></span></td>
-            <td><span class="badge-tag badge-registered <?php echo strtolower($entry['registered_via'])==='mobile' ? 'badge-mobile' : 'badge-system'; ?>"><?php echo htmlspecialchars($entry['registered_via']); ?></span></td>
+        <tr class="clickable-row" data-donor-id="<?php echo $entry['donor_id']; ?>" data-stage="<?php echo htmlspecialchars($entry['stage']); ?>" data-donor-type="<?php echo htmlspecialchars($entry['donor_type']); ?>">
+            <td class="text-center"><?php echo $entry['no']; ?></td>
+            <td class="text-center"><?php try { $date = new DateTime($entry['date']); echo $date->format('F d, Y'); } catch (Exception $e) { echo 'N/A'; } ?></td>
+            <td class="text-center"><?php echo htmlspecialchars($entry['surname']); ?></td>
+            <td class="text-center"><?php echo htmlspecialchars($entry['first_name']); ?></td>
+            <td class="text-center"><?php echo htmlspecialchars($entry['interviewer']); ?></td>
+            <td class="text-center"><span class="<?php echo stripos($entry['donor_type'],'Returning')===0 ? 'type-returning' : 'type-new'; ?>"><?php echo htmlspecialchars($entry['donor_type']); ?></span></td>
+            <td class="text-center"><span class="status-text"><?php echo $entry['status'] === '-' ? '-' : '<strong>' . htmlspecialchars($entry['status']) . '</strong>'; ?></span></td>
+            <td class="text-center"><span class="badge-tag badge-registered <?php echo strtolower($entry['registered_via'])==='mobile' ? 'badge-mobile' : 'badge-system'; ?>"><?php echo htmlspecialchars($entry['registered_via']); ?></span></td>
             <td class="text-center">
                 <button type="button" class="btn btn-info btn-sm view-donor-btn me-1" 
                         onclick="viewDonorFromRow('<?php echo $entry['donor_id']; ?>','<?php echo htmlspecialchars($entry['stage']); ?>','<?php echo htmlspecialchars($entry['donor_type']); ?>')"
