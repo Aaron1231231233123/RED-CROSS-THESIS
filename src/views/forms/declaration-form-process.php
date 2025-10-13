@@ -298,6 +298,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $medical_update_data = [
                             'donor_id' => $donor_id, // Use donor_id for medical_history table
                             'needs_review' => false, // Set to false - staff has completed the interview
+                            'medical_approval' => 'Not Approved', // Set to Not Approved - awaiting physician approval
                             'updated_at' => date('Y-m-d H:i:s')
                         ];
                         
@@ -323,7 +324,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         
                         if ($mh_http_code === 200) {
-                            $log_message = "[" . date('Y-m-d H:i:s') . "] Medical history updated successfully - needs_review=false (staff has completed the medical history interview)\n";
+                            $log_message = "[" . date('Y-m-d H:i:s') . "] Medical history updated successfully - needs_review=false, medical_approval='Not Approved' (staff has completed the medical history interview, awaiting physician approval)\n";
                             file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         } else {
                             $log_message = "[" . date('Y-m-d H:i:s') . "] Failed to update medical history: " . $mh_response . "\n";
@@ -335,6 +336,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             'donor_id' => $donor_id, // Use donor_id (not donor_form_id) for physical_examination table
                             'screening_id' => $screening_id, // Use the actual screening_id UUID from screening form response
                             'needs_review' => true,
+                            'remarks' => 'Pending', // Set remarks to Pending after declaration form submission
                             'updated_at' => date('Y-m-d H:i:s') // Only updated_at for every transaction
                         ];
                         
@@ -401,7 +403,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                         
                         if ($pe_http_code === 201 || $pe_http_code === 200) {
-                            $log_message = "[" . date('Y-m-d H:i:s') . "] Physical examination data " . ($pe_http_code === 201 ? 'inserted' : 'updated') . " successfully - needs_review=true (UPDATE priority)\n";
+                            $log_message = "[" . date('Y-m-d H:i:s') . "] Physical examination data " . ($pe_http_code === 201 ? 'inserted' : 'updated') . " successfully - needs_review=true, remarks='Pending' (UPDATE priority)\n";
                             file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         } else {
                             $log_message = "[" . date('Y-m-d H:i:s') . "] Failed to process physical examination: " . $pe_response . "\n";

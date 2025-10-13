@@ -29,7 +29,7 @@ include_once __DIR__ . '/module/optimized_functions.php';
 $startTime = microtime(true);
 
 // OPTIMIZATION: Smart caching with intelligent change detection
-$cacheKey = 'home_dashboard_v2_' . date('Y-m-d'); // Daily cache key (bumped)
+$cacheKey = 'home_dashboard_v3_' . date('Y-m-d'); // Daily cache key (bumped to v3)
 $cacheFile = sys_get_temp_dir() . '/' . $cacheKey . '.json';
 $cacheMetaFile = sys_get_temp_dir() . '/' . $cacheKey . '_meta.json';
 
@@ -61,8 +61,8 @@ if (file_exists($cacheFile) && file_exists($cacheMetaFile)) {
     // Simplified change detection - only check cache age
     $hasChanges = false;
     
-    // Check cache age - if older than 15 minutes, consider it stale
-    if ($cacheAge > 900) { // 15 minutes
+    // PERFORMANCE FIX: Extended cache lifetime from 15 minutes to 2 hours
+    if ($cacheAge > 7200) { // 2 hours (was 900 = 15 minutes)
         $hasChanges = true;
     }
     
@@ -82,7 +82,7 @@ if (file_exists($cacheFile) && file_exists($cacheMetaFile)) {
             $donorLookup = $cachedData['donorLookup'] ?? [];
             
             // Debug cache loading
-            error_log("CACHE LOADED - Total Donor Count: " . $totalDonorCount);
+            error_log("CACHE LOADED (v3) - Total Donor Count: " . $totalDonorCount . " (Age: " . round($cacheAge/60) . " mins)");
             error_log("CACHE LOADED - City Donor Counts: " . json_encode($cityDonorCounts));
             error_log("CACHE LOADED - Heatmap Data Count: " . count($heatmapData));
             
@@ -180,180 +180,14 @@ if (is_array($bloodBankUnitsData) && !empty($bloodBankUnitsData)) {
 }
 
 // ----------------------------------------------------
-// PART 5: PROCESS GIS MAPPING DATA (POSTGIS OPTIMIZED)
+// PART 5: PROCESS GIS MAPPING DATA (DEFERRED FOR PERFORMANCE)
 // ----------------------------------------------------
-// Initialize GIS data arrays
+// PERFORMANCE OPTIMIZATION: GIS data will be loaded via AJAX after page load
+// This significantly reduces initial page load time
 $cityDonorCounts = [];
 $heatmapData = [];
-$totalDonorCount = 0;
-$postgisAvailable = false; // Initialize PostGIS availability flag
-
-// Try to get optimized GIS data from PostGIS endpoint
-try {
-    // Fix the path to the API endpoint and add a fast timeout
-    $apiPath = 'http://' . $_SERVER['HTTP_HOST'] . '/REDCROSS/public/api/optimized-gis-data.php?t=' . time();
-    $ctx = stream_context_create(['http' => ['timeout' => 0.8]]);
-    $gisDataResponse = @file_get_contents($apiPath, false, $ctx);
-    if ($gisDataResponse) {
-        $gisData = json_decode($gisDataResponse, true);
-        if ($gisData && !isset($gisData['error'])) {
-            $cityDonorCounts = $gisData['cityDonorCounts'] ?? [];
-            $heatmapData = $gisData['heatmapData'] ?? [];
-            $totalDonorCount = $gisData['totalDonorCount'] ?? 0;
-            $postgisAvailable = $gisData['postgis_available'] ?? false;
-            
-            error_log("GIS Debug - PostGIS Data Loaded: " . $totalDonorCount . " donors, " . count($heatmapData) . " heatmap points, PostGIS Available: " . ($postgisAvailable ? 'Yes' : 'No'));
-            
-            // Debug output for browser
-            if (isset($_GET['debug_gis'])) {
-                echo "<!-- GIS Debug: PostGIS Data Loaded Successfully -->\n";
-                echo "<!-- Total Donors: {$totalDonorCount} -->\n";
-                echo "<!-- Heatmap Points: " . count($heatmapData) . " -->\n";
-                echo "<!-- PostGIS Available: " . ($postgisAvailable ? 'Yes' : 'No') . " -->\n";
-            }
-            
-            // Force PostGIS to be available if we have data
-            if ($totalDonorCount > 0 || !empty($heatmapData)) {
-                $postgisAvailable = true;
-                if (isset($_GET['debug_gis'])) {
-                    echo "<!-- GIS Debug: Forced PostGIS Available due to data presence -->\n";
-                }
-            }
-        }
-    }
-} catch (Exception $e) {
-    error_log("GIS Debug - PostGIS endpoint error: " . $e->getMessage());
-}
-
-// Fallback to original method if PostGIS is not available or data is completely empty
-if (!$postgisAvailable || (empty($cityDonorCounts) && empty($heatmapData))) {
-    error_log("GIS Debug - Using fallback method - PostGIS available: " . ($postgisAvailable ? 'Yes' : 'No') . ", Data empty: " . (empty($cityDonorCounts) && empty($heatmapData) ? 'Yes' : 'No'));
-    
-    // Debug output for browser
-    if (isset($_GET['debug_gis'])) {
-        echo "<!-- GIS Debug: Using Fallback Method -->\n";
-        echo "<!-- PostGIS Available: " . ($postgisAvailable ? 'Yes' : 'No') . " -->\n";
-        echo "<!-- Data Empty: " . (empty($cityDonorCounts) && empty($heatmapData) ? 'Yes' : 'No') . " -->\n";
-    }
-    
-    // Function to clean and standardize address
-    function standardizeAddress($address) {
-        $municipalities = [
-            'Pototan', 'Oton', 'Pavia', 'Leganes', 'Santa Barbara', 'San Miguel',
-            'Cabatuan', 'Maasin', 'Janiuay', 'Dumangas', 'Zarraga', 'New Lucena',
-            'Alimodian', 'Leon', 'Tubungan', 'Iloilo City'
-        ];
-
-        $address = trim($address);
-        
-        $foundMunicipalities = [];
-        foreach ($municipalities as $muni) {
-            if (stripos($address, $muni) !== false) {
-                $foundMunicipalities[] = $muni;
-            }
-        }
-
-        if (count($foundMunicipalities) > 1) {
-            $primaryLocation = $foundMunicipalities[0];
-            foreach (array_slice($foundMunicipalities, 1) as $muni) {
-                $address = str_ireplace($muni, '', $address);
-            }
-            $address = str_ireplace($primaryLocation, '', $address);
-            $address = trim($address, ' ,.') . ', ' . $primaryLocation;
-        }
-
-        if (stripos($address, 'Iloilo') === false) {
-            $address .= ', Iloilo';
-        }
-        if (stripos($address, 'Philippines') === false) {
-            $address .= ', Philippines';
-        }
-
-        $address = preg_replace('/\s+/', ' ', $address);
-        $address = preg_replace('/,+/', ',', $address);
-        $address = trim($address, ' ,');
-
-        return $address;
-    }
-
-    // OPTIMIZED: Single query to get unique donor IDs and their addresses
-    $donorIds = array_keys($seenDonorIds); // Reuse from blood received count (already a set)
-    // Cap to a reasonable maximum to avoid huge in() queries
-    if (count($donorIds) > 500) {
-        $donorIds = array_slice($donorIds, 0, 500);
-    }
-    $totalDonorCount = count($donorIds);
-
-    // Get donor addresses for GIS mapping in one query
-    $donorLookup = [];
-    if (!empty($donorIds)) {
-        $donorIdsString = implode(',', $donorIds);
-        $donorFormResponse = supabaseRequest("donor_form?select=donor_id,permanent_address,office_address&donor_id=in.(" . $donorIdsString . ")");
-        $donorFormData = isset($donorFormResponse['data']) ? $donorFormResponse['data'] : [];
-        
-        foreach ($donorFormData as $donor) {
-            $donorLookup[$donor['donor_id']] = $donor;
-        }
-    }
-
-    // Process GIS data from unique donor_ids
-    foreach ($donorIds as $donorId) {
-        $donor = $donorLookup[$donorId] ?? null;
-        
-        if ($donor) {
-            $address = !empty($donor['office_address']) ? $donor['office_address'] : $donor['permanent_address'];
-            
-            $iloiloCities = [
-                'Oton', 'Pavia', 'Leganes', 'Santa Barbara', 'San Miguel', 
-                'Cabatuan', 'Maasin', 'Janiuay', 'Pototan', 'Dumangas',
-                'Zarraga', 'New Lucena', 'Alimodian', 'Leon', 'Tubungan',
-                'Iloilo City'
-            ];
-
-            $cityFound = false;
-            foreach ($iloiloCities as $cityName) {
-                if (stripos($address, $cityName) !== false) {
-                    if (!isset($cityDonorCounts[$cityName])) {
-                        $cityDonorCounts[$cityName] = 0;
-                    }
-                    $cityDonorCounts[$cityName]++;
-                    $cityFound = true;
-                    break;
-                }
-            }
-
-            if (!$cityFound) {
-                if (!isset($cityDonorCounts['Unidentified Location'])) {
-                    $cityDonorCounts['Unidentified Location'] = 0;
-                }
-                $cityDonorCounts['Unidentified Location']++;
-            }
-            
-            if (!empty($donor['permanent_address'])) {
-                $standardizedAddress = standardizeAddress($donor['permanent_address']);
-                $heatmapData[] = [
-                    'donor_id' => $donorId,
-                    'original_address' => $donor['permanent_address'],
-                    'address' => $standardizedAddress,
-                    'latitude' => null,
-                    'longitude' => null,
-                    'location_source' => 'none'
-                ];
-            }
-        }
-    }
-
-    arsort($cityDonorCounts);
-    
-    // Ensure PostGIS flag is set to false for fallback method
-    $postgisAvailable = false;
-}
-
-// Debug logging for GIS data
-error_log("GIS Debug - Total Donor Count: " . $totalDonorCount);
-error_log("GIS Debug - City Donor Counts: " . json_encode($cityDonorCounts));
-error_log("GIS Debug - Heatmap Data Count: " . count($heatmapData));
-error_log("GIS Debug - PostGIS Available: " . ($postgisAvailable ? 'Yes' : 'No'));
+$totalDonorCount = count($seenDonorIds); // Quick count from already-loaded data
+$postgisAvailable = false;
 
 // OPTIMIZATION: Performance logging and caching
 $endTime = microtime(true);
@@ -370,9 +204,9 @@ $cacheData = [
     'bloodByType' => $bloodByType,
     'bloodInventory' => $bloodInventory,
     'totalDonorCount' => $totalDonorCount,
-    'cityDonorCounts' => $cityDonorCounts ?? [],
-    'heatmapData' => $heatmapData ?? [],
-    'donorLookup' => $donorLookup ?? [],
+    'cityDonorCounts' => [],  // Will be loaded via AJAX
+    'heatmapData' => [],      // Will be loaded via AJAX
+    'donorLookup' => [],
     'timestamp' => time()
 ];
 
@@ -388,9 +222,9 @@ file_put_contents($cacheMetaFile, json_encode($cacheMeta));
 // Cache loaded marker
 cache_loaded:
 
-// --- Pending Donors Alert Setup ---
-include_once __DIR__ . '/module/donation_pending.php';
-$pendingDonorsCount = isset($pendingDonations) && is_array($pendingDonations) ? count($pendingDonations) : 0;
+// --- Pending Donors Alert Setup (DEFERRED FOR PERFORMANCE) ---
+// PERFORMANCE OPTIMIZATION: Pending donors will be loaded via AJAX
+$pendingDonorsCount = 0;
 
 $maxCapacity = 800;
 $totalUnits = $bloodInStockCount;
@@ -1128,30 +962,85 @@ h6 {
 </head>
 <body>
     <!-- Notification Bell and Alerts -->
-    <?php if ($notifCount > 0): ?>
     <button class="notifications-toggle" id="notificationsToggle" style="position: fixed; top: 100px; right: 32px; z-index: 1100; display: none; background: none; border: none; outline: none; align-items: center; justify-content: center; padding: 0; width: 56px; height: 56px; border-radius: 50%; box-shadow: 0 2px 8px rgba(148,16,34,0.08); background: #fff; transition: box-shadow 0.2s;">
         <i class="fas fa-bell" style="font-size: 2em; color: #941022; position: relative;"></i>
         <span class="badge rounded-pill" id="notifBadge" style="position: absolute; top: 10px; right: 10px; background: #dc3545; color: #fff; border: 2px solid #fff; font-size: 1em; font-weight: 700; padding: 2px 7px; border-radius: 12px; box-shadow: 0 1px 4px rgba(220,53,69,0.12); display:none; animation: pulseBadge 1.2s infinite; min-width: 24px; text-align: center;">0</span>
     </button>
     <div class="sticky-alerts" id="stickyAlerts">
-        <?php foreach ($notifications as $notif): ?>
-        <div class="blood-alert alert" role="alert" data-notif-id="<?php echo $notif['type']; ?>" style="background: <?php echo $notif['bg']; ?>; color: <?php echo $notif['color']; ?>; border-left: 6px solid <?php echo $notif['color']; ?>;">
-            <span class="notif-icon" style="background: #fff; color: <?php echo $notif['color']; ?>;"><i class="fas <?php echo $notif['icon']; ?>"></i></span>
-            <div class="notif-content">
-                <div class="notif-title"><?php echo $notif['title']; ?></div>
-                <div><?php echo $notif['message']; ?></div>
-            </div>
-            <button class="notif-close" title="Dismiss" aria-label="Dismiss">&times;</button>
-        </div>
-        <?php endforeach; ?>
+        <!-- PERFORMANCE OPTIMIZATION: Pending donors notification loaded via AJAX -->
     </div>
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    // PERFORMANCE OPTIMIZATION: Load notifications asynchronously
+    fetch('/RED-CROSS-THESIS/public/api/load-pending-donors-count.php')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.pendingDonorsCount > 0) {
+                // Create pending donors notification
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'blood-alert alert';
+                alertDiv.setAttribute('data-notif-id', 'pending');
+                alertDiv.style.cssText = 'background: #fffbe6; color: #b38b00; border-left: 6px solid #b38b00;';
+                alertDiv.innerHTML = `
+                    <span class="notif-icon" style="background: #fff; color: #b38b00;"><i class="fas fa-clock"></i></span>
+                    <div class="notif-content">
+                        <div class="notif-title">Pending Donors</div>
+                        <div>There are <b>${data.pendingDonorsCount}</b> donor(s) pending approval.</div>
+                    </div>
+                    <button class="notif-close" title="Dismiss" aria-label="Dismiss">&times;</button>
+                `;
+                document.getElementById('stickyAlerts').appendChild(alertDiv);
+                
+                // Update badge
+                document.getElementById('notifBadge').textContent = data.pendingDonorsCount;
+                
+                // Initialize notification handlers
+                initNotifications();
+            } else {
+                // Still show inventory notification even if no pending donors
+                initNotifications();
+            }
+        })
+        .catch(error => {
+            console.log('⚠️ Pending donors check failed:', error);
+            initNotifications();
+        });
+    
+    function initNotifications() {
+        // Add inventory notification
+        const inventoryAlert = document.createElement('div');
+        inventoryAlert.className = 'blood-alert alert';
+        inventoryAlert.setAttribute('data-notif-id', 'inventory');
+        
+        const statusClass = '<?php echo $statusClass; ?>';
+        const statusText = '<?php echo $statusText; ?>';
+        const totalPercentage = <?php echo round($totalPercentage); ?>;
+        const statusColor = '<?php echo $statusColor; ?>';
+        const statusBg = statusClass === 'critical' ? '#ffeaea' : (statusClass === 'warning' ? '#fff7e6' : '#e6fff2');
+        const iconClass = statusClass === 'critical' ? 'fa-exclamation-triangle' : (statusClass === 'warning' ? 'fa-exclamation-circle' : 'fa-check-circle');
+        
+        inventoryAlert.style.cssText = `background: ${statusBg}; color: ${statusColor}; border-left: 6px solid ${statusColor};`;
+        inventoryAlert.innerHTML = `
+            <span class="notif-icon" style="background: #fff; color: ${statusColor};"><i class="fas ${iconClass}"></i></span>
+            <div class="notif-content">
+                <div class="notif-title">Inventory Status</div>
+                <div>Blood bank inventory is at <b>${statusText}</b> (${totalPercentage}%)</div>
+            </div>
+            <button class="notif-close" title="Dismiss" aria-label="Dismiss">&times;</button>
+        `;
+        document.getElementById('stickyAlerts').appendChild(inventoryAlert);
+        
         const stickyAlerts = document.getElementById('stickyAlerts');
         const notificationsToggle = document.getElementById('notificationsToggle');
         const notifBadge = document.getElementById('notifBadge');
         let autoHideTimeout;
         let dismissedNotifs = [];
+        
+        // Count total notifications
+        const totalNotifs = document.querySelectorAll('.blood-alert').length;
+        if (totalNotifs > 0) {
+            notifBadge.textContent = totalNotifs;
+            notifBadge.style.display = 'inline-block';
+        }
         function getAlerts() {
             return Array.from(document.querySelectorAll('.blood-alert'));
         }
@@ -1204,9 +1093,8 @@ h6 {
         autoHideTimeout = setTimeout(() => {
             getAlerts().forEach(alert => hideAlert(alert));
         }, 7000);
-    });
+    }
     </script>
-    <?php endif; ?>
 
     <!-- Confirmation Modal -->
     <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
@@ -1738,6 +1626,10 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     ?>
 
                     <script>
+                    // PERFORMANCE FIX: Lazy load map initialization
+                    let mapInitialized = false;
+                    let map = null;
+                    
                     // HILBERT CURVE SPATIAL SORTING ALGORITHM
                     function hilbertCurve(lat, lng, order = 16) {
                         // Normalize coordinates to [0, 1] range
@@ -1775,17 +1667,27 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                         });
                     }
 
-                    // Initialize map centered on Iloilo
-                    const map = L.map('map').setView([10.7202, 122.5621], 11); // Centered on Iloilo City
+                    // Function to initialize map (called when user scrolls to map section)
+                    function initializeMap() {
+                        if (mapInitialized) return;
+                        mapInitialized = true;
+                        
+                        console.log('🗺️ Initializing map...');
+                        
+                        // Initialize map centered on Iloilo
+                        map = L.map('map').setView([10.7202, 122.5621], 11); // Centered on Iloilo City
 
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                        maxZoom: 18,
-                        attribution: '&copy; OpenStreetMap contributors'
-                    }).addTo(map);
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            maxZoom: 18,
+                            attribution: '&copy; OpenStreetMap contributors'
+                        }).addTo(map);
+                        
+                        // Start processing addresses after map is initialized
+                        updateDisplay();
+                    }
 
                     let heatLayer = null;
-                    let markers = L.layerGroup().addTo(map);
-                    const points = [];
+                    let markers = null; // Will be initialized when map loads
 
                     // Elements for filters
                     const bloodTypeFilter = document.getElementById('bloodTypeFilter');
@@ -1795,13 +1697,37 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     const locationListEl = document.getElementById('locationList');
 
                     // Separate data for Top Donors and Heatmap
-                    const cityDonorCounts = <?php echo json_encode($cityDonorCounts); ?>;
-                    const heatmapData = <?php echo json_encode($heatmapData); ?>;
+                    let cityDonorCounts = {};
+                    let heatmapData = [];
+                    
+                    // PERFORMANCE OPTIMIZATION: Load GIS data via AJAX after page loads
+                    console.log('🚀 Loading GIS data in background...');
+                    fetch('/RED-CROSS-THESIS/public/api/load-gis-data-dashboard.php')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                cityDonorCounts = data.cityDonorCounts || {};
+                                heatmapData = data.heatmapData || [];
+                                console.log('✅ GIS data loaded:', data.totalDonorCount, 'donors');
+                                
+                                // Update summary immediately
+                                totalDonorsEl.textContent = 'Total Donors: ' + data.totalDonorCount;
+                                updateTopDonorLocations();
+                                
+                                // If map is already initialized, update it
+                                if (mapInitialized && map) {
+                                    processAddresses();
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            console.log('⚠️ GIS data loading failed (will show empty map):', error);
+                        });
                     
                     // Debug logging
-                    console.log('City Donor Counts:', cityDonorCounts);
-                    console.log('Heatmap Data:', heatmapData);
-                    console.log('Total Donor Count:', <?php echo $totalDonorCount; ?>);
+                    console.log('Initial City Donor Counts:', cityDonorCounts);
+                    console.log('Initial Heatmap Data:', heatmapData);
+                    console.log('Initial Total Donor Count:', <?php echo $totalDonorCount; ?>);
 
                                          // OPTIMIZED: Pre-defined coordinates for common Iloilo locations
                      const locationCoordinates = {
@@ -1914,15 +1840,15 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                          };
                                      }
                                  }
-                             } catch (error) {
-                                 console.error('Geocoding error:', error);
-                                 continue;
-                             }
-                             // Reduced delay for faster processing
-                             await delay(200);
-                         }
-                         return null;
-                     }
+                            } catch (error) {
+                                console.error('Geocoding error:', error);
+                                continue;
+                            }
+                            // PERFORMANCE FIX: Reduced delay from 200ms to 100ms for faster processing
+                            await delay(100);
+                        }
+                        return null;
+                    }
 
                      // Function to add delay between geocoding requests
                      function delay(ms) {
@@ -1934,13 +1860,24 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                      let geocodingInProgress = false;
                      
                      async function processAddresses() {
+                         // PERFORMANCE FIX: Don't process if map isn't initialized yet
+                         if (!mapInitialized || !map) {
+                             console.log('⚠️ Map not initialized yet, skipping address processing');
+                             return;
+                         }
+                         
+                         // Initialize markers layer if not exists
+                         if (!markers) {
+                             markers = L.layerGroup().addTo(map);
+                         }
+                         
                          markers.clearLayers();
                          if (heatLayer) {
                              map.removeLayer(heatLayer);
                          }
 
                          const points = [];
-                         const batchSize = 10; // Smaller batch for better geocoding
+                         const batchSize = 25; // PERFORMANCE FIX: Increased from 10 to 25 for faster processing
                          const totalLocations = heatmapData.length;
                          
                          // Show loading indicator with geocoding status
@@ -2028,11 +1965,11 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                  </div>
                              `;
 
-                             // Delay between batches to respect rate limits
-                             if (i + batchSize < totalLocations) {
-                                 await delay(1000); // 1 second delay for geocoding
-                             }
-                         }
+                            // PERFORMANCE FIX: Reduced delay from 1000ms to 300ms for faster loading
+                            if (i + batchSize < totalLocations) {
+                                await delay(300); // 0.3 second delay (reduced from 1 second)
+                            }
+                        }
 
                          // Remove loading indicator
                          if (loadingDiv.parentNode) {
@@ -2117,43 +2054,62 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     // Add event listeners - these only affect the heatmap
                     bloodTypeFilter.addEventListener('change', processAddresses);
 
-                    // Initialize
-                    updateDisplay();
-                    
-                    // Auto-geocode new donors in background
-                    console.log('🚀 Dashboard loaded, starting automatic geocoding in 2 seconds...');
-                    console.log('🔧 JavaScript is running - auto-geocoding will start soon...');
-                    setTimeout(async () => {
-                        try {
-                            console.log('🔍 Checking for missing coordinates...');
-                            const response = await fetch('/RED-CROSS-THESIS/public/api/auto-geocode-missing.php', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ action: 'auto_geocode' })
-                            });
-                            
-                            console.log('📡 Response status:', response.status);
-                            
-                            if (response.ok) {
-                                const result = await response.json();
-                                console.log('📊 Geocoding result:', result);
-                                
-                                if (result.successful > 0) {
-                                    console.log(`✅ Successfully geocoded ${result.successful} missing addresses`);
-                                    // Refresh the map to show new data
-                                    setTimeout(() => {
-                                        updateDisplay();
-                                    }, 1000);
-                                } else if (result.total > 0) {
-                                    console.log(`⚠️ Found ${result.total} donors with missing coordinates, but geocoding failed`);
-                                } else {
-                                    console.log('✅ All coordinates are up to date');
-                                }
+                    // PERFORMANCE FIX: Lazy load map when user scrolls to it
+                    const mapElement = document.getElementById('map');
+                    const mapObserver = new IntersectionObserver((entries) => {
+                        entries.forEach(entry => {
+                            if (entry.isIntersecting && !mapInitialized) {
+                                console.log('🗺️ Map section visible, initializing...');
+                                initializeMap();
+                                mapObserver.disconnect(); // Stop observing after initialization
                             }
-                        } catch (e) {
-                            console.log('Background geocoding failed:', e);
-                        }
-                    }, 2000); // Run 2 seconds after page load for faster response
+                        });
+                    }, {
+                        root: null,
+                        rootMargin: '100px', // Start loading 100px before map is visible
+                        threshold: 0.1
+                    });
+                    
+                    if (mapElement) {
+                        mapObserver.observe(mapElement);
+                    }
+
+                    // Initialize summary data (without map)
+                    totalDonorsEl.textContent = 'Total Donors: <?php echo $totalDonorCount; ?>';
+                    updateTopDonorLocations();
+                    
+                    // PERFORMANCE FIX: Disabled automatic background geocoding on page load
+                    // This was causing significant performance issues during login
+                    // Geocoding now happens on-demand when viewing the map
+                    console.log('🚀 Dashboard loaded successfully (auto-geocoding disabled for performance)');
+                    console.log('💡 Map will initialize when you scroll to it');
+                    
+                    // Optional: Uncomment below to enable manual geocoding with a button
+                    // To manually trigger geocoding, add ?geocode=1 to the URL
+                    if (window.location.search.includes('geocode=1')) {
+                        console.log('🔍 Manual geocoding triggered...');
+                        setTimeout(async () => {
+                            try {
+                                const response = await fetch('/RED-CROSS-THESIS/public/api/auto-geocode-missing.php', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'auto_geocode' })
+                                });
+                                
+                                if (response.ok) {
+                                    const result = await response.json();
+                                    console.log('📊 Geocoding result:', result);
+                                    
+                                    if (result.successful > 0) {
+                                        console.log(`✅ Successfully geocoded ${result.successful} missing addresses`);
+                                        setTimeout(() => updateDisplay(), 1000);
+                                    }
+                                }
+                            } catch (e) {
+                                console.log('Background geocoding failed:', e);
+                            }
+                        }, 1000);
+                    }
                     </script>
                 </div>
             </main>

@@ -10,67 +10,78 @@ $donor_id = $_GET['donor_id'];
 // Database connection
 require_once '../../../assets/conn/db_conn.php';
 
-// Fetch donor information
-try {
-    $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select=*&donor_id=eq.' . $donor_id);
-    $headers = array(
-        'apikey: ' . SUPABASE_API_KEY,
-        'Authorization: Bearer ' . SUPABASE_API_KEY,
-        'Accept: application/json'
-    );
+// OPTIMIZED: Fetch all data in parallel using cURL multi-handle
+$headers = array(
+    'apikey: ' . SUPABASE_API_KEY,
+    'Authorization: Bearer ' . SUPABASE_API_KEY,
+    'Accept: application/json'
+);
+
+// Initialize all cURL handles
+$ch_donor = curl_init(SUPABASE_URL . '/rest/v1/donor_form?select=*&donor_id=eq.' . $donor_id);
+$ch_screening = curl_init(SUPABASE_URL . '/rest/v1/screening_form?select=*&donor_form_id=eq.' . $donor_id . '&order=created_at.desc&limit=1');
+$ch_medical = curl_init(SUPABASE_URL . '/rest/v1/medical_history?select=*&donor_id=eq.' . $donor_id . '&order=created_at.desc&limit=1');
+$ch_physical = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=*&donor_id=eq.' . $donor_id . '&order=created_at.desc&limit=1');
+
+// Set options for all handles
+$handles = [$ch_donor, $ch_screening, $ch_medical, $ch_physical];
+foreach ($handles as $ch) {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    $response = curl_exec($ch);
-    curl_close($ch);
-    
-    $donor_info = json_decode($response, true);
-    $donor_info = $donor_info[0] ?? null;
-} catch (Exception $e) {
-    $donor_info = null;
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10); // 10 second timeout
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5); // 5 second connection timeout
 }
 
-// Fetch screening information
-try {
-    $screening_url = SUPABASE_URL . '/rest/v1/screening_form?select=*&donor_form_id=eq.' . $donor_id . '&order=created_at.desc&limit=1';
-    $ch = curl_init($screening_url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    $response = curl_exec($ch);
-    curl_close($ch);
-    
-    $screening_info = json_decode($response, true);
-    $screening_info = $screening_info[0] ?? null;
-} catch (Exception $e) {
-    $screening_info = null;
+// Execute all requests in parallel
+$mh = curl_multi_init();
+foreach ($handles as $ch) {
+    curl_multi_add_handle($mh, $ch);
 }
 
-// Fetch medical history information
-try {
-    $ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?select=*&donor_id=eq.' . $donor_id . '&order=created_at.desc&limit=1');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    $response = curl_exec($ch);
-    curl_close($ch);
-    
-    $medical_history_info = json_decode($response, true);
-    $medical_history_info = $medical_history_info[0] ?? null;
-} catch (Exception $e) {
-    $medical_history_info = null;
-}
+$running = null;
+do {
+    curl_multi_exec($mh, $running);
+    curl_multi_select($mh);
+} while ($running > 0);
 
-// Fetch physical examination information
-try {
-    $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=*&donor_id=eq.' . $donor_id . '&order=created_at.desc&limit=1');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    $response = curl_exec($ch);
+// Get responses
+$donor_response = curl_multi_getcontent($ch_donor);
+$screening_response = curl_multi_getcontent($ch_screening);
+$medical_response = curl_multi_getcontent($ch_medical);
+$physical_response = curl_multi_getcontent($ch_physical);
+
+// Clean up
+foreach ($handles as $ch) {
+    curl_multi_remove_handle($mh, $ch);
     curl_close($ch);
-    
-    $physical_exam_info = json_decode($response, true);
-    $physical_exam_info = $physical_exam_info[0] ?? null;
-} catch (Exception $e) {
-    $physical_exam_info = null;
 }
+curl_multi_close($mh);
+
+// Parse responses
+$donor_info = null;
+$screening_info = null;
+$medical_history_info = null;
+$physical_exam_info = null;
+
+try {
+    $donor_data = json_decode($donor_response, true);
+    $donor_info = $donor_data[0] ?? null;
+} catch (Exception $e) {}
+
+try {
+    $screening_data = json_decode($screening_response, true);
+    $screening_info = $screening_data[0] ?? null;
+} catch (Exception $e) {}
+
+try {
+    $medical_data = json_decode($medical_response, true);
+    $medical_history_info = $medical_data[0] ?? null;
+} catch (Exception $e) {}
+
+try {
+    $physical_data = json_decode($physical_response, true);
+    $physical_exam_info = $physical_data[0] ?? null;
+} catch (Exception $e) {}
 
 // Calculate age from birthdate
 $age = '';
@@ -254,22 +265,16 @@ if ($physical_exam_info && isset($physical_exam_info['remarks'])) {
      width: 25%;
  }
  
- /* Medical History Table - 4 equal columns */
+ /* Medical History Table (Interviewer) - 2 equal columns */
  .status-table.medical-history th,
  .status-table.medical-history td {
-     width: 25%;
+     width: 50%;
  }
  
- /* Initial Screening Table - 3 equal columns */
- .status-table.initial-screening th,
- .status-table.initial-screening td {
-     width: 33.33%;
- }
- 
- /* Physical Examination Table - 3 equal columns */
+ /* Physical Examination Table (Physician) - 2 equal columns */
  .status-table.physical-examination th,
  .status-table.physical-examination td {
-     width: 33.33%;
+     width: 50%;
  }
 
 .status-badge {
@@ -425,16 +430,31 @@ if ($physical_exam_info && isset($physical_exam_info['remarks'])) {
                 <tr>
                     <th>Medical History</th>
                     <th>Initial Screening</th>
-                    <th>Action</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
                     <td>
-                        <?php $mhExists = !empty($medical_history_info); $mhApproved = ($medical_history_info && isset($medical_history_info['medical_approval']) && strtolower(trim($medical_history_info['medical_approval'])) === 'approved'); ?>
-                        <span class="status-badge <?php echo $mhExists ? 'status-completed' : 'status-pending'; ?>">
-                            <?php echo $mhExists ? 'Completed' : '--'; ?>
-                        </span>
+                        <?php 
+                            $mhExists = !empty($medical_history_info); 
+                            $mhApproved = ($medical_history_info && isset($medical_history_info['medical_approval']) && strtolower(trim($medical_history_info['medical_approval'])) === 'approved'); 
+                        ?>
+                        <div style="display: flex; flex-direction: row; align-items: center; gap: 15px; justify-content: center;">
+                            <span class="status-badge <?php echo $mhExists ? 'status-completed' : 'status-pending'; ?>">
+                                <?php echo $mhExists ? 'Completed' : '--'; ?>
+                            </span>
+                            <?php if ($mhExists): ?>
+                                <?php if ($mhApproved): ?>
+                                    <button class="btn btn-info btn-sm" id="medicalHistoryViewBtn" title="View Medical History" style="padding: 6px 16px; font-size: 0.875rem; min-width: 90px; border-radius: 20px;">
+                                        <i class="fas fa-eye me-1"></i> View
+                                    </button>
+                                <?php else: ?>
+                                    <button class="btn btn-warning btn-sm" id="medicalHistoryConfirmBtn" title="Edit Medical History" style="padding: 6px 16px; font-size: 0.875rem; min-width: 90px; border-radius: 20px;">
+                                        <i class="fas fa-edit me-1"></i> Edit
+                                    </button>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        </div>
                     </td>
                     <td>
                         <?php
@@ -443,16 +463,22 @@ if ($physical_exam_info && isset($physical_exam_info['remarks'])) {
                                 $screenPassed = isset($screening_info['screening_id']) && !empty($screening_info['screening_id']);
                             }
                         ?>
-                        <span class="status-badge <?php echo ($screening_info ? ($screenPassed ? 'status-completed' : 'status-pending') : 'status-pending'); ?>">
-                            <?php echo ($screening_info ? ($screenPassed ? 'Passed' : 'Pending') : '--'); ?>
-                        </span>
-                    </td>
-                    <td>
-                        <?php if ($mhApproved): ?>
-                            <button class="btn btn-info btn-sm" id="medicalHistoryViewBtn" title="View Medical History"><i class="fas fa-eye"></i></button>
-                        <?php else: ?>
-                            <button class="action-button" id="medicalHistoryConfirmBtn">Confirm</button>
-                        <?php endif; ?>
+                        <div style="display: flex; flex-direction: row; align-items: center; gap: 15px; justify-content: center;">
+                            <span class="status-badge <?php echo ($screening_info ? ($screenPassed ? 'status-completed' : 'status-pending') : 'status-pending'); ?>">
+                                <?php echo ($screening_info ? ($screenPassed ? 'Passed' : 'Pending') : '--'); ?>
+                            </span>
+                            <?php if ($screening_info): ?>
+                                <?php if ($mhApproved): ?>
+                                    <button class="btn btn-info btn-sm" id="initialScreeningViewBtn" title="View Initial Screening" style="padding: 6px 16px; font-size: 0.875rem; min-width: 90px; border-radius: 20px;">
+                                        <i class="fas fa-eye me-1"></i> View
+                                    </button>
+                                <?php else: ?>
+                                    <button class="btn btn-warning btn-sm" id="initialScreeningEditBtn" title="Edit Initial Screening" style="padding: 6px 16px; font-size: 0.875rem; min-width: 90px; border-radius: 20px;">
+                                        <i class="fas fa-edit me-1"></i> Edit
+                                    </button>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        </div>
                     </td>
                 </tr>
             </tbody>
@@ -470,7 +496,6 @@ if ($physical_exam_info && isset($physical_exam_info['remarks'])) {
                 <tr>
                     <th>Medical History</th>
                     <th>Physical Examination</th>
-                    <th>Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -479,14 +504,20 @@ if ($physical_exam_info && isset($physical_exam_info['remarks'])) {
                         <?php 
                             $mhLabel = isset($medical_history_info['medical_approval']) ? trim((string)$medical_history_info['medical_approval']) : '';
                             $mhBadgeClass = $mhLabel ? ($mhLabel === 'Approved' ? 'status-approved' : 'status-pending') : 'status-pending';
+                            $mhIsApproved = ($mhLabel === 'Approved');
+                            
+                            // Get Physical Examination remarks for controlling button state
+                            $peRemarks = isset($physical_exam_info['remarks']) ? trim((string)$physical_exam_info['remarks']) : '';
+                            $peIsPending = (strcasecmp($peRemarks, 'Pending') === 0 || $peRemarks === '');
                         ?>
-                        <span class="status-badge <?php echo $mhBadgeClass; ?>">
-                            <?php echo $mhLabel !== '' ? htmlspecialchars($mhLabel) : '--'; ?>
-                        </span>
+                        <div style="display: flex; flex-direction: row; align-items: center; gap: 15px; justify-content: center;">
+                            <span class="status-badge <?php echo $mhBadgeClass; ?>">
+                                <?php echo $mhLabel !== '' ? htmlspecialchars($mhLabel) : '--'; ?>
+                            </span>
+                        </div>
                     </td>
                     <td>
                         <?php 
-                            $peRemarks = isset($physical_exam_info['remarks']) ? trim((string)$physical_exam_info['remarks']) : '';
                             $peBadgeClass = 'status-pending';
                             if (strcasecmp($peRemarks, 'Accepted') === 0) {
                                 $peBadgeClass = 'status-completed';
@@ -495,26 +526,24 @@ if ($physical_exam_info && isset($physical_exam_info['remarks'])) {
                             } else if ($peRemarks !== '') {
                                 $peBadgeClass = 'status-pending';
                             }
-                            $peNeedsReview = isset($physical_exam_info['needs_review']) && (
-                                $physical_exam_info['needs_review'] === true ||
-                                $physical_exam_info['needs_review'] === 1 ||
-                                $physical_exam_info['needs_review'] === '1' ||
-                                (is_string($physical_exam_info['needs_review']) && in_array(strtolower(trim($physical_exam_info['needs_review'])), ['true','t','yes','y'], true))
-                            );
                             $peIsAccepted = (strcasecmp($peRemarks, 'Accepted') === 0);
                         ?>
-                        <span class="status-badge <?php echo $peBadgeClass; ?>">
-                            <?php echo $peRemarks !== '' ? htmlspecialchars($peRemarks) : 'Pending'; ?>
-                        </span>
-                    </td>
-                    <td>
-                        <?php if ($peIsAccepted): ?>
-                            <button class="btn btn-info btn-sm" id="physicalExamViewBtn" title="View Physical Examination"><i class="fas fa-eye"></i></button>
-                        <?php elseif ($peNeedsReview): ?>
-                            <button class="action-button" id="physicalExamConfirmBtn">Confirm</button>
-                        <?php else: ?>
-                            <button class="btn btn-info btn-sm" id="physicalExamViewBtn" title="View Physical Examination"><i class="fas fa-eye"></i></button>
-                        <?php endif; ?>
+                        <div style="display: flex; flex-direction: row; align-items: center; gap: 15px; justify-content: center;">
+                            <span class="status-badge <?php echo $peBadgeClass; ?>">
+                                <?php echo $peRemarks !== '' ? htmlspecialchars($peRemarks) : 'Pending'; ?>
+                            </span>
+                            <?php if ($peRemarks !== ''): ?>
+                                <?php if ($peIsPending): ?>
+                                    <button class="btn btn-warning btn-sm" id="physicalExamConfirmBtn" title="Edit Physical Examination" style="padding: 6px 16px; font-size: 0.875rem; min-width: 90px; border-radius: 20px;">
+                                        <i class="fas fa-edit me-1"></i> Edit
+                                    </button>
+                                <?php else: ?>
+                                    <button class="btn btn-info btn-sm" id="physicalExamViewBtn" title="View Physical Examination" style="padding: 6px 16px; font-size: 0.875rem; min-width: 90px; border-radius: 20px;">
+                                        <i class="fas fa-eye me-1"></i> View
+                                    </button>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        </div>
                     </td>
                 </tr>
             </tbody>

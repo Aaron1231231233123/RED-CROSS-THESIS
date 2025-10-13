@@ -2994,14 +2994,15 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         }
         
         function openDonorProfileModalInternal(screeningData, donorId) {
-            // Show loading state in modal content
+            // Show optimized loading state in modal content
             const modalContent = document.getElementById('donorProfileModalContent');
             modalContent.innerHTML = `
-                <div class="text-center">
-                    <div class="spinner-border text-primary" role="status">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-danger" role="status" style="width: 3rem; height: 3rem; border-width: 0.3em;">
                         <span class="visually-hidden">Loading...</span>
                     </div>
-                    <p class="mt-2">Loading donor profile...</p>
+                    <p class="mt-3 mb-0 text-muted" style="font-size: 1.1rem;">Loading donor profile...</p>
+                    <small class="text-muted">Please wait</small>
                 </div>
             `;
             
@@ -3133,21 +3134,56 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 const modalContent = document.getElementById('donorProfileModalContent');
                 if (!modalContent) return;
                 modalContent.innerHTML = `
-                    <div class="text-center" style="padding: 28px 0;">
-                        <div class="spinner-border text-primary" role="status">
+                    <div class="text-center py-5">
+                        <div class="spinner-border text-danger" role="status" style="width: 3rem; height: 3rem; border-width: 0.3em;">
                             <span class="visually-hidden">Loading...</span>
                         </div>
-                        <p class="mt-2 mb-0">${message || 'Loading donor profile...'}</p>
+                        <p class="mt-3 mb-0 text-muted" style="font-size: 1.1rem;">${message || 'Loading donor profile...'}</p>
+                        <small class="text-muted">Please wait</small>
                     </div>
                 `;
             } catch(_) {}
         }
 
+        // Cache for donor profile data to improve loading speed
+        window.donorProfileCache = window.donorProfileCache || {};
+        
         function loadDonorProfileContent(donorId, screeningData, forceTimestamp) {
-            // Fetch donor profile content directly into the modal
-            setDonorProfileLoading('Loading donor profile...');
-            const ts = forceTimestamp || Date.now();
-            fetch(`../../src/views/forms/donor-profile-modal-content.php?donor_id=${donorId}&_=${ts}`)
+            // Check if we have cached data and show it immediately
+            const cacheKey = `donor_${donorId}`;
+            const cachedData = window.donorProfileCache[cacheKey];
+            
+            if (cachedData && !forceTimestamp) {
+                // Show cached data immediately for instant loading
+                const modalContent = document.getElementById('donorProfileModalContent');
+                modalContent.innerHTML = cachedData;
+                
+                // Bind event listeners immediately
+                try {
+                    updateDonorProfileActions(donorId);
+                    bindDonorProfileConfirmButtons(screeningData);
+                    enforcePendingConfirmVisibility();
+                } catch(_) {}
+                
+                // Still fetch fresh data in background and update silently
+                fetchDonorProfileData(donorId, screeningData, true);
+            } else {
+                // No cache, show loading and fetch
+                setDonorProfileLoading('Loading donor profile...');
+                fetchDonorProfileData(donorId, screeningData, false);
+            }
+        }
+        
+        function fetchDonorProfileData(donorId, screeningData, isBackgroundUpdate) {
+            const ts = Date.now();
+            const cacheKey = `donor_${donorId}`;
+            
+            // Use fetch with keepalive and priority for better performance
+            fetch(`../../src/views/forms/donor-profile-modal-content.php?donor_id=${donorId}&_=${ts}`, {
+                method: 'GET',
+                keepalive: true,
+                priority: 'high'
+            })
                 .then(response => {
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
@@ -3155,17 +3191,22 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     return response.text();
                 })
                 .then(html => {
+                    // Cache the response for next time
+                    window.donorProfileCache[cacheKey] = html;
+                    
+                    // Only clear cache after 30 seconds to keep it fresh but not stale
+                    setTimeout(() => {
+                        delete window.donorProfileCache[cacheKey];
+                    }, 30000);
+                    
                     // Update modal content
                     const modalContent = document.getElementById('donorProfileModalContent');
                     modalContent.innerHTML = html;
                     
                     // Enforce visibility rules: Confirm only when Physical Examination needs_review is true
-                    // Delay to ensure fresh data is loaded
                     setTimeout(() => { 
                         try { enforcePendingConfirmVisibility(); } catch(_) {}
-                    }, 200);
-                    
-                    
+                    }, isBackgroundUpdate ? 50 : 200);
                     
                     // Adjust action buttons based on medical approval status
                     updateDonorProfileActions(donorId);
@@ -3174,7 +3215,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     bindDonorProfileConfirmButtons(screeningData);
                 })
                 .catch(error => {
-                    
+                    console.error('Error loading donor profile:', error);
                     const modalContent = document.getElementById('donorProfileModalContent');
                     modalContent.innerHTML = `
                         <div class="alert alert-danger">
@@ -3327,27 +3368,11 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             } catch(_) { return null; }
         }
 
-        // When medical_approval is Approved, change Medical History action to a view (eye) button
+        // Note: Button rendering is now handled by PHP in donor-profile-modal-content.php
+        // This function is kept for backward compatibility but is no longer actively used
         function updateDonorProfileActions(donorId) {
-            try {
-                const record = (medicalByDonor && (medicalByDonor[donorId] || medicalByDonor[String(donorId)])) || null;
-                const isApproved = !!(record && record.medical_approval === 'Approved');
-                const confirmBtn = document.getElementById('medicalHistoryConfirmBtn');
-                if (isApproved && confirmBtn) {
-                    const viewBtn = document.createElement('button');
-                    viewBtn.type = 'button';
-                    viewBtn.id = 'medicalHistoryViewBtn';
-                    viewBtn.className = 'btn btn-info btn-sm';
-                    viewBtn.innerHTML = '<i class="fas fa-eye"></i>';
-                    viewBtn.title = 'View Medical History';
-                    viewBtn.addEventListener('click', function() {
-                        openMedicalHistoryModal(donorId);
-                    });
-                    confirmBtn.replaceWith(viewBtn);
-                }
-            } catch (e) {
-                
-            }
+            // No-op: Buttons are now rendered server-side based on data state
+            // The PHP file handles the logic for showing Edit vs View buttons
         }
         
         function bindDonorProfileConfirmButtons(screeningData) {
@@ -3395,44 +3420,80 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 });
             }
             
-            // Add event listener for Physical Examination Confirm button
+            // Add event listener for Initial Screening View button
+            const initialScreeningViewBtn = document.getElementById('initialScreeningViewBtn');
+            if (initialScreeningViewBtn) {
+                initialScreeningViewBtn.addEventListener('click', function() {
+                    const donorId = screeningData?.donor_form_id;
+                    if (!donorId) return;
+                    window.lastDonorProfileContext = { donorId: donorId, screeningData: screeningData };
+                    // Open the initial screening modal (physician view)
+                    const screeningModal = document.getElementById('screeningFormModal');
+                    if (screeningModal) {
+                        try {
+                            // Close donor profile modal
+                            window.allowDonorProfileHide = true;
+                            cleanupModalState('donorProfileModal');
+                            
+                            // Set donor ID in the screening form
+                            setTimeout(() => {
+                                const screeningForm = document.getElementById('screeningForm');
+                                if (screeningForm) {
+                                    const donorIdInput = screeningForm.querySelector('input[name="donor_id"]');
+                                    if (donorIdInput) {
+                                        donorIdInput.value = donorId;
+                                    }
+                                }
+                                // Open the screening modal
+                                const modalInstance = bootstrap.Modal.getInstance(screeningModal) || new bootstrap.Modal(screeningModal);
+                                modalInstance.show();
+                            }, 120);
+                        } catch(e) {
+                            console.error('Error opening screening modal:', e);
+                        }
+                    }
+                });
+            }
+            
+            // Add event listener for Initial Screening Edit button
+            const initialScreeningEditBtn = document.getElementById('initialScreeningEditBtn');
+            if (initialScreeningEditBtn) {
+                initialScreeningEditBtn.addEventListener('click', function() {
+                    const donorId = screeningData?.donor_form_id;
+                    if (!donorId) return;
+                    window.lastDonorProfileContext = { donorId: donorId, screeningData: screeningData };
+                    // Open the initial screening modal (physician view in edit mode)
+                    const screeningModal = document.getElementById('screeningFormModal');
+                    if (screeningModal) {
+                        try {
+                            // Close donor profile modal
+                            window.allowDonorProfileHide = true;
+                            cleanupModalState('donorProfileModal');
+                            
+                            // Set donor ID in the screening form
+                            setTimeout(() => {
+                                const screeningForm = document.getElementById('screeningForm');
+                                if (screeningForm) {
+                                    const donorIdInput = screeningForm.querySelector('input[name="donor_id"]');
+                                    if (donorIdInput) {
+                                        donorIdInput.value = donorId;
+                                    }
+                                }
+                                // Open the screening modal
+                                const modalInstance = bootstrap.Modal.getInstance(screeningModal) || new bootstrap.Modal(screeningModal);
+                                modalInstance.show();
+                            }, 120);
+                        } catch(e) {
+                            console.error('Error opening screening modal:', e);
+                        }
+                    }
+                });
+            }
+            
+            
+            // Add event listener for Physical Examination Confirm button (Edit)
             const physicalExamBtn = document.getElementById('physicalExamConfirmBtn');
             if (physicalExamBtn) {
-                // Show Confirm only when status != Accepted AND needs_review === true; else show eye (View)
-                try {
-                    const donorId = screeningData?.donor_form_id;
-                    (async () => {
-                        let needsReview = false;
-                        let isAccepted = false;
-                        try {
-                            if (donorId) {
-                                const data = await makeApiCall(`../api/get-physical-examination.php?donor_id=${donorId}`);
-                                const pe = data && (data.physical_exam || data);
-                                const val = pe ? pe.needs_review : null;
-                                const remarks = pe ? (pe.remarks || pe.remarks_status || '') : '';
-                                needsReview = (val === true) || (val === 1) || (val === '1') || (typeof val === 'string' && ['true','t','yes','y'].includes(val.trim().toLowerCase()));
-                                isAccepted = String(remarks).trim().toLowerCase() === 'accepted';
-                            }
-                        } catch(_) { needsReview = false; isAccepted = false; }
-                        if (isAccepted || !needsReview) {
-                            const viewBtn = document.createElement('button');
-                            viewBtn.type = 'button';
-                            viewBtn.id = 'physicalExamViewBtn';
-                            viewBtn.className = 'btn btn-info btn-sm';
-                            viewBtn.title = 'View Physical Examination';
-                            viewBtn.innerHTML = '<i class="fas fa-eye"></i>';
-                            physicalExamBtn.replaceWith(viewBtn);
-                            viewBtn.addEventListener('click', function(){
-                                const donorId = screeningData?.donor_form_id;
-                                if (!donorId) return;
-                                window.lastDonorProfileContext = { donorId: screeningData?.donor_form_id || screeningData?.donor_id, screeningData };
-                                if (window.physicalExaminationModal) { window.physicalExaminationModal.openModal(screeningData); }
-                            });
-                        } else {
-                            physicalExamBtn.style.display = '';
-                        }
-                    })();
-                } catch(_) {}
                 physicalExamBtn.addEventListener('click', function() {
                     // Physician flow: open Medical History first, then proceed to Physical Examination
                     try {
@@ -5199,38 +5260,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
 
         
         // Loading spinner handled by global singleton at bottom of file (no backdrop)
-        
-        // Show loading when physical examination forms are submitted
-        document.addEventListener('submit', function(e) {
-            if (e.target && (e.target.classList.contains('physical-form') || e.target.id.includes('physical'))) {
-                showProcessingModal('Submitting physical examination data...');
-            }
-        });
-        
-        // Show loading for physical examination AJAX calls
-        const originalFetch = window.fetch;
-        window.fetch = function(...args) {
-            const url = args[0];
-            if (typeof url === 'string' && (url.includes('physical') || url.includes('examination'))) {
-                showProcessingModal('Processing physical examination...');
-            }
-            return originalFetch.apply(this, args).finally(() => {
-                setTimeout(() => {
-                    try {
-                        // Ensure loading modal z-index stays above any new backdrops
-                        const lm = document.getElementById('loadingModal');
-                        if (lm && lm.classList.contains('show')) {
-                            lm.style.zIndex = '20000';
-                            const dlg = lm.querySelector('.modal-dialog');
-                            if (dlg) dlg.style.zIndex = '20001';
-                            // Do not elevate Bootstrap backdrop above functional modals
-                            // Let each modal manage its own stacking context
-                        }
-                    } catch(_) {}
-                    hideProcessingModal();
-                }, 500);
-            });
-        };
+        // Removed global fetch interceptor - it was causing unwanted spinners when opening modals
         
         // Custom confirmation function to replace browser confirm
         if (!window.customConfirm) window.customConfirm = function(message, onConfirm) {

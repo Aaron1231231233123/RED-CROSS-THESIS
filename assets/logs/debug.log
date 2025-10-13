@@ -13707,3 +13707,192 @@ Stack trace:
 [2025-10-12 13:48:55] Physical examination UPDATE attempt - HTTP Code: 200
 [2025-10-12 13:48:55] Physical examination UPDATE attempt - Response: [{"physical_exam_id":"95bbc92d-ee52-4caa-8ba2-beaf68441080","donor_id":184,"blood_pressure":null,"pulse_rate":null,"body_temp":null,"gen_appearance":null,"skin":null,"heent":null,"heart_and_lungs":null,"remarks":null,"reason":null,"blood_bag_type":null,"created_at":"2025-10-12T13:26:49","updated_at":"2025-10-12T13:48:55","disapproval_reason":null,"needs_review":true,"physician":null,"screening_id":"92bc37ff-4038-480d-b049-7870fbdd44e3","status":null}]
 [2025-10-12 13:48:55] Physical examination data updated successfully - needs_review=true (UPDATE priority)
+[2025-10-13 04:14:29] declaration-form-process.php accessed
+[2025-10-13 04:14:29] declaration-form-process.php accessed
+[2025-10-13 04:14:29] JS DEBUG:   debug_log: Submitting form data...
+[2025-10-13 04:14:29] JS DEBUG: Submitting form data...
+[2025-10-13 04:14:29] === DECLARATION FORM PROCESS START ===
+[2025-10-13 04:14:29] POST data: Array
+(
+    [donor_id] => 122
+    [action] => complete
+    [screening_data] => {"donor_id":"122","donation-type":"Walk-in","patient-name":"","hospital":"","patient-blood-type":"","no-units":"","body-wt":"50","sp-gr":"12.5","blood-type":"A+","interviewer":"Interviewer"}
+    [debug_log] => Submitting form data...
+)
+
+[2025-10-13 04:14:29] Session data: Array
+(
+    [user_id] => 07f20ca3-b282-4122-88a6-123f8dfedd22
+    [email] => reviewer@gmail.com
+    [role_id] => 3
+    [donor_id] => 122
+    [transferred_screening_data] => Array
+        (
+            [body_weight] => 50
+            [specific_gravity] => 12.5
+            [blood_type] => A+
+            [donation_type] => walk-in
+            [mobile_location] => 
+            [mobile_organizer] => 
+            [patient_name] => 
+            [hospital] => 
+            [patient_blood_type] => 
+            [component_type] => 
+            [units_needed] => 0
+        )
+
+    [medical_history_processed] => 1
+)
+
+[2025-10-13 04:14:29] REQUEST_METHOD: POST
+[2025-10-13 04:14:29] Content-Type: multipart/form-data; boundary=----WebKitFormBoundaryRLHpf7JqJAYJiK2c
+[2025-10-13 04:14:29] Donor ID: 122
+[2025-10-13 04:14:29] Action: complete
+[2025-10-13 04:14:29] Processing complete action
+[2025-10-13 04:14:29] Screening data found in POST
+[2025-10-13 04:14:29] Screening data JSON: {"donor_id":"122","donation-type":"Walk-in","patient-name":"","hospital":"","patient-blood-type":"","no-units":"","body-wt":"50","sp-gr":"12.5","blood-type":"A+","interviewer":"Interviewer"}
+[2025-10-13 04:14:29] Decoded screening data: Array
+(
+    [donor_id] => 122
+    [donation-type] => Walk-in
+    [patient-name] => 
+    [hospital] => 
+    [patient-blood-type] => 
+    [no-units] => 
+    [body-wt] => 50
+    [sp-gr] => 12.5
+    [blood-type] => A+
+    [interviewer] => Interviewer
+)
+
+[2025-10-13 04:14:29] Processing screening data
+[2025-10-13 04:14:30] Found medical_history_id: 97
+[2025-10-13 04:14:30] Screening submission data: Array
+(
+    [donor_form_id] => 122
+    [medical_history_id] => 97
+    [interviewer_id] => 07f20ca3-b282-4122-88a6-123f8dfedd22
+    [interview_date] => 2025-10-13
+    [donation_type] => walk-in
+    [blood_type] => A+
+    [body_weight] => 50
+    [specific_gravity] => 12.5
+    [staff] => Interviewer
+    [updated_at] => 2025-10-13 04:14:30
+)
+
+[2025-10-13 04:14:30] Attempting UPDATE first for screening form (UPDATE priority)
+[2025-10-13 04:14:30] Screening form UPDATE attempt - HTTP Code: 200
+[2025-10-13 04:14:30] Screening form UPDATE attempt - Response: [{"screening_id":"e7f2330e-0124-4730-853f-9a9e7a26e1a9","donor_form_id":122,"medical_history_id":97,"interviewer_id":"07f20ca3-b282-4122-88a6-123f8dfedd22","body_weight":50.00,"specific_gravity":"12.5","blood_type":"A+","mobile_organizer":"","patient_name":"","hospital":"","patient_blood_type":"","component_type":"","units_needed":0,"has_previous_donation":false,"red_cross_donations":0,"hospital_donations":0,"last_rc_donation_date":"0001-01-01","last_hosp_donation_date":"0001-01-01","last_rc_donation_place":"","last_hosp_donation_place":"","interview_date":"2025-10-13","disapproval_reason":null,"created_at":"2025-07-03T06:03:02.167289+00:00","updated_at":"2025-10-13T04:14:30+00:00","mobile_location":"","donation_type":"walk-in","needs_review":false,"staff":"Interviewer"}]
+[2025-10-13 04:14:30] Screening form data updated successfully (UPDATE priority)
+[2025-10-13 04:14:30] Extracted screening_id: e7f2330e-0124-4730-853f-9a9e7a26e1a9
+[2025-10-13 04:14:31] Medical history update - HTTP Code: 200
+[2025-10-13 04:14:31] Medical history update - Response: [{"medical_history_id":97,"donor_id":122,"feels_well":true,"feels_well_remarks":null,"previously_refused":false,"previously_refused_remarks":null,"testing_purpose_only":false,"testing_purpose_only_remarks":null,"understands_transmission_risk":false,"understands_transmission_risk_remarks":null,"recent_alcohol_consumption":false,"recent_alcohol_consumption_remarks":null,"recent_aspirin":false,"recent_aspirin_remarks":null,"recent_medication":false,"recent_medication_remarks":null,"recent_donation":false,"recent_donation_remarks":null,"zika_travel":false,"zika_travel_remarks":null,"zika_contact":false,"zika_contact_remarks":null,"zika_sexual_contact":false,"zika_sexual_contact_remarks":null,"blood_transfusion":false,"blood_transfusion_remarks":null,"surgery_dental":false,"surgery_dental_remarks":null,"tattoo_piercing":false,"tattoo_piercing_remarks":null,"risky_sexual_contact":false,"risky_sexual_contact_remarks":null,"unsafe_sex":false,"unsafe_sex_remarks":null,"hepatitis_contact":false,"hepatitis_contact_remarks":null,"imprisonment":false,"imprisonment_remarks":null,"uk_europe_stay":false,"uk_europe_stay_remarks":null,"foreign_travel":false,"foreign_travel_remarks":null,"drug_use":false,"drug_use_remarks":null,"clotting_factor":false,"clotting_factor_remarks":null,"positive_disease_test":false,"positive_disease_test_remarks":null,"malaria_history":false,"malaria_history_remarks":null,"std_history":false,"std_history_remarks":null,"cancer_blood_disease":false,"cancer_blood_disease_remarks":null,"heart_disease":false,"heart_disease_remarks":null,"lung_disease":false,"lung_disease_remarks":null,"kidney_disease":false,"kidney_disease_remarks":null,"chicken_pox":false,"chicken_pox_remarks":null,"chronic_illness":false,"chronic_illness_remarks":null,"recent_fever":false,"recent_fever_remarks":null,"pregnancy_history":false,"pregnancy_history_remarks":null,"last_childbirth_remarks":null,"recent_miscarriage":false,"recent_miscarriage_remarks":null,"breastfeeding":false,"breastfeeding_remarks":null,"last_menstruation_remarks":null,"created_at":"2025-07-03T06:01:49.479619+00:00","updated_at":"2025-10-13T04:14:30+00:00","medical_approval":"Approved","last_menstruation":false,"last_childbirth":false,"needs_review":false,"interviewer":"Ray Jasper Suner","disapproval_reason":null}]
+[2025-10-13 04:14:31] Medical history updated successfully - needs_review=false (staff has completed the medical history interview)
+[2025-10-13 04:14:31] Physical examination data: Array
+(
+    [donor_id] => 122
+    [screening_id] => e7f2330e-0124-4730-853f-9a9e7a26e1a9
+    [needs_review] => 1
+    [updated_at] => 2025-10-13 04:14:31
+)
+
+[2025-10-13 04:14:31] Attempting UPDATE first for physical examination (UPDATE priority)
+[2025-10-13 04:14:31] Physical examination UPDATE attempt - HTTP Code: 200
+[2025-10-13 04:14:31] Physical examination UPDATE attempt - Response: [{"physical_exam_id":"61a9b303-9bac-4b42-8bf6-baa69335af76","donor_id":122,"blood_pressure":"120/80","pulse_rate":40,"body_temp":35.0,"gen_appearance":"Normal","skin":"Normal","heent":"Normal","heart_and_lungs":"Normal","remarks":"Accepted","reason":"","blood_bag_type":"Single","created_at":"2025-07-03T06:17:10.515927","updated_at":"2025-10-13T04:14:31","disapproval_reason":null,"needs_review":true,"physician":"Dr. John Roland Java","screening_id":"e7f2330e-0124-4730-853f-9a9e7a26e1a9","status":"Accepted"}]
+[2025-10-13 04:14:31] Physical examination data updated successfully - needs_review=true (UPDATE priority)
+[2025-10-13 04:21:12] declaration-form-process.php accessed
+[2025-10-13 04:21:12] JS DEBUG:   debug_log: Submitting form data...
+[2025-10-13 04:21:12] declaration-form-process.php accessed
+[2025-10-13 04:21:12] JS DEBUG: Submitting form data...
+[2025-10-13 04:21:12] === DECLARATION FORM PROCESS START ===
+[2025-10-13 04:21:12] POST data: Array
+(
+    [donor_id] => 122
+    [action] => complete
+    [screening_data] => {"donor_id":"122","donation-type":"Walk-in","patient-name":"","hospital":"","patient-blood-type":"","no-units":"","body-wt":"50","sp-gr":"12.5","blood-type":"A+","interviewer":"Interviewer"}
+    [debug_log] => Submitting form data...
+)
+
+[2025-10-13 04:21:12] Session data: Array
+(
+    [user_id] => 07f20ca3-b282-4122-88a6-123f8dfedd22
+    [email] => reviewer@gmail.com
+    [role_id] => 3
+    [donor_id] => 122
+    [transferred_screening_data] => Array
+        (
+            [body_weight] => 50
+            [specific_gravity] => 12.5
+            [blood_type] => A+
+            [donation_type] => walk-in
+            [mobile_location] => 
+            [mobile_organizer] => 
+            [patient_name] => 
+            [hospital] => 
+            [patient_blood_type] => 
+            [component_type] => 
+            [units_needed] => 0
+        )
+
+    [medical_history_processed] => 1
+)
+
+[2025-10-13 04:21:12] REQUEST_METHOD: POST
+[2025-10-13 04:21:12] Content-Type: multipart/form-data; boundary=----WebKitFormBoundaryBu5AxwApfwrYmxn8
+[2025-10-13 04:21:12] Donor ID: 122
+[2025-10-13 04:21:12] Action: complete
+[2025-10-13 04:21:12] Processing complete action
+[2025-10-13 04:21:12] Screening data found in POST
+[2025-10-13 04:21:12] Screening data JSON: {"donor_id":"122","donation-type":"Walk-in","patient-name":"","hospital":"","patient-blood-type":"","no-units":"","body-wt":"50","sp-gr":"12.5","blood-type":"A+","interviewer":"Interviewer"}
+[2025-10-13 04:21:12] Decoded screening data: Array
+(
+    [donor_id] => 122
+    [donation-type] => Walk-in
+    [patient-name] => 
+    [hospital] => 
+    [patient-blood-type] => 
+    [no-units] => 
+    [body-wt] => 50
+    [sp-gr] => 12.5
+    [blood-type] => A+
+    [interviewer] => Interviewer
+)
+
+[2025-10-13 04:21:12] Processing screening data
+[2025-10-13 04:21:12] Found medical_history_id: 97
+[2025-10-13 04:21:12] Screening submission data: Array
+(
+    [donor_form_id] => 122
+    [medical_history_id] => 97
+    [interviewer_id] => 07f20ca3-b282-4122-88a6-123f8dfedd22
+    [interview_date] => 2025-10-13
+    [donation_type] => walk-in
+    [blood_type] => A+
+    [body_weight] => 50
+    [specific_gravity] => 12.5
+    [staff] => Interviewer
+    [updated_at] => 2025-10-13 04:21:12
+)
+
+[2025-10-13 04:21:12] Attempting UPDATE first for screening form (UPDATE priority)
+[2025-10-13 04:21:13] Screening form UPDATE attempt - HTTP Code: 200
+[2025-10-13 04:21:13] Screening form UPDATE attempt - Response: [{"screening_id":"e7f2330e-0124-4730-853f-9a9e7a26e1a9","donor_form_id":122,"medical_history_id":97,"interviewer_id":"07f20ca3-b282-4122-88a6-123f8dfedd22","body_weight":50.00,"specific_gravity":"12.5","blood_type":"A+","mobile_organizer":"","patient_name":"","hospital":"","patient_blood_type":"","component_type":"","units_needed":0,"has_previous_donation":false,"red_cross_donations":0,"hospital_donations":0,"last_rc_donation_date":"0001-01-01","last_hosp_donation_date":"0001-01-01","last_rc_donation_place":"","last_hosp_donation_place":"","interview_date":"2025-10-13","disapproval_reason":null,"created_at":"2025-07-03T06:03:02.167289+00:00","updated_at":"2025-10-13T04:21:12+00:00","mobile_location":"","donation_type":"walk-in","needs_review":false,"staff":"Interviewer"}]
+[2025-10-13 04:21:13] Screening form data updated successfully (UPDATE priority)
+[2025-10-13 04:21:13] Extracted screening_id: e7f2330e-0124-4730-853f-9a9e7a26e1a9
+[2025-10-13 04:21:13] Medical history update - HTTP Code: 200
+[2025-10-13 04:21:13] Medical history update - Response: [{"medical_history_id":97,"donor_id":122,"feels_well":true,"feels_well_remarks":null,"previously_refused":false,"previously_refused_remarks":null,"testing_purpose_only":false,"testing_purpose_only_remarks":null,"understands_transmission_risk":false,"understands_transmission_risk_remarks":null,"recent_alcohol_consumption":false,"recent_alcohol_consumption_remarks":null,"recent_aspirin":false,"recent_aspirin_remarks":null,"recent_medication":false,"recent_medication_remarks":null,"recent_donation":false,"recent_donation_remarks":null,"zika_travel":false,"zika_travel_remarks":null,"zika_contact":false,"zika_contact_remarks":null,"zika_sexual_contact":false,"zika_sexual_contact_remarks":null,"blood_transfusion":false,"blood_transfusion_remarks":null,"surgery_dental":false,"surgery_dental_remarks":null,"tattoo_piercing":false,"tattoo_piercing_remarks":null,"risky_sexual_contact":false,"risky_sexual_contact_remarks":null,"unsafe_sex":false,"unsafe_sex_remarks":null,"hepatitis_contact":false,"hepatitis_contact_remarks":null,"imprisonment":false,"imprisonment_remarks":null,"uk_europe_stay":false,"uk_europe_stay_remarks":null,"foreign_travel":false,"foreign_travel_remarks":null,"drug_use":false,"drug_use_remarks":null,"clotting_factor":false,"clotting_factor_remarks":null,"positive_disease_test":false,"positive_disease_test_remarks":null,"malaria_history":false,"malaria_history_remarks":null,"std_history":false,"std_history_remarks":null,"cancer_blood_disease":false,"cancer_blood_disease_remarks":null,"heart_disease":false,"heart_disease_remarks":null,"lung_disease":false,"lung_disease_remarks":null,"kidney_disease":false,"kidney_disease_remarks":null,"chicken_pox":false,"chicken_pox_remarks":null,"chronic_illness":false,"chronic_illness_remarks":null,"recent_fever":false,"recent_fever_remarks":null,"pregnancy_history":false,"pregnancy_history_remarks":null,"last_childbirth_remarks":null,"recent_miscarriage":false,"recent_miscarriage_remarks":null,"breastfeeding":false,"breastfeeding_remarks":null,"last_menstruation_remarks":null,"created_at":"2025-07-03T06:01:49.479619+00:00","updated_at":"2025-10-13T04:21:13+00:00","medical_approval":"Not Approved","last_menstruation":false,"last_childbirth":false,"needs_review":false,"interviewer":"Ray Jasper Suner","disapproval_reason":null}]
+[2025-10-13 04:21:13] Medical history updated successfully - needs_review=false, medical_approval='Not Approved' (staff has completed the medical history interview, awaiting physician approval)
+[2025-10-13 04:21:13] Physical examination data: Array
+(
+    [donor_id] => 122
+    [screening_id] => e7f2330e-0124-4730-853f-9a9e7a26e1a9
+    [needs_review] => 1
+    [remarks] => Pending
+    [updated_at] => 2025-10-13 04:21:13
+)
+
+[2025-10-13 04:21:13] Attempting UPDATE first for physical examination (UPDATE priority)
+[2025-10-13 04:21:13] Physical examination UPDATE attempt - HTTP Code: 200
+[2025-10-13 04:21:13] Physical examination UPDATE attempt - Response: [{"physical_exam_id":"61a9b303-9bac-4b42-8bf6-baa69335af76","donor_id":122,"blood_pressure":"120/80","pulse_rate":40,"body_temp":35.0,"gen_appearance":"Normal","skin":"Normal","heent":"Normal","heart_and_lungs":"Normal","remarks":"Pending","reason":"","blood_bag_type":"Single","created_at":"2025-07-03T06:17:10.515927","updated_at":"2025-10-13T04:21:13","disapproval_reason":null,"needs_review":true,"physician":"Dr. John Roland Java","screening_id":"e7f2330e-0124-4730-853f-9a9e7a26e1a9","status":"Accepted"}]
+[2025-10-13 04:21:13] Physical examination data updated successfully - needs_review=true, remarks='Pending' (UPDATE priority)
