@@ -201,11 +201,21 @@ try {
                 $eligibilityHttpCode = curl_getinfo($eligibilityCurl, CURLINFO_HTTP_CODE);
                 curl_close($eligibilityCurl);
                 
-                if ($eligibilityHttpCode === 200) {
+                
+    // DEBUG: Special debugging for donor 185 - eligibility check
+    if ($donorId == 185) {
+        error_log('DEBUG DONOR 185: Checking eligibility status');
+        if (isset($eligibilityData) && !empty($eligibilityData)) {
+            error_log('DEBUG DONOR 185: Eligibility data found: ' . json_encode($eligibilityData[0]));
+        } else {
+            error_log('DEBUG DONOR 185: No eligibility data found');
+        }
+    }
+    if ($eligibilityHttpCode === 200) {
                     $eligibilityData = json_decode($eligibilityResponse, true) ?: [];
                     if (!empty($eligibilityData)) {
                         $eligibilityStatus = strtolower($eligibilityData[0]['status'] ?? '');
-
+                        
                         // Check for decline/deferral in eligibility table
                         if (in_array($eligibilityStatus, ['declined', 'refused'])) {
                             $hasDeclineDeferStatus = true;
@@ -218,7 +228,12 @@ try {
                             if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
                                 error_log("DEBUG - Donor $donorId: Skipped due to eligibility status: '$eligibilityStatus'");
                             }
-                            continue;
+                            
+    // DEBUG: Special debugging for donor 185 - about to continue
+    if ($donorId == 185) {
+        error_log('DEBUG DONOR 185: About to continue due to eligibility status: ' . $eligibilityStatus);
+    }
+    continue;
                         }
                     }
                 }
@@ -260,11 +275,42 @@ try {
                 }
                 
                 // If donor has ANY decline/deferral status, they should not appear in pending
-                if ($hasDeclineDeferStatus) {
+                
+    // DEBUG: Special debugging for donor 185 - decline/deferral check
+    if ($donorId == 185) {
+        error_log('DEBUG DONOR 185: Checking for decline/deferral status');
+        error_log('DEBUG DONOR 185: hasDeclineDeferStatus = ' . ($hasDeclineDeferStatus ? 'true' : 'false'));
+        if ($hasDeclineDeferStatus) {
+            error_log('DEBUG DONOR 185: Decline/deferral type: ' . $declineDeferType);
+        }
+    }
+    if ($hasDeclineDeferStatus) {
                     if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
                         error_log("DEBUG - Donor $donorId: Skipped due to decline/deferral status: '$declineDeferType'");
-                    }                    continue; // Skip this donor - they have a final decline/deferral status
-                }                // Based on user specifications: Interviewer role as primary checking, needs_review as fallback
+                    }
+                    
+    // DEBUG: Special debugging for donor 185 - about to continue
+    if ($donorId == 185) {
+        error_log('DEBUG DONOR 185: About to continue due to eligibility status: ' . $eligibilityStatus);
+    }
+    
+    // DEBUG: Special debugging for donor 185 - about to continue due to decline/deferral
+    if ($donorId == 185) {
+        error_log('DEBUG DONOR 185: About to continue due to decline/deferral status: ' . $declineDeferType);
+    }
+    continue; // Skip this donor - they have a final decline/deferral status
+                }
+                
+                // PENDING STATUS DETERMINATION LOGIC
+    // DEBUG: Special debugging for donor 185 - status determination
+    if ($donorId == 185) {
+        error_log('DEBUG DONOR 185: Determining final status');
+        error_log('DEBUG DONOR 185: medicalHistoryCompleted = ' . ($medicalHistoryCompleted ? 'true' : 'false'));
+        error_log('DEBUG DONOR 185: screeningCompleted = ' . ($screeningCompleted ? 'true' : 'false'));
+        error_log('DEBUG DONOR 185: physicalExamCompleted = ' . ($physicalExamCompleted ? 'true' : 'false'));
+    }
+    
+                // Based on user specifications: Interviewer role as primary checking, needs_review as fallback
                 
                 // 0. Determine completion for Medical History and Initial Screening first.
                 // New donors (no records yet) should remain "Pending (Screening)" by default.
@@ -352,7 +398,9 @@ try {
                             // Debug logging for specific donor IDs
                             if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
                                 error_log("DEBUG - Donor $donorId: physNeeds = " . ($physNeeds ? 'true' : 'false') . ", remarks = '$remarks'");
-                            }                            // Physical examination is completed if it doesn't need review and has valid remarks
+                            }
+                            
+                            // Physical examination is completed if it doesn't need review and has valid remarks
                             // Valid remarks include: 'Accepted', 'Approved', 'Completed', etc.
                             // Invalid remarks include: 'Pending', 'Temporarily Deferred', 'Permanently Deferred', 'Declined', 'Refused'
                             if ($physNeeds !== true && !empty($remarks) && 
@@ -362,13 +410,15 @@ try {
                                 // Debug logging for specific donor IDs
                                 if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
                                     error_log("DEBUG - Donor $donorId: Physical examination completed");
-                                }                            }
+                                }
+                            }
                         }
                     } else {
                         // Debug logging for specific donor IDs
                         if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
                             error_log("DEBUG - Donor $donorId: No physical examination record found");
-                        }                    }
+                        }
+                    }
                     
                     // If Physical Examination is not completed -> Pending (Examination)
                     if (!$physicalExaminationCompleted) {
@@ -384,7 +434,9 @@ try {
                         if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
                             error_log("DEBUG - Donor $donorId: physicalExamId = " . ($physicalExamId ?? 'null'));
                             error_log("DEBUG - Donor $donorId: has collection data = " . (isset($collectionByPhysicalExamId[$physicalExamId]) ? 'yes' : 'no'));
-                        }                        if ($physicalExamId && isset($collectionByPhysicalExamId[$physicalExamId])) {
+                        }
+                        
+                        if ($physicalExamId && isset($collectionByPhysicalExamId[$physicalExamId])) {
                             $collectionData = $collectionByPhysicalExamId[$physicalExamId];
                             $collNeeds = $collectionData['needs_review'] ?? null;
                             $collectionStatus = $collectionData['status'] ?? '';
@@ -392,7 +444,9 @@ try {
                             // Debug logging for specific donor IDs
                             if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
                                 error_log("DEBUG - Donor $donorId: collectionStatus = '$collectionStatus', collNeeds = " . ($collNeeds ? 'true' : 'false'));
-                            }                            // Blood collection is completed if it doesn't need review and has a valid status
+                            }
+                            
+                            // Blood collection is completed if it doesn't need review and has a valid status
                             // Valid statuses: 'Completed', 'Success', 'Approved', etc.
                             // Invalid statuses: 'pending', 'Incomplete', 'Failed', 'Yet to be collected'
                             if ($collNeeds !== true && !empty($collectionStatus) && 
@@ -407,10 +461,17 @@ try {
                             // Debug logging for specific donor IDs
                             if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
                                 error_log("DEBUG - Donor $donorId: No blood collection record found, setting to Pending (Collection)");
-                            }                        }
+                            }
+                        }
                         
                         if ($bloodCollectionCompleted) {
-                            // All stages completed successfully - donor is approved (should not appear in pending)                            continue; // Skip this donor - they're approved, not pending
+                            // All stages completed successfully - donor is approved (should not appear in pending)
+                            
+    // DEBUG: Special debugging for donor 185 - about to continue
+    if ($donorId == 185) {
+        error_log('DEBUG DONOR 185: About to continue due to eligibility status: ' . $eligibilityStatus);
+    }
+    continue; // Skip this donor - they're approved, not pending
                         } else {
                             // Blood collection is "Yet to be collected" -> Pending (Collection)
                             $statusLabel = 'Pending (Collection)';
@@ -418,7 +479,8 @@ try {
                             // Debug logging for specific donor IDs
                             if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
                                 error_log("DEBUG - Donor $donorId: Final status = Pending (Collection)");
-                            }                        }
+                            }
+                        }
                     }
                 }
             }
@@ -448,7 +510,8 @@ try {
             // Debug logging for specific donor IDs
             if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
                 error_log("DEBUG - Donor $donorId: Added to pendingDonations array with status: '$statusLabel'");
-            }        }
+            }
+        }
 
         // Enforce FIFO: oldest first
         usort($pendingDonations, function($a, $b) {
@@ -457,8 +520,8 @@ try {
             return ($ta < $tb) ? -1 : 1;
         });
         
-        // Apply pagination for display (20 items per page)
-        $displayLimit = 20;
+        // Apply pagination for display (10 items per page)
+        $displayLimit = 10;
         $displayOffset = isset($GLOBALS['DONATION_DISPLAY_OFFSET']) ? intval($GLOBALS['DONATION_DISPLAY_OFFSET']) : 0;
         $pendingDonations = array_slice($pendingDonations, $displayOffset, $displayLimit);
     } else {

@@ -146,8 +146,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Log data being sent
         error_log("Admin Physical Examination Handler - Sending data to Supabase for donor: " . $data['donor_id']);
 
+        // Check for existing physical examination record first
+        $existing_check = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=physical_exam_id&donor_id=eq.' . $data['donor_id'] . '&order=created_at.desc&limit=1');
+        curl_setopt($existing_check, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($existing_check, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json'
+        ]);
+        
+        $existing_response = curl_exec($existing_check);
+        $existing_http_code = curl_getinfo($existing_check, CURLINFO_HTTP_CODE);
+        curl_close($existing_check);
+        
+        $should_update = false;
+        $physical_exam_id = null;
+        
+        if ($existing_http_code === 200) {
+            $existing_records = json_decode($existing_response, true);
+            if (!empty($existing_records) && isset($existing_records[0]['physical_exam_id'])) {
+                $should_update = true;
+                $physical_exam_id = $existing_records[0]['physical_exam_id'];
+                error_log("Admin Physical Examination Handler - Found existing record, will update: " . $physical_exam_id);
+            } else {
+                error_log("Admin Physical Examination Handler - No existing record found, will create new");
+            }
+        } else {
+            error_log("Admin Physical Examination Handler - Failed to check existing records, will create new");
+        }
+
         // Initialize cURL session for Supabase
-        $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination');
+        if ($should_update) {
+            // UPDATE existing record
+            $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?physical_exam_id=eq.' . $physical_exam_id);
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            error_log("Admin Physical Examination Handler - Updating existing physical examination record");
+        } else {
+            // INSERT new record
+            $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination');
+            curl_setopt($ch, CURLOPT_POST, true);
+            error_log("Admin Physical Examination Handler - Creating new physical examination record");
+        }
 
         $headers = array(
             'apikey: ' . SUPABASE_API_KEY,
@@ -181,51 +220,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         curl_close($ch);
 
-        if ($http_code === 201) {
+        if (($should_update && $http_code >= 200 && $http_code < 300) || (!$should_update && $http_code === 201)) {
             // Parse the response to get the physical examination ID
             $response_data = json_decode($response, true);
             
             if (is_array($response_data) && isset($response_data[0]['physical_exam_id'])) {
                 $physical_exam_id = $response_data[0]['physical_exam_id'];
-                error_log("Admin Physical Examination Handler - Created physical_exam_id: " . $physical_exam_id);
+                error_log("Admin Physical Examination Handler - " . ($should_update ? "Updated" : "Created") . " physical_exam_id: " . $physical_exam_id);
                 
-                // Create blood collection record for admin workflow
+                // Create blood collection record for admin workflow (only if it doesn't exist)
                 try {
-                    // Create blood collection record first
-                    $collectionData = [
-                        'physical_exam_id' => $physical_exam_id,
-                        'needs_review' => true,
-                        'status' => 'pending',
-                        'created_at' => date('Y-m-d\TH:i:s.000\Z'),
-                        'updated_at' => date('Y-m-d\TH:i:s.000\Z')
-                    ];
-                    
-                    // Add screening_id if available
-                    if (!empty($screening_id)) {
-                        $collectionData['screening_id'] = $screening_id;
-                    }
-                    
-                    $collection_ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection');
-                    curl_setopt($collection_ch, CURLOPT_POST, true);
-                    curl_setopt($collection_ch, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($collection_ch, CURLOPT_POSTFIELDS, json_encode($collectionData));
-                    curl_setopt($collection_ch, CURLOPT_HTTPHEADER, [
+                    // Check if blood collection record already exists
+                    $collection_check = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=blood_collection_id&physical_exam_id=eq.' . $physical_exam_id . '&limit=1');
+                    curl_setopt($collection_check, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($collection_check, CURLOPT_HTTPHEADER, [
                         'apikey: ' . SUPABASE_API_KEY,
                         'Authorization: Bearer ' . SUPABASE_API_KEY,
-                        'Content-Type: application/json',
-                        'Prefer: return=representation'
+                        'Content-Type: application/json'
                     ]);
                     
-                    $collection_response = curl_exec($collection_ch);
-                    $collection_http_code = curl_getinfo($collection_ch, CURLINFO_HTTP_CODE);
-                    curl_close($collection_ch);
+                    $collection_check_response = curl_exec($collection_check);
+                    $collection_check_http_code = curl_getinfo($collection_check, CURLINFO_HTTP_CODE);
+                    curl_close($collection_check);
                     
-                    if ($collection_http_code === 201) {
-                        $collection_data = json_decode($collection_response, true);
-                        $blood_collection_id = $collection_data[0]['blood_collection_id'] ?? null;
-                        error_log("Admin Physical Examination Handler - Created blood collection record: " . $blood_collection_id);
+                    $collection_exists = false;
+                    if ($collection_check_http_code === 200) {
+                        $collection_check_data = json_decode($collection_check_response, true);
+                        $collection_exists = !empty($collection_check_data);
+                    }
+                    
+                    if (!$collection_exists) {
+                        // Create blood collection record only if it doesn't exist
+                        $collectionData = [
+                            'physical_exam_id' => $physical_exam_id,
+                            'needs_review' => true,
+                            'status' => 'pending',
+                            'created_at' => date('Y-m-d\TH:i:s.000\Z'),
+                            'updated_at' => date('Y-m-d\TH:i:s.000\Z')
+                        ];
+                        
+                        // Add screening_id if available
+                        if (!empty($screening_id)) {
+                            $collectionData['screening_id'] = $screening_id;
+                        }
+                        
+                        $collection_ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection');
+                        curl_setopt($collection_ch, CURLOPT_POST, true);
+                        curl_setopt($collection_ch, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($collection_ch, CURLOPT_POSTFIELDS, json_encode($collectionData));
+                        curl_setopt($collection_ch, CURLOPT_HTTPHEADER, [
+                            'apikey: ' . SUPABASE_API_KEY,
+                            'Authorization: Bearer ' . SUPABASE_API_KEY,
+                            'Content-Type: application/json',
+                            'Prefer: return=representation'
+                        ]);
+                        
+                        $collection_response = curl_exec($collection_ch);
+                        $collection_http_code = curl_getinfo($collection_ch, CURLINFO_HTTP_CODE);
+                        curl_close($collection_ch);
+                        
+                        if ($collection_http_code === 201) {
+                            $collection_data = json_decode($collection_response, true);
+                            $blood_collection_id = $collection_data[0]['blood_collection_id'] ?? null;
+                            error_log("Admin Physical Examination Handler - Created blood collection record: " . $blood_collection_id);
+                        } else {
+                            error_log("Admin Physical Examination Handler - Failed to create blood collection record: HTTP $collection_http_code");
+                        }
                     } else {
-                        error_log("Admin Physical Examination Handler - Failed to create blood collection record: HTTP $collection_http_code");
+                        error_log("Admin Physical Examination Handler - Blood collection record already exists, skipping creation");
                     }
                 } catch (Exception $collection_error) {
                     error_log("Admin Physical Examination Handler - Blood collection creation error: " . $collection_error->getMessage());
@@ -285,10 +347,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     header('Content-Type: application/json');
                     echo json_encode([
                         'success' => true, 
-                        'message' => 'Physical examination completed successfully',
+                        'message' => 'Physical examination ' . ($should_update ? 'updated' : 'completed') . ' successfully',
                         'physical_exam_id' => $physical_exam_id,
                         'donor_id' => $data['donor_id'],
-                        'next_step' => 'blood_collection'
+                        'next_step' => 'blood_collection',
+                        'action_performed' => $should_update ? 'updated' : 'created'
                     ]);
                     exit();
                     
@@ -298,10 +361,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     header('Content-Type: application/json');
                     echo json_encode([
                         'success' => true, 
-                        'message' => 'Physical examination completed successfully',
+                        'message' => 'Physical examination ' . ($should_update ? 'updated' : 'completed') . ' successfully',
                         'physical_exam_id' => $physical_exam_id,
                         'donor_id' => $data['donor_id'],
                         'next_step' => 'blood_collection',
+                        'action_performed' => $should_update ? 'updated' : 'created',
                         'warning' => 'Eligibility record creation failed'
                     ]);
                     exit();

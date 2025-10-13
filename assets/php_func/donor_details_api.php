@@ -761,10 +761,41 @@ try {
         $derived['collection_status'] = $collection_status;
     }
 
+    // Fetch physical examination data for physician section
+    $physicalExamData = null;
+    if (isset($derived['physical_exam_id']) && !empty($derived['physical_exam_id'])) {
+        $physicalExamData = fetchPhysicalExamData($derived['physical_exam_id']);
+    } else {
+        // Try to fetch by donor_id if no physical_exam_id
+        try {
+            $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?donor_id=eq.' . urlencode($donor_id) . '&order=created_at.desc&limit=1');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Accept: application/json'
+            ]);
+            $resp = curl_exec($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($http === 200) {
+                $arr = json_decode($resp, true);
+                if (!empty($arr)) {
+                    $physicalExamData = $arr[0];
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Error fetching physical examination data by donor_id: " . $e->getMessage());
+        }
+    }
+
     // Return data as JSON
     echo json_encode([
         'donor' => $donorInfo,
-        'eligibility' => $derived
+        'eligibility' => $derived,
+        'physical_examination' => $physicalExamData,
+        'screening_form' => $screeningLatest
     ]);
 
 } catch (Exception $e) {

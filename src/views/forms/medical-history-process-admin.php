@@ -92,6 +92,32 @@ try {
         'donor_id' => $donor_id,
         'interviewer' => $interviewer_name
     ];
+    
+    // Check existing medical history approval status to maintain consistency
+    $existing_approval_status = null;
+    try {
+        $checkCurl = curl_init(SUPABASE_URL . '/rest/v1/medical_history?select=medical_approval,needs_review&donor_id=eq.' . $donor_id . '&limit=1');
+        curl_setopt($checkCurl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($checkCurl, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY
+        ]);
+        
+        $checkResponse = curl_exec($checkCurl);
+        $checkHttpCode = curl_getinfo($checkCurl, CURLINFO_HTTP_CODE);
+        curl_close($checkCurl);
+        
+        if ($checkHttpCode === 200) {
+            $existingData = json_decode($checkResponse, true);
+            if (!empty($existingData)) {
+                $existing_approval_status = $existingData[0]['medical_approval'] ?? null;
+                $existing_needs_review = $existingData[0]['needs_review'] ?? null;
+                error_log("Existing medical history status - approval: " . ($existing_approval_status ?? 'null') . ", needs_review: " . ($existing_needs_review ? 'true' : 'false'));
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Error checking existing medical history status: " . $e->getMessage());
+    }
 
     // Check which button was clicked and set the approval status
     $action = isset($_POST['action']) ? $_POST['action'] : null;
@@ -113,9 +139,19 @@ try {
         $medical_history_data['needs_review'] = false;
         error_log("Processing admin_complete action - marking review as completed");
     } elseif ($action === 'next') {
-        // For 'next' action, just save the data without setting approval status
-        // This allows for draft saving
-        error_log("Processing next action");
+        // For 'next' action, maintain consistency with existing approval status
+        if ($existing_approval_status === 'Approved') {
+            // If already approved, ensure needs_review is false for consistency
+            $medical_history_data['needs_review'] = false;
+            error_log("Processing next action - maintaining approved status with needs_review = false");
+        } elseif ($existing_approval_status === 'Declined') {
+            // If already declined, ensure needs_review is false for consistency
+            $medical_history_data['needs_review'] = false;
+            error_log("Processing next action - maintaining declined status with needs_review = false");
+        } else {
+            // For new or pending records, don't change approval status
+            error_log("Processing next action - draft saving without approval status change");
+        }
     } else {
         error_log("Invalid action specified: " . ($action ? $action : 'NULL'));
         throw new Exception("Invalid action specified: " . ($action ? $action : 'NULL'));
@@ -179,6 +215,15 @@ try {
         // Continue without screening data
     }
 
+    // Final consistency check: ensure needs_review matches approval status
+    if (isset($medical_history_data['medical_approval'])) {
+        if ($medical_history_data['medical_approval'] === 'Approved' || $medical_history_data['medical_approval'] === 'Declined') {
+            // If approved or declined, needs_review should always be false
+            $medical_history_data['needs_review'] = false;
+            error_log("Consistency check: Set needs_review to false for " . $medical_history_data['medical_approval'] . " status");
+        }
+    }
+    
     error_log("Final medical history data to be sent: " . print_r($medical_history_data, true));
 
     // Update the medical history record (only with existing fields)

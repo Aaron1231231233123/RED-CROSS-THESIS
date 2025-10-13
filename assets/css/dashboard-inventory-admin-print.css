@@ -1,0 +1,32 @@
+/**
+ * Dashboard Inventory Admin - Print Styles
+ * Extracted from dashboard-Inventory-System-list-of-donations.php
+ * Admin-specific print and declaration form styles
+ */
+
+/* Declaration Form Print Styles */
+body { 
+    font-family: Arial, sans-serif; 
+    margin: 20px; 
+}
+
+.declaration-header { 
+    text-align: center; 
+    margin-bottom: 20px; 
+}
+
+.donor-info, .declaration-content, .signature-section { 
+    margin-bottom: 20px; 
+}
+
+.signature-box { 
+    border: 1px solid #000; 
+    height: 50px; 
+    margin: 10px 0; 
+}
+
+@media print { 
+    body { 
+        margin: 0; 
+    } 
+}

@@ -22,6 +22,9 @@ if (!$donor_id) {
     exit();
 }
 
+// Set user role for admin context
+$user_role = 'admin';
+
 // Fetch existing medical history data and donor's sex
 $medical_history_data = null;
 $donor_sex = null;
@@ -1153,7 +1156,7 @@ setTimeout(() => {
 
         // Gate this handler to ADMIN context only. Staff dashboards reuse this file
         // but must not auto-open Initial Screening on submit.
-        const isAdminContext = !!document.getElementById('medicalHistoryModalAdmin');
+        const isAdminContext = !!document.getElementById('medicalHistoryModalAdmin') || !!document.getElementById('medicalHistoryModal');
         if (!isAdminContext) return;
 
         function submitAjax(finalAction) {
@@ -1176,7 +1179,7 @@ setTimeout(() => {
             e.stopPropagation();
             submitAjax('next').then(res => {
                 if (res && res.success) {
-                    // Close admin MH modal if present
+                    // Close admin MH modal if present (handle both modal types)
                     try {
                         const adminModalEl = document.getElementById('medicalHistoryModalAdmin');
                         if (adminModalEl && window.bootstrap) {
@@ -1184,12 +1187,44 @@ setTimeout(() => {
                             m.hide();
                         }
                     } catch(_) {}
+                    
+                    // Close custom medical history modal if present
+                    try {
+                        const customModalEl = document.getElementById('medicalHistoryModal');
+                        if (customModalEl && typeof window.closeMedicalHistoryModal === 'function') {
+                            window.closeMedicalHistoryModal();
+                        }
+                    } catch(_) {}
+                    
                     // Proceed to screening modal in admin context
                     try {
                         const donorIdInput = form.querySelector('input[name="donor_id"]');
                         const donorId = donorIdInput ? donorIdInput.value : null;
-                        if (donorId && typeof window.openScreeningModal === 'function') {
+                        
+                        // Check if we're in interviewer workflow
+                        console.log('Checking workflow context:', {
+                            currentInterviewerDonorId: window.currentInterviewerDonorId,
+                            donorId: donorId,
+                            location: window.location.href,
+                            isInventoryDashboard: window.location.href.includes('dashboard-Inventory-System-list-of-donations')
+                        });
+                        
+                        if (window.currentInterviewerDonorId || (donorId && window.location.href.includes('dashboard-Inventory-System-list-of-donations'))) {
+                            // For interviewer workflow, show confirmation modal first
+                            console.log('Detected interviewer workflow, showing confirmation modal');
+                            if (donorId && typeof window.bootstrap !== 'undefined') {
+                                window.currentInterviewerDonorId = donorId;
+                                const confirmModal = new window.bootstrap.Modal(document.getElementById('submitMedicalHistoryConfirmModal'));
+                                confirmModal.show();
+                            } else {
+                                console.error('Bootstrap not available or donorId missing');
+                            }
+                        } else if (donorId && typeof window.openScreeningModal === 'function') {
+                            // For admin workflow, directly open screening modal
+                            console.log('Detected admin workflow, opening screening modal');
                             window.openScreeningModal({ donor_id: donorId });
+                        } else {
+                            console.log('No workflow detected or missing functions');
                         }
                     } catch(_) {}
                 } else {

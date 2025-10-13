@@ -15,10 +15,6 @@
     z-index: 10000 !important;
 }
 
-/* Modal backdrop should also be on top */
-.modal-backdrop {
-    z-index: 9998 !important;
-}
 
 /* Make decline modal appear right in front - MAXIMUM PRIORITY */
 #medicalHistoryDeclineModal {
@@ -38,15 +34,6 @@
     z-index: 100002 !important;
 }
 
-/* Force modal backdrop to be behind but visible */
-#medicalHistoryDeclinedModal + .modal-backdrop {
-    z-index: 100000 !important;
-}
-
-/* Force modal backdrop to be behind but visible */
-#medicalHistoryDeclineModal + .modal-backdrop {
-    z-index: 99998 !important;
-}
 
 /* FIX: Prevent decline modal from scrolling with page */
 #medicalHistoryDeclineModal {
@@ -78,7 +65,6 @@ body.modal-open:has(#medicalHistoryDeclineModal) {
     padding-right: 0 !important;
 }
 
-/* Keep modal backdrop normal */
 
 /* FIX FOR DONOR PROFILE MODAL - Prevent layout shifts */
 #donorProfileModal {

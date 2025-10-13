@@ -79,6 +79,7 @@ function approveMedicalHistory($donor_id) {
     
     $updateData = json_encode([
         'medical_approval' => 'Approved',
+        'needs_review' => false, // Ensure needs_review is false when approved
         'approval_date' => date('Y-m-d H:i:s'),
         'approved_by' => 'admin' // You might want to get this from session
     ]);
@@ -144,6 +145,7 @@ function declineMedicalHistory($donor_id, $decline_reason) {
     
     $updateData = json_encode([
         'medical_approval' => 'Not Approved',
+        'needs_review' => false, // Ensure needs_review is false when declined
         'decline_reason' => $decline_reason,
         'decline_date' => date('Y-m-d H:i:s'),
         'declined_by' => 'admin' // You might want to get this from session
