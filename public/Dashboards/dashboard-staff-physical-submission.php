@@ -1900,6 +1900,14 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         #physicalExaminationModal .modal-backdrop {
             z-index: 1064 !important;
         }
+        
+        /* Staff Physician Account Summary Modal - ensure proper z-index layering */
+        #staffPhysicianAccountSummaryModal {
+            z-index: 1065 !important;
+        }
+        #staffPhysicianAccountSummaryModal .modal-dialog {
+            z-index: 1066 !important;
+        }
     </style>
     <style>
         /* Extend screening modal UI to match MH look */
@@ -2313,8 +2321,9 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         </div>
     </div>
 
-        <?php include '../../src/views/modals/defer-donor-modal.php'; ?>
+    <?php include '../../src/views/modals/defer-donor-modal.php'; ?>
     <?php include '../../src/views/modals/physical-examination-modal.php'; ?>
+    <?php include '../../src/views/modals/staff-physician-account-summary-modal.php'; ?>
     
     <?php include '../../src/views/forms/physician-screening-form-content-modal.php'; ?>
 
@@ -2880,60 +2889,57 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 const flagEl = document.querySelector('#donorProfileModal #pe-needs-review-flag');
                 if (flagEl) {
                     const needsReview = flagEl.value === '1';
-                    // Also allow showing when MH approved AND PE accepted
-                    let mhApproved = false;
-                    try {
-                        const rec = (typeof window.medicalByDonor === 'object' && window.medicalByDonor) ? (window.medicalByDonor[donorId] || window.medicalByDonor[String(donorId)]) : null;
-                        mhApproved = !!(rec && String(rec.medical_approval).trim() === 'Approved');
-                    } catch(_) {}
-                    let peAccepted = false;
-                    try {
-                        // Fast path: rely on embedded status endpoint used elsewhere
-                        // If it fails, we'll fall back to async block below; but here we keep UI responsive
-                    } catch(_) {}
-                    // Always show footer and proceed button; click logic will gate actions
-                    if (footer) footer.style.display = '';
-                    if (proceedBtn) proceedBtn.style.display = '';
+                    
+                    // Check if physical examination remarks exist (means PE record exists)
+                    const remarksEl = document.querySelector('#donorProfileModal #pe-remarks-flag');
+                    const peExists = remarksEl && remarksEl.value !== '';
+                    
+                    // Only show Confirm button if PE exists AND needs_review is true
+                    if (peExists && needsReview) {
+                        if (footer) footer.style.display = '';
+                        if (proceedBtn) proceedBtn.style.display = '';
+                        console.log('[CONFIRM BTN] Showing Confirm button: PE exists and needs_review=true');
+                    } else {
+                        if (footer) footer.style.display = 'none';
+                        if (proceedBtn) proceedBtn.style.display = 'none';
+                        console.log('[CONFIRM BTN] Hiding Confirm button: PE exists=', peExists, 'needs_review=', needsReview);
+                    }
+                    
+                    // Always show/hide peConfirmBtn based on its own logic
                     if (peConfirmBtn) peConfirmBtn.style.display = '';
-                    // Do not return; fall through to async verification for peAccepted
+                    // Do not return; fall through to async verification for accuracy
                 }
                 // Fallback: fetch latest physical examination and use needs_review flag
                 (async () => {
                     try {
                         const d = await makeApiCall(`../api/get-physical-examination.php?donor_id=${donorId}`);
-                        const v = d && (d.physical_exam ? d.physical_exam.needs_review : d.needs_review);
+                        const peData = d && (d.physical_exam || d.data);
+                        
+                        // Check if PE record exists (has physical_exam_id or data)
+                        const peExists = !!(peData && (peData.physical_exam_id || peData.remarks !== undefined));
+                        
+                        // Check needs_review flag
+                        const v = peData ? peData.needs_review : null;
                         const needsReview = (v === true) || (v === 1) || (v === '1') || (typeof v === 'string' && ['true','t','yes','y'].includes(v.trim().toLowerCase()));
-                        // Determine MH approved - ALWAYS force fresh fetch to avoid stale cache
-                        let mhApproved = false;
-                        try {
-                            // Always fetch fresh data, don't rely on cache
-                            const mhData = await makeApiCall(`../../assets/php_func/fetch_medical_history_info.php?donor_id=${donorId}&_=${Date.now()}`);
-                            console.log('[DEBUG] Fresh MH data for donor', donorId, ':', mhData);
-                            if (mhData && mhData.success && mhData.data) {
-                                const approvalStatus = String(mhData.data.medical_approval || '').trim().toLowerCase();
-                                mhApproved = approvalStatus === 'approved';
-                                console.log('[DEBUG] MH approval status:', approvalStatus, 'approved:', mhApproved);
-                                // Update cache with fresh data
-                                if (typeof window.medicalByDonor !== 'object') window.medicalByDonor = {};
-                                window.medicalByDonor[donorId] = mhData.data;
-                                window.medicalByDonor[String(donorId)] = mhData.data;
-                            }
-                        } catch(e) {
-                            console.error('[DEBUG] Error fetching MH data:', e);
+                        
+                        console.log('[CONFIRM BTN] Async check: PE exists=', peExists, 'needs_review=', needsReview);
+                        
+                        // Only show Confirm button if PE exists AND needs_review is true
+                        if (peExists && needsReview) {
+                            if (footer) footer.style.display = '';
+                            if (proceedBtn) proceedBtn.style.display = '';
+                            console.log('[CONFIRM BTN] Showing Confirm button (async)');
+                        } else {
+                            if (footer) footer.style.display = 'none';
+                            if (proceedBtn) proceedBtn.style.display = 'none';
+                            console.log('[CONFIRM BTN] Hiding Confirm button (async)');
                         }
-                        // Determine PE accepted (remarks/remarks_status)
-                        let peAccepted = false;
-                        try {
-                            const d2 = await makeApiCall(`../../assets/php_func/fetch_physical_examination_info.php?donor_id=${donorId}`);
-                            const pe = d2 && d2.success && d2.data ? d2.data : {};
-                            const remarks = pe.remarks || pe.remarks_status || '';
-                            peAccepted = (String(remarks).trim().toLowerCase() === 'accepted');
-                        } catch(_) { peAccepted = false; }
-                        // Always show footer and proceed button; click logic will gate actions
-                        if (footer) footer.style.display = '';
-                        if (proceedBtn) proceedBtn.style.display = '';
+                        
+                        // Keep peConfirmBtn logic separate
                         if (peConfirmBtn) peConfirmBtn.style.display = '';
-                    } catch(_) {
+                    } catch(e) {
+                        console.error('[CONFIRM BTN] Error in async check:', e);
+                        // On error, hide the button
                         if (footer) footer.style.display = 'none';
                         if (proceedBtn) proceedBtn.style.display = 'none';
                         if (peConfirmBtn) peConfirmBtn.style.display = 'none';
@@ -3312,30 +3318,35 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 try {
                     console.log('[GLOBAL DEBUG] Modal hidden event:', event.target?.id);
                     
-                    // Skip donor profile modal and physical examination modal - they have their own cleanup logic
-                    if (event.target && (event.target.id === 'donorProfileModal' || event.target.id === 'physicalExaminationModal')) {
-                        console.log('[GLOBAL DEBUG] Skipping cleanup for:', event.target.id);
-                        return;
-                    }
-                    
-                    console.log('[GLOBAL DEBUG] Processing cleanup for modal:', event.target?.id);
-                    
-                    // Clean up modal state after other modals close
-                    setTimeout(() => {
-                        // Only clean up if no modals are currently showing
-                        const anyOpen = document.querySelector('.modal.show');
-                        const backdrops = document.querySelectorAll('.modal-backdrop');
-                        console.log('[GLOBAL DEBUG] Cleanup check - anyOpen:', anyOpen?.id, 'backdrops:', backdrops.length);
+                    // Skip cleanup for donor profile, physical examination, and summary modals - they have their own handlers
+                    // BUT DO NOT RETURN - let the event propagate to their own handlers!
+                    if (event.target && (event.target.id === 'donorProfileModal' || 
+                                        event.target.id === 'physicalExaminationModal' ||
+                                        event.target.id === 'staffPhysicianAccountSummaryModal')) {
+                        console.log('[GLOBAL DEBUG] Allowing event propagation for:', event.target.id, '(skipping global cleanup only)');
+                        // Don't return - let the event continue to modal-specific handlers
+                        // Just skip the global cleanup logic below
+                    } else {
+                        console.log('[GLOBAL DEBUG] Processing cleanup for modal:', event.target?.id);
+
                         
-                        if (!anyOpen) {
-                            console.log('[GLOBAL DEBUG] No modals open, normalizing body only');
-                            document.body.classList.remove('modal-open');
-                            document.body.style.overflow = '';
-                            document.body.style.paddingRight = '';
-                        } else {
-                            console.log('[GLOBAL DEBUG] Modal still open:', anyOpen.id, 'skipping cleanup');
-                        }
-                    }, 50);
+                        // Clean up modal state after other modals close
+                        setTimeout(() => {
+                            // Only clean up if no modals are currently showing
+                            const anyOpen = document.querySelector('.modal.show');
+                            const backdrops = document.querySelectorAll('.modal-backdrop');
+                            console.log('[GLOBAL DEBUG] Cleanup check - anyOpen:', anyOpen?.id, 'backdrops:', backdrops.length);
+                            
+                            if (!anyOpen) {
+                                console.log('[GLOBAL DEBUG] No modals open, normalizing body only');
+                                document.body.classList.remove('modal-open');
+                                document.body.style.overflow = '';
+                                document.body.style.paddingRight = '';
+                            } else {
+                                console.log('[GLOBAL DEBUG] Modal still open:', anyOpen.id, 'skipping cleanup');
+                            }
+                        }, 50);
+                    }
                 } catch(e) {
                     console.error('[GLOBAL DEBUG] Error in global cleanup:', e);
                 }
@@ -3495,44 +3506,47 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             const physicalExamBtn = document.getElementById('physicalExamConfirmBtn');
             if (physicalExamBtn) {
                 physicalExamBtn.addEventListener('click', function() {
-                    // Physician flow: open Medical History first, then proceed to Physical Examination
-                    try {
-                        window.__mhSuccessActive = false;
-                        window.__peSuccessActive = false;
-                    } catch(_) {}
-
-                    // Close the current donor profile modal
-                    try { window.allowDonorProfileHide = true; } catch(_) {}
+                    const donorId = screeningData?.donor_form_id;
+                    if (!donorId) return;
+                    
+                    // Open Physical Examination modal directly in edit mode (not read-only)
+                    window.forcePhysicalReadonly = false;
+                    
+                    // Save context so PE modal's close handler can return to donor profile
+                    window.lastDonorProfileContext = { 
+                        donorId: donorId, 
+                        screeningData: screeningData 
+                    };
+                    
+                    // Set flag to skip donor profile cleanup when transitioning to physical examination modal
                     try { window.skipDonorProfileCleanup = true; } catch(_) {}
-                    cleanupModalState('donorProfileModal');
-
-                    // Save context so we can return to donor profile when needed
-                    if (screeningData?.donor_form_id) {
-                        window.lastDonorProfileContext = { donorId: screeningData.donor_form_id, screeningData };
-                    }
-
-                    // Mark that MH was opened from Physician flow and cache screeningData for PE
-                    try {
-                        window.__openMHForPhysician = true;
-                        window.__physFlowScreeningData = screeningData;
-                    } catch(_) {}
-
-                    // Open Medical History modal for review first
+                    try { window.allowDonorProfileHide = true; } catch(_) {}
+                    
+                    const donorProfileModal = bootstrap.Modal.getInstance(document.getElementById('donorProfileModal'));
+                    if (donorProfileModal) donorProfileModal.hide();
+                    
+                    // Wait for donor profile to close, then open PE modal
+                    // Don't remove backdrops - let Bootstrap manage them
                     setTimeout(() => {
-                        const donorId = screeningData?.donor_form_id;
-                        if (!donorId) { alert('Unable to resolve donor.'); return; }
-                        openMedicalHistoryModal(donorId);
-                        // Normalize body if no other modals
-                        try {
-                            const otherModals = document.querySelectorAll('.modal.show:not(#medicalHistoryModal)');
-                            if (otherModals.length === 0) {
-                                document.body.classList.remove('modal-open');
-                                document.body.style.overflow = '';
-                                document.body.style.paddingRight = '';
+                        // Open Physical Examination modal directly - Bootstrap will create backdrop
+                        if (window.physicalExaminationModal && typeof window.physicalExaminationModal.open === 'function') {
+                            window.physicalExaminationModal.open(screeningData);
+                        } else {
+                            // Fallback: use Bootstrap modal
+                            const peModal = document.getElementById('physicalExaminationModal');
+                            if (peModal) {
+                                const modal = bootstrap.Modal.getOrCreateInstance(peModal, { 
+                                    backdrop: 'static', 
+                                    keyboard: false 
+                                });
+                                modal.show();
                             }
-                        } catch(_) {}
+                        }
+                        
                         // Reset skip cleanup after handoff
-                        try { window.skipDonorProfileCleanup = false; } catch(_) {}
+                        setTimeout(() => {
+                            try { window.skipDonorProfileCleanup = false; } catch(_) {}
+                        }, 300);
                     }, 200);
                 });
             }
@@ -3542,62 +3556,133 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 physicalExamViewBtn.addEventListener('click', function() {
                     const donorId = screeningData?.donor_form_id;
                     if (!donorId) return;
-                    // Force readonly mode for physical examination modal
-                    window.forcePhysicalReadonly = true;
-                    // Set flag to skip donor profile cleanup when transitioning to physical examination modal
+                    
+                    // Save context so summary modal's close handler can return to donor profile
+                    window.lastDonorProfileContext = { 
+                        donorId: donorId, 
+                        screeningData: screeningData 
+                    };
+                    
+                    // Set flag to skip donor profile cleanup when transitioning to summary modal
                     try { window.skipDonorProfileCleanup = true; } catch(_) {}
+                    try { window.allowDonorProfileHide = true; } catch(_) {}
+                    
                     const donorProfileModal = bootstrap.Modal.getInstance(document.getElementById('donorProfileModal'));
                     if (donorProfileModal) donorProfileModal.hide();
                     
                     // Clean up any Bootstrap backdrops from donor profile modal
                     setTimeout(() => {
                         try {
-                            const otherModals = document.querySelectorAll('.modal.show:not(#physicalExaminationModal)');
-                            if (otherModals.length === 0) {
-                                document.body.classList.remove('modal-open');
-                                document.body.style.overflow = '';
-                                document.body.style.paddingRight = '';
-                            }
+                            document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+                                backdrop.remove();
+                            });
+                            document.body.classList.remove('modal-open');
+                            document.body.style.overflow = '';
+                            document.body.style.paddingRight = '';
                         } catch(_) {}
-                    }, 100);
-                    
-                    if (window.physicalExaminationModal) {
-                        window.lastDonorProfileContext = { donorId: screeningData?.donor_form_id || screeningData?.donor_id, screeningData };
-                        setTimeout(() => {
-                            window.physicalExaminationModal.openModal(screeningData);
-                            
-                            // Ensure proper z-index layering after modal opens
-                            setTimeout(() => {
-                                try {
-                                    const modalEl = document.getElementById('physicalExaminationModal');
-                                    if (modalEl) {
-                                        modalEl.style.zIndex = '1065';
-                                        const dlg = modalEl.querySelector('.modal-dialog');
-                                        if (dlg) dlg.style.zIndex = '1066';
-                                    }
-                                    // Reset the skip cleanup flag
-                                    window.skipDonorProfileCleanup = false;
-                                } catch(_) {}
-                            }, 50);
-                            
-                            setTimeout(enforcePhysicalReadonly, 300);
-                        }, 200);
-                    }
+                        
+                        // Open the new summary modal
+                        openPhysicalExaminationSummaryModal(donorId);
+                        
+                        // Reset skip cleanup after handoff
+                        try { window.skipDonorProfileCleanup = false; } catch(_) {}
+                    }, 150);
                 });
             }
+        }
+        
+        // Function to open and populate the Physical Examination Summary Modal (view only)
+        function openPhysicalExaminationSummaryModal(donorId) {
+            if (!donorId) return;
+            
+            // Clean up any lingering backdrops first
+            try {
+                const oldBackdrops = document.querySelectorAll('.modal-backdrop');
+                oldBackdrops.forEach(backdrop => backdrop.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+            } catch(_) {}
+            
+            // Fetch physical examination data
+            fetch(`../../public/api/get-physical-examination.php?donor_id=${donorId}&_=${Date.now()}`)
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success && result.physical_exam) {
+                        const data = result.physical_exam;
+                        
+                        // Populate the summary modal fields
+                        document.getElementById('summary-view-blood-pressure').textContent = data.blood_pressure || '-';
+                        document.getElementById('summary-view-pulse-rate').textContent = data.pulse_rate || '-';
+                        document.getElementById('summary-view-body-temp').textContent = data.body_temp || '-';
+                        document.getElementById('summary-view-gen-appearance').textContent = data.gen_appearance || '-';
+                        document.getElementById('summary-view-skin').textContent = data.skin || '-';
+                        document.getElementById('summary-view-heent').textContent = data.heent || '-';
+                        document.getElementById('summary-view-heart-lungs').textContent = data.heart_and_lungs || '-';
+                        document.getElementById('summary-view-remarks').textContent = data.remarks || '-';
+                        
+                        // Populate physician name if available
+                        if (data.physician) {
+                            document.getElementById('summary-physician-name').textContent = data.physician;
+                            document.getElementById('summary-view-physician-signature').textContent = data.physician;
+                        }
+                        
+                        // Open the modal with proper z-index
+                        const modalEl = document.getElementById('staffPhysicianAccountSummaryModal');
+                        if (modalEl) {
+                            // Set z-index before opening
+                            modalEl.style.zIndex = '1065';
+                            const dlg = modalEl.querySelector('.modal-dialog');
+                            if (dlg) dlg.style.zIndex = '1066';
+                            
+                            const modal = bootstrap.Modal.getOrCreateInstance(modalEl, {
+                                backdrop: true,
+                                keyboard: true,
+                                focus: true
+                            });
+                            
+                            // Listen for modal shown event to fix z-index
+                            modalEl.addEventListener('shown.bs.modal', function handleModalShown() {
+                                try {
+                                    modalEl.style.zIndex = '1065';
+                                    const dlg = modalEl.querySelector('.modal-dialog');
+                                    if (dlg) dlg.style.zIndex = '1066';
+                                    const content = modalEl.querySelector('.modal-content');
+                                    if (content) content.style.zIndex = '1067';
+                                    
+                                    // Ensure backdrop is properly positioned behind the modal
+                                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                                    backdrops.forEach(backdrop => {
+                                        backdrop.style.zIndex = '1064';
+                                    });
+                                    
+                                    // Ensure body has modal-open class
+                                    document.body.classList.add('modal-open');
+                                } catch(_) {}
+                                
+                                // Remove this listener after first use
+                                modalEl.removeEventListener('shown.bs.modal', handleModalShown);
+                            });
+                            
+                            modal.show();
+                        }
+                    } else {
+                        alert('Unable to load physical examination data.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading physical examination data:', error);
+                    alert('Error loading physical examination data. Please try again.');
+                });
         }
         
         function bindProceedToPhysicalButton(screeningData) {
             const proceedBtn = document.getElementById('proceedToPhysicalBtn');
             if (proceedBtn) {
-                // Always show footer/button; click handler will gate behavior and show notices
+                // Don't automatically show; let enforcePendingConfirmVisibility control visibility
                 try {
-                    const donorId = screeningData?.donor_form_id;
-                    (async () => {
-                        const footer = document.getElementById('donorProfileFooter');
-                        if (footer) footer.style.display = '';
-                        proceedBtn.style.display = '';
-                    })();
+                    // Call enforcePendingConfirmVisibility to determine if button should show
+                    enforcePendingConfirmVisibility();
                 } catch(_) {}
                 // Helper: verify prerequisites strictly from latest data
                 async function verifyEligibilityPrereqs(donorId){

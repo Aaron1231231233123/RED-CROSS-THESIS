@@ -46,3 +46,4 @@ echo json_encode([
     'postgis_available' => false
 ]);
 
+

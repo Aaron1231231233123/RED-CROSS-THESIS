@@ -59,6 +59,12 @@ class PhysicalExaminationModal {
         });
     }
     
+    // Alias: open() calls openModal() for compatibility
+    async open(screeningData) {
+        console.log('[PE DEBUG] open() called, delegating to openModal()');
+        return this.openModal(screeningData);
+    }
+    
     async openModal(screeningData) {
         console.log('[PE DEBUG] openModal called with screeningData:', screeningData);
         this.screeningData = screeningData;
@@ -159,20 +165,43 @@ class PhysicalExaminationModal {
 
         // When PE modal closes (X button or otherwise), return to donor profile modal
         const onHidden = () => {
+            console.log('[PE MODAL] Physical Examination modal hidden.bs.modal event fired');
             try {
+                // Don't reopen if we're in a success/approval flow
+                if (window.__suppressReturnToProfile || window.__peSuccessActive) {
+                    console.log('[PE MODAL] Suppressing return to profile (success flow active)');
+                    window.__suppressReturnToProfile = false;
+                    return;
+                }
+                
                 const dpEl = document.getElementById('donorProfileModal');
                 if (dpEl) {
+                    console.log('[PE MODAL] Found donor profile modal, reopening...');
+                    
+                    // Clear any hide prevention flags
+                    try { window.allowDonorProfileHide = false; } catch(_) {}
+                    
                     const dp = bootstrap.Modal.getOrCreateInstance(dpEl, { backdrop: 'static', keyboard: false });
                     dp.show();
+                    console.log('[PE MODAL] Called dp.show()');
+                    
                     // Refresh with last context if available
                     setTimeout(() => {
                         try {
                             if (window.lastDonorProfileContext && typeof refreshDonorProfileModal === 'function') {
+                                console.log('[PE MODAL] Refreshing donor profile with context');
                                 refreshDonorProfileModal(window.lastDonorProfileContext);
+                            } else {
+                                console.warn('[PE MODAL] No context or refreshDonorProfileModal function not found');
                             }
-                        } catch(_) {}
+                        } catch(e) {
+                            console.error('[PE MODAL] Error refreshing donor profile:', e);
+                        }
                     }, 100);
+                } else {
+                    console.error('[PE MODAL] Donor profile modal element not found!');
                 }
+                
                 // Clean backdrops only if no other modals are open
                 setTimeout(() => {
                     try {
@@ -185,12 +214,15 @@ class PhysicalExaminationModal {
                         }
                     } catch(_) {}
                 }, 50);
-            } catch(_) {}
+            } catch(e) {
+                console.error('[PE MODAL] Error in onHidden handler:', e);
+            }
             // Detach once
             try { modalEl.removeEventListener('hidden.bs.modal', onHiddenCapture, true); } catch(_) {}
         };
         const onHiddenCapture = () => onHidden();
         modalEl.addEventListener('hidden.bs.modal', onHiddenCapture, true);
+        console.log('[PE MODAL] Attached hidden.bs.modal listener for return to donor profile');
         // Default blood bag to 'Single' and hide Blood Bag step (3)
         try {
             // NOTE: Default blood bag as 'Single' for submission/summary even if UI is hidden.
