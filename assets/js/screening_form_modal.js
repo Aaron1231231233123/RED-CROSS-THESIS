@@ -24,7 +24,6 @@ document.addEventListener('DOMContentLoaded', function() {
             document.body.style.overflow = '';
             document.body.style.paddingRight = '';
             
-            console.log('Modal backdrops cleaned up');
         }
     }
 
@@ -338,7 +337,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function validateCurrentStep() {
-        console.log('validateCurrentStep called for step:', currentStep);
         
         if (currentStep === 1) {
             // Validate donation type selection - either IN-HOUSE dropdown OR mobile fields filled
@@ -394,7 +392,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const hasGravityError = (gravity < 12.5 || gravity > 18.0) && gravity > 0;
             
             // Debug logging
-            console.log('Step 2 Validation:', {
                 weight: weight,
                 gravity: gravity,
                 hasWeightError: hasWeightError,
@@ -402,7 +399,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             if (hasWeightError || hasGravityError) {
-                console.log('Showing validation error modal');
                 window.showValidationErrorModal(hasWeightError, hasGravityError);
                 return false;
             }
@@ -482,7 +478,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Make showValidationErrorModal globally accessible
     window.showValidationErrorModal = function(hasWeightError, hasGravityError) {
-        console.log('showValidationErrorModal called with:', { hasWeightError, hasGravityError });
         
         // Create modal HTML
         const modalHtml = `
@@ -560,7 +555,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const backdrop = document.querySelector('.modal-backdrop');
             if (backdrop) {
                 backdrop.style.zIndex = '10550';
-                console.log('Validation modal and backdrop z-index set');
             }
         }, 50);
         
@@ -1025,18 +1019,12 @@ function handleDeferDonor() {
             // Add listener to defer modal to restore screening form modal if closed
             setTimeout(() => {
                 const deferModal = document.getElementById('deferDonorModal');
-                console.log('Looking for defer modal:', deferModal);
-                console.log('Pending screening modal state:', window.pendingScreeningModal);
                 
                 if (deferModal && window.pendingScreeningModal) {
-                    console.log('Adding listener to defer modal for screening form restoration');
                     deferModal.addEventListener('hidden.bs.modal', function() {
-                        console.log('Defer modal closed, checking if screening form modal should be restored');
                         // If defer modal is closed and we have pending screening modal, restore it
                         if (window.pendingScreeningModal) {
-                            console.log('Restoring screening form modal with state:', window.pendingScreeningModal);
                             setTimeout(() => {
-                                console.log('About to reopen screening form modal');
                                 // Clean up any remaining backdrops first
                                 cleanupModalBackdrops();
                                 
@@ -1051,12 +1039,10 @@ function handleDeferDonor() {
                                         if (window.resetToStep) {
                                             window.resetToStep(2);
                                         }
-                                        console.log('Screening form modal restored to step 2');
                                     }, 100);
                                 }
                                 // Clear the pending modal state
                                 window.pendingScreeningModal = null;
-                                console.log('Screening form modal restoration completed');
                             }, 300);
                         }
                     }, { once: true }); // Use once: true to only listen once

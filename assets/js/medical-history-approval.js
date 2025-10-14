@@ -12,14 +12,11 @@ if (typeof currentMedicalHistoryData === 'undefined') {
 
 // Initialize medical history approval functionality
 function initializeMedicalHistoryApproval() {
-    console.log('Initializing medical history approval functionality...');
     
     // Check if modals are loaded
     const declineModal = document.getElementById('medicalHistoryDeclineModal');
     const approvalModal = document.getElementById('medicalHistoryApprovalModal');
     
-    console.log('Decline modal found:', declineModal);
-    console.log('Approval modal found:', approvalModal);
     
     if (!declineModal || !approvalModal) {
         console.warn('Medical history modals not found. Waiting for them to load...');
@@ -30,7 +27,6 @@ function initializeMedicalHistoryApproval() {
     
     // Handle approve button clicks
     const approveButtons = document.querySelectorAll('.approve-medical-history-btn');
-    console.log('Found approve buttons:', approveButtons.length);
     approveButtons.forEach(btn => {
         // Remove existing event listeners to prevent duplicates
         btn.removeEventListener('click', handleApproveClick);
@@ -39,30 +35,24 @@ function initializeMedicalHistoryApproval() {
 
     // Handle decline button clicks
     const declineButtons = document.querySelectorAll('.decline-medical-history-btn');
-    console.log('Found decline buttons:', declineButtons.length);
     declineButtons.forEach((btn, index) => {
-        console.log(`Setting up decline button ${index}:`, btn);
         // Remove existing event listeners to prevent duplicates
         btn.removeEventListener('click', handleDeclineClick);
         btn.addEventListener('click', handleDeclineClick);
-        console.log(`Decline button ${index} event listener attached`);
     });
 
     // Handle decline form submission
     const submitDeclineBtn = document.getElementById('submitDeclineBtn');
     if (submitDeclineBtn) {
         submitDeclineBtn.addEventListener('click', handleDeclineSubmit);
-        console.log('Decline submit button handler attached');
     }
 
     // Handle restriction type change
     const restrictionType = document.getElementById('restrictionType');
     if (restrictionType) {
         restrictionType.addEventListener('change', handleRestrictionTypeChange);
-        console.log('Restriction type change handler attached');
     }
     
-    console.log('Medical history approval functionality initialized successfully');
 }
 
 // Intercept any Approve button inside the MH modal to force: Approve -> Confirm -> Process
@@ -149,11 +139,9 @@ function bindApproveInterceptors() {
 
 // Click handler for Decline buttons (opens the dedicated decline modal)
 function handleDeclineClick(e) {
-    console.log('handleDeclineClick called', e);
     try { if (e && typeof e.preventDefault === 'function') e.preventDefault(); } catch(_) {}
     try { if (e && typeof e.stopPropagation === 'function') e.stopPropagation(); } catch(_) {}
     
-    console.log('About to call showDeclineModal');
     showDeclineModal();
     return false;
 }
@@ -246,21 +234,15 @@ function handleRestrictionTypeChange() {
 
 // Show decline confirmation modal
 function showDeclineModal() {
-    console.log('showDeclineModal called');
     
     const modalElement = document.getElementById('medicalHistoryDeclineModal');
-    console.log('Modal element found:', modalElement);
     
     if (!modalElement) {
         console.error('Medical history decline modal not found!');
-        console.log('Available modals:', document.querySelectorAll('.modal').length);
-        console.log('Modal IDs:', Array.from(document.querySelectorAll('.modal')).map(m => m.id));
-        console.log('Trying fallback modal...');
         
         // Try fallback modal for testing
         const fallbackModal = document.getElementById('fallbackDeclineModal');
         if (fallbackModal) {
-            console.log('Using fallback modal');
             const modal = new bootstrap.Modal(fallbackModal);
             modal.show();
             return;
@@ -282,7 +264,6 @@ function showDeclineModal() {
         
         const declineModal = new bootstrap.Modal(modalElement);
         declineModal.show();
-        console.log('Decline modal shown successfully');
         
         // Restore scroll position after modal opens
         setTimeout(() => {
@@ -307,7 +288,6 @@ function showDeclineModal() {
         const form = document.getElementById('declineMedicalHistoryForm');
         if (form) {
             form.reset();
-            console.log('Form reset successfully');
         }
         
         // Reset restriction type change handler
@@ -463,16 +443,10 @@ async function processMedicalHistoryDecline(declineReason, restrictionType, dona
     
     // Check if we have a screening_id, if not, we need to create one or use a different approach
     if (!currentMedicalHistoryData.screening_id || currentMedicalHistoryData.screening_id === 'no-screening-id') {
-        console.log('No screening_id available, using update-eligibility endpoint instead');
         
         // Fetch ALL data from source tables
         try {
-            console.log('Fetching data for donor_id:', currentMedicalHistoryData.donor_id);
             const allSourceData = await fetchAllSourceData(currentMedicalHistoryData.donor_id);
-            console.log('Fetched all source data:', allSourceData);
-            console.log('Screening form data:', allSourceData.screeningForm);
-            console.log('Physical exam data:', allSourceData.physicalExam);
-            console.log('Donor form data:', allSourceData.donorForm);
             
             // Calculate temporary_deferred text based on restriction type
             let temporaryDeferredText;
@@ -519,10 +493,6 @@ async function processMedicalHistoryDecline(declineReason, restrictionType, dona
                                  currentMedicalHistoryData.physical_exam_id || 
                                  null;
             
-            console.log('ID values being used:');
-            console.log('medical_history_id:', medicalHistoryId);
-            console.log('screening_id:', screeningId);
-            console.log('physical_exam_id:', physicalExamId);
             
             const eligibilityData = {
                 donor_id: currentMedicalHistoryData.donor_id,
@@ -559,10 +529,6 @@ async function processMedicalHistoryDecline(declineReason, restrictionType, dona
                 updated_at: new Date().toISOString()
             };
             
-            console.log('Using update-eligibility with data:', eligibilityData);
-            console.log('Screening form data being used:', allSourceData.screeningForm);
-            console.log('Physical exam data being used:', allSourceData.physicalExam);
-            console.log('Donor form data being used:', allSourceData.donorForm);
             
                                // Submit to update-eligibility endpoint
                    makeApiCall('../api/update-eligibility.php', {
@@ -574,7 +540,6 @@ async function processMedicalHistoryDecline(declineReason, restrictionType, dona
                    })
             .then(result => {
                        if (result.success) {
-                           console.log('Decline recorded successfully:', result);
                            
                            // Update physical examination remarks and needs_review
                            const donorId = allSourceData?.donorForm?.donor_id || null;
@@ -617,7 +582,6 @@ async function processMedicalHistoryDecline(declineReason, restrictionType, dona
             Math.ceil((new Date(donationRestrictionDate) - new Date()) / (1000 * 60 * 60 * 24)) : null
     };
     
-    console.log('Using defer functionality with data:', deferData);
     
     // Submit to the same endpoint as the defer button
     makeApiCall('../../assets/php_func/create_eligibility.php', {
@@ -629,7 +593,6 @@ async function processMedicalHistoryDecline(declineReason, restrictionType, dona
     })
     .then(result => {
         if (result.success) {
-            console.log('Decline recorded successfully:', result);
                    
                    // Update physical examination remarks and needs_review
                    const physicalExamId = getPhysicalExamId() || 
@@ -714,7 +677,6 @@ function cleanupModalCompletely() {
     // Force a reflow to ensure styles are applied
     document.body.offsetHeight;
     
-    console.log('Modal cleanup completed - design should be restored');
 }
 
 // Show medical history toast notification
@@ -813,7 +775,6 @@ function getPhysicalExamId() {
                          element.getAttribute('data-physical-examination-id') || 
                          element.value;
             if (value && value !== '' && value !== 'null') {
-                console.log('Found physical exam ID from page elements:', value);
                 return value;
             }
         }
@@ -822,12 +783,10 @@ function getPhysicalExamId() {
         const currentUrl = window.location.href;
         const urlMatch = currentUrl.match(/physical[_-]?exam[_-]?id[=:]([^&\s]+)/i);
         if (urlMatch) {
-            console.log('Found physical exam ID from URL:', urlMatch[1]);
             return urlMatch[1];
         }
         
         // 8. Last resort: return null since we can't find a valid UUID
-        console.log('Physical exam ID not found, returning null');
         return null;
     } catch (error) {
         console.error('Error getting physical exam ID:', error);
@@ -862,7 +821,6 @@ function getScreeningId() {
         const screeningMatch = pageContent.match(/screening_id["\s]*[:=]\s*["']?([^"'\s,}]+)["']?/i);
         if (screeningMatch) return screeningMatch[1];
         
-        console.log('Screening ID not found, returning null');
         return null;
     } catch (error) {
         console.error('Error getting screening ID:', error);
@@ -897,7 +855,6 @@ function getMedicalHistoryId() {
         const medicalHistoryMatch = pageContent.match(/medical_history_id["\s]*[:=]\s*["']?([^"'\s,}]+)["']?/i);
         if (medicalHistoryMatch) return medicalHistoryMatch[1];
         
-        console.log('Medical history ID not found, returning null');
         return null;
     } catch (error) {
         console.error('Error getting medical history ID:', error);
@@ -908,7 +865,6 @@ function getMedicalHistoryId() {
 // Helper function to update or create physical examination after decline
 function updatePhysicalExaminationAfterDecline(physicalExamId, restrictionType, donorId = null) {
     if (!physicalExamId && !donorId) {
-        console.log('No physical_exam_id or donor_id available, skipping physical examination update/create');
         return;
     }
     
@@ -924,12 +880,6 @@ function updatePhysicalExaminationAfterDecline(physicalExamId, restrictionType, 
     
     if (physicalExamId) {
         // Update existing physical examination record
-        console.log('Updating existing physical examination:', {
-            physical_exam_id: physicalExamId,
-            remarks: remarks,
-            needs_review: false
-        });
-        
         makeApiCall('../api/update-physical-examination.php', {
             method: 'POST',
             headers: {
@@ -943,7 +893,6 @@ function updatePhysicalExaminationAfterDecline(physicalExamId, restrictionType, 
         })
         .then(result => {
             if (result.success) {
-                console.log('Physical examination updated successfully:', result);
             } else {
                 console.error('Failed to update physical examination:', result.error);
             }
@@ -953,12 +902,6 @@ function updatePhysicalExaminationAfterDecline(physicalExamId, restrictionType, 
         });
     } else if (donorId) {
         // Create new physical examination record
-        console.log('Creating new physical examination record:', {
-            donor_id: donorId,
-            remarks: remarks,
-            needs_review: false
-        });
-        
         makeApiCall('../api/create-physical-examination.php', {
             method: 'POST',
             headers: {
@@ -972,7 +915,6 @@ function updatePhysicalExaminationAfterDecline(physicalExamId, restrictionType, 
         })
         .then(result => {
             if (result.success) {
-                console.log('Physical examination record created successfully:', result);
             } else {
                 console.error('Failed to create physical examination record:', result.error);
             }
@@ -986,7 +928,6 @@ function updatePhysicalExaminationAfterDecline(physicalExamId, restrictionType, 
 // Helper function to get screening form data from page context
 function getScreeningFormDataFromPage() {
     try {
-        console.log('Trying to get screening form data from page context');
         
         // Try to find screening form data in the page
         const pageContent = document.body.textContent;
@@ -1065,7 +1006,6 @@ function getScreeningFormDataFromPage() {
 // Comprehensive function to fetch data from all source tables
 async function fetchAllSourceData(donorId) {
     try {
-        console.log('Fetching comprehensive data for donor:', donorId);
         
         // Fetch data from all source tables in parallel
         const [screeningData, physicalExamData, donorData] = await Promise.all([
@@ -1088,21 +1028,17 @@ async function fetchAllSourceData(donorId) {
 // Fetch data from screening_form table
 async function fetchScreeningFormData(donorId) {
     try {
-        console.log('Fetching screening form data for donor_id:', donorId);
         
         // First, let's test what's in the screening_form table
         try {
             const testData = await makeApiCall(`../api/test-screening-form.php?donor_id=${donorId}`);
-            console.log('Screening form test results:', testData);
         } catch (testError) {
             console.error('Error testing screening form:', testError);
         }
         
         const data = await makeApiCall(`../api/get-screening-form.php?donor_id=${donorId}`);
-        console.log('Screening form API response:', data);
         
         if (data.success && data.screening_form) {
-            console.log('Successfully retrieved screening form data:', data.screening_form);
             return {
                 // Key fields that were missing
                 screening_id: data.screening_form.screening_id || null,
@@ -1138,11 +1074,9 @@ async function fetchScreeningFormData(donorId) {
             };
         }
         
-        console.log('No screening form data found from API, trying to get from page context');
         
         // Try to get screening form data from page context
         const pageScreeningData = getScreeningFormDataFromPage();
-        console.log('Screening form data from page context:', pageScreeningData);
         
         return pageScreeningData;
     } catch (error) {
@@ -1181,9 +1115,7 @@ async function fetchScreeningFormData(donorId) {
 // Fetch data from physical_examination table
 async function fetchPhysicalExamData(donorId) {
     try {
-        console.log('Fetching physical exam data for donor_id:', donorId);
         const data = await makeApiCall(`../api/get-physical-examination.php?donor_id=${donorId}`);
-        console.log('Physical exam API response:', data);
         
         if (data.success && data.physical_exam) {
             return {
@@ -1286,7 +1218,6 @@ async function updateEligibilityTable(eligibilityData) {
         });
         
         if (result.success) {
-            console.log('Eligibility table updated successfully:', result);
             showMedicalHistoryToast('Success', 'Eligibility status updated to declined', 'success');
         } else {
             console.error('Failed to update eligibility table:', result.error);
@@ -1402,7 +1333,6 @@ function initializeDeclineFormValidation() {
     updateValidation();
     handleRestrictionTypeChange();
     
-    console.log('Decline form validation initialized');
 }
 
 // Show confirm approve modal
@@ -1605,7 +1535,6 @@ function attachInnerModalApproveHandler() {
                     const donorId = (screeningData && (screeningData.donor_form_id || screeningData.donor_id)) || (window.currentMedicalHistoryData && window.currentMedicalHistoryData.donor_id);
                     window.lastDonorProfileContext = { donorId: donorId, screeningData: screeningData };
                     window.__mhQueuedReopen = true;
-                    console.log('[MH] Queued donor profile reopen due to medical history success state');
                     return; // swallow during success phase
                 }
                 return window.__origOpenDonorProfile.apply(this, arguments);
@@ -1641,7 +1570,6 @@ function attachInnerModalApproveHandler() {
                             const ctx = window.lastDonorProfileContext || null;
                             if (ctx) {
                                 window.__mhQueuedReopen = true;
-                                console.log('[MH] Queued donor profile reopen due to modal guard');
                             }
                         }
                     }
@@ -1670,7 +1598,6 @@ function attachInnerModalApproveHandler() {
 })();
 
 function showApprovedThenReturn(donorId, screeningData) {
-    console.log('[MH] showApprovedThenReturn called with:', { donorId, screeningData });
     
     // CRITICAL: Prevent duplicate calls
     if (window.__mhShowApprovedActive) {
@@ -1700,7 +1627,6 @@ function showApprovedThenReturn(donorId, screeningData) {
             }
             if (!resolvedDonorId && window.currentDonorId) resolvedDonorId = window.currentDonorId;
             if (!resolvedDonorId && window.currentMedicalHistoryData && window.currentMedicalHistoryData.donor_id) resolvedDonorId = window.currentMedicalHistoryData.donor_id;
-            console.log('[MH] Resolved donorId for success flow:', resolvedDonorId);
             if (resolvedDonorId) {
                 window.__mhLastDonorId = String(resolvedDonorId);
                 window.lastDonorProfileContext = { donorId: String(resolvedDonorId), screeningData: screeningData || { donor_form_id: String(resolvedDonorId) } };
@@ -1786,7 +1712,6 @@ function showApprovedThenReturn(donorId, screeningData) {
             
             // Prevent duplicate cleaning logs
             if (!window.__mhEnvironmentCleaned) {
-                console.log('[MH] Modal environment cleaned');
                 window.__mhEnvironmentCleaned = true;
                 setTimeout(() => { window.__mhEnvironmentCleaned = false; }, 1000);
             }
@@ -1811,7 +1736,6 @@ function showApprovedThenReturn(donorId, screeningData) {
             }
             window.__mhReopenActive = true;
             
-            console.log('[MH] Reopen attempt', attempts, 'donorId=', donorId);
             if (!donorId) return;
             const dataArg = (ctx && ctx.screeningData) ? ctx.screeningData : { donor_form_id: donorId };
             if (typeof window.openDonorProfileModal === 'function') { 
@@ -1835,7 +1759,6 @@ function showApprovedThenReturn(donorId, screeningData) {
                 } 
             }
             if (forceShowDonorProfileElement()) { 
-                console.log('[MH] Forced Donor Profile element visible'); 
                 window.__mhReopenActive = false; // Reset flag on success
                 return; 
             }
@@ -1912,7 +1835,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return; // No MH UI on this page; safely no-op
     }
 
-    console.log('Medical history approval system initialized');
     
     // Initialize decline form validation (guard internal DOM)
     try { initializeDeclineFormValidation(); } catch(_) {}
@@ -1955,7 +1877,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Footer confirmation functions
 function showFooterConfirmModal(onConfirm) {
-    console.log('[MH] showFooterConfirmModal called');
     try {
         const modal = document.getElementById('footerConfirmModal');
         if (!modal) {
@@ -1989,7 +1910,6 @@ function showFooterConfirmModal(onConfirm) {
         // Bind new handler
         if (confirmBtn && onConfirm) {
             confirmBtn.onclick = function() {
-                console.log('[MH] Footer confirm button clicked');
                 m.hide();
                 setTimeout(() => {
                     if (onConfirm) onConfirm();
@@ -2005,7 +1925,6 @@ function showFooterConfirmModal(onConfirm) {
 }
 
 function showFooterActionSuccessModal() {
-    console.log('[MH] showFooterActionSuccessModal called');
     try {
         const modal = document.getElementById('footerActionSuccessModal');
         if (!modal) {
@@ -2026,7 +1945,6 @@ function showFooterActionSuccessModal() {
 }
 
 function showFooterActionFailureModal(message = 'Unable to process the eligibility decision. Please try again.') {
-    console.log('[MH] showFooterActionFailureModal called with message:', message);
     try {
         const modal = document.getElementById('footerActionFailureModal');
         if (!modal) {

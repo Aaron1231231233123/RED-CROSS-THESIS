@@ -6,23 +6,16 @@ let currentDonorMedicalData = null;
 
 // Function to show the donor information medical modal
 function showDonorInformationMedicalModal(eligibilityId) {
-    console.log('Opening Donor Information Medical Modal for eligibility ID:', eligibilityId);
     
     // Fetch donor medical information
     fetchDonorMedicalInfo(eligibilityId)
         .then(data => {
-            console.log('API Response:', data);
             if (data && data.success) {
-                console.log('Data received:', data.data);
                 currentDonorMedicalData = data.data;
                 try {
-                    console.log('Calling displayDonorMedicalInfo...');
                     displayDonorMedicalInfo(data.data);
-                    console.log('displayDonorMedicalInfo completed successfully');
-                    console.log('Showing modal...');
                     const modal = new bootstrap.Modal(document.getElementById('donorInformationMedicalModal'));
                     modal.show();
-                    console.log('Modal show command executed');
                 } catch (error) {
                     console.error('Error in displayDonorMedicalInfo or modal show:', error);
                     showError('Error displaying donor information: ' + error.message);
@@ -58,9 +51,6 @@ async function fetchDonorMedicalInfo(eligibilityId) {
         }
         
         const data = await response.json();
-        console.log('Donor medical info response:', data);
-        console.log('Response status:', response.status);
-        console.log('Response ok:', response.ok);
         return data;
     } catch (error) {
         console.error('Error fetching donor medical info:', error);
@@ -70,14 +60,11 @@ async function fetchDonorMedicalInfo(eligibilityId) {
 
 // Function to display donor medical information in the modal
 function displayDonorMedicalInfo(donorData) {
-    console.log('displayDonorMedicalInfo called with:', donorData);
-    console.log('UPDATED VERSION - Donor Information section should now have clean layout!');
     const modalContent = document.getElementById('donorMedicalModalContent');
     if (!modalContent) {
         console.error('Modal content element not found');
         return;
     }
-    console.log('Modal content element found:', modalContent);
     
     // Safe function to handle null/undefined values
     const safe = (value, fallback = 'N/A') => {
@@ -295,9 +282,7 @@ function displayDonorMedicalInfo(donorData) {
         </div>
     `;
     
-    console.log('Setting modal content HTML...');
     modalContent.innerHTML = donorMedicalHTML;
-    console.log('Modal content HTML set successfully');
 }
 
 // Function to show error messages
@@ -312,11 +297,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const modal = document.getElementById('donorInformationMedicalModal');
     if (modal) {
         modal.addEventListener('show.bs.modal', function() {
-            console.log('Donor Information Medical Modal is being shown');
         });
         
         modal.addEventListener('hidden.bs.modal', function() {
-            console.log('Donor Information Medical Modal is hidden');
             currentDonorMedicalData = null;
         });
     }

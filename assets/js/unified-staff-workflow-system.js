@@ -21,7 +21,6 @@ class UnifiedStaffWorkflowSystem {
         this.setupDashboardIntegration();
         this.setupEventListeners();
         this.isInitialized = true;
-        console.log('Unified Staff Workflow System initialized');
     }
 
     /**
@@ -66,7 +65,6 @@ class UnifiedStaffWorkflowSystem {
      */
     async handleInterviewerWorkflow(donorId) {
         try {
-            console.log('Starting interviewer workflow for donor:', donorId);
             
             // Load donor data
             const donorData = await this.loadDonorData(donorId);
@@ -89,7 +87,6 @@ class UnifiedStaffWorkflowSystem {
      */
     async handlePhysicianWorkflow(donorId) {
         try {
-            console.log('Starting physician workflow for donor:', donorId);
             
             // Load donor data
             const donorData = await this.loadDonorData(donorId);
@@ -112,7 +109,6 @@ class UnifiedStaffWorkflowSystem {
      */
     async handleCombinedWorkflow(donor) {
         try {
-            console.log('Starting combined workflow for donor:', donor);
             
             this.currentDonor = donor;
 
@@ -136,7 +132,6 @@ class UnifiedStaffWorkflowSystem {
             // Try to load from cache first
             const cachedData = await this.dataHandler.loadWorkflowData(`donor_${donorId}`, { useCache: true });
             if (cachedData.success && cachedData.fromCache) {
-                console.log('Loaded donor data from cache:', donorId);
                 return cachedData.data;
             }
 
@@ -154,7 +149,6 @@ class UnifiedStaffWorkflowSystem {
             // Cache the data
             await this.dataHandler.saveWorkflowData(`donor_${donorId}`, data.donor, { persist: false });
 
-            console.log('Loaded donor data from server:', donorId);
             return data.donor;
 
         } catch (error) {
@@ -167,7 +161,6 @@ class UnifiedStaffWorkflowSystem {
      * Handle workflow completion
      */
     handleWorkflowComplete(workflowType, result) {
-        console.log(`${workflowType} workflow completed:`, result);
         
         // Save workflow history
         this.workflowHistory.push({
@@ -628,12 +621,10 @@ class UnifiedStaffWorkflowSystem {
     setupEventListeners() {
         // Listen for workflow events
         window.addEventListener('workflowCompleted', (event) => {
-            console.log('Workflow completed event received:', event.detail);
         });
 
         // Listen for validation events
         window.addEventListener('validationError', (event) => {
-            console.log('Validation error event received:', event.detail);
         });
     }
 
@@ -684,7 +675,6 @@ class UnifiedStaffWorkflowSystem {
         this.workflowManager.cleanupModals();
         this.dataHandler.clearAll();
         this.validationSystem.clearValidationErrors();
-        console.log('Unified Staff Workflow System reset');
     }
 }
 

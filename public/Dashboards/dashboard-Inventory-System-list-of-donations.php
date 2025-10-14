@@ -3117,21 +3117,24 @@ function getCacheStats() {
                         const modalContent = document.getElementById('medicalHistoryModalContent');
                         modalContent.innerHTML = html;
                         // Execute any script tags in the loaded content
+                        // Remove all script tags to prevent CSP violations
                         const scripts = modalContent.querySelectorAll('script');
                         scripts.forEach(script => {
                             try {
-                                const newScript = document.createElement('script');
-                                if (script.type) newScript.type = script.type;
-                                if (script.src) {
-                                    newScript.src = script.src;
-                                } else {
-                                    newScript.text = script.textContent || '';
-                                }
-                                document.body.appendChild(newScript);
+                                script.remove();
                             } catch (e) {
-                                console.log('Script execution error:', e);
+                                console.warn('Could not remove script tag:', e);
                             }
                         });
+                        
+                        // Manually call known functions that might be needed
+                        try {
+                            if (typeof window.initializeMedicalHistoryApproval === 'function') {
+                                window.initializeMedicalHistoryApproval();
+                            }
+                        } catch(e) {
+                            console.warn('Could not execute initializeMedicalHistoryApproval:', e);
+                        }
                         // Check if this is part of the interviewer workflow
                         if (window.currentInterviewerDonorId) {
                             // Add interviewer workflow buttons
@@ -3649,14 +3652,7 @@ function getCacheStats() {
                             const scripts = contentEl.querySelectorAll('script');
                             scripts.forEach(script => {
                                 try {
-                                    const newScript = document.createElement('script');
-                                    if (script.type) newScript.type = script.type;
-                                    if (script.src) {
-                                        newScript.src = script.src;
-                                    } else {
-                                        newScript.text = script.textContent || '';
-                                    }
-                                    document.body.appendChild(newScript);
+                                    script.remove();
                                 } catch (e) {
                                     console.log('Script execution error:', e);
                                 }
@@ -4268,14 +4264,7 @@ function getCacheStats() {
                             const scripts = contentEl.querySelectorAll('script');
                             scripts.forEach(script => {
                                 try {
-                                    const newScript = document.createElement('script');
-                                    if (script.type) newScript.type = script.type;
-                                    if (script.src) {
-                                        newScript.src = script.src;
-                                    } else {
-                                        newScript.text = script.textContent || '';
-                                    }
-                                    document.body.appendChild(newScript);
+                                    script.remove();
                                 } catch (e) {
                                     console.log('Script execution error:', e);
                                 }
@@ -4558,11 +4547,7 @@ function getCacheStats() {
                         try {
                             const scripts = contentEl.querySelectorAll('script');
                             scripts.forEach(script => {
-                                const s = document.createElement('script');
-                                if (script.type) s.type = script.type;
-                                if (script.src) { s.src = script.src; } else { s.text = script.textContent || ''; }
-                                // Append to body for reliable execution; don't remove immediately
-                                document.body.appendChild(s);
+                                script.remove();
                             });
                         } catch(_) {}
                         // If the content relies on a generator, call it
@@ -5473,14 +5458,7 @@ function getCacheStats() {
                     scripts.forEach((script, index) => {
                         try {
                             console.log(`Executing script ${index + 1}:`, script.type || 'inline');
-                            const newScript = document.createElement('script');
-                            if (script.type) newScript.type = script.type;
-                            if (script.src) {
-                                newScript.src = script.src;
-                            } else {
-                                newScript.text = script.textContent || '';
-                            }
-                            document.body.appendChild(newScript);
+                            script.remove();
                             console.log(`Script ${index + 1} executed successfully`);
                         } catch (e) {
                             console.warn('Error executing script:', e);
@@ -5524,14 +5502,7 @@ function getCacheStats() {
                     const scripts = modalContent.querySelectorAll('script');
                     scripts.forEach(script => {
                         try {
-                            const newScript = document.createElement('script');
-                            if (script.type) newScript.type = script.type;
-                            if (script.src) {
-                                newScript.src = script.src;
-                            } else {
-                                newScript.text = script.textContent || '';
-                            }
-                            document.body.appendChild(newScript);
+                            script.remove();
                         } catch (e) {
                             console.warn('Error executing script:', e);
                         }

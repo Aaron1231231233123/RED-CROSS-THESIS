@@ -1,4 +1,4 @@
-﻿        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('searchInput');
             const searchLoading = document.getElementById('searchLoading');
             const searchCategory = document.getElementById('searchCategory');
@@ -456,7 +456,7 @@
                                                      } else if (status === 'approved' || status === 'eligible') {
                                                          color = '#28a745'; // Green
                                                      }
-                                                     return ` â€¢ <span style="font-weight: bold; color: ${color};">${remainingDays} days left</span>`;
+                                                     return ` • <span style="font-weight: bold; color: ${color};">${remainingDays} days left</span>`;
                                                  }
                                              }
                                              return '';
@@ -551,7 +551,7 @@
                                     vitalSigns = 'Abnormal';
                                 }
                                 
-                                // Check temperature (normal: 36.1-37.2Â°C or 97-99Â°F)
+                                // Check temperature (normal: 36.1-37.2°C or 97-99°F)
                                 const temp = parseFloat(eligibility.body_temp);
                                 if (temp < 36.1 || temp > 37.2) {
                                     vitalSigns = 'Abnormal';
@@ -593,7 +593,6 @@
                                 physician = eligibility.physical_examination.physician;
                             }
                             
-                             console.log('Eligibility record:', eligibility);
                             assessmentRows += `
                                  <tr>
                                      <td class="text-center">${safe(examDate)}</td>
@@ -730,7 +729,7 @@
                                     vitalSigns = 'Abnormal';
                                 }
                                 
-                                // Check temperature (normal: 36.1-37.2Â°C)
+                                // Check temperature (normal: 36.1-37.2°C)
                                 const temp = parseFloat(el.body_temp);
                                 if (temp < 36.1 || temp > 37.2) {
                                     vitalSigns = 'Abnormal';
@@ -968,21 +967,24 @@
                         modalContent.innerHTML = data;
                         
                         // Execute any script tags in the loaded content
+                        // Remove all script tags to prevent CSP violations
                         const scripts = modalContent.querySelectorAll('script');
                         scripts.forEach(script => {
                             try {
-                                const newScript = document.createElement('script');
-                                if (script.type) newScript.type = script.type;
-                                if (script.src) {
-                                    newScript.src = script.src;
-                                } else {
-                                    newScript.text = script.textContent || '';
-                                }
-                                document.body.appendChild(newScript);
+                                script.remove();
                             } catch (e) {
-                                // Script execution error - silent
+                                console.warn('Could not remove script tag:', e);
                             }
                         });
+                        
+                        // Manually call known functions that might be needed
+                        try {
+                            if (typeof window.initializeMedicalHistoryApproval === 'function') {
+                                window.initializeMedicalHistoryApproval();
+                            }
+                        } catch(e) {
+                            console.warn('Could not execute initializeMedicalHistoryApproval:', e);
+                        }
                         
                         // Add form submission interceptor to prevent submissions without proper action
                         const form = document.getElementById('modalMedicalHistoryForm');
@@ -1241,18 +1243,18 @@
                          <div class="question-text">${questionData.text}</div>
                          <div class="radio-cell">
                              <label class="radio-container">
-                                 <input type="radio" name="q${questionData.q}" value="Yes" ${value === true ? 'checked' : ''} ${modalRequiredAttr}>
+                                 <input type="radio" name="q${questionData.q}" value="Yes" ${value === true ? 'checked' : ''} ${modalRequiredAttr} aria-label="Question ${questionData.q} - Yes">
                                  <span class="checkmark"></span>
                              </label>
                          </div>
                          <div class="radio-cell">
                              <label class="radio-container">
-                                 <input type="radio" name="q${questionData.q}" value="No" ${value === false ? 'checked' : ''} ${modalRequiredAttr}>
+                                 <input type="radio" name="q${questionData.q}" value="No" ${value === false ? 'checked' : ''} ${modalRequiredAttr} aria-label="Question ${questionData.q} - No">
                                  <span class="checkmark"></span>
                              </label>
                          </div>
                          <div class="remarks-cell">
-                             <select class="remarks-input" name="q${questionData.q}_remarks" ${modalRequiredAttr}>
+                             <select class="remarks-input" name="q${questionData.q}_remarks" ${modalRequiredAttr} aria-label="Remarks for question ${questionData.q}">
                                  ${modalRemarksOptions[questionData.q].map(option => 
                                      `<option value="${option}" ${remarks === option ? 'selected' : ''}>${option}</option>`
                                  ).join('')}
@@ -1454,7 +1456,7 @@
                         };
                     }
                 } else {
-                    nextButton.innerHTML = 'Next â†’';
+                    nextButton.innerHTML = 'Next →';
                     nextButton.onclick = (e) => {
                         e.preventDefault();
                         e.stopPropagation();

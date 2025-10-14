@@ -1,6 +1,5 @@
 // Function to show eligibility alert modal
 function showEligibilityAlert(donorId) {
-    console.log('Showing eligibility alert for donor:', donorId);
     
     // Get modal elements
     const modalElement = document.getElementById('eligibilityAlertModal');
@@ -24,7 +23,6 @@ function showEligibilityAlert(donorId) {
     fetch('../../assets/php_func/fetch_eligibility_alert_info.php?donor_id=' + donorId)
         .then(response => response.json())
         .then(data => {
-            console.log('Received eligibility data:', data);
             
             if (!data.success || !data.data) {
                 throw new Error(data.message || 'Failed to fetch eligibility data');

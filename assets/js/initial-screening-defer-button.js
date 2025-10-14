@@ -8,7 +8,6 @@ let currentDeferData = null;
 // Comprehensive function to fetch data from all source tables for screening deferral
 async function fetchAllSourceDataForScreeningDeferral(donorId) {
     try {
-        console.log('Fetching comprehensive data for donor:', donorId);
         
         const [screeningForm, physicalExam, donorForm] = await Promise.all([
             fetchScreeningFormDataForScreeningDeferral(donorId),
@@ -34,10 +33,8 @@ async function fetchAllSourceDataForScreeningDeferral(donorId) {
 // Fetch data from screening_form table for screening deferral
 async function fetchScreeningFormDataForScreeningDeferral(donorId) {
     try {
-        console.log('Fetching screening form data for donor_id:', donorId);
         const response = await fetch(`../api/get-screening-form.php?donor_id=${donorId}`);
         const data = await response.json();
-        console.log('Screening form API response:', data);
         
         if (data.success && data.screening_form) {
             return data.screening_form;
@@ -52,10 +49,8 @@ async function fetchScreeningFormDataForScreeningDeferral(donorId) {
 // Fetch data from physical_examination table for screening deferral
 async function fetchPhysicalExamDataForScreeningDeferral(donorId) {
     try {
-        console.log('Fetching physical exam data for donor_id:', donorId);
         const response = await fetch(`../api/get-physical-examination.php?donor_id=${donorId}`);
         const data = await response.json();
-        console.log('Physical exam API response:', data);
         
         if (data.success && data.physical_exam) {
             return data.physical_exam;
@@ -70,10 +65,8 @@ async function fetchPhysicalExamDataForScreeningDeferral(donorId) {
 // Fetch data from donor_form table for screening deferral
 async function fetchDonorFormDataForScreeningDeferral(donorId) {
     try {
-        console.log('Fetching donor form data for donor_id:', donorId);
         const response = await fetch(`../api/get-donor-form.php?donor_id=${donorId}`);
         const data = await response.json();
-        console.log('Donor form API response:', data);
         
         if (data.success && data.donor_form) {
             return data.donor_form;
@@ -151,7 +144,6 @@ function initializeScreeningDeferModal() {
 
     // Handle deferral type change
     deferralTypeSelect.addEventListener('change', function() {
-        console.log('Deferral type changed to:', this.value);
         if (this.value === 'Temporary Deferral') {
             durationSection.style.display = 'block';
             setTimeout(() => {
@@ -298,7 +290,6 @@ function initializeScreeningDeferModal() {
     // Initial validation
     updateScreeningDeferValidation();
     
-    console.log('Screening defer modal with validation initialized');
 }
 
 // Validate screening defer form
@@ -392,7 +383,6 @@ async function submitScreeningDeferral() {
         units_needed: document.querySelector('input[name="units-needed"]')?.value || null
     };
 
-    console.log('Submitting screening deferral data:', {
         donor_id: donorId,
         screening_id: screeningId,
         deferral_type: deferralType,
@@ -407,11 +397,7 @@ async function submitScreeningDeferral() {
 
     try {
         // Fetch all source data
-        console.log('Fetching comprehensive data for donor:', donorId);
         const allSourceData = await fetchAllSourceDataForScreeningDeferral(donorId);
-        console.log('Fetched all source data:', allSourceData);
-        console.log('Screening form data:', allSourceData.screeningForm);
-        console.log('Medical history ID from screening form:', allSourceData.screeningForm?.medical_history_id);
         
         // Calculate temporary_deferred text based on deferral type
         let temporaryDeferredText;
@@ -451,7 +437,6 @@ async function submitScreeningDeferral() {
             screening_form_data: screeningFormData // Pass the screening form data
         };
         
-        console.log('Using create_eligibility with defer data:', deferData);
         
         // Validate required fields before sending
         if (!deferData.donor_id || !deferData.deferral_type || !deferData.disapproval_reason) {
@@ -481,12 +466,10 @@ async function submitScreeningDeferral() {
         });
         
         if (result.success) {
-            console.log('Screening deferral recorded successfully:', result);
             
             // Update or create physical examination remarks and needs_review
             const physicalExamId = allSourceData.physicalExam?.physical_exam_id || null;
             const medicalHistoryId = allSourceData.screeningForm?.medical_history_id || null;
-            console.log('Physical examination ID:', physicalExamId, 'Medical History ID:', medicalHistoryId, 'Donor ID:', donorId);
             await updateScreeningPhysicalExaminationAfterDeferral(physicalExamId, deferralType, donorId, medicalHistoryId);
             
             // Close the deferral modal
@@ -531,7 +514,6 @@ async function updateScreeningPhysicalExaminationAfterDeferral(physicalExamId, d
     try {
         if (physicalExamId) {
             // Update existing physical examination record
-            console.log('Updating existing physical examination:', {
                 physical_exam_id: physicalExamId,
                 remarks: remarks,
                 needs_review: false
@@ -556,13 +538,11 @@ async function updateScreeningPhysicalExaminationAfterDeferral(physicalExamId, d
             const result = await response.json();
             
             if (result.success) {
-                console.log('Physical examination updated successfully:', result);
             } else {
                 console.error('Failed to update physical examination:', result.error);
             }
         } else if (donorId) {
             // Create new physical examination record
-            console.log('Creating new physical examination record:', {
                 donor_id: donorId,
                 remarks: remarks,
                 needs_review: false
@@ -587,21 +567,17 @@ async function updateScreeningPhysicalExaminationAfterDeferral(physicalExamId, d
             const result = await response.json();
             
             if (result.success) {
-                console.log('Physical examination record created successfully:', result);
             } else {
                 console.error('Failed to create physical examination record:', result.error);
             }
         } else {
-            console.log('No physical_exam_id or donor_id available, skipping physical examination update/create');
         }
         
         // Update medical history if medical_history_id is available
         if (medicalHistoryId) {
-            console.log('Updating medical history:', {
                 medical_history_id: medicalHistoryId,
                 needs_review: false
             });
-            console.log('Medical history ID is valid, proceeding with update...');
             
             try {
                 const response = await fetch('../api/update-medical-history.php', {
@@ -623,7 +599,6 @@ async function updateScreeningPhysicalExaminationAfterDeferral(physicalExamId, d
                 const result = await response.json();
                 
                 if (result.success) {
-                    console.log('Medical history updated successfully:', result);
                 } else {
                     console.error('Failed to update medical history:', result.error);
                 }
@@ -631,9 +606,6 @@ async function updateScreeningPhysicalExaminationAfterDeferral(physicalExamId, d
                 console.error('Error updating medical history:', error);
             }
         } else {
-            console.log('No medical_history_id available, skipping medical history update');
-            console.log('Medical history ID was:', medicalHistoryId);
-            console.log('This means the screening form did not contain a medical_history_id');
         }
     } catch (error) {
         console.error('Error updating/creating physical examination:', error);
@@ -692,7 +664,6 @@ function showScreeningDeferralConfirmedModal() {
     
     // Add event listener for when modal is closed to reload page
     modalElement.addEventListener('hidden.bs.modal', function() {
-        console.log('Screening deferral confirmation modal closed, reloading page...');
         // Clean up backdrops before reload
         if (window.cleanupModalBackdrops) {
             window.cleanupModalBackdrops();
@@ -798,7 +769,6 @@ function openScreeningDeferModal(screeningData) {
 
 // Handle screening defer button click
 function handleScreeningDeferDonor() {
-    console.log('Screening defer donor button clicked');
     const donorIdInput = document.querySelector('input[name="donor_id"]');
     const donorId = donorIdInput ? donorIdInput.value : null;
     
@@ -808,7 +778,6 @@ function handleScreeningDeferDonor() {
         return;
     }
     
-    console.log('Opening screening defer modal for donor ID:', donorId);
     
     const screeningModal = document.getElementById('screeningFormModal');
     if (screeningModal) {

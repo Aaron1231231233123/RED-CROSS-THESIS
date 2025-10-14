@@ -53,7 +53,6 @@ class PhysicalExaminationModalAdmin {
     }
     
     async openModal(screeningData) {
-        console.log('[PE ADMIN DEBUG] openModal called with screeningData:', screeningData);
         this.screeningData = screeningData;
         this.resetForm();
         this.isReadonly = false;
@@ -68,7 +67,6 @@ class PhysicalExaminationModalAdmin {
         }
         
         const modalEl = document.getElementById('physicalExaminationModalAdmin');
-        console.log('[PE ADMIN DEBUG] Modal element found:', modalEl);
         
         if (!modalEl) {
             console.error('[PE ADMIN DEBUG] Modal element not found!');
@@ -77,7 +75,6 @@ class PhysicalExaminationModalAdmin {
         
         // Show via Bootstrap
         const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
-        console.log('[PE ADMIN DEBUG] Bootstrap modal instance:', modal);
         
         modal.show();
         
@@ -87,12 +84,10 @@ class PhysicalExaminationModalAdmin {
         
         // Add event listener to track when modal is actually shown
         modalEl.addEventListener('shown.bs.modal', () => {
-            console.log('[PE ADMIN DEBUG] Modal is now shown');
         }, { once: true });
     }
     
     populateInitialScreeningSummary(screeningData) {
-        console.log('[PE ADMIN DEBUG] Populating initial screening summary:', screeningData);
         
         // Populate donor information in summary
         const interviewerEl = document.getElementById('summary-interviewer-admin');
@@ -108,7 +103,6 @@ class PhysicalExaminationModalAdmin {
     }
     
     resetForm() {
-        console.log('[PE ADMIN DEBUG] Resetting form');
         
         // Reset form data
         this.formData = {};
@@ -148,7 +142,6 @@ class PhysicalExaminationModalAdmin {
     }
     
     nextStep() {
-        console.log('[PE ADMIN DEBUG] Next step clicked, current step:', this.currentStep);
         
         if (this.validateCurrentStep()) {
             if (this.currentStep < this.totalSteps) {
@@ -164,7 +157,6 @@ class PhysicalExaminationModalAdmin {
     }
     
     prevStep() {
-        console.log('[PE ADMIN DEBUG] Previous step clicked, current step:', this.currentStep);
         
         if (this.currentStep > 1) {
             this.currentStep--;
@@ -174,7 +166,6 @@ class PhysicalExaminationModalAdmin {
     }
     
     goToStep(step) {
-        console.log('[PE ADMIN DEBUG] Going to step:', step);
         
         if (step >= 1 && step <= this.currentStep && step <= this.totalSteps) {
             this.currentStep = step;
@@ -188,7 +179,6 @@ class PhysicalExaminationModalAdmin {
     }
     
     showStep(step) {
-        console.log('[PE ADMIN DEBUG] Showing step:', step);
         
         // Hide all step contents
         const stepContents = document.querySelectorAll('#physicalExaminationModalAdmin .physical-step-content');
@@ -220,7 +210,6 @@ class PhysicalExaminationModalAdmin {
     }
     
     updateProgressIndicator() {
-        console.log('[PE ADMIN DEBUG] Updating progress indicator, current step:', this.currentStep);
         
         const steps = document.querySelectorAll('#physicalExaminationModalAdmin .physical-step');
         steps.forEach((step, index) => {
@@ -246,7 +235,6 @@ class PhysicalExaminationModalAdmin {
     }
     
     validateCurrentStep() {
-        console.log('[PE ADMIN DEBUG] Validating current step:', this.currentStep);
         
         // Skip validation on review step (step 3) - we'll validate all fields during submission
         if (this.currentStep === 3) {
@@ -270,7 +258,6 @@ class PhysicalExaminationModalAdmin {
     }
     
     updateSummary() {
-        console.log('[PE ADMIN DEBUG] Updating summary');
         
         // Update vital signs
         const bloodPressure = document.getElementById('physical-blood-pressure-admin')?.value || '-';
@@ -294,7 +281,6 @@ class PhysicalExaminationModalAdmin {
     }
     
     async submitForm() {
-        console.log('[PE ADMIN DEBUG] Submitting form');
         
         if (!this.validateCurrentStep()) {
             return;
@@ -354,9 +340,7 @@ class PhysicalExaminationModalAdmin {
             const element = document.getElementById(field.id);
             if (element && element.value) {
                 formData.append(field.name, element.value);
-                console.log(`[PE ADMIN DEBUG] Added ${field.name}: ${element.value}`);
             } else {
-                console.log(`[PE ADMIN DEBUG] Field ${field.name} (${field.id}) not found or empty`);
             }
         });
         
@@ -365,9 +349,7 @@ class PhysicalExaminationModalAdmin {
         formData.append('blood_bag_type', 'Single');
         
         // Debug: Log all form data being sent
-        console.log('[PE ADMIN DEBUG] Form data being sent:');
         for (let [key, value] of formData.entries()) {
-            console.log(`  ${key}: ${value}`);
         }
         
         try {
@@ -407,7 +389,6 @@ class PhysicalExaminationModalAdmin {
     }
     
     closeModal() {
-        console.log('[PE ADMIN DEBUG] Closing modal');
         
         const modalEl = document.getElementById('physicalExaminationModalAdmin');
         if (modalEl) {
@@ -433,7 +414,6 @@ class PhysicalExaminationModalAdmin {
     }
     
     handleFieldChange(field) {
-        console.log('[PE ADMIN DEBUG] Field changed:', field.name, field.value);
         
         // Store field data
         this.formData[field.name] = field.value;
@@ -442,15 +422,12 @@ class PhysicalExaminationModalAdmin {
     }
     
     async checkAndUpdateDonorStatus(donorId) {
-        console.log('[PE ADMIN DEBUG] Checking completion status for donor', donorId);
         
         try {
             // Fetch eligibility data to check physician section badge status
             const eligibilityResponse = await fetch(`../../assets/php_func/fetch_donor_medical_info.php?donor_id=${donorId}&_=${Date.now()}`);
             const eligibilityData = await eligibilityResponse.json();
             
-            console.log('[PE ADMIN DEBUG] Eligibility response status:', eligibilityResponse.status);
-            console.log('[PE ADMIN DEBUG] Eligibility data:', eligibilityData);
             
             if (eligibilityData && eligibilityData.success && eligibilityData.data) {
                 const eligibility = eligibilityData.data;
@@ -459,15 +436,11 @@ class PhysicalExaminationModalAdmin {
                 const physicianMedical = eligibility.review_status || '';
                 const physicianPhysical = eligibility.physical_status || '';
                 
-                console.log('[PE ADMIN DEBUG] Physician Medical status:', physicianMedical);
-                console.log('[PE ADMIN DEBUG] Physician Physical status:', physicianPhysical);
                 
                 // Check if both physician badges would show "Accepted" (same logic as donor modal)
                 const physicianMHAccepted = this.isAcceptedStatus(physicianMedical);
                 const physicianPEAccepted = this.isAcceptedStatus(physicianPhysical);
                 
-                console.log('[PE ADMIN DEBUG] Physician MH Accepted:', physicianMHAccepted);
-                console.log('[PE ADMIN DEBUG] Physician PE Accepted:', physicianPEAccepted);
                 
                 // Determine new status based on physician section completion
                 let newStatus;
@@ -477,7 +450,6 @@ class PhysicalExaminationModalAdmin {
                     newStatus = 'Pending (Examination)';
                 }
                 
-                console.log('[PE ADMIN DEBUG] Updating status to:', newStatus);
                 this.updateDonorStatusBadge(donorId, newStatus);
                 
             } else {
@@ -505,7 +477,6 @@ class PhysicalExaminationModalAdmin {
     }
     
     updateDonorStatusBadge(donorId, newStatus) {
-        console.log('[PE ADMIN DEBUG] Updating status badge for donor', donorId, 'to', newStatus);
         
         // Find the donor row by donor ID
         const donorRows = document.querySelectorAll('tr[data-donor-id]');
@@ -541,7 +512,6 @@ class PhysicalExaminationModalAdmin {
                     statusBadge.classList.add('bg-secondary');
                 }
                 
-                console.log('[PE ADMIN DEBUG] Status badge updated successfully');
             } else {
                 console.warn('[PE ADMIN DEBUG] Status badge not found in donor row');
             }
@@ -554,5 +524,4 @@ class PhysicalExaminationModalAdmin {
 // Initialize admin modal when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     window.physicalExaminationModalAdmin = new PhysicalExaminationModalAdmin();
-    console.log('[PE ADMIN DEBUG] PhysicalExaminationModalAdmin initialized');
 });

@@ -61,12 +61,10 @@ class PhysicalExaminationModal {
     
     // Alias: open() calls openModal() for compatibility
     async open(screeningData) {
-        console.log('[PE DEBUG] open() called, delegating to openModal()');
         return this.openModal(screeningData);
     }
     
     async openModal(screeningData) {
-        console.log('[PE DEBUG] openModal called with screeningData:', screeningData);
         this.screeningData = screeningData;
         this.resetForm();
         this.isReadonly = false;
@@ -90,13 +88,10 @@ class PhysicalExaminationModal {
         }
         
         const modalEl = document.getElementById('physicalExaminationModal');
-        console.log('[PE DEBUG] Modal element found:', modalEl);
         
         // Show via Bootstrap only; do not manually toggle classes/backdrops
         const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
-        console.log('[PE DEBUG] Bootstrap modal instance:', modal);
         
-        console.log('[PE DEBUG] About to call modal.show()');
         modal.show();
         // No manual backdrop management; rely on Bootstrap stacking
         
@@ -106,18 +101,14 @@ class PhysicalExaminationModal {
         
         // Add event listener to track when modal is actually shown
         modalEl.addEventListener('shown.bs.modal', () => {
-            console.log('[PE DEBUG] Modal shown event triggered');
             const backdrops = document.querySelectorAll('.modal-backdrop');
-            console.log('[PE DEBUG] Backdrops on shown event:', backdrops.length, backdrops);
             backdrops.forEach((backdrop, index) => {
-                console.log(`[PE DEBUG] Shown backdrop ${index}: z-index=${backdrop.style.zIndex}, classList=${backdrop.classList.toString()}`);
             });
             
             // Ensure all backdrops have correct z-index
             backdrops.forEach((backdrop, index) => {
                 if (backdrop.style.zIndex !== '1064') {
                     backdrop.style.zIndex = '1064';
-                    console.log(`[PE DEBUG] Fixed backdrop ${index} z-index to 1064 on shown event`);
                 }
             });
 
@@ -165,31 +156,26 @@ class PhysicalExaminationModal {
 
         // When PE modal closes (X button or otherwise), return to donor profile modal
         const onHidden = () => {
-            console.log('[PE MODAL] Physical Examination modal hidden.bs.modal event fired');
             try {
                 // Don't reopen if we're in a success/approval flow
                 if (window.__suppressReturnToProfile || window.__peSuccessActive) {
-                    console.log('[PE MODAL] Suppressing return to profile (success flow active)');
                     window.__suppressReturnToProfile = false;
                     return;
                 }
                 
                 const dpEl = document.getElementById('donorProfileModal');
                 if (dpEl) {
-                    console.log('[PE MODAL] Found donor profile modal, reopening...');
                     
                     // Clear any hide prevention flags
                     try { window.allowDonorProfileHide = false; } catch(_) {}
                     
                     const dp = bootstrap.Modal.getOrCreateInstance(dpEl, { backdrop: 'static', keyboard: false });
                     dp.show();
-                    console.log('[PE MODAL] Called dp.show()');
                     
                     // Refresh with last context if available
                     setTimeout(() => {
                         try {
                             if (window.lastDonorProfileContext && typeof refreshDonorProfileModal === 'function') {
-                                console.log('[PE MODAL] Refreshing donor profile with context');
                                 refreshDonorProfileModal(window.lastDonorProfileContext);
                             } else {
                                 console.warn('[PE MODAL] No context or refreshDonorProfileModal function not found');
@@ -222,7 +208,6 @@ class PhysicalExaminationModal {
         };
         const onHiddenCapture = () => onHidden();
         modalEl.addEventListener('hidden.bs.modal', onHiddenCapture, true);
-        console.log('[PE MODAL] Attached hidden.bs.modal listener for return to donor profile');
         // Default blood bag to 'Single' and hide Blood Bag step (3)
         try {
             // NOTE: Default blood bag as 'Single' for submission/summary even if UI is hidden.
@@ -257,8 +242,6 @@ class PhysicalExaminationModal {
             if (donorId) {
                 // Try both sources. Prefer fallback (returns physical_exam) because it's what your console shows
                 const exam = await this.getLatestExamWithFallback(donorId) || await this.fetchExistingPhysicalExamination(donorId);
-                console.log('[PE DEBUG] Exam record found:', !!exam);
-                console.log('[PE DEBUG] Exam has physical_exam_id:', !!exam?.physical_exam_id);
                 const getState = (ex) => {
                     if (!ex) return '';
                     // Prefer remarks (PE column). If absent, use pe_remarks from combined payload.
@@ -269,25 +252,17 @@ class PhysicalExaminationModal {
                     if (raw == null) { source = 'medical_approval'; raw = ex.medical_approval; }
                     if (raw == null) { source = 'status'; raw = ex.status; }
                     const norm = String(raw ?? '').trim().toLowerCase();
-                    console.log('[PE DEBUG] State source:', source, 'value:', norm);
                     return norm;
                 };
                 const st = getState(exam);
-                console.log('[PE DEBUG] Exam data:', exam);
-                console.log('[PE DEBUG] remarks column value:', String(exam?.remarks ?? '').toLowerCase());
-                console.log('[PE DEBUG] All exam fields:', Object.keys(exam || {}));
-                console.log('[PE DEBUG] remarks field type:', typeof exam?.remarks, 'value:', exam?.remarks);
-                console.log('[PE DEBUG] Remarks value:', st);
                 // Treat any not-pending as terminal
                 const terminal = (!!st && st !== 'pending');
-                console.log('[PE DEBUG] Is terminal (should prefill):', terminal);
                 if (terminal || window.forcePhysicalReadonly) {
                     this.hideReviewStage();
                     this.applyReadonlyMode();
                 }
                 // Perform explicit prefill ONLY when terminal (readonly)
                 if (exam && (terminal || window.forcePhysicalReadonly)) {
-                    console.log('[PE DEBUG] Prefilling form with exam data');
                     const valOf = (keys) => {
                         for (const k of keys) { if (exam[k] != null && exam[k] !== '') return exam[k]; }
                         return '';
@@ -930,13 +905,69 @@ class PhysicalExaminationModal {
             data.status = 'Pending';
             // Set remarks to Accepted upon physician approval/submit
             data.remarks = 'Accepted';
-            const result = await makeApiCall('../../assets/php_func/process_physical_examination.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
+            // Use makeApiCall if available, otherwise use fetch
+            let result;
+            if (typeof makeApiCall === 'function') {
+                result = await makeApiCall('../../assets/php_func/process_physical_examination.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+            } else {
+                const response = await fetch('../../assets/php_func/process_physical_examination.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                result = await response.json();
+            }
             if (result && result.success) {
                 const donorId = (this.screeningData && (this.screeningData.donor_form_id || this.screeningData.donor_id)) || window.__peLastDonorId || null;
+                
+                // Update medical approval status to "Approved" when physical examination is accepted
+                if (donorId) {
+                    console.log('Updating medical approval status for donor:', donorId);
+                    try {
+                        const updateFormData = new FormData();
+                        updateFormData.append('donor_id', donorId);
+                        updateFormData.append('medical_approval', 'Approved');
+                        
+                        console.log('Sending medical approval update request...');
+                        const updateResponse = await fetch('../../public/api/update-medical-approval.php', {
+                            method: 'POST',
+                            body: updateFormData
+                        });
+                        
+                        console.log('Update response status:', updateResponse.status);
+                        if (updateResponse.ok) {
+                            const updateResult = await updateResponse.json();
+                            console.log('Update result:', updateResult);
+                            if (updateResult && updateResult.success) {
+                                // Update in-memory cache so UI doesn't flash Not Approved
+                                try {
+                                    if (typeof window.medicalByDonor === 'object') {
+                                        const key = donorId; const k2 = String(donorId);
+                                        window.medicalByDonor[key] = window.medicalByDonor[key] || {};
+                                        window.medicalByDonor[key].medical_approval = 'Approved';
+                                        window.medicalByDonor[k2] = window.medicalByDonor[k2] || {};
+                                        window.medicalByDonor[k2].medical_approval = 'Approved';
+                                        console.log('Updated medicalByDonor cache for keys:', key, k2);
+                                    }
+                                } catch(_) {}
+                                console.log('Medical approval status updated successfully');
+                            } else {
+                                console.error('Failed to update medical approval status:', updateResult);
+                            }
+                        } else {
+                            console.error('HTTP error updating medical approval status:', updateResponse.status);
+                        }
+                    } catch(error) {
+                        console.error('Failed to update medical approval status:', error);
+                    }
+                } else {
+                    console.error('No donor ID available for medical approval update');
+                }
+                
                 // Show minimalist success modal (no buttons), then redirect
                 await this.showTransientResultModal({
                     title: 'Accepted',
@@ -1019,7 +1050,6 @@ class PhysicalExaminationModal {
     }
     // Simplified redirect to donor profile (no reload)
     redirectToDonorProfile(donorId, screeningData) {
-        console.log('[PE] reopenDonorProfileAfterSuccess called with donorId:', donorId);
         try { 
             window.__peSuccessActive = false; 
             window.__mhSuccessActive = false; // Clear medical history success state

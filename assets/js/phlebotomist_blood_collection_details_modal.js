@@ -58,7 +58,6 @@ class PhlebotomistBloodCollectionDetailsModal {
             const result = await response.json();
 
             if (result.success) {
-                console.log('Donor data received:', result.data);
                 this.populateModal(result.data);
                 this.showModal();
             } else {
@@ -93,7 +92,6 @@ class PhlebotomistBloodCollectionDetailsModal {
     }
 
     populateCollectionDetails(blood_collection) {
-        console.log('Populating collection details with:', blood_collection);
         
         // Collection Date
         const collectionDateEl = document.getElementById('phlebotomist-collection-date');

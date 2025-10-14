@@ -10,19 +10,16 @@ document.addEventListener('DOMContentLoaded', function() {
         function setFieldValue(name, value) {
             const field = document.querySelector(`[name="${name}"]`);
             if (field) {
-                console.log(`Setting field ${name} to value: ${value}`);
                 if (field.tagName === 'DIV' || field.tagName === 'SPAN' || field.tagName === 'H3') {
                     field.textContent = value || '-';
                 } else {
                     field.value = value || '';
                 }
             } else {
-                console.log(`Field with name="${name}" not found`);
             }
         }
         
         // Populate donor header section
-        console.log('Donor data for name:', {
             surname: donorData.surname,
             first_name: donorData.first_name,
             middle_name: donorData.middle_name
@@ -50,12 +47,9 @@ document.addEventListener('DOMContentLoaded', function() {
             fullName = `Donor ID: ${donorData.donor_id || 'Unknown'}`;
         }
         
-        console.log('Constructed full name:', fullName);
         
         // Debug: Check if the donor_name element exists
         const donorNameElement = document.querySelector('[name="donor_name"]');
-        console.log('Donor name element found:', donorNameElement);
-        console.log('Donor name element tag:', donorNameElement ? donorNameElement.tagName : 'not found');
         
         setFieldValue('donor_name', fullName);
         
@@ -65,7 +59,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Fix blood type badge - check multiple possible sources
         let bloodType = donorData.blood_type || donorData.blood_type_screening || donorData.blood_type_donor || 'N/A';
-        console.log('Blood type sources:', {
             blood_type: donorData.blood_type,
             blood_type_screening: donorData.blood_type_screening,
             blood_type_donor: donorData.blood_type_donor,
@@ -133,7 +126,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (response.ok) {
                 const screeningData = await response.json();
                 if (screeningData.success && screeningData.data) {
-                    console.log('Screening data received:', screeningData.data);
                     
                     // Update screening fields with actual data
                     const setFieldValue = (name, value) => {
@@ -153,15 +145,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         const bloodBadge = document.querySelector('[name="blood_badge"]');
                         if (bloodBadge) {
                             bloodBadge.textContent = screeningData.data.blood_type;
-                            console.log('Updated blood badge to:', screeningData.data.blood_type);
                         }
                     }
                 } else {
-                    console.log('No screening data found for donor:', donorId);
                 }
             }
         } catch (error) {
-            console.log('No screening data available for this donor yet:', error);
         }
     }
 
@@ -198,8 +187,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 const donorDataStr = this.getAttribute('data-donor');
                 const donorId = this.getAttribute('data-donor-id');
                 
-                console.log("View button clicked, data attribute value:", donorDataStr);
-                console.log("Donor ID:", donorId);
                 
                 // Check if we have donor data
                 if (!donorDataStr || donorDataStr === 'null' || donorDataStr === '{}') {
@@ -209,8 +196,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Try to parse the donor data
                 currentDonorData = JSON.parse(donorDataStr);
-                console.log("Parsed donor data:", currentDonorData);
-                console.log("Name fields check:", {
                     surname: currentDonorData.surname,
                     first_name: currentDonorData.first_name,
                     middle_name: currentDonorData.middle_name,
@@ -219,8 +204,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 
                 // Debug: Show all available fields
-                console.log("All donor data fields:", Object.keys(currentDonorData));
-                console.log("Sample donor data values:", {
                     donor_id: currentDonorData.donor_id,
                     surname: currentDonorData.surname,
                     first_name: currentDonorData.first_name,
@@ -234,7 +217,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Fallback to using the donor_id from the attribute
                     if (donorId) {
                         currentDonorData = { donor_id: donorId };
-                        console.log("Using fallback donor_id:", donorId);
                     } else {
                         showError('Missing donor_id in parsed data. This will cause issues with approval.');
                         return;
@@ -247,7 +229,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Wait a moment for the modal to be fully rendered, then populate
                 setTimeout(() => {
-                    console.log('Modal should be visible now, populating fields...');
                     populateModalFields(currentDonorData);
                 }, 100);
                 
@@ -267,7 +248,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.edit-donor-btn').forEach(button => {
         button.addEventListener('click', function() {
             const donorId = this.getAttribute('data-donor-id');
-            console.log('Edit button clicked for donor ID:', donorId);
             // Add your edit functionality here
             alert('Edit functionality will be implemented for donor ID: ' + donorId);
         });
@@ -277,7 +257,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const approveButton = document.getElementById('Approve');
     if (approveButton) {
         approveButton.addEventListener('click', function() {
-            console.log("Approve button clicked");
             
             if (!currentDonorData) {
                 showError('Error: No donor selected');
@@ -285,7 +264,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            console.log("Current donor data:", currentDonorData);
             
             // Get the donor_id from the data
             const donorId = currentDonorData.donor_id;
@@ -295,7 +273,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            console.log("Opening screening modal for donor ID:", donorId);
             
             // Close the donor details modal first
             const donorModal = bootstrap.Modal.getInstance(document.getElementById('donorDetailsModal'));
@@ -345,7 +322,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Proper cleanup for donor modal
     if (donorModal) {
         donorModal.addEventListener('hidden.bs.modal', function() {
-            console.log('Donor modal hidden, cleaning up...');
             
             // Reset current donor data
             currentDonorData = null;
@@ -371,7 +347,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 toggleAdditionalInfoBtn.classList.remove('expanded');
             }
             
-            console.log('Donor modal cleanup completed');
         });
     }
 

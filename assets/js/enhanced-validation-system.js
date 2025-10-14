@@ -17,7 +17,6 @@ class EnhancedValidationSystem {
     init() {
         this.setupDefaultValidationRules();
         this.setupCustomValidators();
-        console.log('Enhanced Validation System initialized');
     }
 
     /**

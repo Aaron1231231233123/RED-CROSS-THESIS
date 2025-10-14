@@ -17,28 +17,28 @@ document.addEventListener('DOMContentLoaded', function(){
                 <div class="dropdown-menu p-3" style="min-width:280px;">
                     <div class="mb-2 fw-bold text-muted">Donor Type</div>
                     <div class="form-check">
-                        <input class="form-check-input" type="checkbox" value="Returning" id="fltDonorReturning">
+                        <input class="form-check-input" type="checkbox" value="Returning" id="fltDonorReturning" aria-label="Filter by Returning donor type">
                         <label class="form-check-label" for="fltDonorReturning">Returning</label>
                     </div>
                     <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" value="New" id="fltDonorNew">
+                        <input class="form-check-input" type="checkbox" value="New" id="fltDonorNew" aria-label="Filter by New donor type">
                         <label class="form-check-label" for="fltDonorNew">New</label>
                     </div>
                     <div class="mb-2 fw-bold text-muted">Status</div>
                     <div class="form-check">
-                        <input class="form-check-input" type="checkbox" value="Pending" id="fltStatusPending">
+                        <input class="form-check-input" type="checkbox" value="Pending" id="fltStatusPending" aria-label="Filter by Pending status">
                         <label class="form-check-label" for="fltStatusPending">Pending</label>
                     </div>
                     <div class="form-check">
-                        <input class="form-check-input" type="checkbox" value="Accepted" id="fltStatusAccepted">
+                        <input class="form-check-input" type="checkbox" value="Accepted" id="fltStatusAccepted" aria-label="Filter by Accepted status">
                         <label class="form-check-label" for="fltStatusAccepted">Accepted</label>
                     </div>
                     <div class="form-check">
-                        <input class="form-check-input" type="checkbox" value="Deferred" id="fltStatusDeferred">
+                        <input class="form-check-input" type="checkbox" value="Deferred" id="fltStatusDeferred" aria-label="Filter by Deferred status">
                         <label class="form-check-label" for="fltStatusDeferred">Deferred</label>
                     </div>
                     <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" value="Ineligible" id="fltStatusIneligible">
+                        <input class="form-check-input" type="checkbox" value="Ineligible" id="fltStatusIneligible" aria-label="Filter by Ineligible status">
                         <label class="form-check-label" for="fltStatusIneligible">Ineligible</label>
                     </div>
                     <div class="d-grid">

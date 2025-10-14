@@ -100,19 +100,10 @@ function initializeDeferModal() {
             submitBtn.style.borderColor = '#6c757d';
             submitBtn.style.color = 'white';
         }
-        
-        console.log('Defer submit button state updated:', {
-            reasonValid,
-            deferralTypeValid,
-            durationValid,
-            allValid,
-            disabled: submitBtn.disabled
-        });
     }
 
     // Handle deferral type change
     deferralTypeSelect.addEventListener('change', function() {
-            console.log('Deferral type changed to:', this.value);
             if (this.value === 'Temporary Deferral') {
                 durationSection.style.display = 'block';
                 setTimeout(() => {
@@ -264,7 +255,6 @@ function initializeDeferModal() {
     // Initial validation
     updateDeferValidation();
     
-    console.log('Defer modal with validation initialized');
 }
 
 // Validate defer form
@@ -342,23 +332,13 @@ async function submitDeferral() {
         }
     }
 
-    console.log('Submitting deferral data:', {
-        donor_id: donorId,
-        screening_id: screeningId,
-        deferral_type: deferralType,
-        disapproval_reason: disapprovalReason,
-        duration: finalDuration
-    });
-
     // Show loading state
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
     submitBtn.disabled = true;
 
     try {
         // Fetch all source data (same as medical history decline)
-        console.log('Fetching comprehensive data for donor:', donorId);
         const allSourceData = await fetchAllSourceData(donorId);
-        console.log('Fetched all source data:', allSourceData);
         
         // Calculate temporary_deferred text based on deferral type
         let temporaryDeferredText;
@@ -425,7 +405,6 @@ async function submitDeferral() {
             updated_at: new Date().toISOString()
         };
         
-        console.log('Using update-eligibility with data:', eligibilityData);
         
         // Submit to update-eligibility endpoint (same as medical history decline)
         const response = await fetch('../api/update-eligibility.php', {
@@ -450,11 +429,9 @@ async function submitDeferral() {
         });
         
         if (result.success) {
-            console.log('Deferral recorded successfully:', result);
             
             // Update or create physical examination remarks and needs_review
             const physicalExamId = allSourceData.physicalExam?.physical_exam_id || null;
-            console.log('Physical examination ID:', physicalExamId, 'Donor ID:', donorId);
             await updatePhysicalExaminationAfterDeferral(physicalExamId, deferralType, donorId);
             
             // Close only the deferral modal, keep physical examination modal open
@@ -499,12 +476,6 @@ async function updatePhysicalExaminationAfterDeferral(physicalExamId, deferralTy
     try {
         if (physicalExamId) {
             // Update existing physical examination record
-            console.log('Updating existing physical examination:', {
-                physical_exam_id: physicalExamId,
-                remarks: remarks,
-                needs_review: false
-            });
-            
             const response = await fetch('../api/update-physical-examination.php', {
                 method: 'POST',
                 headers: {
@@ -523,19 +494,11 @@ async function updatePhysicalExaminationAfterDeferral(physicalExamId, deferralTy
             
             const result = await response.json();
             
-            if (result.success) {
-                console.log('Physical examination updated successfully:', result);
-            } else {
+            if (!result.success) {
                 console.error('Failed to update physical examination:', result.error);
             }
         } else if (donorId) {
             // Create new physical examination record
-            console.log('Creating new physical examination record:', {
-                donor_id: donorId,
-                remarks: remarks,
-                needs_review: false
-            });
-            
             const response = await fetch('../api/create-physical-examination.php', {
                 method: 'POST',
                 headers: {
@@ -554,13 +517,9 @@ async function updatePhysicalExaminationAfterDeferral(physicalExamId, deferralTy
             
             const result = await response.json();
             
-            if (result.success) {
-                console.log('Physical examination record created successfully:', result);
-            } else {
+            if (!result.success) {
                 console.error('Failed to create physical examination record:', result.error);
             }
-        } else {
-            console.log('No physical_exam_id or donor_id available, skipping physical examination update/create');
         }
     } catch (error) {
         console.error('Error updating/creating physical examination:', error);
@@ -614,7 +573,6 @@ function showDeferralConfirmedModal() {
     
     // Add event listener for when modal is closed to reload page
     document.getElementById('deferralConfirmedModal').addEventListener('hidden.bs.modal', function() {
-        console.log('Deferral confirmation modal closed, reloading page...');
         window.location.reload();
     }, { once: true });
 }
@@ -714,13 +672,11 @@ function openDeferModal(screeningData) {
 // Handle defer button click from physical examination modal
 function handleDeferClick(e) {
     e.preventDefault();
-    console.log('Defer button clicked');
     
     // Get current screening data from the physical examination modal
     const donorId = document.getElementById('physical-donor-id')?.value;
     const screeningId = document.getElementById('physical-screening-id')?.value;
     
-    console.log('Donor ID:', donorId, 'Screening ID:', screeningId);
     
     if (!donorId || !screeningId) {
         showDeferToast('Error', 'Unable to get donor information. Please try again.', 'error');
@@ -740,7 +696,6 @@ function initializePhysicalExamDeferButton() {
     // Use a timeout to ensure the modal is fully loaded
     setTimeout(() => {
         const physicalDeferBtn = document.querySelector('.physical-defer-btn');
-        console.log('Looking for defer button:', physicalDeferBtn);
         
         if (physicalDeferBtn) {
             // Remove any existing event listeners
@@ -748,7 +703,6 @@ function initializePhysicalExamDeferButton() {
             
             // Add the event listener
             physicalDeferBtn.addEventListener('click', handleDeferClick);
-            console.log('Defer button initialized successfully');
         } else {
             console.error('Physical defer button not found in DOM');
         }

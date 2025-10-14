@@ -3720,21 +3720,24 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         modalContent.innerHTML = data;
                         
                         // Execute any script tags in the loaded content
+                        // Remove all script tags to prevent CSP violations
                         const scripts = modalContent.querySelectorAll('script');
                         scripts.forEach(script => {
                             try {
-                                const newScript = document.createElement('script');
-                                if (script.type) newScript.type = script.type;
-                                if (script.src) {
-                                    newScript.src = script.src;
-                                } else {
-                                    newScript.text = script.textContent || '';
-                                }
-                                document.body.appendChild(newScript);
+                                script.remove();
                             } catch (e) {
-                                // Script execution error - silent
+                                console.warn('Could not remove script tag:', e);
                             }
                         });
+                        
+                        // Manually call known functions that might be needed
+                        try {
+                            if (typeof window.initializeMedicalHistoryApproval === 'function') {
+                                window.initializeMedicalHistoryApproval();
+                            }
+                        } catch(e) {
+                            console.warn('Could not execute initializeMedicalHistoryApproval:', e);
+                        }
                         
                         // Add form submission interceptor to prevent submissions without proper action
                         const form = document.getElementById('modalMedicalHistoryForm');

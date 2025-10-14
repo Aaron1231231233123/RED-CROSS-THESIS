@@ -378,9 +378,10 @@ if ($physical_exam_info && isset($physical_exam_info['remarks'])) {
                                  <span class="donor-id-display">
                      Donor ID: <?php echo htmlspecialchars($donor_info['prc_donor_number'] ?? 'N/A'); ?>
                  </span>
-                <span class="blood-type-display">
-                    <?php echo htmlspecialchars($screening_info['blood_type'] ?? 'N/A'); ?>
-                </span>
+                <div class="badge fs-6 px-3 py-2" style="background-color: #8B0000; color: white; border-radius: 20px; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 80px;">
+                    <div style="font-size: 0.75rem; font-weight: 500; opacity: 0.9;">Blood Type</div>
+                    <div style="font-size: 1.3rem; font-weight: 700; line-height: 1;"><?php echo htmlspecialchars($screening_info['blood_type'] ?? 'N/A'); ?></div>
+                </div>
             </div>
         </div>
     </div>
@@ -393,28 +394,28 @@ if ($physical_exam_info && isset($physical_exam_info['remarks'])) {
         </h3>
         <div class="form-grid">
             <div class="form-group">
-                <label class="form-label">Birthdate</label>
-                <input type="text" class="form-input" value="<?php echo htmlspecialchars($donor_info['birthdate'] ?? 'N/A'); ?>" readonly>
+                <label class="form-label" for="donor-birthdate">Birthdate</label>
+                <input type="text" id="donor-birthdate" name="donor_birthdate" class="form-input" value="<?php echo htmlspecialchars($donor_info['birthdate'] ?? 'N/A'); ?>" readonly aria-label="Donor birthdate">
             </div>
             <div class="form-group">
-                <label class="form-label">Address</label>
-                <input type="text" class="form-input" value="<?php echo htmlspecialchars($donor_info['permanent_address'] ?? 'N/A'); ?>" readonly>
+                <label class="form-label" for="donor-address">Address</label>
+                <input type="text" id="donor-address" name="donor_address" class="form-input" value="<?php echo htmlspecialchars($donor_info['permanent_address'] ?? 'N/A'); ?>" readonly aria-label="Donor address">
             </div>
             <div class="form-group">
-                <label class="form-label">Mobile Number</label>
-                <input type="text" class="form-input" value="<?php echo htmlspecialchars($donor_info['mobile'] ?? 'N/A'); ?>" readonly>
+                <label class="form-label" for="donor-mobile">Mobile Number</label>
+                <input type="text" id="donor-mobile" name="donor_mobile" class="form-input" value="<?php echo htmlspecialchars($donor_info['mobile'] ?? 'N/A'); ?>" readonly aria-label="Donor mobile number">
             </div>
             <div class="form-group">
-                <label class="form-label">Civil Status</label>
-                <input type="text" class="form-input" value="<?php echo htmlspecialchars(ucfirst($donor_info['civil_status'] ?? 'N/A')); ?>" readonly>
+                <label class="form-label" for="donor-civil-status">Civil Status</label>
+                <input type="text" id="donor-civil-status" name="donor_civil_status" class="form-input" value="<?php echo htmlspecialchars(ucfirst($donor_info['civil_status'] ?? 'N/A')); ?>" readonly aria-label="Donor civil status">
             </div>
             <div class="form-group">
-                <label class="form-label">Nationality</label>
-                <input type="text" class="form-input" value="<?php echo htmlspecialchars($donor_info['nationality'] ?? 'N/A'); ?>" readonly>
+                <label class="form-label" for="donor-nationality">Nationality</label>
+                <input type="text" id="donor-nationality" name="donor_nationality" class="form-input" value="<?php echo htmlspecialchars($donor_info['nationality'] ?? 'N/A'); ?>" readonly aria-label="Donor nationality">
             </div>
             <div class="form-group">
-                <label class="form-label">Occupation</label>
-                <input type="text" class="form-input" value="<?php echo htmlspecialchars($donor_info['occupation'] ?? 'N/A'); ?>" readonly>
+                <label class="form-label" for="donor-occupation">Occupation</label>
+                <input type="text" id="donor-occupation" name="donor_occupation" class="form-input" value="<?php echo htmlspecialchars($donor_info['occupation'] ?? 'N/A'); ?>" readonly aria-label="Donor occupation">
             </div>
         </div>
     </div>

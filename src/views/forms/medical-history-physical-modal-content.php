@@ -660,7 +660,9 @@ if ($http_code === 200) {
 </div>
 
 <form method="POST" action="medical-history-process.php" id="modalMedicalHistoryForm">
-    <input type="hidden" name="donor_id" value="<?php echo htmlspecialchars($donor_id); ?>">
+    <label for="modal-donor-id" class="visually-hidden">Donor ID</label>
+    <input type="hidden" id="modal-donor-id" name="donor_id" value="<?php echo htmlspecialchars($donor_id); ?>">
+    <label for="modalSelectedAction" class="visually-hidden">Selected Action</label>
     <input type="hidden" name="action" id="modalSelectedAction" value="">
     
     <!-- Step 1: Health & Risk Assessment -->
@@ -824,10 +826,10 @@ if ($http_code === 200) {
             <i class="fas fa-check-circle me-2"></i>Approve
         </button>
         <?php
-            // Button label is role-aware: interviewer proceeds to Initial Screening; physician proceeds to PE (handled at dashboard level)
-            $nextLabel = (isset($_SESSION['user_staff_role']) && strtolower($_SESSION['user_staff_role']) === 'interviewer') ? 'Proceed to Initial Screening' : 'Next →';
+            // This is the PHYSICIAN dashboard medical history modal - always use Next for navigation only
+            // The "Proceed to Initial Screening" action is for interviewer dashboard, not here
         ?>
-        <button class="next-button" id="modalNextButton"><?php echo $nextLabel; ?></button>
+        <button class="next-button" id="modalNextButton">Next →</button>
     </div>
 </div>
 
@@ -852,6 +854,9 @@ if ($http_code === 200) {
                 el.disabled = true;
                 el.setAttribute('aria-readonly','true');
             });
+            
+            // Keep the Next button for navigation - it's needed for step navigation
+            // The button is hardcoded as "Next →" in PHP, no need to remove it
         } catch(_) {}
     }
     enforceReadonly();
