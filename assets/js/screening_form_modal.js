@@ -392,11 +392,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const hasGravityError = (gravity < 12.5 || gravity > 18.0) && gravity > 0;
             
             // Debug logging
-                weight: weight,
-                gravity: gravity,
-                hasWeightError: hasWeightError,
-                hasGravityError: hasGravityError
-            });
+            try {
+                console.log('[Screening Validation]', {
+                    weight: weight,
+                    gravity: gravity,
+                    hasWeightError: hasWeightError,
+                    hasGravityError: hasGravityError
+                });
+            } catch(_) {}
             
             if (hasWeightError || hasGravityError) {
                 window.showValidationErrorModal(hasWeightError, hasGravityError);

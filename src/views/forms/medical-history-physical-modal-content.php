@@ -103,6 +103,36 @@ if ($http_code === 200) {
     error_log("Medical history query response for donor_id $donor_id: " . $response);
     if (!empty($data)) {
         $medical_history_data = $data[0];
+        // Normalize boolean-like fields to real booleans so the UI can compare strictly
+        try {
+            $boolFields = [
+                'feels_well','previously_refused','testing_purpose_only','understands_transmission_risk',
+                'recent_alcohol_consumption','recent_aspirin','recent_medication','recent_donation',
+                'zika_travel','zika_contact','zika_sexual_contact','blood_transfusion',
+                'surgery_dental','tattoo_piercing','risky_sexual_contact','unsafe_sex',
+                'hepatitis_contact','imprisonment','uk_europe_stay','foreign_travel',
+                'drug_use','clotting_factor','positive_disease_test','malaria_history',
+                'std_history','cancer_blood_disease','heart_disease','lung_disease',
+                'kidney_disease','chicken_pox','chronic_illness','recent_fever',
+                'pregnancy_history','last_childbirth','recent_miscarriage','breastfeeding',
+                'last_menstruation'
+            ];
+            foreach ($boolFields as $f) {
+                if (!array_key_exists($f, $medical_history_data)) continue;
+                $v = $medical_history_data[$f];
+                if ($v === true || $v === false) { /* already boolean */ }
+                else if (is_numeric($v)) {
+                    $medical_history_data[$f] = ((int)$v) === 1;
+                } else if (is_string($v)) {
+                    $s = strtolower(trim($v));
+                    if (in_array($s, ['yes','y','true','t','1'], true)) {
+                        $medical_history_data[$f] = true;
+                    } else if (in_array($s, ['no','n','false','f','0'], true)) {
+                        $medical_history_data[$f] = false;
+                    }
+                }
+            }
+        } catch (Throwable $__) { /* ignore normalization errors */ }
         error_log("Medical history data found: " . json_encode($medical_history_data));
     } else {
         error_log("No medical history data found for donor_id: $donor_id");

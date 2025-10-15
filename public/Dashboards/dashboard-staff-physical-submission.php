@@ -4716,6 +4716,40 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             };
             
             // Generate questions for each step
+            // Helpers: normalize booleans and safely resolve field/remarks with fallbacks
+            const __mhNormalizeBool = (val) => {
+                if (val === true || val === false) return val;
+                if (val === null || typeof val === 'undefined' || val === '') return null;
+                const s = String(val).trim().toLowerCase();
+                if (['yes','y','true','t','1'].includes(s)) return true;
+                if (['no','n','false','f','0'].includes(s)) return false;
+                return null;
+            };
+            const __mhGetValue = (data, qNum, fieldName) => {
+                if (!data) return null;
+                if (fieldName && (fieldName in data)) return __mhNormalizeBool(data[fieldName]);
+                // Fallbacks: q{n}, q{n}_answer, question{n}
+                const tryKeys = [
+                    `q${qNum}`, `q${qNum}_answer`, `question${qNum}`, `question_${qNum}`
+                ];
+                for (const k of tryKeys) {
+                    if (k in data) return __mhNormalizeBool(data[k]);
+                }
+                return null;
+            };
+            const __mhGetRemarks = (data, qNum, fieldName) => {
+                if (!data) return null;
+                const primary = `${fieldName}_remarks`;
+                if (fieldName && (primary in data)) return data[primary];
+                const tryKeys = [
+                    `q${qNum}_remarks`, `question${qNum}_remarks`, `question_${qNum}_remarks`
+                ];
+                for (const k of tryKeys) {
+                    if (k in data) return data[k];
+                }
+                return null;
+            };
+            try { console.debug('[MH Modal] Data snapshot:', { keys: modalMedicalHistoryData ? Object.keys(modalMedicalHistoryData) : null, donorSex: modalDonorSex, role: modalUserRole }); } catch(_) {}
             for (let step = 1; step <= 6; step++) {
                 // Skip step 6 for male donors
                 if (step === 6 && modalIsMale) {
@@ -4732,41 +4766,42 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 
                 stepQuestions.forEach(questionData => {
                     const fieldName = getModalFieldName(questionData.q);
-                    const value = modalMedicalHistoryData ? modalMedicalHistoryData[fieldName] : null;
-                    const remarks = modalMedicalHistoryData ? modalMedicalHistoryData[fieldName + '_remarks'] : null;
+                    const value = __mhGetValue(modalMedicalHistoryData, questionData.q, fieldName);
+                    const remarks = __mhGetRemarks(modalMedicalHistoryData, questionData.q, fieldName);
                     
                     // Create a form group for each question
                     const questionRow = document.createElement('div');
                     questionRow.className = 'form-group';
+                    // Ensure remarks option list includes the saved remark (if any)
+                    const optionsList = Array.isArray(modalRemarksOptions[questionData.q]) ? [...modalRemarksOptions[questionData.q]] : ['None'];
+                    if (remarks && !optionsList.includes(remarks)) {
+                        optionsList.unshift(remarks);
+                    }
                     questionRow.innerHTML = `
                         <div class="question-number">${questionData.q}</div>
                         <div class="question-text" id="question-text-${questionData.q}">${questionData.text}</div>
                         <div class="radio-cell">
-                            <input type="radio" 
-                                   id="q${questionData.q}-yes"
-                                   name="q${questionData.q}" 
-                                   value="Yes" 
-                                   ${value === true ? 'checked' : ''} 
-                                   ${modalRequiredAttr}
-                                   aria-labelledby="question-text-${questionData.q}"
-                                   class="visually-hidden">
-                            <label class="radio-container" for="q${questionData.q}-yes">
+                            <label class="radio-container">
+                                <input type="radio" 
+                                       id="q${questionData.q}-yes"
+                                       name="q${questionData.q}" 
+                                       value="Yes" 
+                                       ${value === true ? 'checked' : ''} 
+                                       ${modalRequiredAttr}
+                                       aria-labelledby="question-text-${questionData.q}">
                                 <span class="checkmark"></span>
-                                <span class="visually-hidden">Yes</span>
                             </label>
                         </div>
                         <div class="radio-cell">
-                            <input type="radio" 
-                                   id="q${questionData.q}-no"
-                                   name="q${questionData.q}" 
-                                   value="No" 
-                                   ${value === false ? 'checked' : ''} 
-                                   ${modalRequiredAttr}
-                                   aria-labelledby="question-text-${questionData.q}"
-                                   class="visually-hidden">
-                            <label class="radio-container" for="q${questionData.q}-no">
+                            <label class="radio-container">
+                                <input type="radio" 
+                                       id="q${questionData.q}-no"
+                                       name="q${questionData.q}" 
+                                       value="No" 
+                                       ${value === false ? 'checked' : ''} 
+                                       ${modalRequiredAttr}
+                                       aria-labelledby="question-text-${questionData.q}">
                                 <span class="checkmark"></span>
-                                <span class="visually-hidden">No</span>
                             </label>
                         </div>
                         <div class="remarks-cell">
@@ -4776,7 +4811,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                     name="q${questionData.q}_remarks" 
                                     ${modalRequiredAttr}
                                     aria-labelledby="question-text-${questionData.q}">
-                                ${modalRemarksOptions[questionData.q].map(option => 
+                                ${optionsList.map(option => 
                                     `<option value="${option}" ${remarks === option ? 'selected' : ''}>${option}</option>`
                                 ).join('')}
                             </select>

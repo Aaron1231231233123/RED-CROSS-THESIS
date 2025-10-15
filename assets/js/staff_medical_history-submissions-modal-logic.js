@@ -1228,42 +1228,53 @@
                      continue;
                  }
                  
-                 const stepQuestions = questionsByStep[step] || [];
-                 
-                 stepQuestions.forEach(questionData => {
-                     const fieldName = getModalFieldName(questionData.q);
-                     const value = modalMedicalHistoryData ? modalMedicalHistoryData[fieldName] : null;
-                     const remarks = modalMedicalHistoryData ? modalMedicalHistoryData[fieldName + '_remarks'] : null;
-                     
-                     // Create a form group for each question
-                     const questionRow = document.createElement('div');
-                     questionRow.className = 'form-group';
-                     questionRow.innerHTML = `
-                         <div class="question-number">${questionData.q}</div>
-                         <div class="question-text">${questionData.text}</div>
-                         <div class="radio-cell">
-                             <label class="radio-container">
-                                 <input type="radio" name="q${questionData.q}" value="Yes" ${value === true ? 'checked' : ''} ${modalRequiredAttr} aria-label="Question ${questionData.q} - Yes">
-                                 <span class="checkmark"></span>
-                             </label>
-                         </div>
-                         <div class="radio-cell">
-                             <label class="radio-container">
-                                 <input type="radio" name="q${questionData.q}" value="No" ${value === false ? 'checked' : ''} ${modalRequiredAttr} aria-label="Question ${questionData.q} - No">
-                                 <span class="checkmark"></span>
-                             </label>
-                         </div>
-                         <div class="remarks-cell">
-                             <select class="remarks-input" name="q${questionData.q}_remarks" ${modalRequiredAttr} aria-label="Remarks for question ${questionData.q}">
-                                 ${modalRemarksOptions[questionData.q].map(option => 
-                                     `<option value="${option}" ${remarks === option ? 'selected' : ''}>${option}</option>`
-                                 ).join('')}
-                             </select>
-                         </div>
-                     `;
-                     
-                     stepContainer.appendChild(questionRow);
-                 });
+                const stepQuestions = questionsByStep[step] || [];
+
+                // Helper to normalize various DB representations to strict boolean/null
+                const normalizeToBool = (val) => {
+                    if (val === true || val === false) return val;
+                    if (val === null || typeof val === 'undefined' || val === '') return null;
+                    const s = String(val).trim().toLowerCase();
+                    if (['yes','y','true','t','1'].includes(s)) return true;
+                    if (['no','n','false','f','0'].includes(s)) return false;
+                    return null;
+                };
+
+                stepQuestions.forEach(questionData => {
+                    const fieldName = getModalFieldName(questionData.q);
+                    const rawValue = modalMedicalHistoryData ? modalMedicalHistoryData[fieldName] : null;
+                    const value = normalizeToBool(rawValue);
+                    const remarks = modalMedicalHistoryData ? modalMedicalHistoryData[fieldName + '_remarks'] : null;
+
+                    // Create a form group for each question
+                    const questionRow = document.createElement('div');
+                    questionRow.className = 'form-group';
+                    questionRow.innerHTML = `
+                        <div class="question-number">${questionData.q}</div>
+                        <div class="question-text">${questionData.text}</div>
+                        <div class="radio-cell">
+                            <label class="radio-container">
+                                <input type="radio" name="q${questionData.q}" value="Yes" ${value === true ? 'checked' : ''} ${modalRequiredAttr} aria-label="Question ${questionData.q} - Yes">
+                                <span class="checkmark"></span>
+                            </label>
+                        </div>
+                        <div class="radio-cell">
+                            <label class="radio-container">
+                                <input type="radio" name="q${questionData.q}" value="No" ${value === false ? 'checked' : ''} ${modalRequiredAttr} aria-label="Question ${questionData.q} - No">
+                                <span class="checkmark"></span>
+                            </label>
+                        </div>
+                        <div class="remarks-cell">
+                            <select class="remarks-input" name="q${questionData.q}_remarks" ${modalRequiredAttr} aria-label="Remarks for question ${questionData.q}">
+                                ${modalRemarksOptions[questionData.q].map(option => 
+                                    `<option value="${option}" ${remarks === option ? 'selected' : ''}>${option}</option>`
+                                ).join('')}
+                            </select>
+                        </div>
+                    `;
+
+                    stepContainer.appendChild(questionRow);
+                });
              }
             
             // Initialize step navigation
