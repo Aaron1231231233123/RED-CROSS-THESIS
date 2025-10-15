@@ -295,10 +295,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         
                         // Update medical_history needs_review to false (staff has completed the medical history interview)
                         // The physician will review during the physical examination stage
+                        // Note: medical_approval should remain null - not set to 'Not Approved' at this stage
                         $medical_update_data = [
                             'donor_id' => $donor_id, // Use donor_id for medical_history table
                             'needs_review' => false, // Set to false - staff has completed the interview
-                            'medical_approval' => 'Not Approved', // Set to Not Approved - awaiting physician approval
+                            // medical_approval is intentionally NOT set - should remain null
                             'updated_at' => date('Y-m-d H:i:s')
                         ];
                         
@@ -324,7 +325,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         
                         if ($mh_http_code === 200) {
-                            $log_message = "[" . date('Y-m-d H:i:s') . "] Medical history updated successfully - needs_review=false, medical_approval='Not Approved' (staff has completed the medical history interview, awaiting physician approval)\n";
+                            $log_message = "[" . date('Y-m-d H:i:s') . "] Medical history updated successfully - needs_review=false, medical_approval remains null (staff has completed the medical history interview, awaiting physician approval)\n";
                             file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         } else {
                             $log_message = "[" . date('Y-m-d H:i:s') . "] Failed to update medical history: " . $mh_response . "\n";
