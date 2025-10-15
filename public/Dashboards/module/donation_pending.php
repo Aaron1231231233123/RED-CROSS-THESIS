@@ -41,7 +41,7 @@ try {
     // OPTIMIZATION 2: Fetch related process tables with status fields for accurate status determination
     // Include status fields from each stage to determine accurate pending status
     $screeningResponse = supabaseRequest("screening_form?select=screening_id,donor_form_id,needs_review,disapproval_reason,created_at");
-    $medicalResponse   = supabaseRequest("medical_history?select=donor_id,needs_review,medical_approval,updated_at");
+    $medicalResponse   = supabaseRequest("medical_history?select=donor_id,needs_review,medical_approval,is_admin,updated_at");
     $physicalResponse  = supabaseRequest("physical_examination?select=physical_exam_id,donor_id,needs_review,remarks,created_at");
     
     // Fetch blood collection data with proper linking
@@ -67,7 +67,8 @@ try {
             if (!empty($row['donor_id'])) {
                 $medicalByDonorId[$row['donor_id']] = [
                     'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
-                    'medical_approval' => $row['medical_approval'] ?? null
+                    'medical_approval' => $row['medical_approval'] ?? null,
+                    'is_admin' => $row['is_admin'] ?? null
                 ];
             }
         }
@@ -146,7 +147,7 @@ try {
         file_put_contents('../../assets/logs/donation_pending_debug.log', "[" . date('Y-m-d H:i:s') . "] Processing " . count($donorIds) . " donors. Donor IDs: " . implode(', ', $donorIds) . "\n", FILE_APPEND | LOCK_EX);
         
         // Check if our specific donor IDs are in the fetched data
-        $targetDonorIds = [176, 169, 170, 144, 140, 142, 135, 120];
+        $targetDonorIds = [176, 169, 170, 144, 140, 142, 135, 120, 189];
         $foundTargetIds = array_intersect($targetDonorIds, $donorIds);
         if (!empty($foundTargetIds)) {
             error_log("DEBUG - Found target donor IDs in fetched data: " . implode(', ', $foundTargetIds));
@@ -178,7 +179,7 @@ try {
             $donorType = isset($donorsWithEligibility[$donorId]) ? 'Returning' : 'New';
             
             // Debug logging for specific donor IDs
-            if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
+            if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120, 189])) {
                 error_log("DEBUG - Processing donor $donorId: donorType = '$donorType'");
             }
 
@@ -298,129 +299,92 @@ try {
                 // Gate downstream stage checks to only run when both early stages are completed
                 $shouldCheckDownstreamStages = ($medicalHistoryCompleted && $screeningCompleted);
                 
-                // 1. PENDING (SCREENING) - Interviewer role: Screening needs review (primary)
-                $screeningNeedsReview = false;
-                $hasScreeningForm = false;
+                // NEW WORKFLOW: Check interviewer phase completion first
+                $isMedicalHistoryCompleted = false;
+                $isScreeningPassed = false;
+                $isPhysicalExamApproved = false;
                 
-                // Check Initial Screening needs_review (primary checking for interviewer role)
-                if (isset($screeningByDonorId[$donorId])) {
-                    $hasScreeningForm = true;
-                    $screen = $screeningByDonorId[$donorId];
-                    if (is_array($screen)) {
-                        $screenNeeds = $screen['needs_review'] ?? null;
-                        $screeningNeedsReview = ($screenNeeds === true);
-                    }
-                }
-                
-                // 2. PENDING (EXAMINATION) - Medical History needs review (physician role)
-                $medicalNeedsReview = false;
+                // Check Medical History completion
                 if (isset($medicalByDonorId[$donorId])) {
                     $medRecord = $medicalByDonorId[$donorId];
                     if (is_array($medRecord)) {
                         $medNeeds = $medRecord['needs_review'] ?? null;
-                        $medicalNeedsReview = ($medNeeds === true);
+                        $isAdmin = $medRecord['is_admin'] ?? null;
+                        // Medical History is completed if:
+                        // 1. Admin side: is_admin is TRUE, OR
+                        // 2. Staff side: needs_review is false (completed by staff)
+                        $isMedicalHistoryCompleted = ($isAdmin === true || $isAdmin === 'true' || $isAdmin === 'True') || 
+                                                    ($medNeeds === false);
+                        
+                        // Debug logging for donor 189
+                        if ($donorId == 189) {
+                            error_log("DEBUG - Donor 189 Medical History: needs_review = " . ($medNeeds ? 'true' : 'false') . 
+                                     ", is_admin = " . ($isAdmin ? 'true' : 'false') . ", completed = " . ($isMedicalHistoryCompleted ? 'true' : 'false'));
+                        }
+                    }
+                } else {
+                    // Debug logging for donor 189
+                    if ($donorId == 189) {
+                        error_log("DEBUG - Donor 189: No medical history record found");
                     }
                 }
                 
-                // If Screening needs review -> Pending (Screening) (Interviewer role)
-                if ($screeningNeedsReview) {
-                    $statusLabel = 'Pending (Screening)';
-                    
-                    // Debug logging for specific donor IDs
-                    if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120, 182])) {
-                        error_log("DEBUG - Donor $donorId: screeningNeedsReview = " . ($screeningNeedsReview ? 'true' : 'false') . " (Interviewer role)");
-                    }
-                } else if ($medicalNeedsReview) {
-                    // If Medical History needs review -> Pending (Examination) (Physician role)
-                    $statusLabel = 'Pending (Examination)';
-                    
-                    // Debug logging for specific donor IDs
-                    if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120, 182])) {
-                        error_log("DEBUG - Donor $donorId: medicalNeedsReview = " . ($medicalNeedsReview ? 'true' : 'false') . " (Physician role)");
-                    }
-                } else if ($shouldCheckDownstreamStages) {
-                    // 2. PENDING (EXAMINATION) - MH approval and Physical Examination process
-                    $physicalExaminationCompleted = false;
-                    
-                    // Check Physical Examination completion
-                    if (isset($physicalByDonorId[$donorId])) {
-                        $phys = $physicalByDonorId[$donorId];
-                        if (is_array($phys)) {
-                            $physNeeds = $phys['needs_review'] ?? null;
-                            $remarks = $phys['remarks'] ?? '';
-                            
-                            // Debug logging for specific donor IDs
-                            if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
-                                error_log("DEBUG - Donor $donorId: physNeeds = " . ($physNeeds ? 'true' : 'false') . ", remarks = '$remarks'");
-                            }                            // Physical examination is completed if it doesn't need review and has valid remarks
-                            // Valid remarks include: 'Accepted', 'Approved', 'Completed', etc.
-                            // Invalid remarks include: 'Pending', 'Temporarily Deferred', 'Permanently Deferred', 'Declined', 'Refused'
-                            if ($physNeeds !== true && !empty($remarks) && 
-                                !in_array($remarks, ['Pending', 'Temporarily Deferred', 'Permanently Deferred', 'Declined', 'Refused'])) {
-                                $physicalExaminationCompleted = true;
-                                
-                                // Debug logging for specific donor IDs
-                                if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
-                                    error_log("DEBUG - Donor $donorId: Physical examination completed");
-                                }                            }
+                // Check Initial Screening completion
+                if (isset($screeningByDonorId[$donorId])) {
+                    $screen = $screeningByDonorId[$donorId];
+                    if (is_array($screen)) {
+                        $screenNeeds = $screen['needs_review'] ?? null;
+                        $disapprovalReason = $screen['disapproval_reason'] ?? '';
+                        // Screening is passed if it doesn't need review and has no disapproval reason
+                        $isScreeningPassed = ($screenNeeds !== true) && empty($disapprovalReason);
+                        
+                        // Debug logging for donor 189
+                        if ($donorId == 189) {
+                            error_log("DEBUG - Donor 189 Screening: needs_review = " . ($screenNeeds ? 'true' : 'false') . 
+                                     ", disapproval_reason = '$disapprovalReason', passed = " . ($isScreeningPassed ? 'true' : 'false'));
                         }
-                    } else {
-                        // Debug logging for specific donor IDs
-                        if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
-                            error_log("DEBUG - Donor $donorId: No physical examination record found");
-                        }                    }
-                    
-                    // If Physical Examination is not completed -> Pending (Examination)
-                    if (!$physicalExaminationCompleted) {
-                        $statusLabel = 'Pending (Examination)';
-                    } else {
-                        // 3. PENDING (COLLECTION) - Blood Collection Status is "Yet to be collected"
-                        $bloodCollectionCompleted = false;
-                        
-                        // Check if we have collection data in our lookup
-                        $physicalExamId = $physicalExamIdByDonorId[$donorId] ?? null;
-                        
-                        // Debug logging for specific donor IDs
-                        if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
-                            error_log("DEBUG - Donor $donorId: physicalExamId = " . ($physicalExamId ?? 'null'));
-                            error_log("DEBUG - Donor $donorId: has collection data = " . (isset($collectionByPhysicalExamId[$physicalExamId]) ? 'yes' : 'no'));
-                        }                        if ($physicalExamId && isset($collectionByPhysicalExamId[$physicalExamId])) {
-                            $collectionData = $collectionByPhysicalExamId[$physicalExamId];
-                            $collNeeds = $collectionData['needs_review'] ?? null;
-                            $collectionStatus = $collectionData['status'] ?? '';
-                            
-                            // Debug logging for specific donor IDs
-                            if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
-                                error_log("DEBUG - Donor $donorId: collectionStatus = '$collectionStatus', collNeeds = " . ($collNeeds ? 'true' : 'false'));
-                            }                            // Blood collection is completed if it doesn't need review and has a valid status
-                            // Valid statuses: 'Completed', 'Success', 'Approved', etc.
-                            // Invalid statuses: 'pending', 'Incomplete', 'Failed', 'Yet to be collected'
-                            if ($collNeeds !== true && !empty($collectionStatus) && 
-                                !in_array($collectionStatus, ['pending', 'Incomplete', 'Failed', 'Yet to be collected'])) {
-                                $bloodCollectionCompleted = true;
-                            }
-                        } else {
-                            // If no blood collection record exists, it means blood collection hasn't been started yet
-                            // This should result in "Pending (Collection)" status
-                            $bloodCollectionCompleted = false;
-                            
-                            // Debug logging for specific donor IDs
-                            if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
-                                error_log("DEBUG - Donor $donorId: No blood collection record found, setting to Pending (Collection)");
-                            }                        }
-                        
-                        if ($bloodCollectionCompleted) {
-                            // All stages completed successfully - donor is approved (should not appear in pending)                            continue; // Skip this donor - they're approved, not pending
-                        } else {
-                            // Blood collection is "Yet to be collected" -> Pending (Collection)
-                            $statusLabel = 'Pending (Collection)';
-                            
-                            // Debug logging for specific donor IDs
-                            if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
-                                error_log("DEBUG - Donor $donorId: Final status = Pending (Collection)");
-                            }                        }
+                    }
+                } else {
+                    // Debug logging for donor 189
+                    if ($donorId == 189) {
+                        error_log("DEBUG - Donor 189: No screening record found");
                     }
                 }
+                
+                // Check Physical Examination approval
+                if (isset($physicalByDonorId[$donorId])) {
+                    $phys = $physicalByDonorId[$donorId];
+                    if (is_array($phys)) {
+                        $physNeeds = $phys['needs_review'] ?? null;
+                        $remarks = $phys['remarks'] ?? '';
+                        // Physical exam is approved if it doesn't need review and has positive remarks
+                        $isPhysicalExamApproved = ($physNeeds !== true) && 
+                            !empty($remarks) && 
+                            !in_array($remarks, ['Pending', 'Temporarily Deferred', 'Permanently Deferred', 'Declined', 'Refused']);
+                    }
+                }
+                
+                // Apply new workflow logic
+                if ($isMedicalHistoryCompleted && $isScreeningPassed && $isPhysicalExamApproved) {
+                    // All phases complete -> Pending (Collection)
+                    $statusLabel = 'Pending (Collection)';
+                } else if ($isMedicalHistoryCompleted && $isScreeningPassed) {
+                    // Interviewer phase complete, physician phase pending -> Pending (Examination)
+                    $statusLabel = 'Pending (Examination)';
+                } else {
+                    // Interviewer phase pending -> Pending (Screening)
+                    $statusLabel = 'Pending (Screening)';
+                }
+                
+                // Debug logging for specific donor IDs
+                if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120, 182, 189])) {
+                    error_log("DEBUG - Donor $donorId: MH Completed = " . ($isMedicalHistoryCompleted ? 'true' : 'false') . 
+                             ", Screening Passed = " . ($isScreeningPassed ? 'true' : 'false') . 
+                             ", PE Approved = " . ($isPhysicalExamApproved ? 'true' : 'false') . 
+                             ", Status = $statusLabel");
+                }
+                
+                // Note: Old downstream stage checking logic removed - now using simplified workflow above
             }
 
             // OPTIMIZATION: Create standardized record with all required fields for UI

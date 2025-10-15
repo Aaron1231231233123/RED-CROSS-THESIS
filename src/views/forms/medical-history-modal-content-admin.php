@@ -792,6 +792,48 @@ if ($http_code === 200) {
 <script type="application/json" id="modalData">{"medicalHistoryData": <?php echo $mh_json; ?>, "donorSex": <?php echo $sex_json; ?>, "userRole": <?php echo $role_json; ?>}</script>
  
 <script>
+// Function to update medical history completion status
+function updateMedicalHistoryCompletion(donorId) {
+    console.log('=== UPDATING MEDICAL HISTORY COMPLETION ===');
+    console.log('Donor ID:', donorId);
+    console.log('API URL: ../../../assets/php_func/update_medical_history_completion.php');
+    
+    const updateData = {
+        donor_id: donorId
+    };
+    
+    console.log('Request data:', updateData);
+    
+    fetch('../../../assets/php_func/update_medical_history_completion.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData)
+    })
+    .then(response => {
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        return response.json();
+    })
+    .then(data => {
+        console.log('Response data:', data);
+        if (data.success) {
+            console.log('✅ Medical history completion status updated successfully');
+            // Refresh the donor details to show updated badge
+            if (typeof window.fetchDonorDetails === 'function') {
+                console.log('Refreshing donor details...');
+                window.fetchDonorDetails(donorId, window.currentEligibilityId);
+            }
+        } else {
+            console.error('❌ Failed to update medical history completion status:', data.error);
+        }
+    })
+    .catch(error => {
+        console.error('❌ Error updating medical history completion status:', error);
+    });
+}
+
 // Function to generate medical history questions (called from admin dashboard)
 window.generateAdminMedicalHistoryQuestions = function() {
     try {
@@ -822,9 +864,12 @@ window.generateAdminMedicalHistoryQuestions = function() {
 
         // Ensure structural hosts exist even if markup was trimmed by loader
         (function ensureStructure(){
-            const root = document.getElementById('medicalHistoryModalContent') || document.body;
+            const root = document.getElementById('medicalHistoryModalAdminContent') || document.getElementById('medicalHistoryModalContent') || document.body;
+            console.log('Root element found:', !!root, root?.id);
             let form = document.getElementById('modalMedicalHistoryForm');
+            console.log('Form element found:', !!form);
             if (!form) {
+                console.log('Creating form element');
                 form = document.createElement('form');
                 form.method = 'POST';
                 form.action = 'medical-history-process-admin.php';
@@ -835,6 +880,7 @@ window.generateAdminMedicalHistoryQuestions = function() {
                 try { hiddenDonor.value = (parsed && parsed.medicalHistoryData && parsed.medicalHistoryData.donor_id) ? parsed.medicalHistoryData.donor_id : ''; } catch(_) {}
                 form.appendChild(hiddenDonor);
                 root.appendChild(form);
+                console.log('Form created and appended to root');
             }
             const stepTitleByNum = {
                 1: 'HEALTH & RISK ASSESSMENT:',
@@ -1078,9 +1124,9 @@ setTimeout(() => {
             // Indicators
             stepIndicators.forEach(i => {
                 const step = parseInt(i.getAttribute('data-step'));
-                if (step < currentStep) { i.classList.add('completed','active'); }
+                if (step < currentStep) { i.classList.add('Completed','active'); }
                 else if (step === currentStep) { i.classList.add('active'); i.classList.remove('completed'); }
-                else { i.classList.remove('active','completed'); }
+                else { i.classList.remove('active','Completed'); }
             });
             stepConnectors.forEach((c, idx) => {
                 if (idx + 1 < currentStep) c.classList.add('active');
@@ -1123,11 +1169,15 @@ setTimeout(() => {
                     updateStepDisplay();
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 } else {
-                    // Final step â€“ simple quiet save to persist changes
+                    // Final step – dispatch submit event (admin flow will be handled in form submit handler)
+                    console.log('Final step reached - dispatching submit event');
                     try {
                         const evt = new Event('submit', { bubbles: true, cancelable: true });
                         form && form.dispatchEvent(evt);
-                    } catch (_) {}
+                        console.log('Submit event dispatched successfully');
+                    } catch (err) {
+                        console.error('Error dispatching submit event:', err);
+                    }
                 }
             });
         }
@@ -1148,102 +1198,112 @@ setTimeout(() => {
 </script>
 
 <script>
-// AJAX submit for admin: save MH and proceed to screening
-(function initAdminAjaxSubmit(){
-    try {
-        const form = document.getElementById('modalMedicalHistoryForm');
-        if (!form) return;
-
-        // Gate this handler to ADMIN context only. Staff dashboards reuse this file
-        // but must not auto-open Initial Screening on submit.
-        const isAdminContext = !!document.getElementById('medicalHistoryModalAdmin') || !!document.getElementById('medicalHistoryModal');
-        if (!isAdminContext) return;
-
-        function submitAjax(finalAction) {
-            const fd = new FormData(form);
-            fd.set('action', finalAction || 'next');
-            // Fallback: ensure donor_id present
-            if (!fd.get('donor_id')) {
-                const di = form.querySelector('input[name="donor_id"]');
-                if (di && di.value) fd.set('donor_id', di.value);
+// Form submit handler for admin context
+(function initAdminFormSubmit(){
+    function attachFormHandler() {
+        try {
+            const form = document.getElementById('modalMedicalHistoryForm');
+            console.log('Form element found:', !!form);
+            if (!form) {
+                console.log('Form not found - retrying in 100ms');
+                setTimeout(attachFormHandler, 100);
+                return;
             }
-            return fetch('../../src/views/forms/medical-history-process-admin.php', {
-                method: 'POST',
-                body: fd
-            }).then(r => r.json());
-        }
+
+            // Gate this handler to ADMIN context only
+            const isAdminContext = !!document.getElementById('medicalHistoryModalAdmin') || !!document.getElementById('medicalHistoryModal');
+            console.log('Admin context check:', isAdminContext);
+            if (!isAdminContext) {
+                console.log('Not in admin context - retrying in 100ms');
+                setTimeout(attachFormHandler, 100);
+                return;
+            }
 
         form.addEventListener('submit', function(e){
+            console.log('Form submit event triggered');
             // Intercept default submission so admin stays on page
             e.preventDefault();
             e.stopPropagation();
-            submitAjax('next').then(res => {
+            
+            // For admin context, always use 'admin_complete' action
+            const formData = new FormData(form);
+            formData.set('action', 'admin_complete');
+            
+            console.log('Admin medical history form submission with admin_complete action');
+            
+            fetch('../../src/views/forms/medical-history-process-admin.php', {
+                method: 'POST',
+                body: formData
+            }).then(r => r.json()).then(res => {
                 if (res && res.success) {
-                    // Close admin MH modal if present (handle both modal types)
-                    try {
-                        const adminModalEl = document.getElementById('medicalHistoryModalAdmin');
-                        if (adminModalEl && window.bootstrap) {
-                            const m = window.bootstrap.Modal.getInstance(adminModalEl) || new window.bootstrap.Modal(adminModalEl);
-                            m.hide();
-                        }
-                    } catch(_) {}
+                    console.log('Admin medical history completed successfully');
                     
-                    // Close custom medical history modal if present
-                    try {
-                        const customModalEl = document.getElementById('medicalHistoryModal');
-                        if (customModalEl && typeof window.closeMedicalHistoryModal === 'function') {
-                            window.closeMedicalHistoryModal();
-                        }
-                    } catch(_) {}
+                    // Close the medical history modal by dispatching a custom event
+                    console.log('Dispatching close event for MH modal');
                     
-                    // Proceed to screening modal in admin context
-                    try {
+                    // First, let's try to close the modal directly from here as a test
+                    const modalElement = document.getElementById('medicalHistoryModalAdmin');
+                    console.log('Modal element found from modal content:', !!modalElement);
+                    if (modalElement) {
+                        console.log('Modal classes:', modalElement.className);
+                        console.log('Modal style display:', modalElement.style.display);
+                        console.log('Modal is visible:', modalElement.classList.contains('show'));
+                    }
+                    
+                    const closeEvent = new CustomEvent('closeMedicalHistoryModal', { 
+                        detail: { 
+                            reason: 'form_submitted',
+                            donorId: form.querySelector('input[name="donor_id"]')?.value
+                        } 
+                    });
+                    window.dispatchEvent(closeEvent);
+                    
+                    // Refresh donor details to show updated status
+                    if (typeof window.fetchDonorDetails === 'function') {
                         const donorIdInput = form.querySelector('input[name="donor_id"]');
                         const donorId = donorIdInput ? donorIdInput.value : null;
-                        
-                        // Check if we're in interviewer workflow
-                        console.log('Checking workflow context:', {
-                            currentInterviewerDonorId: window.currentInterviewerDonorId,
-                            donorId: donorId,
-                            location: window.location.href,
-                            isInventoryDashboard: window.location.href.includes('dashboard-Inventory-System-list-of-donations')
-                        });
-                        
-                        if (window.currentInterviewerDonorId || (donorId && window.location.href.includes('dashboard-Inventory-System-list-of-donations'))) {
-                            // For interviewer workflow, show confirmation modal first
-                            console.log('Detected interviewer workflow, showing confirmation modal');
-                            if (donorId && typeof window.bootstrap !== 'undefined') {
-                                window.currentInterviewerDonorId = donorId;
-                                const confirmModal = new window.bootstrap.Modal(document.getElementById('submitMedicalHistoryConfirmModal'));
-                                confirmModal.show();
-                            } else {
-                                console.error('Bootstrap not available or donorId missing');
-                            }
-                        } else if (donorId && typeof window.openScreeningModal === 'function') {
-                            // For admin workflow, directly open screening modal
-                            console.log('Detected admin workflow, opening screening modal');
-                            window.openScreeningModal({ donor_id: donorId });
-                        } else {
-                            console.log('No workflow detected or missing functions');
+                        if (donorId) {
+                            console.log('Refreshing donor details after MH completion');
+                            window.fetchDonorDetails(donorId, window.currentEligibilityId);
                         }
-                    } catch(_) {}
+                    }
+                    
+                    // Show completion confirmation modal immediately after closing
+                    setTimeout(() => {
+                        const completionModal = document.getElementById('medicalHistoryCompletionModal');
+                        if (completionModal) {
+                            const modal = new bootstrap.Modal(completionModal);
+                            modal.show();
+                        } else {
+                            console.log('Medical history completion modal not found - showing fallback message');
+                            // Fallback: show a simple alert
+                            alert('Medical History has been completed successfully!');
+                        }
+                    }, 300);
                 } else {
-                    // Show basic error inline
+                    console.error('Admin medical history completion failed:', res?.message);
+                    // Show error message
                     const em = document.getElementById('modalValidationError');
                     if (em) {
-                        em.textContent = (res && res.message) ? res.message : 'Failed to save medical history.';
+                        em.textContent = res?.message || 'Failed to complete medical history.';
                         em.style.display = 'block';
                     }
                 }
-            }).catch(() => {
+            }).catch(err => {
+                console.error('Admin medical history completion error:', err);
+                // Show error message
                 const em = document.getElementById('modalValidationError');
                 if (em) {
-                    em.textContent = 'Network error occurred while saving.';
+                    em.textContent = 'Network error occurred while completing medical history.';
                     em.style.display = 'block';
                 }
             });
         });
-    } catch(_) { /* noop */ }
+        } catch(_) { /* noop */ }
+    }
+    
+    // Start trying to attach the handler
+    attachFormHandler();
 })();
 </script>
 
@@ -1550,95 +1610,15 @@ function mhInitializeAdminFlow() {
     // Note: needs_review will be set to TRUE when the admin starts reviewing
     // and set to FALSE when they complete the review via admin_complete action
     
-    // Show submit button when on last step
-    const nextButton = document.getElementById('modalNextButton');
-    const submitButton = document.getElementById('modalSubmitButton');
+    // Admin flow now uses standard form submission - no custom submit button needed
+    // Just hide approve/decline buttons for admin flow
     const declineButton = document.getElementById('modalDeclineButton');
     const approveButton = document.getElementById('modalApproveButton');
-    const prevButton = document.getElementById('modalPrevButton');
     
-    if (nextButton && submitButton) {
-        // Override next button behavior for admin flow
-        nextButton.addEventListener('click', function() {
-            // Check if we're on the last step
-            const currentStep = document.querySelector('.step.active');
-            if (currentStep && currentStep.getAttribute('data-step') === '6') {
-                console.log('Reached final step - showing submit button for admin review completion');
-                // Hide next button and show submit button for admin review completion
-                nextButton.style.display = 'none';
-                // Show submit button for admin to complete their review
-                submitButton.style.display = 'inline-block';
-                // Hide approve/decline buttons (those are for physician approval)
-                declineButton.style.display = 'none';
-                approveButton.style.display = 'none';
-            }
-        });
-        
-        // Also check if we're already on the last step when the modal loads
-        setTimeout(() => {
-            const currentStep = document.querySelector('.step.active');
-            if (currentStep && currentStep.getAttribute('data-step') === '6') {
-                console.log('Already on final step - showing submit button for admin review completion');
-                nextButton.style.display = 'none';
-                submitButton.style.display = 'inline-block';
-                declineButton.style.display = 'none';
-                approveButton.style.display = 'none';
-            }
-        }, 100);
-        
-        // Handle submit button click (for admin review completion)
-        submitButton.addEventListener('click', function() {
-            console.log('Admin completing medical history review - submitting with admin_complete action');
-            
-            // Get the form and set the action to admin_complete
-            const form = document.getElementById('modalMedicalHistoryForm');
-            const actionInput = document.getElementById('modalSelectedAction');
-            if (actionInput) {
-                actionInput.value = 'admin_complete';
-            }
-            
-            // Submit the form with admin_complete action
-            const formData = new FormData(form);
-            formData.set('action', 'admin_complete');
-            
-            fetch('../../src/views/forms/medical-history-process-admin.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    console.log('Admin medical history review completed successfully');
-                    mhShowQuietSuccessToast('Medical history review completed successfully!');
-                    
-                    // Close the medical history modal
-                    setTimeout(() => {
-                        const medicalHistoryModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModalAdmin'));
-                        if (medicalHistoryModal) {
-                            medicalHistoryModal.hide();
-                        }
-                        
-                        // Proceed to initial screening (screening form)
-                        setTimeout(() => {
-                            if (typeof window.proceedToInitialScreening === 'function') {
-                                window.proceedToInitialScreening(donorId);
-                            } else {
-                                console.error('proceedToInitialScreening function not found');
-                            }
-                        }, 300);
-                    }, 1500);
-                } else {
-                    console.error('Failed to complete medical history review:', data.message);
-                    mhShowQuietErrorToast('Failed to complete medical history review');
-                }
-            })
-            .catch(error => {
-                console.error('Error completing medical history review:', error);
-                mhShowQuietErrorToast('Error completing medical history review');
-            });
-        });
-        
-        // Handle decline button click
+    if (declineButton) declineButton.style.display = 'none';
+    if (approveButton) approveButton.style.display = 'none';
+    
+    // Handle decline button click
         if (declineButton) {
             declineButton.addEventListener('click', function() {
                 // Show decline confirmation modal
@@ -1854,20 +1834,21 @@ function mhProcessApproval() {
                 // Add event listener for the proceed button
                 const proceedBtn = document.getElementById('proceedToPhysicalExamBtn');
                 if (proceedBtn) {
+                    // Capture donorId in closure
+                    const capturedDonorId = donorId;
                     proceedBtn.addEventListener('click', function() {
                         approvedModal.hide();
                         setTimeout(() => {
-                            // For interviewer workflow, proceed to screening form first
-                            if (typeof window.proceedToInitialScreening === 'function') {
-                                window.proceedToInitialScreening(donorId);
-                            } else if (typeof window.proceedToPhysicalExamination === 'function') {
-                                window.proceedToPhysicalExamination(donorId);
-                            } else if (typeof window.showPhysicianPhysicalExamConfirmation === 'function') {
-                                window.showPhysicianPhysicalExamConfirmation();
-                            } else if (typeof window.showApproveDonorConfirmation === 'function') {
-                                window.showApproveDonorConfirmation();
+                            // Medical history completion status will be updated by the PHP processing file
+                        console.log('Medical history form submitted with admin_complete action - is_admin should be updated by PHP');
+                            
+                            // Show medical history completion confirmation
+                            const completionModal = document.getElementById('medicalHistoryCompletionModal');
+                            if (completionModal) {
+                                const modal = new bootstrap.Modal(completionModal);
+                                modal.show();
                             } else {
-                                console.error('No confirmation function found');
+                                console.error('Medical history completion modal not found');
                             }
                         }, 300);
                     });

@@ -1,6 +1,6 @@
 <?php
 // Log that the file is being accessed
-file_put_contents('../../../assets/logs/debug.log', "[" . date('Y-m-d H:i:s') . "] declaration-form-process.php accessed\n", FILE_APPEND | LOCK_EX);
+file_put_contents('../../../assets/logs/debug.log', "[" . date('Y-m-d H:i:s') . "] admin-declaration-form-process.php accessed\n", FILE_APPEND | LOCK_EX);
 
 session_start();
 require_once '../../../assets/conn/db_conn.php';
@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         // Debug logging
-        $log_message = "[" . date('Y-m-d H:i:s') . "] === DECLARATION FORM PROCESS START ===\n";
+        $log_message = "[" . date('Y-m-d H:i:s') . "] === ADMIN DECLARATION FORM PROCESS START ===\n";
         file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
         
         $log_message = "[" . date('Y-m-d H:i:s') . "] POST data: " . print_r($_POST, true) . "\n";
@@ -295,10 +295,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         
                         // Update medical_history needs_review to false (staff has completed the medical history interview)
                         // The physician will review during the physical examination stage
+                        // Note: medical_approval should remain null - not set to 'Not Approved' at this stage
                         $medical_update_data = [
                             'donor_id' => $donor_id, // Use donor_id for medical_history table
                             'needs_review' => false, // Set to false - staff has completed the interview
-                            'medical_approval' => 'Not Approved', // Set to Not Approved - awaiting physician approval
+                            // medical_approval is intentionally NOT set - should remain null
                             'updated_at' => date('Y-m-d H:i:s')
                         ];
                         
@@ -324,7 +325,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         
                         if ($mh_http_code === 200) {
-                            $log_message = "[" . date('Y-m-d H:i:s') . "] Medical history updated successfully - needs_review=false, medical_approval='Not Approved' (staff has completed the medical history interview, awaiting physician approval)\n";
+                            $log_message = "[" . date('Y-m-d H:i:s') . "] Medical history updated successfully - needs_review=false, medical_approval remains null (staff has completed the medical history interview, awaiting physician approval)\n";
                             file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         } else {
                             $log_message = "[" . date('Y-m-d H:i:s') . "] Failed to update medical history: " . $mh_response . "\n";
@@ -460,7 +461,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['declaration_completed'] = true;
             
             // Log successful registration
-            error_log("Donor registration completed successfully for donor ID: " . $donor_id);
+            error_log("Admin Donor registration completed successfully for donor ID: " . $donor_id);
             
             // Set a flag for registered donor in session
             $_SESSION['donor_registered'] = true;
@@ -483,7 +484,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!empty($donorData)) {
                     $donorName = $donorData[0]['first_name'] . ' ' . $donorData[0]['surname'];
                     $_SESSION['donor_registered_name'] = $donorName;
-                    error_log("Declaration form - Donor registration completed for: " . $donorName . " (ID: " . $donor_id . ")");
+                    error_log("Admin Declaration form - Donor registration completed for: " . $donorName . " (ID: " . $donor_id . ")");
                 }
             }
             
@@ -507,16 +508,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Use the proper cache invalidation function if available
                     if (function_exists('invalidateCache')) {
                         invalidateCache();
-                        error_log("Declaration Form Process - Cache invalidated for donor: " . $donor_id);
+                        error_log("Admin Declaration Form Process - Cache invalidated for donor: " . $donor_id);
                     }
                 }
             } catch (Exception $cache_error) {
-                error_log("Declaration Form Process - Cache invalidation error: " . $cache_error->getMessage());
+                error_log("Admin Declaration Form Process - Cache invalidation error: " . $cache_error->getMessage());
             }
             
             echo json_encode([
                 'success' => true, 
-                'message' => 'Declaration form completed successfully',
+                'message' => 'Admin declaration form completed successfully',
                 'donor_id' => $donor_id
             ]);
         } else {
@@ -524,7 +525,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
     } catch (Exception $e) {
-        error_log("Error in declaration form processing: " . $e->getMessage());
+        error_log("Error in admin declaration form processing: " . $e->getMessage());
         echo json_encode([
             'success' => false,
             'message' => $e->getMessage()
@@ -534,4 +535,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     http_response_code(405);
     echo json_encode(['success' => false, 'message' => 'Method not allowed']);
 }
-?> 
+?>
+

@@ -137,7 +137,8 @@ try {
     } elseif ($action === 'admin_complete') {
         // For 'admin_complete' action, mark review as completed
         $medical_history_data['needs_review'] = false;
-        error_log("Processing admin_complete action - marking review as completed");
+        $medical_history_data['is_admin'] = 'True';  // Use string 'True' for PostgreSQL boolean
+        error_log("Processing admin_complete action - marking review as Completed and is_admin as True");
     } elseif ($action === 'next') {
         // For 'next' action, maintain consistency with existing approval status
         if ($existing_approval_status === 'Approved') {

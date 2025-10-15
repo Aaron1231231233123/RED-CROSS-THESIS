@@ -3719,14 +3719,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     .then(data => {
                         modalContent.innerHTML = data;
                         
-                        // Execute any script tags in the loaded content
-                        // Remove all script tags to prevent CSP violations
+                        // Remove only executable script tags; keep JSON data such as <script type="application/json" id="modalData">
                         const scripts = modalContent.querySelectorAll('script');
                         scripts.forEach(script => {
                             try {
+                                const type = (script.getAttribute('type') || '').toLowerCase();
+                                if (type === 'application/json') return; // preserve data scripts needed by the renderer
                                 script.remove();
                             } catch (e) {
-                                console.warn('Could not remove script tag:', e);
+                                console.warn('Could not process script tag:', e);
                             }
                         });
                         

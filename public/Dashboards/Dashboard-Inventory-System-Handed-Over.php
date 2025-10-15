@@ -915,7 +915,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <span><i class="fas fa-list"></i>Hospital Requests</span>
                         </a>
                         
-                        <a href="#" class="nav-link">
+                        <a href="dashboard-Inventory-System-Reports-reports-admin.php" class="nav-link">
                             <span><i class="fas fa-chart-line me-2"></i>Forecast Reports</span>
                         </a>
                         <a href="Dashboard-Inventory-System-Users.php" class="nav-link">

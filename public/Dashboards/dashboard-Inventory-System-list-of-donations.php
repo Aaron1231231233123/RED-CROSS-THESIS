@@ -521,7 +521,7 @@ function getCacheStats() {
                         <a href="Dashboard-Inventory-System-Hospital-Request.php" class="nav-link">
                             <span><i class="fas fa-list"></i>Hospital Requests</span>
                         </a>
-                        <a href="#" class="nav-link">
+                        <a href="dashboard-Inventory-System-Reports-reports-admin.php" class="nav-link">
                             <span><i class="fas fa-chart-line"></i>Forecast Reports</span>
                         </a>    
                         <a href="Dashboard-Inventory-System-Users.php" class="nav-link">
@@ -1230,14 +1230,14 @@ function getCacheStats() {
         </div>
     </div>
 </div>
-<!-- Initial Screening Confirmation Modal -->
-<div class="modal fade" id="initialScreeningConfirmationModal" tabindex="-1" aria-labelledby="initialScreeningConfirmationModalLabel" aria-hidden="true">
+<!-- Medical History Completion Confirmation Modal -->
+<div class="modal fade" id="medicalHistoryCompletionModal" tabindex="-1" aria-labelledby="medicalHistoryCompletionModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
-                <h5 class="modal-title" id="initialScreeningConfirmationModalLabel">
-                    <i class="fas fa-clipboard-check me-2"></i>
-                    Submit Medical History
+            <div class="modal-header" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border-radius: 15px 15px 0 0;">
+                <h5 class="modal-title" id="medicalHistoryCompletionModalLabel">
+                    <i class="fas fa-check-circle me-2"></i>
+                    Medical History Completed
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -1248,17 +1248,13 @@ function getCacheStats() {
                     </div>
                     <h5 class="mb-3">Medical History Review Complete</h5>
                     <p class="text-muted mb-4">
-                        Please confirm if the donor is ready for the next step based on the medical history interview,
-                        and proceed with Initial Screening.
+                        The medical history has been successfully submitted and will be marked as completed.
                     </p>
                 </div>
             </div>
-            <div class="modal-footer border-0">
-                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-2"></i>Cancel
-                </button>
-                <button type="button" class="btn btn-danger px-4" id="proceedToInitialScreeningBtn">
-                    <i class="fas fa-arrow-right me-2"></i>Initial Screening
+            <div class="modal-footer border-0 justify-content-end">
+                <button type="button" class="btn btn-success px-4" data-bs-dismiss="modal">
+                    <i class="fas fa-check me-2"></i>Confirm
                 </button>
             </div>
         </div>
@@ -1927,583 +1923,15 @@ function getCacheStats() {
                 });
             });
         })();
-        // Function to fetch donor details
+        // Function to fetch donor details - now using extracted admin module   
         function fetchDonorDetails(donorId, eligibilityId) {
-            console.log(`Fetching details for donor: ${donorId}, eligibility: ${eligibilityId}`);
-            fetch(`../../assets/php_func/donor_details_api.php?donor_id=${donorId}&eligibility_id=${eligibilityId}`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! Status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    // Track current donor/eligibility shown in the modal for refreshes
-                    try {
-                        window.currentDetailsDonorId = donorId;
-                        window.currentDetailsEligibilityId = eligibilityId;
-                    } catch (e) {}
-                    // Populate modal with compact staged layout (Interviewer, Physician, Phlebotomist)
-                    const donorDetailsContainer = document.getElementById('donorDetails');
-                    if (data.error) {
-                        donorDetailsContainer.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
-                        return;
-                    }
-                    const donor = data.donor || {};
-                    const eligibility = data.eligibility || {};
-                    const safe = (v, fb = '-') => (v === null || v === undefined || v === '' ? fb : v);
-                    const badge = (text) => {
-                        const t = String(text || '').toLowerCase();
-                        let cls = 'bg-secondary';
-                        if (t.includes('pending')) cls = 'bg-warning text-dark';
-                        else if (t.includes('approved') || t.includes('eligible') || t.includes('success')) cls = 'bg-success';
-                        else if (t.includes('declined') || t.includes('defer') || t.includes('fail') || t.includes('ineligible')) cls = 'bg-danger';
-                        else if (t.includes('review') || t.includes('medical') || t.includes('physical')) cls = 'bg-info text-dark';
-                        return `<span class="badge ${cls}">${safe(text)}</span>`;
-                    };
-                    const interviewerMedical = safe(eligibility.medical_history_status);
-                    const interviewerScreening = safe(eligibility.screening_status);
-                    const physicianMedical = safe(eligibility.review_status);
-                    const physicianPhysical = safe(eligibility.physical_status);
-                    const phlebStatus = safe(eligibility.collection_status);
-                    const eligibilityStatus = String(safe(eligibility.status, '')).toLowerCase();
-                    const isFullyApproved = eligibilityStatus === 'approved' || eligibilityStatus === 'eligible';
-                    // Debug logging for Donor Information Modal
-                    console.log('Donor Information Modal - Status Values:', {
-                        interviewerMedical,
-                        interviewerScreening,
-                        physicianMedical,
-                        physicianPhysical,
-                        phlebStatus,
-                        eligibilityStatus,
-                        eligibility: eligibility
-                    });
-                    // Derive blood type from donor, fallback to eligibility
-                    const derivedBloodType = safe(donor.blood_type || eligibility.blood_type);
-                    const header = `
-                        <div class="donor-header-wireframe">
-                            <div class="donor-header-left">
-                                <h3 class="donor-name-wireframe">${safe(donor.surname)}, ${safe(donor.first_name)} ${safe(donor.middle_name)}</h3>
-                                <div class="donor-age-gender">${safe(donor.age)}, ${safe(donor.sex)}</div>
-                            </div>
-                            <div class="donor-header-right">
-                                <div class="donor-id-wireframe">Donor ID ${safe(donor.donor_id)}</div>
-                                <div class="donor-blood-type">
-                                    <div class="blood-type-display" style="display: inline-block !important; background-color: #8B0000 !important; color: white !important; padding: 8px 16px !important; border-radius: 20px !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important; text-align: center !important; min-width: 80px !important; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important; border: none !important;">
-                                        <div class="blood-type-label" style="font-size: 0.75rem !important; font-weight: 500 !important; line-height: 1 !important; margin-bottom: 2px !important; opacity: 0.9 !important; color: white !important;">Blood Type</div>
-                                        <div class="blood-type-value" style="font-size: 1.1rem !important; font-weight: bold !important; line-height: 1 !important; letter-spacing: 0.5px !important; color: white !important;">${derivedBloodType}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Donor Information Section -->
-                        <div class="section-wireframe">
-                            <h6 class="section-title">Donor Information:</h6>
-                            <div class="form-fields-grid">
-                                <div class="form-field">
-                                    <label>Birthdate</label>
-                                    <input type="text" class="form-control form-control-sm donor-info-input" value="${safe(donor.birthdate)}" disabled>
-                                </div>
-                                <div class="form-field">
-                                    <label>Address</label>
-                                    <input type="text" class="form-control form-control-sm donor-info-input" value="${safe(donor.permanent_address || donor.current_address || donor.office_address || donor.address_line || donor.address)}" disabled>
-                                </div>
-                                <div class="form-field">
-                                    <label>Mobile Number</label>
-                                    <input type="text" class="form-control form-control-sm donor-info-input" value="${safe(donor.mobile || donor.mobile_number || donor.contact_number || donor.phone)}" disabled>
-                                </div>
-                                <div class="form-field">
-                                    <label>Civil Status</label>
-                                    <input type="text" class="form-control form-control-sm donor-info-input" value="${safe(donor.civil_status)}" disabled>
-                                </div>
-                                <div class="form-field">
-                                    <label>Nationality</label>
-                                    <input type="text" class="form-control form-control-sm donor-info-input" value="${safe(donor.nationality)}" disabled>
-                                </div>
-                                <div class="form-field">
-                                    <label>Occupation</label>
-                                    <input type="text" class="form-control form-control-sm donor-info-input" value="${safe(donor.occupation)}" disabled>
-                                </div>
-                            </div>
-                        </div>`;
-                    const section = (title, rows, headerColor = 'bg-danger') => `
-                        <div class="card mb-3 shadow-sm" style="border:none">
-                            <div class="card-header ${headerColor} text-white py-2 px-3" style="border:none">
-                                <h6 class="mb-0" style="font-weight:600;">${title}</h6>
-                            </div>
-                            <div class="card-body py-2 px-3">
-                                ${rows}
-                            </div>
-                        </div>`;
-                    const interviewerRows = (() => {
-                        const baseUrl = '../../src/views/forms/';
-                        const donorId = encodeURIComponent(safe(donor.donor_id, ''));
-                        const medHistoryUrl = `${baseUrl}medical-history.php?donor_id=${donorId}`;
-                        // Check donor status for appropriate action buttons
-                        const isPendingNew = eligibilityStatus === 'pending' &&
-                                           ((interviewerMedical.toLowerCase() === 'pending' || interviewerMedical === '' || interviewerMedical === '-') &&
-                                           (interviewerScreening.toLowerCase() === 'pending' || interviewerScreening === '' || interviewerScreening === '-'));
-                        const isPendingScreening = eligibilityStatus === 'pending' &&
-                                                 (interviewerMedical.toLowerCase() !== 'pending' && interviewerMedical !== '' && interviewerMedical !== '-') &&
-                                                 (interviewerScreening.toLowerCase() === 'pending' || interviewerScreening === '' || interviewerScreening === '-');
-                        const isCompletedScreening = (interviewerMedical.toLowerCase() !== 'pending' && interviewerMedical !== '' && interviewerMedical !== '-') &&
-                                                   (interviewerScreening.toLowerCase() !== 'pending' && interviewerScreening !== '' && interviewerScreening !== '-');
-                        // Determine action button based on status
-                        let actionButton = '';
-                        if (isPendingNew) {
-                            actionButton = `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"Edit Medical History\" onclick=\"editMedicalHistory('${safe(donor.donor_id,'')}')\"><i class=\"fas fa-pen\"></i></button>`;
-                        } else if (isPendingScreening) {
-                            actionButton = `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"Edit Initial Screening\" onclick=\"editInitialScreening('${safe(donor.donor_id,'')}')\"><i class=\"fas fa-pen\"></i></button>`;
-                        } else if (isCompletedScreening) {
-                            actionButton = `<button type=\"button\" class=\"btn btn-sm btn-outline-success circular-btn\" title=\"View Interviewer Details\" onclick=\"viewInterviewerDetails('${safe(donor.donor_id,'')}')\"><i class=\"fas fa-eye\"></i></button>`;
+            // Use the extracted AdminDonorModal module
+            if (typeof AdminDonorModal !== 'undefined' && AdminDonorModal.fetchDonorDetails) {
+                AdminDonorModal.fetchDonorDetails(donorId, eligibilityId);
                         } else {
-                            actionButton = `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"View Details\" onclick=\"viewInterviewerDetails('${safe(donor.donor_id,'')}')\"><i class=\"fas fa-eye\"></i></button>`;
-                        }
-                        // Create status display with stage information
-                        const getStatusDisplay = (status, stage) => {
-                            const statusLower = String(status || '').toLowerCase();
-                            if (statusLower.includes('permanently deferred')) {
-                                return `<span class="badge bg-danger">${stage} - Permanently Deferred</span>`;
-                            } else if (statusLower.includes('temporarily deferred')) {
-                                return `<span class="badge bg-warning text-dark">${stage} - Temporarily Deferred</span>`;
-                            } else if (statusLower.includes('refused')) {
-                                return `<span class="badge bg-danger">${stage} - Refused</span>`;
-                            } else if (statusLower.includes('declined') || statusLower.includes('defer') || statusLower.includes('not approved')) {
-                                return `<span class="badge bg-danger">${stage} - ${status}</span>`;
-                            } else if (statusLower.includes('pending')) {
-                                return `<span class="badge bg-warning text-dark">${status}</span>`;
-                            } else if (statusLower.includes('accepted') || statusLower.includes('approved') || statusLower.includes('completed') || statusLower.includes('passed') || statusLower.includes('successful')) {
-                                return `<span class="badge bg-success">${status}</span>`;
-                            } else {
-                                return badge(status);
-                            }
-                        };
-                        return `
-                        <div class="donor-role-table">
-                            <table class="table align-middle mb-2">
-                                <thead>
-                                    <tr>
-                                        <th class="text-center">Medical History</th>
-                                        <th class="text-center">Initial Screening</th>
-                                        <th class="text-end">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td class="text-center status-cell">${getStatusDisplay(interviewerMedical, 'MH')}</td>
-                                        <td class="text-center status-cell">${getStatusDisplay(interviewerScreening, 'Initial Screening')}</td>
-                                        <td class="text-end action-cell">${actionButton}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>`;
-                    })();
-                    const physicianRows = (() => {
-                        const baseUrl = '../../src/views/forms/';
-                        const donorId = encodeURIComponent(safe(donor.donor_id, ''));
-                        const medReviewUrl = `${baseUrl}medical-history.php?donor_id=${donorId}`;
-                        // Check if interviewer phase is completed
-                        const interviewerCompleted = (interviewerMedical.toLowerCase() !== 'pending' && interviewerMedical !== '' && interviewerMedical !== '-') &&
-                                                  (interviewerScreening.toLowerCase() !== 'pending' && interviewerScreening !== '' && interviewerScreening !== '-');
-                        // Check physician phase status - combined workflow
-                        const isPendingPhysicianWork = interviewerCompleted &&
-                                                      ((physicianMedical.toLowerCase() === 'pending' || physicianMedical === '' || physicianMedical === '-') ||
-                                                       (physicianPhysical.toLowerCase() === 'pending' || physicianPhysical === '' || physicianPhysical === '-'));
-                        const isCompletedPhysicianWork = interviewerCompleted &&
-                                                        (physicianMedical.toLowerCase() !== 'pending' && physicianMedical !== '' && physicianMedical !== '-') &&
-                                                        (physicianPhysical.toLowerCase() !== 'pending' && physicianPhysical !== '' && physicianPhysical !== '-');
-                        // Determine action button based on status – always open Medical History view for physicians
-                        // This mirrors the interviewer modal but without submit; shows Approve/Decline when applicable
-                        let actionButton = '';
-                        if (!interviewerCompleted) {
-                            actionButton = `<button type=\"button\" class=\"btn btn-sm btn-outline-secondary circular-btn\" title=\"Complete Interviewer Phase First\" disabled><i class=\"fas fa-lock\"></i></button>`;
-                        } else {
-                            // Decide based on the MH badge text first (fallback to needs_review-derived checks)
-                            const pmLower = String(physicianMedical || '').toLowerCase();
-                            const physicianMHAccepted = (
-                                pmLower.includes('approved') ||
-                                pmLower.includes('accepted') ||
-                                pmLower.includes('completed') ||
-                                pmLower.includes('passed') ||
-                                pmLower.includes('success')
-                            );
-                            const btnTitle = physicianMHAccepted ? 'View Medical History' : 'Review Medical History';
-                            const btnClass = physicianMHAccepted ? 'btn-outline-success' : 'btn-outline-primary';
-                            const icon = physicianMHAccepted ? 'fa-eye' : 'fa-pen';
-                            if (physicianMHAccepted) {
-                                // Completed/accepted → mirror interviewer "View" behavior
-                                actionButton = `<button type=\"button\" class=\"btn btn-sm ${btnClass} circular-btn\" title=\"${btnTitle}\" onclick=\"viewPhysicianDetails('${donor.donor_id || ''}')\"><i class=\"fas ${icon}\"></i></button>`;
-                            } else {
-                                // Fallback to review modal flow when not accepted
-                                actionButton = `<button type=\"button\" class=\"btn btn-sm ${btnClass} circular-btn\" title=\"${btnTitle}\" onclick=\"openPhysicianMedicalPreview('${donor.donor_id || ''}')\"><i class=\"fas ${icon}\"></i></button>`;
-                            }
-                        }
-                        // Create status display with stage information for physician
-                        const getStatusDisplay = (status, stage) => {
-                            const statusLower = String(status || '').toLowerCase();
-                            if (statusLower.includes('permanently deferred')) {
-                                return `<span class="badge bg-danger">${stage} - Permanently Deferred</span>`;
-                            } else if (statusLower.includes('temporarily deferred')) {
-                                return `<span class="badge bg-warning text-dark">${stage} - Temporarily Deferred</span>`;
-                            } else if (statusLower.includes('refused')) {
-                                return `<span class="badge bg-danger">${stage} - Refused</span>`;
-                            } else if (statusLower.includes('declined') || statusLower.includes('defer') || statusLower.includes('not approved')) {
-                                return `<span class="badge bg-danger">${stage} - ${status}</span>`;
-                            } else if (statusLower.includes('pending')) {
-                                return `<span class="badge bg-warning text-dark">${status}</span>`;
-                            } else if (statusLower.includes('accepted') || statusLower.includes('approved') || statusLower.includes('completed') || statusLower.includes('passed')) {
-                                return `<span class="badge bg-success">${status}</span>`;
-                            } else {
-                                return badge(status);
-                            }
-                        };
-                        return `
-                        <div class="donor-role-table">
-                            <table class="table align-middle mb-2">
-                                <thead>
-                                    <tr>
-                                        <th class="text-center">Medical History</th>
-                                        <th class="text-center">Physical Examination</th>
-                                        <th class="text-end">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td class="text-center status-cell">${getStatusDisplay(physicianMedical, 'MH')}</td>
-                                        <td class="text-center status-cell">${getStatusDisplay(physicianPhysical, 'Physical Exam')}</td>
-                                        <td class="text-end action-cell">${actionButton}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>`;
-                    })();
-                    const phlebRows = (() => {
-                        // Debug logging for status values
-                        console.log('Blood Collection Status Debug:', {
-                            interviewerMedical,
-                            interviewerScreening,
-                            physicianMedical,
-                            physicianPhysical,
-                            phlebStatus
-                        });
-                        // Check if physician phase is completed
-                        // Status values can be: 'Completed', 'Passed', 'Approved', 'Pending', etc.
-                        const physicianCompleted = (interviewerMedical.toLowerCase() !== 'pending' && interviewerMedical !== '' && interviewerMedical !== '-') &&
-                                                (interviewerScreening.toLowerCase() !== 'pending' && interviewerScreening !== '' && interviewerScreening !== '-') &&
-                                                (physicianMedical.toLowerCase() !== 'pending' && physicianMedical !== '' && physicianMedical !== '-') &&
-                                                (physicianPhysical.toLowerCase() !== 'pending' && physicianPhysical !== '' && physicianPhysical !== '-');
-                        console.log('Physician Completed:', physicianCompleted);
-                        // Check phlebotomist phase status
-                        const isPendingBloodCollection = physicianCompleted &&
-                                                       (phlebStatus.toLowerCase() === 'pending' || phlebStatus === '' || phlebStatus === '-');
-                        const isCompletedBloodCollection = physicianCompleted &&
-                                                         phlebStatus.toLowerCase() !== 'pending' && phlebStatus !== '' && phlebStatus !== '-';
-                        // Determine action button based on status
-                        let actionButton = '';
-                        if (!physicianCompleted) {
-                            actionButton = `<button type=\"button\" class=\"btn btn-sm btn-outline-secondary circular-btn\" title=\"Complete Physician Phase First\" disabled><i class=\"fas fa-lock\"></i></button>`;
-                        } else if (isPendingBloodCollection) {
-                            actionButton = `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"Edit Blood Collection\" onclick=\"editBloodCollection('${donor.donor_id || ''}')\"><i class=\"fas fa-pen\"></i></button>`;
-                        } else if (isCompletedBloodCollection) {
-                            actionButton = `<button type=\"button\" class=\"btn btn-sm btn-outline-success circular-btn\" title=\"View Phlebotomist Details\" onclick=\"viewPhlebotomistDetails('${donor.donor_id || ''}')\"><i class=\"fas fa-eye\"></i></button>`;
-                        } else {
-                            actionButton = `<button type=\"button\" class=\"btn btn-sm btn-outline-primary circular-btn\" title=\"View Details\" onclick=\"viewPhlebotomistDetails('${donor.donor_id || ''}')\"><i class=\"fas fa-eye\"></i></button>`;
-                        }
-                        // Create status display with stage information for phlebotomist
-                        const getStatusDisplay = (status, stage) => {
-                            const statusLower = String(status || '').toLowerCase();
-                            if (statusLower.includes('permanently deferred')) {
-                                return `<span class="badge bg-danger">${stage} - Permanently Deferred</span>`;
-                            } else if (statusLower.includes('temporarily deferred')) {
-                                return `<span class="badge bg-warning text-dark">${stage} - Temporarily Deferred</span>`;
-                            } else if (statusLower.includes('refused')) {
-                                return `<span class="badge bg-danger">${stage} - Refused</span>`;
-                            } else if (statusLower.includes('declined') || statusLower.includes('defer') || statusLower.includes('not approved')) {
-                                return `<span class="badge bg-danger">${stage} - ${status}</span>`;
-                            } else if (statusLower.includes('pending')) {
-                                return `<span class="badge bg-warning text-dark">${status}</span>`;
-                            } else if (statusLower.includes('accepted') || statusLower.includes('approved') || statusLower.includes('completed') || statusLower.includes('passed')) {
-                                return `<span class="badge bg-success">${status}</span>`;
-                            } else {
-                                return badge(status);
-                            }
-                        };
-                        return `
-                        <div class="donor-role-table">
-                            <table class="table align-middle mb-2">
-                                <thead>
-                                    <tr>
-                                        <th class="text-center">Blood Collection Status</th>
-                                        <th class="text-end">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td class="text-center status-cell">${getStatusDisplay(phlebStatus, 'Blood Collection')}</td>
-                                        <td class="text-end action-cell">${actionButton}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>`;
-                    })();
-                    const cta = '';
-                    const donorInfoSection = `
-                        <div class="card mb-3" style="border:none">
-                            <div class="card-body" style="padding: 8px 12px;">
-                                <h6 class="mb-3" style="font-weight:700; color:#212529;">Donor Information</h6>
-                                <div class="row g-2">
-                                    <div class="col-md-6">
-                                        <div class="mb-2">
-                                            <small class="text-muted d-block">Birthdate</small>
-                                            <input type="text" class="form-control form-control-sm" value="${safe(donor.birthdate)}" disabled>
-                                        </div>
-                                        <div class="mb-2">
-                                            <small class="text-muted d-block">Address</small>
-                                            <input type="text" class="form-control form-control-sm" value="${safe(donor.permanent_address || donor.office_address)}" disabled>
-                                        </div>
-                                        <div class="mb-2">
-                                            <small class="text-muted d-block">Mobile Number</small>
-                                            <input type="text" class="form-control form-control-sm" value="${safe(donor.mobile || donor.mobile_number || donor.contact_number)}" disabled>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="mb-2">
-                                            <small class="text-muted d-block">Civil Status</small>
-                                            <input type="text" class="form-control form-control-sm" value="${safe(donor.civil_status)}" disabled>
-                                        </div>
-                                        <div class="mb-2">
-                                            <small class="text-muted d-block">Nationality</small>
-                                            <input type="text" class="form-control form-control-sm" value="${safe(donor.nationality)}" disabled>
-                                        </div>
-                                        <div class="mb-2">
-                                            <small class="text-muted d-block">Occupation</small>
-                                            <input type="text" class="form-control form-control-sm" value="${safe(donor.occupation)}" disabled>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <hr class="my-3" />
-                    `;
-                    // Create status summary section
-                    const getOverallStatus = () => {
-                        const statusLower = String(eligibilityStatus || '').toLowerCase();
-                        const interviewerMedicalLower = String(interviewerMedical || '').toLowerCase();
-                        const interviewerScreeningLower = String(interviewerScreening || '').toLowerCase();
-                        const physicianMedicalLower = String(physicianMedical || '').toLowerCase();
-                        const physicianPhysicalLower = String(physicianPhysical || '').toLowerCase();
-                        const phlebStatusLower = String(phlebStatus || '').toLowerCase();
-                        // Check for declined/deferred/refused status in each stage based on specific column checks
-                        if (interviewerMedicalLower.includes('declined') || interviewerMedicalLower.includes('defer') || interviewerMedicalLower.includes('refused') || interviewerMedicalLower.includes('not approved')) {
-                            return { status: 'Declined/Not Approved', stage: 'MH', color: 'danger' };
-                        }
-                        if (interviewerScreeningLower.includes('declined') || interviewerScreeningLower.includes('defer') || interviewerScreeningLower.includes('refused') || interviewerScreeningLower.includes('not approved')) {
-                            return { status: 'Declined/Not Approved', stage: 'Initial Screening', color: 'danger' };
-                        }
-                        if (physicianMedicalLower.includes('declined') || physicianMedicalLower.includes('defer') || physicianMedicalLower.includes('refused') || physicianMedicalLower.includes('not approved')) {
-                            return { status: 'Declined/Not Approved', stage: 'MH', color: 'danger' };
-                        }
-                        if (physicianPhysicalLower.includes('permanently deferred')) {
-                            return { status: 'Permanently Deferred', stage: 'Physical Exam', color: 'danger' };
-                        }
-                        if (physicianPhysicalLower.includes('temporarily deferred')) {
-                            return { status: 'Temporarily Deferred', stage: 'Physical Exam', color: 'warning' };
-                        }
-                        if (physicianPhysicalLower.includes('refused')) {
-                            return { status: 'Refused', stage: 'Physical Exam', color: 'danger' };
-                        }
-                        if (physicianPhysicalLower.includes('declined') || physicianPhysicalLower.includes('defer') || physicianPhysicalLower.includes('not approved')) {
-                            return { status: 'Declined/Not Approved', stage: 'Physical Exam', color: 'danger' };
-                        }
-                        if (phlebStatusLower.includes('declined') || phlebStatusLower.includes('defer') || phlebStatusLower.includes('refused') || phlebStatusLower.includes('not approved')) {
-                            return { status: 'Declined/Not Approved', stage: 'Blood Collection', color: 'danger' };
-                        }
-                        if (statusLower === 'approved' || statusLower === 'eligible') {
-                            return { status: 'Approved', stage: 'All Stages', color: 'success' };
-                        }
-                        if (statusLower === 'pending') {
-                            return { status: 'Pending', stage: 'In Progress', color: 'warning' };
-                        }
-                        return { status: eligibilityStatus || 'Unknown', stage: 'Unknown', color: 'secondary' };
-                    };
-                    const overallStatus = getOverallStatus();
-                    const statusSummary = `
-                        <div class="card mb-3" style="border-left: 4px solid var(--bs-${overallStatus.color});">
-                            <div class="card-body py-2 px-3">
-                                <div class="row align-items-center">
-                                    <div class="col-md-8">
-                                        <h6 class="mb-1" style="font-weight: 600; color: #212529;">Overall Status</h6>
-                                        <span class="badge bg-${overallStatus.color} me-2">${overallStatus.status}</span>
-                                        <small class="text-muted">${overallStatus.stage}</small>
-                                    </div>
-                                    <div class="col-md-4 text-end">
-                                        <small class="text-muted">Eligibility ID: ${safe(eligibility.eligibility_id, 'N/A')}</small>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    const html = `
-                        ${header}
-                        ${statusSummary}
-                        ${section('Interviewer', interviewerRows, 'bg-danger')}
-                        ${section('Physician', physicianRows, 'bg-danger')}
-                        ${section('Phlebotomist', phlebRows, 'bg-danger')}
-                        ${cta}
-                    `;
-                    donorDetailsContainer.innerHTML = html;
-                    // Store current donor info for admin actions
-                    window.currentDonorId = donorId;
-                    window.currentEligibilityId = eligibilityId;
-                    // Hide approve CTA in footer when fully approved (view-only state)
-                    try {
-                        const approveBtn = document.getElementById('Approve');
-                        if (approveBtn) approveBtn.style.display = isFullyApproved ? 'none' : '';
-                    } catch (_) {}
-                    // Wireframe-aligned styles
-                    const styleEl = document.createElement('style');
-                    styleEl.textContent = `
-                        #donorModal .modal-dialog { max-width: 1000px; }
-                        #donorModal .modal-body { padding: 20px; }
-                        #donorModal .card-header { padding: 8px 12px !important; }
-                        #donorModal .card-body { padding: 12px !important; }
-                        #donorModal .table td { padding: 8px 12px; }
-                        .donor-header-section {
-                            background: linear-gradient(135deg, #dc3545, #c82333);
-                            border-radius: 8px;
-                            padding: 20px;
-                            color: white;
-                            margin-bottom: 20px;
-                        }
-                        .donor-header-card {
-                            background: transparent;
-                        }
-                        .donor-header-content {
-                            display: flex;
-                            justify-content: space-between;
-                            align-items: flex-start;
-                        }
-                        .donor-name-section {
-                            flex: 1;
-                        }
-                        .donor-name {
-                            font-size: 1.4rem;
-                            font-weight: 600;
-                            margin: 0 0 8px 0;
-                            color: white;
-                        }
-                        .donor-badges {
-                            display: flex;
-                            gap: 6px;
-                            flex-wrap: wrap;
-                        }
-                        .donor-badge {
-                            background: rgba(255, 255, 255, 0.25);
-                            padding: 3px 8px;
-                            border-radius: 10px;
-                            font-size: 0.75rem;
-                            font-weight: 500;
-                            color: white;
-                        }
-                        .donor-id-section {
-                            text-align: right;
-                            margin-top: 5px;
-                        }
-                        .donor-id-label {
-                            font-size: 0.9rem;
-                            font-weight: 500;
-                            color: white;
-                        }
-                        .card {
-                            border: 1px solid #e9ecef;
-                            border-radius: 8px;
-                        }
-                        .card-header {
-                            background-color: #f8f9fa;
-                            border-bottom: 1px solid #e9ecef;
-                        }
-                        .table thead th { background: transparent; color: #111827; font-weight: 700; border: none; }
-                        /* Role tables (wireframe look) */
-                        .donor-role-table .table { border-collapse: separate; border-spacing: 0; }
-                        .donor-role-table .table thead th {
-                            background: transparent !important;
-                            color: #212529;
-                            font-weight: 700;
-                            border-top: 1px solid #e9ecef;
-                            border-right: 1px solid #e9ecef;
-                            border-left: 1px solid #e9ecef;
-                            border-bottom: 1px solid #e9ecef;
-                        }
-                        .donor-role-table .table tbody td {
-                            border-right: 1px solid #e9ecef;
-                            border-left: 1px solid #e9ecef;
-                            border-bottom: 1px solid #e9ecef;
-                        }
-                        .donor-role-table .status-cell { vertical-align: middle; color:#111827; }
-                        .donor-role-table .action-cell { vertical-align: middle; white-space: nowrap; width: 1%; }
-                        .donor-role-table .action-cell .circular-btn { transform: scale(0.9); }
-                        .donor-info-input[disabled] {
-                            background:#f1f3f5; border:1px solid #e9ecef; border-radius:8px; color:#495057;
-                        }
-                        /* Stronger, consistent text colors */
-                        .donor-header-wireframe .donor-name-wireframe { color:#111827; }
-                        .donor-age-gender { color:#111827; }
-                        .donor-id-wireframe { color:#111827; }
-                        .donor-blood-type { 
-                            /* Remove conflicting styles to allow blood-type-display to work */
-                        }
-                        .section-title { color:#111827; }
-                        .donor-info-label { color:#111827; font-weight:600; }
-                        .btn-outline-primary {
-                            border-color: #007bff;
-                            color: #007bff;
-                        }
-                        .btn-outline-primary:hover {
-                            background-color: #007bff;
-                            border-color: #007bff;
-                            color: white;
-                        }
-                        .circular-btn {
-                            width: 32px;
-                            height: 32px;
-                            border-radius: 50%;
-                            padding: 0;
-                            display: inline-flex;
-                            align-items: center;
-                            justify-content: center;
-                            border: 2px solid #007bff;
-                            background-color: #e3f2fd;
-                        }
-                        .circular-btn:hover {
-                            background-color: #007bff;
-                            color: white;
-                        }
-                        .circular-btn i {
-                            font-size: 12px;
-                        }
-                        /* Role section card styling to match the second modal's clean blocks */
-                        .role-section-card {
-                            background: #ffffff;
-                            border: 1px solid #e9ecef;
-                            border-radius: 8px;
-                            padding: 12px 12px 4px;
-                            margin-bottom: 12px;
-                        }
-                        .role-section-card .mb-2 { color: #495057; }
-                        /* Donor info inputs styling */
-                        .donor-info-title { font-weight:700; color:#212529; }
-                        .donor-info-label { color:#6c757d; font-weight:600; letter-spacing:.2px; }
-                        .donor-info-input[disabled] {
-                            background:#f1f3f5; border:1px solid #e9ecef; border-radius:8px; color:#495057;
-                        }
-                    `;
-                    document.head.appendChild(styleEl);
-                    // Admin modal does not include a process action
-                })
-                .catch(error => {
-                    console.error('Error fetching donor details:', error);
-                    document.getElementById('donorDetails').innerHTML = '<div class="alert alert-danger">Error loading donor details. Please try again.</div>';
-                });
+                console.error('AdminDonorModal not loaded');
+                document.getElementById('donorDetails').innerHTML = '<div class="alert alert-danger">Error: Admin module not loaded. Please refresh the page.</div>';
+            }
         }
         // Function to load edit form
         function loadEditForm(donorId, eligibilityId) {
@@ -2650,6 +2078,8 @@ function getCacheStats() {
     <script src="../../assets/js/admin-declaration-form-modal.js"></script>
     <!-- Admin-specific physical examination modal script -->
     <script src="../../assets/js/physical_examination_modal_admin.js"></script>
+     <!-- Admin-specific donor modal script -->
+     <script src="../../assets/js/admin-donor-modal.js"></script>
      <script>
      // Safety shim: ensure makeApiCall exists for modules (physician PE handler uses it)
      if (typeof window.makeApiCall !== 'function') {
@@ -3117,13 +2547,19 @@ function getCacheStats() {
                         const modalContent = document.getElementById('medicalHistoryModalContent');
                         modalContent.innerHTML = html;
                         // Execute any script tags in the loaded content
-                        // Remove all script tags to prevent CSP violations
                         const scripts = modalContent.querySelectorAll('script');
-                        scripts.forEach(script => {
+                        scripts.forEach((script, index) => {
                             try {
-                                script.remove();
+                                console.log(`Executing script ${index + 1}:`, script.type || 'inline');
+                                // Create a new script element and execute it
+                                const newScript = document.createElement('script');
+                                newScript.textContent = script.textContent;
+                                newScript.type = script.type || 'text/javascript';
+                                document.head.appendChild(newScript);
+                                newScript.remove(); // Remove after execution
+                                console.log(`Script ${index + 1} executed successfully`);
                             } catch (e) {
-                                console.warn('Could not remove script tag:', e);
+                                console.warn('Error executing script:', e);
                             }
                         });
                         
@@ -3166,13 +2602,7 @@ function getCacheStats() {
         console.log('=== FUNCTION ASSIGNMENT COMPLETE ===');
         // Function to close medical history modal
         function closeMedicalHistoryModal() {
-            const modal = document.getElementById('medicalHistoryModal');
-            if (modal) {
-                modal.classList.remove('show');
-                setTimeout(() => {
-                    modal.style.display = 'none';
-                }, 300);
-            }
+            closeMedicalHistoryModalUnified();
         }
         // Function to show physical examination confirmation after medical history approval
         window.showPhysicianPhysicalExamConfirmation = function() {
@@ -3650,9 +3080,16 @@ function getCacheStats() {
                             contentEl.innerHTML = html;
                             // Execute any script tags in the loaded content (like staff modal does)
                             const scripts = contentEl.querySelectorAll('script');
-                            scripts.forEach(script => {
+                            scripts.forEach((script, index) => {
                                 try {
-                                    script.remove();
+                                    console.log(`Executing script ${index + 1}:`, script.type || 'inline');
+                                    // Create a new script element and execute it
+                                    const newScript = document.createElement('script');
+                                    newScript.textContent = script.textContent;
+                                    newScript.type = script.type || 'text/javascript';
+                                    document.head.appendChild(newScript);
+                                    newScript.remove(); // Remove after execution
+                                    console.log(`Script ${index + 1} executed successfully`);
                                 } catch (e) {
                                     console.log('Script execution error:', e);
                                 }
@@ -3774,11 +3211,18 @@ function getCacheStats() {
             try {
                 const mhModalEl = document.getElementById('medicalHistoryModalAdmin');
                 if (!mhModalEl) return;
+                
+                // Check if listener is already bound to prevent duplicates
+                if (mhModalEl.hasAttribute('data-refresh-bound')) return;
+                
                 mhModalEl.addEventListener('hidden.bs.modal', function() {
                     if (window.currentDetailsDonorId && window.currentDetailsEligibilityId) {
                         fetchDonorDetails(window.currentDetailsDonorId, window.currentDetailsEligibilityId);
                     }
                 }, { once: true });
+                
+                // Mark as bound to prevent duplicate listeners
+                mhModalEl.setAttribute('data-refresh-bound', 'true');
             } catch (e) {}
         }
         function bindScreeningFormRefresh() {
@@ -4262,9 +3706,16 @@ function getCacheStats() {
                             contentEl.innerHTML = html;
                             // Execute any script tags in the loaded content (like staff modal does)
                             const scripts = contentEl.querySelectorAll('script');
-                            scripts.forEach(script => {
+                            scripts.forEach((script, index) => {
                                 try {
-                                    script.remove();
+                                    console.log(`Executing script ${index + 1}:`, script.type || 'inline');
+                                    // Create a new script element and execute it
+                                    const newScript = document.createElement('script');
+                                    newScript.textContent = script.textContent;
+                                    newScript.type = script.type || 'text/javascript';
+                                    document.head.appendChild(newScript);
+                                    newScript.remove(); // Remove after execution
+                                    console.log(`Script ${index + 1} executed successfully`);
                                 } catch (e) {
                                     console.log('Script execution error:', e);
                                 }
@@ -4396,9 +3847,8 @@ function getCacheStats() {
             console.log('Editing initial screening for donor:', donorId);
             // Store the donor ID for the workflow
             window.currentInterviewerDonorId = donorId;
-            // Show confirmation modal first
-            const confirmModal = new bootstrap.Modal(document.getElementById('submitMedicalHistoryConfirmModal'));
-            confirmModal.show();
+            // Open the screening form directly
+            openScreeningFormForInterviewer(donorId);
         };
         window.editPhysicianWorkflow = function(donorId) {
             console.log('Editing physician workflow for donor:', donorId);
@@ -4546,8 +3996,19 @@ function getCacheStats() {
                         // Execute any script tags embedded in the loaded content so questions/data render
                         try {
                             const scripts = contentEl.querySelectorAll('script');
-                            scripts.forEach(script => {
-                                script.remove();
+                            scripts.forEach((script, index) => {
+                                try {
+                                    console.log(`Executing script ${index + 1}:`, script.type || 'inline');
+                                    // Create a new script element and execute it
+                                    const newScript = document.createElement('script');
+                                    newScript.textContent = script.textContent;
+                                    newScript.type = script.type || 'text/javascript';
+                                    document.head.appendChild(newScript);
+                                    newScript.remove(); // Remove after execution
+                                    console.log(`Script ${index + 1} executed successfully`);
+                                } catch (e) {
+                                    console.log('Script execution error:', e);
+                                }
                             });
                         } catch(_) {}
                         // If the content relies on a generator, call it
@@ -4703,6 +4164,96 @@ function getCacheStats() {
                 }
             } catch(_) { if (typeof cb === 'function') cb(); }
         }
+        
+        // Unified function to close medical history modals
+        function closeMedicalHistoryModalUnified() {
+            console.log('Closing medical history modal (unified function)...');
+            
+            // Try both Staff Style and Admin Style modals
+            const staffModal = document.getElementById('medicalHistoryModal');
+            const adminModal = document.getElementById('medicalHistoryModalAdmin');
+            
+            console.log('Staff modal found:', !!staffModal);
+            console.log('Admin modal found:', !!adminModal);
+            
+            // Determine which modal is currently visible
+            let modalElement = null;
+            if (staffModal && staffModal.classList.contains('show')) {
+                modalElement = staffModal;
+                console.log('Using Staff Style modal');
+            } else if (adminModal && adminModal.classList.contains('show')) {
+                modalElement = adminModal;
+                console.log('Using Admin Style modal');
+            } else {
+                // Fallback: try to find any visible modal
+                modalElement = staffModal || adminModal;
+                console.log('Using fallback modal:', modalElement?.id);
+            }
+            
+            if (modalElement) {
+                // Check if modal is currently visible
+                const isVisible = modalElement.classList.contains('show');
+                console.log('Modal is currently visible:', isVisible);
+                console.log('Modal ID:', modalElement.id);
+                
+                // Try multiple approaches to close the modal
+                const modalInstance = bootstrap.Modal.getInstance(modalElement);
+                console.log('Modal instance found:', !!modalInstance);
+                
+                if (modalInstance) {
+                    console.log('Method 1: Using existing instance to hide modal');
+                    try {
+                        modalInstance.hide();
+                        console.log('Hide command sent successfully');
+                    } catch (error) {
+                        console.error('Error hiding modal with existing instance:', error);
+                    }
+                } else {
+                    console.log('Method 2: Creating new instance and hiding');
+                    try {
+                        const modal = new bootstrap.Modal(modalElement);
+                        modal.hide();
+                        console.log('Hide command sent with new instance');
+                    } catch (error) {
+                        console.error('Error hiding modal with new instance:', error);
+                    }
+                }
+                
+                // Method 3: Force close by manipulating classes directly
+                setTimeout(() => {
+                    console.log('Method 3: Force closing modal by manipulating classes');
+                    if (modalElement.classList.contains('show')) {
+                        modalElement.classList.remove('show');
+                        modalElement.style.display = 'none';
+                        modalElement.setAttribute('aria-hidden', 'true');
+                        modalElement.removeAttribute('aria-modal');
+                        
+                        // Remove backdrop
+                        const backdrop = document.querySelector('.modal-backdrop');
+                        if (backdrop) {
+                            backdrop.remove();
+                        }
+                        
+                        // Clean up body classes
+                        document.body.classList.remove('modal-open');
+                        document.body.style.overflow = '';
+                        document.body.style.paddingRight = '';
+                        
+                        console.log('Force close completed');
+                    }
+                }, 100);
+                
+            } else {
+                console.error('No modal element found!');
+            }
+        }
+        
+        // Listen for custom close event from MH modal content
+        window.addEventListener('closeMedicalHistoryModal', function(event) {
+            console.log('Received close event for MH modal:', event.detail);
+            closeMedicalHistoryModalUnified();
+        });
+        
         // Proceed to Physical Examination (admin path)
         function proceedToPE(donorId){
             try {
@@ -5154,6 +4705,12 @@ function getCacheStats() {
         }
         // Add event listener for modal cleanup
         document.addEventListener('hidden.bs.modal', function(event) {
+            // Skip cleanup for both medical history modals to avoid conflicts with our custom close event
+            if (event.target && (event.target.id === 'medicalHistoryModalAdmin' || event.target.id === 'medicalHistoryModal')) {
+                console.log('Skipping cleanup for medical history modal - handled by custom close event');
+                return;
+            }
+            
             // Small delay to ensure proper cleanup
             setTimeout(() => {
                 cleanupModalState();
@@ -5452,13 +5009,18 @@ function getCacheStats() {
                     // Update modal content with fetched HTML
                     modalContent.innerHTML = html;
                     
-                    // Execute any script tags in the loaded content (append to body for consistent execution)
+                    // Execute any script tags in the loaded content
                     const scripts = modalContent.querySelectorAll('script');
                     console.log('Found', scripts.length, 'script tags to execute');
                     scripts.forEach((script, index) => {
                         try {
                             console.log(`Executing script ${index + 1}:`, script.type || 'inline');
-                            script.remove();
+                            // Create a new script element and execute it
+                            const newScript = document.createElement('script');
+                            newScript.textContent = script.textContent;
+                            newScript.type = script.type || 'text/javascript';
+                            document.head.appendChild(newScript);
+                            newScript.remove(); // Remove after execution
                             console.log(`Script ${index + 1} executed successfully`);
                         } catch (e) {
                             console.warn('Error executing script:', e);
@@ -5498,11 +5060,18 @@ function getCacheStats() {
                 .then(html => {
                     // Update modal content
                     modalContent.innerHTML = html;
-                    // Execute any script tags in the loaded content (append to body for consistent execution)
+                    // Execute any script tags in the loaded content
                     const scripts = modalContent.querySelectorAll('script');
-                    scripts.forEach(script => {
+                    scripts.forEach((script, index) => {
                         try {
-                            script.remove();
+                            console.log(`Executing script ${index + 1}:`, script.type || 'inline');
+                            // Create a new script element and execute it
+                            const newScript = document.createElement('script');
+                            newScript.textContent = script.textContent;
+                            newScript.type = script.type || 'text/javascript';
+                            document.head.appendChild(newScript);
+                            newScript.remove(); // Remove after execution
+                            console.log(`Script ${index + 1} executed successfully`);
                         } catch (e) {
                             console.warn('Error executing script:', e);
                         }
@@ -5598,41 +5167,7 @@ function getCacheStats() {
         }
         // Function to close medical history modal
         window.closeMedicalHistoryModal = function() {
-            console.log('Closing medical history modal...');
-            const mhElement = document.getElementById('medicalHistoryModal');
-            // First, hide the modal content
-            mhElement.classList.remove('show');
-            // Wait for the fade-out animation to complete
-            setTimeout(() => {
-                mhElement.style.display = 'none';
-                window.isOpeningMedicalHistory = false;
-                // Reset any form state or validation errors
-                const form = mhElement.querySelector('form');
-                if (form) {
-                    form.reset();
-                    // Remove any validation classes
-                    form.querySelectorAll('.is-invalid, .is-valid').forEach(el => {
-                        el.classList.remove('is-invalid', 'is-valid');
-                    });
-                }
-                // Clear any dynamic content that might be causing layout issues
-                const modalContent = document.getElementById('medicalHistoryModalContent');
-                if (modalContent) {
-                    // Reset to loading state to clear any corrupted content
-                    modalContent.innerHTML = `
-                        <div class="text-center">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="mt-2">Loading medical history...</p>
-                        </div>
-                    `;
-                }
-                // Force a clean state by removing any lingering classes or styles
-                mhElement.removeAttribute('style');
-                mhElement.className = 'medical-history-modal';
-                console.log('Medical history modal closed');
-            }, 300);
+            closeMedicalHistoryModalUnified();
         };
         // Function to proceed to physical examination (called after medical history approval)
         window.proceedToPhysicalExamination = function(donorId) {
@@ -6585,28 +6120,8 @@ function getCacheStats() {
             } else {
                 console.error('Proceed button not found!');
             }
-            // Handle Submit Medical History Confirmation (Interviewer-specific button)
-            const screeningBtn = document.getElementById('interviewerProceedToInitialScreeningBtn') || document.getElementById('proceedToInitialScreeningBtn');
-            console.log('Screening button found:', screeningBtn);
-            if (screeningBtn) {
-                screeningBtn.addEventListener('click', function() {
-                // Prefer donorId stored on the confirmation modal; fallback to global
-                const confirmEl = document.getElementById('submitMedicalHistoryConfirmModal');
-                const donorId = (confirmEl && confirmEl.dataset && confirmEl.dataset.donorId) ? confirmEl.dataset.donorId : window.currentInterviewerDonorId;
-                if (!donorId) {
-                    console.error('No donor ID available for screening');
-                    return;
-                }
-                // Close confirmation modal and open screening shortly after
-                try {
-                    const cm = bootstrap.Modal.getInstance(confirmEl) || new bootstrap.Modal(confirmEl);
-                    cm.hide();
-                } catch(_) {}
-                setTimeout(() => { openScreeningFormForInterviewer(donorId); }, 220);
-                });
-            } else {
-                console.error('Screening button not found!');
-            }
+            // Medical History completion is now handled by the simple completion modal
+            // No additional action needed - users can manually click the separate Screening button
             // Handle Print Declaration Form
             const printBtn = document.getElementById('printDeclarationFormBtn');
             console.log('Print button found:', printBtn);
@@ -6666,17 +6181,8 @@ function getCacheStats() {
         }
         
         
-        // Function to proceed to initial screening from medical history
-        function proceedToInitialScreening(donorId) {
-            console.log('Proceeding to initial screening:', donorId);
-            // Close medical history modal using the custom modal system
-            closeMedicalHistoryModal();
-            // Wait for modal to close, then show confirmation modal for initial screening
-            setTimeout(() => {
-                const confirmModal = new bootstrap.Modal(document.getElementById('submitMedicalHistoryConfirmModal'));
-                confirmModal.show();
-            }, 350);
-        }
+        // Medical History completion now shows simple confirmation modal
+        // Screening is handled separately by the Screening button
         // Function to open screening form for interviewer workflow
         function openScreeningFormForInterviewer(donorId) {
             console.log('Opening admin screening form for interviewer workflow:', donorId);
@@ -6688,18 +6194,18 @@ function getCacheStats() {
                 console.error('openAdminScreeningModal function not found');
             }
         }
-        // Function to open declaration form for interviewer workflow
+        // Function to open admin declaration form for interviewer workflow
         function openDeclarationFormForInterviewer(donorId) {
-            console.log('Opening declaration form for interviewer workflow:', donorId);
+            console.log('Opening admin declaration form for interviewer workflow:', donorId);
             const modal = document.getElementById('declarationFormModal');
             if (!modal) {
-                console.error('Declaration form modal not found');
+                console.error('Admin declaration form modal not found');
                 return;
             }
             // Show the modal
             const bootstrapModal = new bootstrap.Modal(modal);
             bootstrapModal.show();
-            // Load declaration form content
+            // Load admin declaration form content
             const modalContent = document.getElementById('declarationFormModalContent');
             modalContent.innerHTML = `
                 <div class="d-flex justify-content-center">
@@ -6708,13 +6214,13 @@ function getCacheStats() {
                     </div>
                 </div>
             `;
-            // Fetch declaration form content
-            fetch(`../../src/views/forms/declaration-form-modal-content.php?donor_id=${donorId}`)
+            // Fetch admin declaration form content
+            fetch(`../../src/views/forms/admin-declaration-form-modal-content.php?donor_id=${donorId}`)
                 .then(response => response.text())
                 .then(data => {
                     modalContent.innerHTML = data;
                     // Ensure print function is available
-                    window.printDeclaration = function() {
+                    window.printAdminDeclaration = function() {
                         const printWindow = window.open('', '_blank');
                         const content = document.querySelector('.declaration-header')?.outerHTML +
                                        document.querySelector('.donor-info')?.outerHTML +
@@ -6724,10 +6230,10 @@ function getCacheStats() {
                             <!DOCTYPE html>
                             <html>
                             <head>
-                                <title>Declaration Form</title>
+                                <title>Admin Declaration Form</title>
                             </head>
                             <body>
-                                ${content || 'Declaration form content not available'}
+                                ${content || 'Admin declaration form content not available'}
                             </body>
                             </html>
                         `);
@@ -6735,17 +6241,17 @@ function getCacheStats() {
                         printWindow.print();
                     };
                     // Ensure submit function is available globally since inline scripts won't execute on innerHTML
-                    window.submitDeclarationForm = function(event) {
+                    window.submitAdminDeclarationForm = function(event) {
                         try {
                             if (event && typeof event.preventDefault === 'function') {
                                 event.preventDefault();
                             }
-                            const form = document.getElementById('modalDeclarationForm');
+                            const form = document.getElementById('modalAdminDeclarationForm');
                             if (!form) {
                                 alert('Form not found. Please try again.');
                                 return;
                             }
-                            const actionInput = document.getElementById('modalDeclarationAction');
+                            const actionInput = document.getElementById('modalAdminDeclarationAction');
                             if (actionInput) {
                                 actionInput.value = 'complete';
                             }
@@ -6756,7 +6262,7 @@ function getCacheStats() {
                                     formData.append('screening_data', JSON.stringify(window.currentScreeningData));
                                 } catch (_) {}
                             }
-                            fetch('../../src/views/forms/declaration-form-process.php', {
+                            fetch('../../src/views/forms/admin-declaration-form-process.php', {
                                 method: 'POST',
                                 body: formData
                             })
@@ -6776,33 +6282,23 @@ function getCacheStats() {
                                 }
                             })
                             .catch(function(error) {
-                                console.error('Declaration submit failed:', error);
+                                console.error('Admin declaration submit failed:', error);
                                 alert('Submission failed. Please try again.');
                             });
                         } catch (err) {
-                            console.error('Unexpected error submitting declaration:', err);
+                            console.error('Unexpected error submitting admin declaration:', err);
                             alert('Unexpected error. Please try again.');
                         }
                     };
                 })
                 .catch(error => {
-                    console.error('Error loading declaration form:', error);
-                    modalContent.innerHTML = '<div class="alert alert-danger">Error loading declaration form. Please try again.</div>';
+                    console.error('Error loading admin declaration form:', error);
+                    modalContent.innerHTML = '<div class="alert alert-danger">Error loading admin declaration form. Please try again.</div>';
                 });
         }
         // Function to close medical history modal
         function closeMedicalHistoryModal() {
-            const modal = document.getElementById('medicalHistoryModal');
-            if (modal) {
-                console.log('Closing medical history modal...');
-                // Remove show class to trigger CSS transition
-                modal.classList.remove('show');
-                // Remove modal-open class from body
-                document.body.classList.remove('modal-open');
-                    // Reset the opening flag
-                    window.isOpeningMedicalHistory = false;
-                    console.log('Medical history modal closed');
-            }
+            closeMedicalHistoryModalUnified();
         }
     // View functions for wireframe action buttons
     window.viewMedicalHistory = function(donorId) {

@@ -45,6 +45,34 @@ function fetchDonorInfo($donorId) {
     }
 }
 
+// Function to fetch medical history data
+function fetchMedicalHistoryData($donorId) {
+    $curl = curl_init();
+    
+    curl_setopt_array($curl, [
+        CURLOPT_URL => SUPABASE_URL . "/rest/v1/medical_history?donor_id=eq." . $donorId,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            "apikey: " . SUPABASE_API_KEY,
+            "Authorization: Bearer " . SUPABASE_API_KEY,
+            "Content-Type: application/json"
+        ],
+    ]);
+    
+    $response = curl_exec($curl);
+    $err = curl_error($curl);
+    
+    curl_close($curl);
+    
+    if ($err) {
+        error_log("cURL Error fetching medical history data: " . $err);
+        return null;
+    } else {
+        $data = json_decode($response, true);
+        return !empty($data) ? $data[0] : null;
+    }
+}
+
 // Function to fetch physical examination data (for declined donors)
 function fetchPhysicalExamData($physicalExamId) {
     error_log("Fetching physical exam data for ID: $physicalExamId");
@@ -75,7 +103,7 @@ function fetchPhysicalExamData($physicalExamId) {
             return null;
         }
         error_log("Successfully retrieved physical exam data for ID: $physicalExamId");
-        return $data[0];
+        return !empty($data) ? $data[0] : null;
     }
 }
 
@@ -109,7 +137,7 @@ function fetchScreeningDataByDonorId($donorId) {
             return null;
         }
         error_log("Successfully retrieved screening data for donor ID: $donorId");
-        return $data[0];
+        return !empty($data) ? $data[0] : null;
     }
 }
 
@@ -340,7 +368,7 @@ function fetchEligibilityRecord($eligibilityId) {
             ];
         }
         
-        $eligibilityRecord = $data[0];
+        $eligibilityRecord = !empty($data) ? $data[0] : null;
         
         // If there's a screening_id, fetch blood_type and donation_type from screening_form
         if (!empty($eligibilityRecord['screening_id'])) {
@@ -390,13 +418,14 @@ function fetchScreeningData($screeningId) {
             error_log("No screening data found for ID: $screeningId");
             return null;
         }
-        return $data[0];
+        return !empty($data) ? $data[0] : null;
     }
 }
 
 try {
     // Fetch data
     $donorInfo = fetchDonorInfo($donor_id);
+    $medicalHistoryData = fetchMedicalHistoryData($donor_id);
     
     if (!$donorInfo) {
         error_log("No donor information found for ID: $donor_id");
@@ -794,6 +823,7 @@ try {
     echo json_encode([
         'donor' => $donorInfo,
         'eligibility' => $derived,
+        'medical_history' => $medicalHistoryData,
         'physical_examination' => $physicalExamData,
         'screening_form' => $screeningLatest
     ]);

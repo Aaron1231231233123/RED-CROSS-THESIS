@@ -424,7 +424,7 @@ class PhysicalExaminationModalAdmin {
     async checkAndUpdateDonorStatus(donorId) {
         
         try {
-            // Fetch eligibility data to check physician section badge status
+            // Fetch eligibility data to check all section statuses
             const eligibilityResponse = await fetch(`../../assets/php_func/fetch_donor_medical_info.php?donor_id=${donorId}&_=${Date.now()}`);
             const eligibilityData = await eligibilityResponse.json();
             
@@ -432,35 +432,48 @@ class PhysicalExaminationModalAdmin {
             if (eligibilityData && eligibilityData.success && eligibilityData.data) {
                 const eligibility = eligibilityData.data;
                 
-                // Get physician section status values (same as donor information modal)
-                const physicianMedical = eligibility.review_status || '';
+                // Get all section status values (same as donor information modal)
+                const interviewerMedical = eligibility.medical_history_status || '';
+                const interviewerScreening = eligibility.screening_status || '';
                 const physicianPhysical = eligibility.physical_status || '';
                 
+                console.log('[PE ADMIN DEBUG] Status values:', {
+                    interviewerMedical,
+                    interviewerScreening,
+                    physicianPhysical
+                });
                 
-                // Check if both physician badges would show "Accepted" (same logic as donor modal)
-                const physicianMHAccepted = this.isAcceptedStatus(physicianMedical);
-                const physicianPEAccepted = this.isAcceptedStatus(physicianPhysical);
-                
-                
-                // Determine new status based on physician section completion
+                // Determine new status based on the new workflow logic
                 let newStatus;
-                if (physicianMHAccepted && physicianPEAccepted) {
+                
+                // Check if Medical History is Completed and Initial Screening is Passed
+                const isMedicalHistoryCompleted = this.isCompletedStatus(interviewerMedical);
+                const isScreeningPassed = this.isPassedStatus(interviewerScreening);
+                const isPhysicalExamApproved = this.isAcceptedStatus(physicianPhysical);
+                
+                if (isMedicalHistoryCompleted && isScreeningPassed && isPhysicalExamApproved) {
+                    // All interviewer and physician phases complete -> Pending (Collection)
                     newStatus = 'Pending (Collection)';
-                } else {
+                } else if (isMedicalHistoryCompleted && isScreeningPassed) {
+                    // Interviewer phase complete, physician phase pending -> Pending (Examination)
                     newStatus = 'Pending (Examination)';
+                } else {
+                    // Interviewer phase pending -> Pending (Screening)
+                    newStatus = 'Pending (Screening)';
                 }
                 
+                console.log('[PE ADMIN DEBUG] Determined new status:', newStatus);
                 this.updateDonorStatusBadge(donorId, newStatus);
                 
             } else {
                 console.warn('[PE ADMIN DEBUG] No eligibility data found, using fallback');
-                this.updateDonorStatusBadge(donorId, 'Pending (Collection)');
+                this.updateDonorStatusBadge(donorId, 'Pending (Screening)');
             }
             
         } catch (error) {
             console.error('[PE ADMIN DEBUG] Error checking donor status:', error);
-            // Fallback to updating to Pending (Collection) if we can't check
-            this.updateDonorStatusBadge(donorId, 'Pending (Collection)');
+            // Fallback to Pending (Screening) if we can't check
+            this.updateDonorStatusBadge(donorId, 'Pending (Screening)');
         }
     }
     
@@ -473,6 +486,27 @@ class PhysicalExaminationModalAdmin {
             statusLower.includes('completed') ||
             statusLower.includes('passed') ||
             statusLower.includes('success')
+        );
+    }
+    
+    isCompletedStatus(status) {
+        if (!status) return false;
+        const statusLower = String(status).toLowerCase();
+        return (
+            statusLower.includes('completed') ||
+            statusLower.includes('approved') ||
+            statusLower.includes('accepted')
+        );
+    }
+    
+    isPassedStatus(status) {
+        if (!status) return false;
+        const statusLower = String(status).toLowerCase();
+        return (
+            statusLower.includes('passed') ||
+            statusLower.includes('approved') ||
+            statusLower.includes('accepted') ||
+            statusLower.includes('completed')
         );
     }
     
@@ -519,9 +553,72 @@ class PhysicalExaminationModalAdmin {
             console.warn('[PE ADMIN DEBUG] Donor row not found for ID:', donorId);
         }
     }
+    
+    // Make status update functions globally available
+    static async updateDonorStatusGlobally(donorId) {
+        try {
+            // Fetch eligibility data to check all section statuses
+            const eligibilityResponse = await fetch(`../../assets/php_func/fetch_donor_medical_info.php?donor_id=${donorId}&_=${Date.now()}`);
+            const eligibilityData = await eligibilityResponse.json();
+            
+            if (eligibilityData && eligibilityData.success && eligibilityData.data) {
+                const eligibility = eligibilityData.data;
+                
+                // Get all section status values
+                const interviewerMedical = eligibility.medical_history_status || '';
+                const interviewerScreening = eligibility.screening_status || '';
+                const physicianPhysical = eligibility.physical_status || '';
+                
+                console.log('[STATUS UPDATE] Status values:', {
+                    interviewerMedical,
+                    interviewerScreening,
+                    physicianPhysical
+                });
+                
+                // Determine new status based on the new workflow logic
+                let newStatus;
+                
+                // Check if Medical History is Completed and Initial Screening is Passed
+                const isMedicalHistoryCompleted = PhysicalExaminationModalAdmin.prototype.isCompletedStatus(interviewerMedical);
+                const isScreeningPassed = PhysicalExaminationModalAdmin.prototype.isPassedStatus(interviewerScreening);
+                const isPhysicalExamApproved = PhysicalExaminationModalAdmin.prototype.isAcceptedStatus(physicianPhysical);
+                
+                if (isMedicalHistoryCompleted && isScreeningPassed && isPhysicalExamApproved) {
+                    // All phases complete -> Pending (Collection)
+                    newStatus = 'Pending (Collection)';
+                } else if (isMedicalHistoryCompleted && isScreeningPassed) {
+                    // Interviewer phase complete, physician phase pending -> Pending (Examination)
+                    newStatus = 'Pending (Examination)';
+                } else {
+                    // Interviewer phase pending -> Pending (Screening)
+                    newStatus = 'Pending (Screening)';
+                }
+                
+                console.log('[STATUS UPDATE] Determined new status:', newStatus);
+                
+                // Update the badge
+                const instance = new PhysicalExaminationModalAdmin();
+                instance.updateDonorStatusBadge(donorId, newStatus);
+                
+            } else {
+                console.warn('[STATUS UPDATE] No eligibility data found, using fallback');
+                const instance = new PhysicalExaminationModalAdmin();
+                instance.updateDonorStatusBadge(donorId, 'Pending (Screening)');
+            }
+            
+        } catch (error) {
+            console.error('[STATUS UPDATE] Error checking donor status:', error);
+            // Fallback to Pending (Screening) if we can't check
+            const instance = new PhysicalExaminationModalAdmin();
+            instance.updateDonorStatusBadge(donorId, 'Pending (Screening)');
+        }
+    }
 }
 
 // Initialize admin modal when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     window.physicalExaminationModalAdmin = new PhysicalExaminationModalAdmin();
+    
+    // Make status update function globally available
+    window.updateDonorStatusGlobally = PhysicalExaminationModalAdmin.updateDonorStatusGlobally;
 });

@@ -383,13 +383,6 @@ async function submitScreeningDeferral() {
         units_needed: document.querySelector('input[name="units-needed"]')?.value || null
     };
 
-        donor_id: donorId,
-        screening_id: screeningId,
-        deferral_type: deferralType,
-        disapproval_reason: disapprovalReason,
-        duration: finalDuration,
-        screening_form_data: screeningFormData
-    });
 
     // Show loading state
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
@@ -514,10 +507,6 @@ async function updateScreeningPhysicalExaminationAfterDeferral(physicalExamId, d
     try {
         if (physicalExamId) {
             // Update existing physical examination record
-                physical_exam_id: physicalExamId,
-                remarks: remarks,
-                needs_review: false
-            });
             
             const response = await fetch('../api/update-physical-examination.php', {
                 method: 'POST',
@@ -543,10 +532,6 @@ async function updateScreeningPhysicalExaminationAfterDeferral(physicalExamId, d
             }
         } else if (donorId) {
             // Create new physical examination record
-                donor_id: donorId,
-                remarks: remarks,
-                needs_review: false
-            });
             
             const response = await fetch('../api/create-physical-examination.php', {
                 method: 'POST',
@@ -575,9 +560,6 @@ async function updateScreeningPhysicalExaminationAfterDeferral(physicalExamId, d
         
         // Update medical history if medical_history_id is available
         if (medicalHistoryId) {
-                medical_history_id: medicalHistoryId,
-                needs_review: false
-            });
             
             try {
                 const response = await fetch('../api/update-medical-history.php', {

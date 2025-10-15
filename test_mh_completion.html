@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Medical History Completion</title>
+</head>
+<body>
+    <h1>Test Medical History Completion</h1>
+    <button onclick="testMHCompletion()">Test Medical History Completion</button>
+    <div id="result"></div>
+
+    <script>
+        function testMHCompletion() {
+            const donorId = 122; // Use a real donor ID
+            console.log('Testing medical history completion for donor:', donorId);
+            
+            const updateData = {
+                donor_id: donorId
+            };
+            
+            fetch('assets/php_func/update_medical_history_completion.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(updateData)
+            })
+            .then(response => {
+                console.log('Response status:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('Response data:', data);
+                document.getElementById('result').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('result').innerHTML = '<p style="color: red;">Error: ' + error + '</p>';
+            });
+        }
+    </script>
+</body>
+</html>

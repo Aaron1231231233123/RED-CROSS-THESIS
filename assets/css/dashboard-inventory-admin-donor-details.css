@@ -323,6 +323,105 @@
     font-size: 14px;
 }
 
+/* Donor Role Tables - Legacy Modal Styling */
+#donorModal .donor-role-table .table {
+    margin-bottom: 0;
+    font-size: 0.875rem;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+#donorModal .donor-role-table .table-sm th,
+#donorModal .donor-role-table .table-sm td {
+    padding: 0.75rem 1rem;
+}
+
+#donorModal .donor-role-table .table-light th {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #212529;
+}
+
+#donorModal .donor-role-table .table td {
+    font-size: 0.875rem;
+    vertical-align: middle;
+    background-color: white;
+}
+
+#donorModal .donor-role-table .status-cell {
+    text-align: center;
+}
+
+#donorModal .donor-role-table .action-cell {
+    text-align: center;
+}
+
+/* Wireframe-style card containers */
+#donorModal .donor-role-tables-container {
+    margin-bottom: 1rem;
+}
+
+#donorModal .donor-role-tables-container .donor-role-table {
+    background: white;
+    border-radius: 8px;
+    padding: 0;
+    margin-bottom: 0;
+}
+
+/* Badge styling to match wireframe */
+#donorModal .badge {
+    font-size: 0.8rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+/* Action button styling to match wireframe */
+#donorModal .circular-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #007bff;
+    background: white;
+    color: #007bff;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
+}
+
+#donorModal .circular-btn:hover {
+    background: #007bff;
+    color: white;
+    transform: scale(1.05);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+}
+
+#donorModal .circular-btn i {
+    font-size: 12px;
+}
+
+/* Disabled button styling for Phlebotomist */
+#donorModal .circular-btn:disabled {
+    border-color: #6c757d;
+    color: #6c757d;
+    background: #f8f9fa;
+    cursor: not-allowed;
+}
+
+#donorModal .circular-btn:disabled:hover {
+    background: #f8f9fa;
+    color: #6c757d;
+    transform: none;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
+}
+
 /* Overall Status Section */
 .overall-status-section {
     background: linear-gradient(135deg, #ffc107 0%, #ffcd39 100%);

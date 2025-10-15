@@ -34,25 +34,31 @@
     </div>
 </div>
 
-<!-- Submit Medical History Confirmation Modal -->
+<!-- Medical History Completion Confirmation Modal -->
 <div class="modal fade" id="submitMedicalHistoryConfirmModal" tabindex="-1" aria-labelledby="submitMedicalHistoryConfirmLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border-radius: 15px 15px 0 0;">
                 <h5 class="modal-title" id="submitMedicalHistoryConfirmLabel">
                     <i class="fas fa-check-circle me-2"></i>
-                    Submit Medical History
+                    Medical History Completed
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body py-4">
                 <div class="text-center">
-                    <p class="mb-0">Please confirm if the donor is ready for the next step based on the medical history interview, and proceed with Initial Screening.</p>
+                    <div class="mb-3">
+                        <i class="fas fa-check-circle text-success" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="mb-3">Medical History Review Complete</h5>
+                    <p class="text-muted mb-4">
+                        The medical history has been successfully submitted and will be marked as completed.
+                    </p>
                 </div>
             </div>
             <div class="modal-footer border-0">
-                <button type="button" class="btn btn-danger px-4" id="interviewerProceedToInitialScreeningBtn">
-                    Initial Screening
+                <button type="button" class="btn btn-success px-4" data-bs-dismiss="modal">
+                    <i class="fas fa-check me-2"></i>OK
                 </button>
             </div>
         </div>
