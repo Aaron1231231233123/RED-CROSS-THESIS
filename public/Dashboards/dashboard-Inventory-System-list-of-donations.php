@@ -500,6 +500,7 @@ function getCacheStats() {
                 </button>
             </div>
         </div>
+
         <div class="row">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">

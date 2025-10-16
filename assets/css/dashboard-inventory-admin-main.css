@@ -1,6 +1,6 @@
 /**
  * Dashboard Inventory Admin - Main Styles
- * Extracted from dashboard-Inventory-System-list-of-donations.php
+ * Updated to match Dashboard-Inventory-System-Bloodbank.php styling
  * Admin-specific styling for the main dashboard interface
  */
 
@@ -14,7 +14,7 @@ body {
 
 /* Reduce Left Margin for Main Content */
 main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
-    margin-left: 280px !important;
+    margin-left: 280px !important; 
 }
 
 /* Header */
@@ -28,6 +28,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     border-bottom: 1px solid #ddd;
     z-index: 1000;
     transition: left 0.3s ease, width 0.3s ease;
+    box-sizing: border-box;
 }
 
 /* Sidebar Styling */
@@ -35,6 +36,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     height: 100vh;
     overflow-y: auto;
     position: fixed;
+    top: 0;
+    left: 0;
     width: 240px;
     background-color: #ffffff;
     border-right: 1px solid #ddd;
@@ -42,6 +45,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     transition: width 0.3s ease;
     display: flex;
     flex-direction: column;
+    z-index: 999;
 }
 
 .sidebar-main-content {
@@ -110,22 +114,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     padding: 8px 15px 8px 40px;
     font-size: 0.85rem;
     margin: 0;
-    border-radius: 4px;
-}
-
-.dashboard-home-sidebar .collapse-menu .nav-link:hover {
-    background-color: #f8f9fa;
-    color: #dc3545;
-}
-
-.dashboard-home-sidebar .collapse-menu .nav-link.active {
-    background-color: #dc3545;
-    color: white;
+    border-radius: 0;
 }
 
 .dashboard-home-sidebar .nav-link[aria-expanded="true"] {
-    background-color: transparent;
-    color: #333;
+    background-color: #f8f9fa;
+    color: #dc3545;
 }
 
 .dashboard-home-sidebar .nav-link[aria-expanded="true"] i.fa-chevron-down {
@@ -151,18 +145,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 }
 
 #donorManagementCollapse .nav-link {
-    color: #333;
+    color: #666;
     padding: 8px 15px 8px 40px;
 }
 
 #donorManagementCollapse .nav-link:hover {
-    background-color: #f8f9fa;
     color: #dc3545;
-}
-
-#donorManagementCollapse .nav-link.active {
-    background-color: #dc3545;
-    color: white;
+    background-color: transparent;
 }
 
 /* Hospital Requests Section */
@@ -176,11 +165,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     color: #dc3545;
     font-weight: 600;
     background-color: transparent;
-}
-
-.dashboard-home-sidebar .nav-link[aria-expanded="true"] {
-    background-color: #f8f9fa;
-    color: #dc3545;
 }
 
 /* Main Content Styling */
@@ -210,6 +194,67 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
     width: 100%;
     margin-top: 100px;
+}
+
+/* ============================== */
+/* Responsive Design Adjustments  */
+/* ============================== */
+
+@media (max-width: 992px) {
+    /* Adjust sidebar and header for tablets */
+    .dashboard-home-sidebar {
+        width: 200px;
+    }
+
+    .dashboard-home-header {
+        left: 200px;
+        width: calc(100% - 200px);
+    }
+
+    .dashboard-home-main {
+        margin-left: 200px;
+    }
+}
+
+@media (max-width: 768px) {
+    /* Collapse sidebar and expand content on smaller screens */
+    .dashboard-home-sidebar {
+        width: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .dashboard-home-header {
+        left: 0;
+        width: 100%;
+    }
+
+    .dashboard-home-main {
+        margin-left: 0;
+        padding: 10px;
+    }
+
+
+    .card {
+        min-height: 100px;
+        font-size: 14px;
+    }
+
+    
+}
+
+/* Medium Screens (Tablets) */
+@media (max-width: 991px) {
+    main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
+        margin-left: 240px !important; 
+    }
+}
+
+/* Small Screens (Mobile) */
+@media (max-width: 768px) {
+    main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
+        margin-left: 0 !important; 
+    }
 }
 
 .donor_form_container {
@@ -264,56 +309,4 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 .modal-header {
     background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
     color: white;
-}
-
-/* ============================== */
-/* Responsive Design Adjustments  */
-/* ============================== */
-@media (max-width: 992px) {
-    /* Adjust sidebar and header for tablets */
-    .dashboard-home-sidebar {
-        width: 200px;
-    }
-    .dashboard-home-header {
-        left: 200px;
-        width: calc(100% - 200px);
-    }
-    .dashboard-home-main {
-        margin-left: 200px;
-    }
-}
-
-@media (max-width: 768px) {
-    /* Collapse sidebar and expand content on smaller screens */
-    .dashboard-home-sidebar {
-        width: 0;
-        padding: 0;
-        overflow: hidden;
-    }
-    .dashboard-home-header {
-        left: 0;
-        width: 100%;
-    }
-    .dashboard-home-main {
-        margin-left: 0;
-        padding: 10px;
-    }
-    .card {
-        min-height: 100px;
-        font-size: 14px;
-    }
-}
-
-/* Medium Screens (Tablets) */
-@media (max-width: 991px) {
-    main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
-        margin-left: 240px !important;
-    }
-}
-
-/* Small Screens (Mobile) */
-@media (max-width: 768px) {
-    main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
-        margin-left: 0 !important;
-    }
 }
