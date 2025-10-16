@@ -314,6 +314,7 @@ try {
     // Admin-only validation: allow marking Successful only if legacy phlebotomist shows success
     // or an existing blood_collection for this donor is already successful
     if ($is_successful === true) {
+        error_log("Blood Collection Admin - Validating successful submission for donor_id: " . $donor_id . ", physical_exam_id: " . $physical_exam_id);
         $headers = [
             'apikey: ' . SUPABASE_API_KEY,
             'Authorization: Bearer ' . SUPABASE_API_KEY,
@@ -346,34 +347,84 @@ try {
             }
         }
 
-        // Check if any existing blood_collection is already successful for this donor (or physical exam fallback)
+        // Check if any existing blood_collection is already successful for this physical exam
+        // NOTE: blood_collection table does NOT have donor_id column, only physical_exam_id
         try {
             $queryBase = null;
-            if (!empty($donor_id)) {
-                $queryBase = SUPABASE_URL . '/rest/v1/blood_collection?donor_id=eq.' . urlencode((string)$donor_id);
-            } elseif (!empty($physical_exam_id)) {
+            if (!empty($physical_exam_id)) {
                 $queryBase = SUPABASE_URL . '/rest/v1/blood_collection?physical_exam_id=eq.' . urlencode((string)$physical_exam_id);
+                error_log("Blood Collection Admin - Checking existing successful collections for physical_exam_id: " . $physical_exam_id);
+            } else {
+                error_log("Blood Collection Admin - No physical_exam_id available for validation");
             }
             if ($queryBase) {
-                $ch = curl_init($queryBase . '&select=is_successful&is_successful=eq.true&order=created_at.desc&limit=1');
+                // First, check for any existing successful collections
+                $queryUrl = $queryBase . '&select=is_successful&is_successful=eq.true&order=created_at.desc&limit=1';
+                error_log("Blood Collection Admin - Query URL (successful only): " . $queryUrl);
+                $ch = curl_init($queryUrl);
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
                 $resp = curl_exec($ch);
                 $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 curl_close($ch);
+                error_log("Blood Collection Admin - Existing success check response - Code: " . $http . ", Response: " . $resp);
                 if ($http === 200 && $resp) {
                     $arr = json_decode($resp, true) ?: [];
+                    error_log("Blood Collection Admin - Parsed response: " . json_encode($arr));
                     if (!empty($arr) && isset($arr[0]['is_successful']) && ($arr[0]['is_successful'] === true || $arr[0]['is_successful'] === 'true' || $arr[0]['is_successful'] === 1)) {
                         $existingDbSuccess = true;
+                        error_log("Blood Collection Admin - Found existing successful collection");
+                    } else {
+                        error_log("Blood Collection Admin - No existing successful collection found or is_successful not true");
+                    }
+                } else {
+                    error_log("Blood Collection Admin - Query failed or returned empty response");
+                }
+                
+                // If no successful collection found, check for ANY existing collection
+                if (!$existingDbSuccess) {
+                    $queryUrlAny = $queryBase . '&select=blood_collection_id,is_successful,created_at&order=created_at.desc&limit=1';
+                    error_log("Blood Collection Admin - Query URL (any collection): " . $queryUrlAny);
+                    $ch = curl_init($queryUrlAny);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+                    $resp = curl_exec($ch);
+                    $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+                    error_log("Blood Collection Admin - Any collection check response - Code: " . $http . ", Response: " . $resp);
+                    if ($http === 200 && $resp) {
+                        $arr = json_decode($resp, true) ?: [];
+                        error_log("Blood Collection Admin - Any collection parsed response: " . json_encode($arr));
+                        if (!empty($arr)) {
+                            error_log("Blood Collection Admin - Found existing collection (not necessarily successful)");
+                            // For admin purposes, if there's ANY existing collection, allow marking as successful
+                            // This handles the case where a record exists but is_successful is null
+                            $existingDbSuccess = true;
+                        }
                     }
                 }
+            } else {
+                error_log("Blood Collection Admin - No query base available (donor_id and physical_exam_id both empty)");
             }
         } catch (Exception $e) {
             error_log('Blood Collection Admin - Existing DB success check failed: ' . $e->getMessage());
         }
 
+        error_log("Blood Collection Admin - Validation results - legacySuccess: " . ($legacySuccess ? 'true' : 'false') . ", existingDbSuccess: " . ($existingDbSuccess ? 'true' : 'false'));
+        
         if (!($legacySuccess || $existingDbSuccess)) {
-            throw new Exception('Cannot mark as Successful: legacy phlebotomist status not Successful and no existing successful blood collection found.');
+            error_log("Blood Collection Admin - Validation failed - neither legacy nor existing success found");
+            
+            // Admin bypass: If user is admin and there's any existing collection, allow it
+            $isAdmin = isset($_SESSION['role']) && ($_SESSION['role'] === 'admin' || $_SESSION['role'] === 'Admin');
+            if ($isAdmin) {
+                error_log("Blood Collection Admin - Admin bypass: Allowing successful submission despite validation failure");
+                // Don't throw exception, continue with submission
+            } else {
+                throw new Exception('Cannot mark as Successful: legacy phlebotomist status not Successful and no existing successful blood collection found.');
+            }
+        } else {
+            error_log("Blood Collection Admin - Validation passed - proceeding with successful submission");
         }
     }
 

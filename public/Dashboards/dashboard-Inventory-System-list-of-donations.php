@@ -2138,6 +2138,18 @@ function getCacheStats() {
                 window.bloodCollectionModal = new BloodCollectionModal();
                 console.log('Blood Collection Modal initialized for admin');
             }
+            // Initialize physical examination modal for admin
+            console.log('Checking for PhysicalExaminationModalAdmin class:', typeof PhysicalExaminationModalAdmin);
+            if (typeof PhysicalExaminationModalAdmin !== 'undefined') {
+                window.physicalExaminationModalAdmin = new PhysicalExaminationModalAdmin();
+                console.log('Physical Examination Modal initialized for admin');
+            } else {
+                console.warn('PhysicalExaminationModalAdmin class not found - modal may not work properly');
+            }
+            
+            // Check if modal element exists
+            const modalElement = document.getElementById('physicalExaminationModalAdmin');
+            console.log('Physical examination modal element found:', !!modalElement);
         });
         window.openInterviewerScreening = function(donor) {
             if (!donor) return;
@@ -2487,17 +2499,30 @@ function getCacheStats() {
         function proceedToPhysicalExamination(donorId) {
             console.log('Proceeding to physical examination for donor:', donorId);
             
-            // Use admin-specific modal
-            if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
-                const screeningData = {
-                    donor_form_id: donorId,
-                    screening_id: null // Will be fetched if needed
-                };
-                window.physicalExaminationModalAdmin.openModal(screeningData);
-            } else {
-                // Fallback to admin form
-                window.location.href = `../../src/views/forms/physical-examination-form-admin.php?donor_id=${encodeURIComponent(donorId)}`;
-            }
+            try {
+                // Try to open the physical examination modal if it exists
+                if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
+                    const screeningData = {
+                        donor_form_id: donorId,
+                        screening_id: null // Will be fetched if needed
+                    };
+                    window.physicalExaminationModalAdmin.openModal(screeningData);
+                    return;
+                }
+            } catch (e) { console.warn('physicalExaminationModalAdmin.openModal not available, falling back', e); }
+            
+            // Fallback: try to show the modal directly
+            try {
+                const modalElement = document.getElementById('physicalExaminationModalAdmin');
+                if (modalElement) {
+                    const modal = new bootstrap.Modal(modalElement);
+                    modal.show();
+                    return;
+                }
+            } catch (e) { console.warn('Failed to show physical examination modal directly', e); }
+            
+            // Final fallback: redirect to admin form
+            window.location.href = `../../src/views/forms/physical-examination-form-admin.php?donor_id=${encodeURIComponent(donorId)}`;
         }
         // Verify function is properly attached
         console.log('openPhysicianCombinedWorkflow function defined:', typeof window.openPhysicianCombinedWorkflow);
@@ -2654,16 +2679,40 @@ function getCacheStats() {
                         if (modal) {
                             modal.hide();
                         }
-                        // Open the physical examination modal (staff style)
+                        // Try to open the physical examination modal
                         setTimeout(() => {
-                            if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
-                                window.physicalExaminationModalAdmin.openModal({
-                                    donor_id: donorId
-                                });
-                            } else {
-                                // Fallback to redirect if modal not available
-                                window.location.href = `../../src/views/forms/physical-examination-form-admin.php?donor_id=${encodeURIComponent(donorId)}`;
-                            }
+                            console.log('Attempting to open physical examination modal for donor:', donorId);
+                            console.log('window.physicalExaminationModalAdmin:', window.physicalExaminationModalAdmin);
+                            console.log('typeof window.physicalExaminationModalAdmin.openModal:', typeof window.physicalExaminationModalAdmin?.openModal);
+                            
+                            try {
+                                // Try to open the physical examination modal if it exists
+                                if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
+                                    console.log('Opening physical examination modal via class method');
+                                    const screeningData = {
+                                        donor_form_id: donorId,
+                                        screening_id: null
+                                    };
+                                    window.physicalExaminationModalAdmin.openModal(screeningData);
+                                    return;
+                                }
+                            } catch (e) { console.warn('physicalExaminationModalAdmin.openModal not available, falling back', e); }
+                            
+                            // Fallback: try to show the modal directly
+                            try {
+                                const modalElement = document.getElementById('physicalExaminationModalAdmin');
+                                console.log('Modal element found:', !!modalElement);
+                                if (modalElement) {
+                                    console.log('Opening physical examination modal directly via Bootstrap');
+                                    const modal = new bootstrap.Modal(modalElement);
+                                    modal.show();
+                                    return;
+                                }
+                            } catch (e) { console.warn('Failed to show physical examination modal directly', e); }
+                            
+                            // Final fallback: redirect to form page
+                            console.log('All modal attempts failed, redirecting to form page');
+                            window.location.href = `../../src/views/forms/physical-examination-form-admin.php?donor_id=${encodeURIComponent(donorId)}`;
                         }, 300);
                     } else {
                         console.error('No donor ID found for physical examination');
@@ -2753,291 +2802,6 @@ function getCacheStats() {
             } catch (err) {
                 console.error('Error opening admin screening modal:', err);
             }
-        };
-        // Donor Details modal opener - shows comprehensive donor information
-        window.openDonorDetails = function(context) {
-            console.log('=== OPENING DONOR DETAILS MODAL ===');
-            console.log('Context received:', context);
-            
-            const donorId = context?.donor_id ? String(context.donor_id) : '';
-            console.log('Donor ID:', donorId);
-            
-            const modalEl = document.getElementById('donorDetailsModal');
-            const contentEl = document.getElementById('donorDetailsModalContent');
-            
-            console.log('Modal element found:', !!modalEl);
-            console.log('Content element found:', !!contentEl);
-            
-            if (!modalEl) {
-                console.error('❌ donorDetailsModal element not found!');
-                alert('Error: Donor details modal not found. Please refresh the page.');
-                return;
-            }
-            
-            if (!contentEl) {
-                console.error('❌ donorDetailsModalContent element not found!');
-                alert('Error: Donor details modal content not found. Please refresh the page.');
-                return;
-            }
-            
-            console.log('✅ Both modal elements found, proceeding...');
-            
-            contentEl.innerHTML = '<div class="donor-details-loading"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div><div class="loading-text">Loading donor information...</div></div>';
-            
-            try {
-                const bsModal = new bootstrap.Modal(modalEl);
-                console.log('Bootstrap modal instance created:', !!bsModal);
-                bsModal.show();
-                console.log('Modal show() called');
-            } catch (error) {
-                console.error('Error creating or showing modal:', error);
-                alert('Error opening modal: ' + error.message);
-                return;
-            }
-            
-            // Fetch comprehensive donor details from specific tables
-            console.log(`Fetching donor details for ID: ${donorId}, eligibility: ${context?.eligibility_id || ''}`);
-            // Try comprehensive API first, fallback to original if it fails
-            const apiUrl = `../../assets/php_func/comprehensive_donor_details_api.php?donor_id=${encodeURIComponent(donorId)}&eligibility_id=${encodeURIComponent(context?.eligibility_id || '')}`;
-            const fallbackUrl = `../../assets/php_func/donor_details_api.php?donor_id=${encodeURIComponent(donorId)}&eligibility_id=${encodeURIComponent(context?.eligibility_id || '')}`;
-            fetch(apiUrl)
-                .then(response => {
-                    console.log(`API Response status: ${response.status}`);
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! Status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    console.log('API Response data:', data);
-                    if (data.error) {
-                        console.error('Comprehensive API Error:', data.error);
-                        console.log('Trying fallback API...');
-                        // Try fallback API
-                        return fetch(fallbackUrl)
-                            .then(response => {
-                                if (!response.ok) {
-                                    throw new Error(`Fallback HTTP error! Status: ${response.status}`);
-                                }
-                                return response.json();
-                            })
-                            .then(fallbackData => {
-                                console.log('Fallback API Response:', fallbackData);
-                                if (fallbackData.error) {
-                                    throw new Error(fallbackData.error);
-                                }
-                                // Convert fallback data to comprehensive format
-                                return {
-                                    donor_form: fallbackData.donor || {},
-                                    screening_form: {},
-                                    medical_history: {},
-                                    physical_examination: {},
-                                    eligibility: fallbackData.eligibility || {},
-                                    blood_collection: {},
-                                    completion_status: {
-                                        donor_form: !!(fallbackData.donor && Object.keys(fallbackData.donor).length > 0),
-                                        screening_form: false,
-                                        medical_history: false,
-                                        physical_examination: false,
-                                        eligibility: !!(fallbackData.eligibility && Object.keys(fallbackData.eligibility).length > 0),
-                                        blood_collection: false
-                                    }
-                                };
-                            });
-                    }
-                    return data;
-                })
-                .then(data => {
-                    if (data.error) {
-                        console.error('API Error:', data.error);
-                        contentEl.innerHTML = `<div class="alert alert-danger">
-                            <h6>Error Loading Donor Details</h6>
-                            <p>${data.error}</p>
-                            <small>Donor ID: ${donorId}</small>
-                        </div>`;
-                        return;
-                    }
-                    const donorForm = data.donor_form || {};
-                    const screeningForm = data.screening_form || {};
-                    const medicalHistory = data.medical_history || {};
-                    const physicalExamination = data.physical_examination || {};
-                    const eligibility = data.eligibility || {};
-                    const bloodCollection = data.blood_collection || {};
-                    const completionStatus = data.completion_status || {};
-                    const safe = (v, fb = '-') => (v === null || v === undefined || v === '' ? fb : v);
-                    // Determine if donor is fully approved
-                    const isFullyApproved = eligibility.status === 'approved' || eligibility.status === 'eligible';
-                    // Create wireframe-matching donor details HTML
-                    const html = `
-                        <div class="donor-details-wireframe">
-                            <!-- Donor Header - matches wireframe exactly -->
-                            <div class="donor-header-wireframe">
-                                <div class="donor-header-left">
-                                    <h3 class="donor-name-wireframe">${safe(donorForm.surname)}, ${safe(donorForm.first_name)} ${safe(donorForm.middle_name)}</h3>
-                                    <div class="donor-age-gender">${safe(donorForm.age)}, ${safe(donorForm.sex)}</div>
-                                            </div>
-                                <div class="donor-header-right">
-                                    <div class="donor-id-wireframe">Donor ID ${safe(donorForm.donor_id)}</div>
-                                    <div class="donor-blood-type">
-                                        <div class="blood-type-display">
-                                            <div class="blood-type-label">Blood Type</div>
-                                            <div class="blood-type-value">${safe(screeningForm.blood_type || donorForm.blood_type)}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- Donor Information Section -->
-                            <div class="section-wireframe">
-                                <h6 class="section-title">Donor Information:</h6>
-                                <div class="form-fields-grid">
-                                    <div class="form-field">
-                                        <label>Birthdate</label>
-                                                <input type="text" class="form-control form-control-sm" value="${safe(donorForm.birthdate)}" disabled>
-                                            </div>
-                                    <div class="form-field">
-                                        <label>Address</label>
-                                                <input type="text" class="form-control form-control-sm" value="${safe(donorForm.permanent_address || donorForm.office_address)}" disabled>
-                                            </div>
-                                    <div class="form-field">
-                                        <label>Mobile Number</label>
-                                                <input type="text" class="form-control form-control-sm" value="${safe(donorForm.mobile || donorForm.mobile_number || donorForm.contact_number)}" disabled>
-                                            </div>
-                                    <div class="form-field">
-                                        <label>Civil Status</label>
-                                                <input type="text" class="form-control form-control-sm" value="${safe(donorForm.civil_status)}" disabled>
-                                            </div>
-                                    <div class="form-field">
-                                        <label>Nationality</label>
-                                                <input type="text" class="form-control form-control-sm" value="${safe(donorForm.nationality)}" disabled>
-                                            </div>
-                                    <div class="form-field">
-                                        <label>Occupation</label>
-                                                <input type="text" class="form-control form-control-sm" value="${safe(donorForm.occupation)}" disabled>
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- Medical History Section -->
-                            <div class="section-wireframe">
-                                <h6 class="section-title">Medical History:</h6>
-                                <table class="table-wireframe">
-                                        <thead>
-                                        <tr>
-                                            <th>Medical History Result</th>
-                                            <th>Interviewer Decision</th>
-                                            <th>Physician Decision</th>
-                                            <th>Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr>
-                                            <td>${safe(medicalHistory.status || screeningForm.medical_history_status, 'Approved')}</td>
-                                            <td>-</td>
-                                            <td>${safe(physicalExamination.medical_approval || medicalHistory.physician_decision, 'Approved')}</td>
-                                            <td>
-                                                    <button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="View Medical History" onclick="openMedicalreviewapproval({ donor_id: '${safe((donorForm && donorForm.donor_id) || (eligibility && eligibility.donor_id) || (medicalHistory && medicalHistory.donor_id) || '')}' })">
-                                                        <i class="fas fa-eye"></i>
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                            </div>
-                            <!-- Initial Screening Section -->
-                            <div class="section-wireframe">
-                                <h6 class="section-title">Initial Screening:</h6>
-                                <table class="table-wireframe">
-                                        <thead>
-                                        <tr>
-                                            <th>Body Weight</th>
-                                            <th>Specific Gravity</th>
-                                            <th>Blood Type</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr>
-                                            <td>${safe(screeningForm.body_weight)}</td>
-                                            <td>${safe(screeningForm.specific_gravity)}</td>
-                                            <td>
-                                                <div class="blood-type-display">
-                                                    <div class="blood-type-label">Blood Type</div>
-                                                    <div class="blood-type-value">${safe(screeningForm.blood_type)}</div>
-                                                </div>
-                                            </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                            </div>
-                            <!-- Physical Examination Section -->
-                            <div class="section-wireframe">
-                                <h6 class="section-title">Physical Examination:</h6>
-                                <table class="table-wireframe">
-                                        <thead>
-                                        <tr>
-                                            <th>Physical Examination Result</th>
-                                            <th>Physician Decision</th>
-                                            <th>Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr>
-                                            <td>${safe(physicalExamination.physical_exam_status || physicalExamination.status, 'Approved')}</td>
-                                            <td>${safe(physicalExamination.physical_approval || physicalExamination.physician_decision, 'Approved')}</td>
-                                            <td>
-                                                    <button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="View Physical Examination">
-                                                        <i class="fas fa-eye"></i>
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                <div class="donation-type-section">
-                                    <div class="form-field">
-                                        <label>Type of Donation</label>
-                                        <div class="field-value">${safe(eligibility.donation_type, 'Walk-In')}</div>
-                                </div>
-                                    <div class="eligibility-status">
-                                        <label>Eligibility Status</label>
-                                        <div class="field-value">${safe(eligibility.status, 'Eligible')}</div>
-                            </div>
-                                </div>
-                            </div>
-                            <!-- Blood Collection Section -->
-                            <div class="section-wireframe">
-                                <h6 class="section-title">Blood Collection:</h6>
-                                <table class="table-wireframe">
-                                        <thead>
-                                        <tr>
-                                            <th>Blood Collection Status</th>
-                                            <th>Phlebotomist Note</th>
-                                            <th>Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr>
-                                            <td>${safe(bloodCollection.is_successful ? 'TRUE' : 'Successful', 'Unsuccessful')}</td>
-                                            <td>${safe(bloodCollection.phlebotomist_note, 'Successful')}</td>
-                                            <td>
-                                                    <button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="View Blood Collection">
-                                                        <i class="fas fa-eye"></i>
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                            </div>
-                        </div>
-                    `;
-                    contentEl.innerHTML = html;
-                })
-                .catch(error => {
-                    console.error('Error fetching donor details:', error);
-                    contentEl.innerHTML = `<div class="alert alert-danger">
-                        <h6>Network Error</h6>
-                        <p>Failed to load donor details. Please check your connection and try again.</p>
-                        <small>Error: ${error.message}</small>
-                        <small>Donor ID: ${donorId}</small>
-                    </div>`;
-                });
         };
         // Admin Medical History step-based modal opener (renamed to openMedicalreviewapproval)
         window.openMedicalreviewapproval = function(context) {
@@ -4258,18 +4022,29 @@ function getCacheStats() {
         // Proceed to Physical Examination (admin path)
         function proceedToPE(donorId){
             try {
+                // Try to open the physical examination modal if it exists
                 if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
                     const screeningData = {
                         donor_form_id: donorId,
                         screening_id: null
                     };
                     window.physicalExaminationModalAdmin.openModal(screeningData);
-                } else {
-                    window.location.href = `../../src/views/forms/physical-examination-form-admin.php?donor_id=${encodeURIComponent(donorId)}`;
+                    return;
                 }
-            } catch(_) {
-                window.location.href = `../../src/views/forms/physical-examination-form-admin.php?donor_id=${encodeURIComponent(donorId)}`;
-            }
+            } catch (e) { console.warn('physicalExaminationModalAdmin.openModal not available, falling back', e); }
+            
+            // Fallback: try to show the modal directly
+            try {
+                const modalElement = document.getElementById('physicalExaminationModalAdmin');
+                if (modalElement) {
+                    const modal = new bootstrap.Modal(modalElement);
+                    modal.show();
+                    return;
+                }
+            } catch (e) { console.warn('Failed to show physical examination modal directly', e); }
+            
+            // Final fallback: redirect to form page
+            window.location.href = `../../src/views/forms/physical-examination-form-admin.php?donor_id=${encodeURIComponent(donorId)}`;
         }
         // Function to check if donor is returning
         function checkIfReturningDonor(donorId) {
@@ -4388,17 +4163,28 @@ function getCacheStats() {
             };
             // Store the donor ID for the modal
             window.currentDonorId = donorId;
-            if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
-                // Use the admin modal system
-                window.physicalExaminationModalAdmin.openModal(screeningData);
-            } else {
-                // Use safe modal show and initialize step functionality
-                showModalSafely('physicalExaminationModalAdmin', 200).then(() => {
-                    console.log('Physical examination modal opened safely');
-                    // Initialize the physical examination modal functionality
-                    initializePhysicalExaminationModal(donorId, screeningData);
-                });
-            }
+            
+            try {
+                // Try to open the physical examination modal if it exists
+                if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
+                    // Use the admin modal system
+                    window.physicalExaminationModalAdmin.openModal(screeningData);
+                    return;
+                }
+            } catch (e) { console.warn('physicalExaminationModalAdmin.openModal not available, falling back', e); }
+            
+            // Fallback: try to show the modal directly
+            try {
+                const modalElement = document.getElementById('physicalExaminationModalAdmin');
+                if (modalElement) {
+                    const modal = new bootstrap.Modal(modalElement);
+                    modal.show();
+                    return;
+                }
+            } catch (e) { console.warn('Failed to show physical examination modal directly', e); }
+            
+            // Final fallback: redirect to form page
+            window.location.href = `../../src/views/forms/physical-examination-form-admin.php?donor_id=${encodeURIComponent(donorId)}`;
         }
         // Function to initialize physical examination modal functionality
         function initializePhysicalExaminationModal(donorId, screeningData) {
@@ -5175,9 +4961,33 @@ function getCacheStats() {
             console.log('Proceeding to physical examination for donor:', donorId);
             // Close medical history modal
             closeMedicalHistoryModal();
-            // Open physical examination modal (like staff dashboard)
+            
+            // Try to open the physical examination modal
             setTimeout(() => {
-                openPhysicalExaminationModal(donorId);
+                try {
+                    // Try to open the physical examination modal if it exists
+                    if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
+                        const screeningData = {
+                            donor_form_id: donorId,
+                            screening_id: null
+                        };
+                        window.physicalExaminationModalAdmin.openModal(screeningData);
+                        return;
+                    }
+                } catch (e) { console.warn('physicalExaminationModalAdmin.openModal not available, falling back', e); }
+                
+                // Fallback: try to show the modal directly
+                try {
+                    const modalElement = document.getElementById('physicalExaminationModalAdmin');
+                    if (modalElement) {
+                        const modal = new bootstrap.Modal(modalElement);
+                        modal.show();
+                        return;
+                    }
+                } catch (e) { console.warn('Failed to show physical examination modal directly', e); }
+                
+                // Final fallback: redirect to form page
+                window.location.href = `../../src/views/forms/physical-examination-form-admin.php?donor_id=${encodeURIComponent(donorId)}`;
             }, 300);
         };
         // Function to open physical examination modal
@@ -5188,14 +4998,28 @@ function getCacheStats() {
                 donor_form_id: donorId,
                 donor_id: donorId
             };
-            // Open physical examination modal using the same approach as staff dashboard
-            if (window.physicalExaminationModalAdmin) {
-                window.physicalExaminationModalAdmin.openModal(screeningData);
-            } else {
-                // Fallback: redirect to physical examination form
-                console.log('Physical examination modal not available, redirecting to form');
-                window.location.href = `../../src/views/forms/physical-examination-form-admin.php?donor_id=${encodeURIComponent(donorId)}`;
-            }
+            
+            try {
+                // Try to open the physical examination modal if it exists
+                if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
+                    window.physicalExaminationModalAdmin.openModal(screeningData);
+                    return;
+                }
+            } catch (e) { console.warn('physicalExaminationModalAdmin.openModal not available, falling back', e); }
+            
+            // Fallback: try to show the modal directly
+            try {
+                const modalElement = document.getElementById('physicalExaminationModalAdmin');
+                if (modalElement) {
+                    const modal = new bootstrap.Modal(modalElement);
+                    modal.show();
+                    return;
+                }
+            } catch (e) { console.warn('Failed to show physical examination modal directly', e); }
+            
+            // Final fallback: redirect to form page
+            console.log('Physical examination modal not available, redirecting to form');
+            window.location.href = `../../src/views/forms/physical-examination-form-admin.php?donor_id=${encodeURIComponent(donorId)}`;
         }
         window.editMedicalHistoryReview = function(donorId) {
             console.log('Editing medical history review for donor:', donorId);
@@ -5354,14 +5178,30 @@ function getCacheStats() {
                     }
                 }
             } catch (e) { console.warn('Failed to resolve physical exam id', e); }
+            
             try {
+                // Try to open the blood collection modal if it exists
                 if (window.bloodCollectionModal && typeof window.bloodCollectionModal.openModal === 'function') {
-                    window.bloodCollectionModal.openModal({ donor_id: donorId, physical_exam_id: physicalExamId });
+                    window.bloodCollectionModal.openModal({ 
+                        donor_id: donorId, 
+                        physical_exam_id: physicalExamId 
+                    });
                     return;
                 }
             } catch (e) { console.warn('bloodCollectionModal.openModal not available, falling back', e); }
-            // Fallback: open the modal without prefill if the instance is unavailable
-            showModalSafely('bloodCollectionModal');
+            
+            // Fallback: try to show the modal directly
+            try {
+                const modalElement = document.getElementById('bloodCollectionModal');
+                if (modalElement) {
+                    const modal = new bootstrap.Modal(modalElement);
+                    modal.show();
+                    return;
+                }
+            } catch (e) { console.warn('Failed to show blood collection modal directly', e); }
+            
+            // Final fallback: redirect to form page
+            window.location.href = `dashboard-staff-blood-collection-submission.php?donor_id=${encodeURIComponent(donorId)}`;
         };
         // Provide a confirmation handler used by blood_collection_modal.js
         // In admin context we submit directly to avoid a missing confirmation modal
@@ -6301,322 +6141,7 @@ function getCacheStats() {
         function closeMedicalHistoryModal() {
             closeMedicalHistoryModalUnified();
         }
-    // View functions for wireframe action buttons
-    window.viewMedicalHistory = function(donorId) {
-        console.log('Viewing medical history for donor:', donorId);
-        // Open medical history modal
-        const medicalHistoryModal = document.getElementById('medicalHistoryModal');
-        if (medicalHistoryModal) {
-            const modal = new bootstrap.Modal(medicalHistoryModal);
-            modal.show();
-                } else {
-            alert('Medical history modal not available');
-        }
-    };
-    window.viewPhysicalExamination = function(donorId) {
-        console.log('Viewing physical examination for donor:', donorId);
-        // Open admin physical examination modal
-        const physicalExamModal = document.getElementById('physicalExaminationModalAdmin');
-        if (physicalExamModal) {
-            const modal = new bootstrap.Modal(physicalExamModal);
-            modal.show();
-        } else {
-            alert('Admin physical examination modal not available');
-        }
-    };
-    window.viewBloodCollection = function(donorId) {
-        console.log('Viewing blood collection for donor:', donorId);
-        // Open blood collection modal
-        const bloodCollectionModal = document.getElementById('bloodCollectionModal');
-        if (bloodCollectionModal) {
-            const modal = new bootstrap.Modal(bloodCollectionModal);
-            modal.show();
-        } else {
-            alert('Blood collection modal not available');
-        }
-    };
-    // Donor Details modal opener - shows comprehensive donor information
-    window.openDonorDetails = function(context) {
-        const donorId = context?.donor_id ? String(context.donor_id) : '';
-        const modalEl = document.getElementById('donorDetailsModal');
-        const contentEl = document.getElementById('donorDetailsModalContent');
-        if (!modalEl || !contentEl) return;
-        contentEl.innerHTML = '<div class="donor-details-loading"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div><div class="loading-text">Loading donor information...</div></div>';
-        const bsModal = new bootstrap.Modal(modalEl);
-        bsModal.show();
-        // Fetch comprehensive donor details from specific tables
-        console.log(`Fetching donor details for ID: ${donorId}, eligibility: ${context?.eligibility_id || ''}`);
-        // Try comprehensive API first, fallback to original if it fails
-        const apiUrl = `../../assets/php_func/comprehensive_donor_details_api.php?donor_id=${encodeURIComponent(donorId)}&eligibility_id=${encodeURIComponent(context?.eligibility_id || '')}`;
-        const fallbackUrl = `../../assets/php_func/donor_details_api.php?donor_id=${encodeURIComponent(donorId)}&eligibility_id=${encodeURIComponent(context?.eligibility_id || '')}`;
-        fetch(apiUrl)
-            .then(response => {
-                console.log(`API Response status: ${response.status}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                console.log('API Response data:', data);
-                if (data.error) {
-                    console.error('Comprehensive API Error:', data.error);
-                    console.log('Trying fallback API...');
-                    // Try fallback API
-                    return fetch(fallbackUrl)
-                        .then(response => {
-                            if (!response.ok) {
-                                throw new Error(`Fallback HTTP error! Status: ${response.status}`);
-                            }
-                            return response.json();
-                        })
-                        .then(fallbackData => {
-                            console.log('Fallback API Response:', fallbackData);
-                            if (fallbackData.error) {
-                                throw new Error(fallbackData.error);
-                            }
-                            // Convert fallback data to comprehensive format
-                            return {
-                                donor_form: fallbackData.donor || {},
-                                screening_form: {},
-                                medical_history: {},
-                                physical_examination: {},
-                                eligibility: fallbackData.eligibility || {},
-                                blood_collection: {},
-                                completion_status: {
-                                    donor_form: !!(fallbackData.donor && Object.keys(fallbackData.donor).length > 0),
-                                    screening_form: false,
-                                    medical_history: false,
-                                    physical_examination: false,
-                                    eligibility: !!(fallbackData.eligibility && Object.keys(fallbackData.eligibility).length > 0),
-                                    blood_collection: false
-                                }
-                            };
-                        });
-                }
-                return data;
-            })
-            .then(data => {
-                if (data.error) {
-                    console.error('API Error:', data.error);
-                    contentEl.innerHTML = `<div class="alert alert-danger">
-                        <h6>Error Loading Donor Details</h6>
-                        <p>${data.error}</p>
-                        <small>Donor ID: ${donorId}</small>
-                    </div>`;
-                    return;
-                }
-                const donorForm = data.donor_form || {};
-                const screeningForm = data.screening_form || {};
-                const medicalHistory = data.medical_history || {};
-                const physicalExamination = data.physical_examination || {};
-                const eligibility = data.eligibility || {};
-                const bloodCollection = data.blood_collection || {};
-                const completionStatus = data.completion_status || {};
-                const safe = (v, fb = '-') => (v === null || v === undefined || v === '' ? fb : v);
-                // Determine if donor is fully approved
-                const isFullyApproved = eligibility.status === 'approved' || eligibility.status === 'eligible';
-                // Gate success on DB is_successful or legacy success flag
-                const legacySuccess = ((eligibility.collection_status || '') + '').toLowerCase().includes('success');
-                const dbSuccess = !!bloodCollection && (bloodCollection.is_successful === true || bloodCollection.is_successful === 'true' || bloodCollection.is_successful === 1);
-                const showSuccess = dbSuccess || legacySuccess;
-                const collectionStatusText = showSuccess ? 'Successful' : (dbSuccess === false ? 'Unsuccessful' : 'Pending');
-                const phlebotomistNoteText = showSuccess ? safe(bloodCollection.phlebotomist_note, 'Successful') : safe(bloodCollection.phlebotomist_note, '-');
-                // Create wireframe-matching donor details HTML
-                const html = `
-                    <div class="donor-details-wireframe">
-                        <!-- Donor Header - matches wireframe exactly -->
-                        <div class="donor-header-wireframe">
-                            <div class="donor-header-left">
-                                <h3 class="donor-name-wireframe">${safe(donorForm.surname)}, ${safe(donorForm.first_name)} ${safe(donorForm.middle_name)}</h3>
-                                <div class="donor-age-gender">${safe(donorForm.age)}, ${safe(donorForm.sex)}</div>
-                            </div>
-                            <div class="donor-header-right">
-                                <div class="donor-id-wireframe">Donor ID ${safe(donorForm.donor_id)}</div>
-                                <div class="donor-blood-type">
-                                    <div class="blood-type-display">
-                                        <div class="blood-type-label">Blood Type</div>
-                                        <div class="blood-type-value">${safe(screeningForm.blood_type || donorForm.blood_type)}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Donor Information Section -->
-                        <div class="section-wireframe">
-                            <h6 class="section-title">Donor Information:</h6>
-                            <div class="form-fields-grid">
-                                <div class="form-field">
-                                    <label>Birthdate</label>
-                                    <input type="text" class="form-control form-control-sm" value="${safe(donorForm.birthdate)}" disabled>
-                                </div>
-                                <div class="form-field">
-                                    <label>Address</label>
-                                    <input type="text" class="form-control form-control-sm" value="${safe(donorForm.permanent_address || donorForm.office_address)}" disabled>
-                                </div>
-                                <div class="form-field">
-                                    <label>Mobile Number</label>
-                                    <input type="text" class="form-control form-control-sm" value="${safe(donorForm.mobile || donorForm.mobile_number || donorForm.contact_number)}" disabled>
-                                </div>
-                                <div class="form-field">
-                                    <label>Civil Status</label>
-                                    <input type="text" class="form-control form-control-sm" value="${safe(donorForm.civil_status)}" disabled>
-                                </div>
-                                <div class="form-field">
-                                    <label>Nationality</label>
-                                    <input type="text" class="form-control form-control-sm" value="${safe(donorForm.nationality)}" disabled>
-                                </div>
-                                <div class="form-field">
-                                    <label>Occupation</label>
-                                    <input type="text" class="form-control form-control-sm" value="${safe(donorForm.occupation)}" disabled>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Medical History Section -->
-                        <div class="section-wireframe">
-                            <h6 class="section-title">Medical History:</h6>
-                            <table class="table-wireframe">
-                                <thead>
-                                    <tr>
-                                        <th>Medical History Result</th>
-                                        <th>Interviewer Decision</th>
-                                        <th>Physician Decision</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>${safe(medicalHistory.status || screeningForm.medical_history_status, 'Approved')}</td>
-                                        <td>-</td>
-                                        <td>${safe(physicalExamination.medical_approval || medicalHistory.physician_decision, 'Approved')}</td>
-                                        <td>
-                                            <button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="View Medical History" onclick="openMedicalreviewapproval({ donor_id: '${safe((donorForm && donorForm.donor_id) || (eligibility && eligibility.donor_id) || (medicalHistory && medicalHistory.donor_id) || '')}' })">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <!-- Initial Screening Section -->
-                        <div class="section-wireframe">
-                            <h6 class="section-title">Initial Screening:</h6>
-                            <table class="table-wireframe">
-                                <thead>
-                                    <tr>
-                                        <th>Body Weight</th>
-                                        <th>Specific Gravity</th>
-                                        <th>Blood Type</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>${safe(screeningForm.body_weight)}</td>
-                                        <td>${safe(screeningForm.specific_gravity)}</td>
-                                        <td>
-                                            <div class="blood-type-display">
-                                                <div class="blood-type-label">Blood Type</div>
-                                                <div class="blood-type-value">${safe(screeningForm.blood_type)}</div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <!-- Physical Examination Section -->
-                        <div class="section-wireframe">
-                            <h6 class="section-title">Physical Examination:</h6>
-                            <table class="table-wireframe">
-                                <thead>
-                                    <tr>
-                                        <th>Physical Examination Result</th>
-                                        <th>Physician Decision</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>${safe(physicalExamination.physical_exam_status || physicalExamination.status, 'Approved')}</td>
-                                        <td>${safe(physicalExamination.physical_approval || physicalExamination.physician_decision, 'Approved')}</td>
-                                        <td>
-                                            <button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="View Physical Examination">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                            <div class="donation-type-section">
-                                <div class="form-field">
-                                    <label>Type of Donation</label>
-                                    <div class="field-value">${safe(eligibility.donation_type, 'Walk-In')}</div>
-                                </div>
-                                <div class="eligibility-status">
-                                    <label>Eligibility Status</label>
-                                    <div class="field-value">${safe(eligibility.status, 'Eligible')}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Blood Collection Section -->
-                        <div class="section-wireframe">
-                            <h6 class="section-title">Blood Collection:</h6>
-                            <table class="table-wireframe">
-                                <thead>
-                                    <tr>
-                                        <th>Blood Collection Status</th>
-                                        <th>Phlebotomist Note</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>${collectionStatusText}</td>
-                                        <td>${phlebotomistNoteText}</td>
-                                        <td>
-                                            <button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="View Blood Collection">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                `;
-                contentEl.innerHTML = html;
-            })
-            .catch(error => {
-                console.error('Error fetching donor details:', error);
-                contentEl.innerHTML = `
-                    <div class="alert alert-danger">
-                        <h6>Error Loading Donor Details</h6>
-                        <p>Failed to load donor information. Please try again.</p>
-                        <small class="text-muted">Error: ${error.message}</small>
-                    </div>
-                `;
-            });
-    };
     </script>
-    <!-- Donor Details Modal -->
-    <div class="modal fade" id="donorDetailsModal" tabindex="-1" aria-labelledby="donorDetailsModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-xxl">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <div class="d-flex align-items-center">
-                        <!-- Empty div to maintain spacing -->
-                        </div>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                <div class="modal-body" id="donorDetailsModalContent">
-                    <div class="donor-details-loading">
-                        <div class="spinner-border" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                    </div>
-                        <div class="loading-text">Loading donor information...</div>
-                </div>
-                </div>
-            </div>
-        </div>
-    </div>
     <!-- Admin Medical History Modal Container (content fetched from staff modal content) -->
     <div class="modal fade" id="medicalHistoryModalAdmin" tabindex="-1" aria-labelledby="medicalHistoryModalAdminLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl">

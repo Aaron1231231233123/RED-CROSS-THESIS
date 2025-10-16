@@ -64,6 +64,7 @@
                     <input type="hidden" name="donor_id" value="">
                     <input type="hidden" name="screening_id" value="">
                     <input type="hidden" name="physical_exam_id" value="">
+                    <input type="hidden" name="amount_taken" value="1">
                     
                     <!-- Step 1: Blood Bag Selection -->
                     <div class="blood-step-content active" data-step="1" id="blood-step-1">

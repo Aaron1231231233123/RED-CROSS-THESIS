@@ -212,6 +212,9 @@ class BloodCollectionModal {
 		// Reset submission flag when opening modal
 		this.isSubmitting = false;
 		
+		// Populate hidden fields immediately
+		this.populateHiddenFields();
+		
 		// Generate new serial number for each modal opening
 		this.generateUnitSerialNumber();
 		
@@ -228,6 +231,39 @@ class BloodCollectionModal {
 		this.showStep(1);
 		this.updateProgressIndicator();
 		this.updateNavigationButtons();
+	}
+
+	populateHiddenFields() {
+		// Populate hidden form fields with collection data
+		if (this.bloodCollectionData) {
+			const donorIdField = document.querySelector('input[name="donor_id"]');
+			if (donorIdField && this.bloodCollectionData.donor_id) {
+				donorIdField.value = this.bloodCollectionData.donor_id;
+			}
+			
+			const screeningIdField = document.querySelector('input[name="screening_id"]');
+			if (screeningIdField && this.bloodCollectionData.screening_id) {
+				screeningIdField.value = this.bloodCollectionData.screening_id;
+			}
+			
+			const physicalExamIdField = document.querySelector('input[name="physical_exam_id"]');
+			if (physicalExamIdField && this.bloodCollectionData.physical_exam_id) {
+				physicalExamIdField.value = this.bloodCollectionData.physical_exam_id;
+			}
+			
+			// Set collection date to today
+			const collectionDateField = document.getElementById('collection_date');
+			if (collectionDateField) {
+				const today = new Date();
+				collectionDateField.value = today.toISOString().split('T')[0];
+			}
+			
+			// Set amount_taken to 1 (standard donation)
+			const amountField = document.querySelector('input[name="amount_taken"]');
+			if (amountField) {
+				amountField.value = '1';
+			}
+		}
 	}
 
 	async populateSummary() {
@@ -273,6 +309,9 @@ class BloodCollectionModal {
 					}
 				}
 			}
+			
+			// Ensure hidden fields are populated after data fetch
+			this.populateHiddenFields();
 
 		} catch (error) {
 			console.error('Error fetching summary data:', error);
@@ -614,10 +653,13 @@ class BloodCollectionModal {
 	}
 
 	showCollectionCompleteConfirmation() {
+		console.log('Blood Collection Modal - showCollectionCompleteConfirmation called');
 		// Show the collection complete confirmation modal
 		if (window.showCollectionCompleteModal) {
+			console.log('Blood Collection Modal - Calling window.showCollectionCompleteModal');
 			window.showCollectionCompleteModal();
 		} else {
+			console.log('Blood Collection Modal - showCollectionCompleteModal not available, falling back to direct submission');
 			// Fallback to direct submission if modal function not available
 			this.submitForm();
 		}
@@ -629,10 +671,14 @@ class BloodCollectionModal {
 		try { if (this.populatePromise) { await this.populatePromise; } } catch (_) {}
 		const formData = this.getFormData();
 		
+		console.log('Blood Collection Modal - Form data:', formData);
+		
 		if (!this.validateFormData(formData)) {
+			console.log('Blood Collection Modal - Form validation failed');
 			return;
 		}
-
+		
+		console.log('Blood Collection Modal - Form validation passed, submitting...');
 		this.showLoading(true);
 		this.isSubmitting = true;
 
@@ -646,16 +692,20 @@ class BloodCollectionModal {
 		})
 		.then(response => response.json())
 		.then(data => {
+			console.log('Blood Collection Modal - Server response:', data);
 			this.isSubmitting = false;
 			this.showLoading(false);
 			
 			if (data.success) {
+				console.log('Blood Collection Modal - Submission successful, showing success modal');
 				this.showSuccessModal();
 			} else {
+				console.log('Blood Collection Modal - Submission failed:', data.message);
 				this.showToast(data.message || 'Submission failed', 'error');
 			}
 		})
 		.catch(error => {
+			console.log('Blood Collection Modal - Network error:', error);
 			this.isSubmitting = false;
 			this.showLoading(false);
 			console.error('Error:', error);
@@ -664,21 +714,27 @@ class BloodCollectionModal {
 	}
 
 	showSuccessModal() {
+		console.log('Blood Collection Modal - showSuccessModal called');
 		// Close the blood collection modal first
 		this.closeModal();
 		
 		// Show the donation success modal after a short delay to ensure modal closes
 		setTimeout(() => {
+			console.log('Blood Collection Modal - Attempting to show donation success modal');
 			if (window.showDonationSuccessModal) {
+				console.log('Blood Collection Modal - Calling window.showDonationSuccessModal');
 				window.showDonationSuccessModal();
 				// Auto-reload the page after 3 seconds to show updated eligibility status
 				setTimeout(() => {
+					console.log('Blood Collection Modal - Reloading page');
 					window.location.reload();
 				}, 3000);
 			} else {
+				console.log('Blood Collection Modal - showDonationSuccessModal not available, using fallback');
 				// Fallback to toast message
 				this.showToast('Donation completed successfully! Blood has been added to Blood Bank.', 'success');
 				setTimeout(() => {
+					console.log('Blood Collection Modal - Reloading page (fallback)');
 					window.location.reload();
 				}, 2000);
 			}
