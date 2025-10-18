@@ -53,10 +53,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
 .action-btn{border:none;background:#e9ecef;border-radius:6px;width:32px;height:28px;display:flex;align-items:center;justify-content:center}
 .chart-card{background:#fff;border:1px solid #eee;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.06)}
 .chart-card h6{font-weight:700;color:#333;margin-bottom:8px}
-/* Equalize chart card heights and reduce pie size */
+/* Equalize chart card heights for all charts */
 .charts-row .chart-card{min-height:260px;display:flex;flex-direction:column}
-.charts-row .chart-card canvas{flex:1 1 auto !important;height:180px !important}
-#pieChart{height:180px !important;max-height:180px !important}
+.charts-row .chart-card canvas{flex:1 1 auto !important;height:360px !important}
+#pieChart{height:360px !important;max-height:360px !important}
 .pagination .page-link{color:#941022}
 .filters .form-select,.filters .form-control{max-width:280px}
 @media(max-width:768px){.dashboard-home-sidebar{width:0;padding:0;overflow:hidden}.dashboard-home-header{left:0;width:100%}.dashboard-home-main{margin-left:0;padding:10px}}
@@ -189,19 +189,19 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
                         <div class="col-lg-4 col-md-6">
                             <div class="card chart-card p-3">
                                 <h6>Demand vs. Donations</h6>
-                                <canvas id="barChart" height="160"></canvas>
+                                <canvas id="barChart" height="320"></canvas>
                             </div>
                         </div>
                         <div class="col-lg-4 col-md-6">
                             <div class="card chart-card p-3">
                                 <h6>Projected Balance</h6>
-                                <canvas id="lineChart" height="160"></canvas>
+                                <canvas id="lineChart" height="320"></canvas>
                             </div>
                         </div>
                         <div class="col-lg-4 col-md-12">
                             <div class="card chart-card p-3">
                                 <h6>Share of Demand</h6>
-                                <canvas id="pieChart" height="160"></canvas>
+                                <canvas id="pieChart" height="320"></canvas>
                             </div>
                         </div>
                     </div>
