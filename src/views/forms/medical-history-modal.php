@@ -352,6 +352,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $_SESSION['donor_id'] = $donorId;
                         error_log("Medical history - New donor_id stored in session: " . $donorId);
                         
+                        // Generate mobile app account if admin user and email is provided
+                        if (isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1 && !empty($donorFormData['email'])) {
+                            error_log("Medical history - Admin user detected, generating mobile app account");
+                            
+                            try {
+                                require_once '../../../assets/php_func/mobile-account-generator.php';
+                                $mobileGenerator = new MobileAccountGenerator();
+                                
+                                // Add donor_id to the form data for mobile account generation
+                                $donorFormData['donor_id'] = $donorId;
+                                
+                                $mobileResult = $mobileGenerator->generateMobileAccount($donorFormData);
+                                
+                                if ($mobileResult['success']) {
+                                    error_log("Mobile account generated successfully for donor ID: " . $donorId);
+                                    $_SESSION['mobile_account_generated'] = true;
+                                    $_SESSION['mobile_credentials'] = [
+                                        'email' => $mobileResult['email'],
+                                        'password' => $mobileResult['password']
+                                    ];
+                                } else {
+                                    error_log("Mobile account generation failed: " . $mobileResult['error']);
+                                    $_SESSION['mobile_account_error'] = $mobileResult['error'];
+                                }
+                            } catch (Exception $e) {
+                                error_log("Mobile account generation exception: " . $e->getMessage());
+                                $_SESSION['mobile_account_error'] = $e->getMessage();
+                            }
+                        }
+                        
                         // Keep donor form data for traceability until after medical history is saved
                         // Will be cleared later after successful submission
                     } else {

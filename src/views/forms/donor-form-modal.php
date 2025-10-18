@@ -826,8 +826,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
                         </div>
                         
                         <div class="mb-3">
-                            <label for="email" class="form-label">Email <span class="text-muted">(optional)</span></label>
-                            <input type="email" class="form-control" id="email" name="email">
+                            <?php 
+                            // Check if user is admin (role_id = 1)
+                            $is_admin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
+                            ?>
+                            <label for="email" class="form-label">
+                                Email 
+                                <?php if ($is_admin): ?>
+                                    <span class="text-danger">*</span>
+                                    <small class="text-muted d-block">Required for mobile app account generation</small>
+                                <?php else: ?>
+                                    <span class="text-muted">(optional)</span>
+                                <?php endif; ?>
+                            </label>
+                            <input type="email" class="form-control" id="email" name="email" <?php echo $is_admin ? 'required' : ''; ?>>
+                            <?php if ($is_admin): ?>
+                                <div class="form-text">
+                                    <i class="fas fa-info-circle text-primary"></i>
+                                    A mobile app account will be automatically created using this email address.
+                                </div>
+                            <?php endif; ?>
                         </div>
                         
                         <div class="navigation-buttons">

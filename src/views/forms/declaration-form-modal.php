@@ -241,11 +241,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['print_declaration']))
     $_SESSION['donor_registered_name'] = $donorData['first_name'] . ' ' . $donorData['surname'];
     error_log("Declaration form - Donor registration completed for: " . $_SESSION['donor_registered_name'] . " (ID: " . $donor_id . ")");
     
+    // Check if mobile account was generated and add credentials to cookies
+    if (isset($_SESSION['mobile_account_generated']) && $_SESSION['mobile_account_generated']) {
+        $expiry = time() + 60*5; // 5 minutes
+        setcookie('mobile_account_generated', 'true', $expiry, '/');
+        if (isset($_SESSION['mobile_credentials'])) {
+            setcookie('mobile_email', $_SESSION['mobile_credentials']['email'], $expiry, '/');
+            setcookie('mobile_password', $_SESSION['mobile_credentials']['password'], $expiry, '/');
+        }
+        error_log("Declaration form - Mobile credentials added to cookies");
+        
+        // Set flag to show credentials modal instead of redirecting immediately
+        $_SESSION['show_credentials_modal'] = true;
+    }
+    
     // Now create a temporary cookie to identify this registration success
     // We'll use this instead of session data to show success message
     $expiry = time() + 60*5; // 5 minutes
     setcookie('donor_registered', 'true', $expiry, '/');
     setcookie('donor_name', $donorData['first_name'] . ' ' . $donorData['surname'], $expiry, '/');
+    
+    // Store redirect URL for after credentials modal
+    $_SESSION['post_registration_redirect'] = $redirect_url;
     
     // Clear any previous registration data from session to avoid conflicts
     unset($_SESSION['donor_form_data']);
@@ -254,9 +271,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['print_declaration']))
     unset($_SESSION['medical_history_id']);
     unset($_SESSION['screening_id']);
     
-    // Redirect back to the dashboard
-    header('Location: ' . $redirect_url);
-    exit();
+    
+    // If mobile credentials are available, show modal instead of redirecting
+    if (isset($_SESSION['mobile_account_generated']) && $_SESSION['mobile_account_generated']) {
+        // Redirect to self to show the credentials modal
+        header('Location: declaration-form-modal.php?show_credentials=true');
+        exit();
+    } else {
+        // Redirect back to the dashboard immediately
+        header('Location: ' . $redirect_url);
+        exit();
+    }
 }
 
 // Calculate age from birthdate if not in donor data
@@ -390,6 +415,15 @@ $today = date('F d, Y');
     </style>
 </head>
 <body>
+    <?php 
+    // Include mobile credentials modal if needed
+    if ((isset($_GET['show_credentials']) && $_GET['show_credentials'] === 'true' && 
+         isset($_SESSION['mobile_account_generated']) && $_SESSION['mobile_account_generated']) ||
+        (isset($_SESSION['show_credentials_modal']) && $_SESSION['show_credentials_modal'])) {
+        include '../modals/mobile-credentials-modal.php';
+    }
+    ?>
+    
     <div class="declaration-container">
         <div class="declaration-header">
             <h2>PHILIPPINE RED CROSS</h2>

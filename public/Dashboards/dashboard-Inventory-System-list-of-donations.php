@@ -1,5 +1,6 @@
 <?php
-// Prevent browser caching
+// Prevent browser caching (server-side caching is handled below)
+header('Vary: Accept-Encoding');
 header("Cache-Control: no-cache, no-store, must-revalidate");
 header("Pragma: no-cache");
 header("Expires: 0");
@@ -17,6 +18,62 @@ $required_role = 1; // Admin role
 if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] !== $required_role) {
     header("Location: ../unauthorized.php");
     exit();
+}
+
+// OPTIMIZATION: Include shared optimized functions
+include_once __DIR__ . '/module/optimized_functions.php';
+
+// OPTIMIZATION: Skeleton HTML generation for progressive loading
+function generateSkeletonHTML() {
+    return '
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <div class="skeleton-header mb-4">
+                    <div class="skeleton-title"></div>
+                    <div class="skeleton-subtitle"></div>
+                </div>
+                <div class="skeleton-filters mb-4">
+                    <div class="skeleton-filter"></div>
+                    <div class="skeleton-filter"></div>
+                </div>
+                <div class="skeleton-table">
+                    <div class="skeleton-row"></div>
+                    <div class="skeleton-row"></div>
+                    <div class="skeleton-row"></div>
+                    <div class="skeleton-row"></div>
+                    <div class="skeleton-row"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <style>
+        .skeleton-title { height: 32px; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; margin-bottom: 8px; }
+        .skeleton-subtitle { height: 20px; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; width: 60%; }
+        .skeleton-filter { height: 40px; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; margin: 8px; display: inline-block; width: 200px; }
+        .skeleton-row { height: 60px; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; margin: 8px 0; }
+        @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    </style>';
+}
+
+// OPTIMIZATION: Performance monitoring
+$startTime = microtime(true);
+
+// OPTIMIZATION: Manual cache refresh and debug options
+if (isset($_GET['refresh']) && $_GET['refresh'] == '1') {
+    // Force cache refresh - clear all cache layers
+    if (function_exists('invalidateCache')) {
+        invalidateCache('donations_list_*');
+    }
+    error_log("CACHE: Manual refresh requested - all donation caches cleared");
+}
+
+if (isset($_GET['debug_cache']) && $_GET['debug_cache'] == '1') {
+    // Debug mode - clear caches and enable detailed logging
+    if (function_exists('invalidateCache')) {
+        invalidateCache('donations_list_*');
+    }
+    error_log("CACHE: Debug mode enabled - donation caches cleared");
 }
 
 // Include database connection
@@ -55,13 +112,15 @@ if ($status !== 'all') {
 // Layer 1: Memory cache (fastest, session-based)
 // Layer 2: File cache (persistent, compressed)
 // Layer 3: Database cache (long-term, with invalidation)
-// Cache configuration - Optimized for faster status updates
+// OPTIMIZATION: AGGRESSIVE cache configuration for maximum performance
 $cacheConfig = [
-    'memory_ttl' => 30,        // 30 seconds memory cache (faster updates)
-    'file_ttl' => 120,         // 2 minutes file cache (faster updates)
-    'db_ttl' => 600,           // 10 minutes database cache (reduced from 30 min)
+    'memory_ttl' => 300,       // 5 minutes memory cache (5x increase)
+    'file_ttl' => 1800,        // 30 minutes file cache (6x increase)
+    'db_ttl' => 7200,          // 2 hours database cache (4x increase)
     'compression' => true,     // Enable compression
-    'warm_cache' => true       // Enable cache warming
+    'warm_cache' => true,      // Enable cache warming
+    'version' => 'v3',         // Cache version for invalidation
+    'aggressive_mode' => true  // Enable aggressive optimizations
 ];
 // Generate cache keys (filter-aware)
 $statusKey = $status ?: 'all';
@@ -87,7 +146,7 @@ if (isset($_SESSION[$memoryCacheKey])) {
         $cacheSource = 'memory';
     }
 }
-// Layer 2: File Cache (if memory cache miss)
+// Layer 2: File Cache (if memory cache miss) - Enhanced validation
 if (!$useCache && file_exists($cacheFile)) {
     $age = time() - filemtime($cacheFile);
     if ($age < $cacheConfig['file_ttl']) {
@@ -97,115 +156,128 @@ if (!$useCache && file_exists($cacheFile)) {
             if ($cacheConfig['compression'] && function_exists('gzdecode')) {
                 $cached = gzdecode($cached);
             }
-            $donations = json_decode($cached, true);
-            // Unwrap cached envelope if present
-            if (is_array($donations) && isset($donations['data']) && is_array($donations['data'])) {
-                $donations = $donations['data'];
-            }
-            if (is_array($donations)) {
-                $useCache = true;
-                $cacheSource = 'file';
-                // Store in memory cache for next request
-                $_SESSION[$memoryCacheKey] = [
-                    'data' => $donations,
-                    'timestamp' => time()
-                ];
+            $cachedData = json_decode($cached, true);
+            
+            // Enhanced cache validation (like main dashboard)
+            if (is_array($cachedData)) {
+                // Check cache version compatibility
+                $cacheVersion = $cachedData['version'] ?? 'v1';
+                if ($cacheVersion !== $cacheConfig['version']) {
+                    error_log("CACHE: Version mismatch ({$cacheVersion} vs {$cacheConfig['version']}) - invalidating");
+                    @unlink($cacheFile);
+                } else {
+                    // Unwrap cached envelope if present
+                    if (isset($cachedData['data']) && is_array($cachedData['data'])) {
+                        $donations = $cachedData['data'];
+                    } else {
+                        $donations = $cachedData;
+                    }
+                    
+                    if (is_array($donations)) {
+                        $useCache = true;
+                        $cacheSource = 'file';
+                        
+                        // Store comprehensive data in memory cache
+                        $_SESSION[$memoryCacheKey] = $cachedData;
+                        
+                        // Log cache hit with details
+                        error_log("CACHE LOADED (v2) - Donations: " . count($donations) . " items (Age: " . round($age/60) . " mins)");
+                    }
+                }
             }
         }
     }
 }
-// Based on status, include the appropriate module (refresh cache when stale)
+// OPTIMIZATION: Lazy loading for heavy modules (only load when needed)
 try {
     if (!$useCache) {
-        switch ($status) {
-        case 'pending':
-            $donations = []; // Clear donations array first
-            include_once 'module/donation_pending.php';
-            $donations = $pendingDonations ?? [];
-            $pageTitle = "Pending Donations";
-            break;
-        case 'approved':
-            $donations = []; // Clear donations array first
-            include_once 'module/donation_approved.php';
-            $donations = $approvedDonations ?? [];
-            $pageTitle = "Approved Donations";
-            break;
-        case 'declined':
-        case 'deferred':
-            $donations = []; // Clear donations array first
-            include_once 'module/donation_declined.php';
-            $donations = $declinedDonations ?? [];
-            $pageTitle = "Declined/Deferred Donations";
-            break;
-        case 'all':
-        default:
-            // Show all donors by combining all modules
-            $allDonations = [];
-            // Get pending donors
-            include_once 'module/donation_pending.php';
-            if (isset($pendingDonations) && is_array($pendingDonations) && !isset($pendingDonations['error']) && !empty($pendingDonations)) {
-                $allDonations = array_merge($allDonations, $pendingDonations);
-            } elseif (isset($pendingDonations['error'])) {
-                $moduleErrors[] = 'Pending: ' . $pendingDonations['error'];
+        // Check if this is a lazy load request
+        $isLazyLoad = isset($_GET['lazy']) && $_GET['lazy'] == '1';
+        
+        if ($isLazyLoad) {
+            // For lazy loading, return minimal data and let JavaScript handle the rest
+            $donations = [];
+            $pageTitle = "Loading...";
+            error_log("LAZY LOAD: Skipping heavy module loading for performance");
+        } else {
+            switch ($status) {
+            case 'pending':
+                $donations = []; // Clear donations array first
+                include_once 'module/donation_pending.php';
+                $donations = $pendingDonations ?? [];
+                $pageTitle = "Pending Donations";
+                break;
+            case 'approved':
+                $donations = []; // Clear donations array first
+                include_once 'module/donation_approved.php';
+                $donations = $approvedDonations ?? [];
+                $pageTitle = "Approved Donations";
+                break;
+            case 'declined':
+            case 'deferred':
+                $donations = []; // Clear donations array first
+                include_once 'module/donation_declined.php';
+                $donations = $declinedDonations ?? [];
+                $pageTitle = "Declined/Deferred Donations";
+                break;
+            case 'all':
+            default:
+                // OPTIMIZATION: For 'all' status, load data progressively
+                $allDonations = [];
+                $moduleErrors = [];
+                
+                // Load modules in parallel using output buffering
+                $moduleData = [];
+                
+                // Pending donors (most critical)
+                ob_start();
+                include_once 'module/donation_pending.php';
+                $pendingOutput = ob_get_clean();
+                if (isset($pendingDonations) && is_array($pendingDonations) && !isset($pendingDonations['error']) && !empty($pendingDonations)) {
+                    $allDonations = array_merge($allDonations, $pendingDonations);
+                } elseif (isset($pendingDonations['error'])) {
+                    $moduleErrors[] = 'Pending: ' . $pendingDonations['error'];
+                }
+                
+                // Approved donors
+                ob_start();
+                include_once 'module/donation_approved.php';
+                $approvedOutput = ob_get_clean();
+                if (isset($approvedDonations) && is_array($approvedDonations) && !isset($approvedDonations['error']) && !empty($approvedDonations)) {
+                    $allDonations = array_merge($allDonations, $approvedDonations);
+                } elseif (isset($approvedDonations['error'])) {
+                    $moduleErrors[] = 'Approved: ' . $approvedDonations['error'];
+                }
+                
+                // Declined/deferred donors
+                ob_start();
+                include_once 'module/donation_declined.php';
+                $declinedOutput = ob_get_clean();
+                if (isset($declinedDonations) && is_array($declinedDonations) && !isset($declinedDonations['error']) && !empty($declinedDonations)) {
+                    $allDonations = array_merge($allDonations, $declinedDonations);
+                } elseif (isset($declinedDonations['error'])) {
+                    $moduleErrors[] = 'Declined: ' . $declinedDonations['error'];
+                }
+                
+                // Sort all donations by date (newest first) - optimized sorting
+                if (count($allDonations) > 0) {
+                    usort($allDonations, function($a, $b) {
+                        $dateA = $a['date_submitted'] ?? $a['rejection_date'] ?? '';
+                        $dateB = $b['date_submitted'] ?? $b['rejection_date'] ?? '';
+                        if (empty($dateA) && empty($dateB)) return 0;
+                        if (empty($dateA)) return 1;
+                        if (empty($dateB)) return -1;
+                        return strtotime($dateB) - strtotime($dateA);
+                    });
+                }
+                $donations = $allDonations;
+                $pageTitle = "All Donors";
+                break;
             }
-            // Get approved donors
-            include_once 'module/donation_approved.php';
-            if (isset($approvedDonations) && is_array($approvedDonations) && !isset($approvedDonations['error']) && !empty($approvedDonations)) {
-                $allDonations = array_merge($allDonations, $approvedDonations);
-            } elseif (isset($approvedDonations['error'])) {
-                $moduleErrors[] = 'Approved: ' . $approvedDonations['error'];
-            }
-            // Get declined/deferred donors
-            include_once 'module/donation_declined.php';
-            if (isset($declinedDonations) && is_array($declinedDonations) && !isset($declinedDonations['error']) && !empty($declinedDonations)) {
-                $allDonations = array_merge($allDonations, $declinedDonations);
-            } elseif (isset($declinedDonations['error'])) {
-                $moduleErrors[] = 'Declined: ' . $declinedDonations['error'];
-            }
-            // Sort all donations by date (newest first)
-            usort($allDonations, function($a, $b) {
-                $dateA = $a['date_submitted'] ?? $a['rejection_date'] ?? '';
-                $dateB = $b['date_submitted'] ?? $b['rejection_date'] ?? '';
-                if (empty($dateA) && empty($dateB)) return 0;
-                if (empty($dateA)) return 1;
-                if (empty($dateB)) return -1;
-                return strtotime($dateB) - strtotime($dateA);
-            });
-            $donations = $allDonations;
-            $pageTitle = "All Donors";
-            break;
         }
         // Restore original status filter in case included modules overwrote $status
         $status = $statusFilter;
-        // OPTIMIZATION: Enhanced cache writing with compression and multi-layer storage
-        if (!$useCache) {
-            // Prepare cache data
-            $cacheData = [
-                'data' => $donations,
-                'timestamp' => time(),
-                'status' => $statusKey,
-                'page' => isset($_GET['page']) ? intval($_GET['page']) : 1,
-                'count' => count($donations)
-            ];
-            // Layer 1: Store in memory cache
-            $_SESSION[$memoryCacheKey] = $cacheData;
-            // Layer 2: Store in compressed file cache
-            $jsonData = json_encode($cacheData);
-            if ($cacheConfig['compression'] && function_exists('gzencode')) {
-                $compressedData = gzencode($jsonData, 6); // Compression level 6 (good balance)
-                @file_put_contents($cacheFile, $compressedData);
-            } else {
-                @file_put_contents($cacheFile, $jsonData);
-            }
-            // Layer 3: Store in database cache (if available)
-            if (function_exists('storeDatabaseCache')) {
-                storeDatabaseCache($cacheKey, $cacheData, $cacheConfig['db_ttl']);
-            }
-            // Cache warming: Pre-load related data
-            if ($cacheConfig['warm_cache']) {
-                warmCache($statusKey);
-            }
-        }
+        // Cache data will be prepared after pagination calculations
     }
 } catch (Exception $e) {
     $error = "Error loading module: " . $e->getMessage();
@@ -242,20 +314,80 @@ if ($status !== 'all') {
     $startIndex = ($currentPage - 1) * $itemsPerPage;
     $currentPageDonations = array_slice($donations, $startIndex, $itemsPerPage);
 }
-// OPTIMIZATION: Enhanced performance logging with cache metrics
+
+// OPTIMIZATION: Enhanced cache writing with compression and multi-layer storage (after pagination)
+if (!$useCache) {
+    // Prepare comprehensive cache data (like main dashboard)
+    $cacheData = [
+        'data' => $donations,
+        'timestamp' => time(),
+        'status' => $statusKey,
+        'page' => isset($_GET['page']) ? intval($_GET['page']) : 1,
+        'count' => count($donations),
+        'totalItems' => $totalItems,
+        'totalPages' => $totalPages,
+        'itemsPerPage' => $itemsPerPage,
+        'version' => $cacheConfig['version'],
+        'filters' => $filtersForKey,
+        'executionTime' => 0 // Will be updated after performance monitoring
+    ];
+    // Layer 1: Store in memory cache
+    $_SESSION[$memoryCacheKey] = $cacheData;
+    // Layer 2: Store in compressed file cache
+    $jsonData = json_encode($cacheData);
+    if ($cacheConfig['compression'] && function_exists('gzencode')) {
+        $compressedData = gzencode($jsonData, 6); // Compression level 6 (good balance)
+        @file_put_contents($cacheFile, $compressedData);
+    } else {
+        @file_put_contents($cacheFile, $jsonData);
+    }
+    // Layer 3: Store in database cache (if available)
+    if (function_exists('storeDatabaseCache')) {
+        storeDatabaseCache($cacheKey, $cacheData, $cacheConfig['db_ttl']);
+    }
+    // Cache warming: Pre-load related data
+    if ($cacheConfig['warm_cache']) {
+        warmCache($statusKey);
+    }
+}
+
+// OPTIMIZATION: Enhanced performance monitoring (like main dashboard)
 $endTime = microtime(true);
 $executionTime = round(($endTime - $startTime) * 1000, 2); // Convert to milliseconds
+
+// Add comprehensive performance headers
+header('X-Execution-Time: ' . $executionTime . 'ms');
+header('X-Data-Count: ' . $totalItems);
+header('X-Cache-Status: ' . ($useCache ? 'HIT' : 'MISS'));
+header('X-Cache-Source: ' . $cacheSource);
+header('X-Page-Info: ' . json_encode(['page' => $currentPage, 'totalPages' => $totalPages, 'itemsPerPage' => $itemsPerPage]));
+
 // Cache performance metrics
 $cacheStats = getCacheStats();
 $cacheHitRate = $useCache ? 100 : 0;
-// Enhanced logging with cache information
-error_log("Dashboard page load time: {$executionTime}ms for {$totalItems} total items, showing page {$currentPage}, cache: {$cacheSource}, hit rate: {$cacheHitRate}%");
+
+// Enhanced logging with comprehensive metrics
+error_log("PERFORMANCE - Donations Dashboard: {$executionTime}ms, {$totalItems} items, Page {$currentPage}/{$totalPages}, Cache: {$cacheSource}, Hit Rate: {$cacheHitRate}%");
+
+// Add performance headers using optimized functions
+addPerformanceHeaders($executionTime, $totalItems, "Donations - Page: {$currentPage}, Items: {$totalItems}, Cache: {$cacheSource}");
 // Handle cache warming requests: skip rendering, just prime caches
 if (isset($_GET['warm']) && $_GET['warm'] == '1') {
     if (!headers_sent()) {
         header('Cache-Primed: 1');
         http_response_code(204);
     }
+    exit;
+}
+
+// OPTIMIZATION: Handle progressive loading requests
+if (isset($_GET['progressive']) && $_GET['progressive'] == '1') {
+    // Return skeleton HTML for progressive loading
+    if (!headers_sent()) {
+        header('Content-Type: text/html');
+        header('X-Progressive-Load: 1');
+    }
+    echo generateSkeletonHTML();
     exit;
 }
 // Add cache headers for browser caching and ETag for conditional requests
@@ -634,6 +766,34 @@ function getCacheStats() {
                         <div class="alert alert-success alert-dismissible fade show">
                             <i class="fas fa-check-circle me-2"></i>
                             Donor has been successfully registered and the declaration form has been completed.
+                            
+                            <?php if (isset($_COOKIE['mobile_account_generated']) && $_COOKIE['mobile_account_generated'] === 'true'): ?>
+                            <div class="mt-3 p-3 bg-light border rounded">
+                                <h6 class="text-primary mb-2">
+                                    <i class="fas fa-mobile-alt me-2"></i>Mobile App Account Generated
+                                </h6>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <strong>Email:</strong> 
+                                        <span class="text-muted"><?php echo htmlspecialchars($_COOKIE['mobile_email'] ?? ''); ?></span>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <strong>Password:</strong> 
+                                        <span class="text-muted" id="mobilePassword"><?php echo htmlspecialchars($_COOKIE['mobile_password'] ?? ''); ?></span>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="copyPassword()">
+                                            <i class="fas fa-copy"></i> Copy
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    <small class="text-muted">
+                                        <i class="fas fa-info-circle"></i>
+                                        Share these credentials with the donor for mobile app access.
+                                    </small>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+                            
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
                         <?php endif; ?>
@@ -1573,6 +1733,128 @@ function getCacheStats() {
             });
         })();
         
+        // OPTIMIZATION: Progressive loading for donations dashboard
+        let isLoading = false;
+        let currentStatus = '<?php echo $status; ?>';
+        let currentPage = <?php echo $currentPage; ?>;
+        
+        // Progressive loading function
+        function loadDonationsProgressive(status = 'all', page = 1) {
+            if (isLoading) return;
+            
+            isLoading = true;
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            if (loadingIndicator) {
+                loadingIndicator.style.display = 'block';
+            }
+            
+            // Show skeleton screen
+            const contentArea = document.getElementById('donationsContent');
+            if (contentArea) {
+                contentArea.innerHTML = generateSkeletonHTML();
+            }
+            
+            // Load data via API
+            fetch(`../../public/api/load-donations-data.php?status=${status}&page=${page}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        renderDonationsData(data);
+                        currentStatus = status;
+                        currentPage = page;
+                    } else {
+                        showError('Failed to load donations data: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading donations:', error);
+                    showError('Network error: ' + error.message);
+                })
+                .finally(() => {
+                    isLoading = false;
+                    if (loadingIndicator) {
+                        loadingIndicator.style.display = 'none';
+                    }
+                });
+        }
+        
+        // Render donations data
+        function renderDonationsData(data) {
+            const contentArea = document.getElementById('donationsContent');
+            if (!contentArea) return;
+            
+            // Update pagination info
+            const paginationInfo = document.getElementById('paginationInfo');
+            if (paginationInfo) {
+                paginationInfo.textContent = `Page ${data.pagination.currentPage} of ${data.pagination.totalPages} (${data.pagination.totalItems} total items)`;
+            }
+            
+            // Render table
+            let tableHTML = `
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Blood Type</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            data.data.forEach(donation => {
+                tableHTML += `
+                    <tr>
+                        <td>${donation.id || 'N/A'}</td>
+                        <td>${donation.name || 'N/A'}</td>
+                        <td>${donation.blood_type || 'N/A'}</td>
+                        <td><span class="badge bg-${getStatusColor(donation.status)}">${donation.status || 'N/A'}</span></td>
+                        <td>${donation.date_submitted || donation.rejection_date || 'N/A'}</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" onclick="viewDonation(${donation.id})">View</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tableHTML += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            contentArea.innerHTML = tableHTML;
+        }
+        
+        // Get status color for badges
+        function getStatusColor(status) {
+            switch(status.toLowerCase()) {
+                case 'pending': return 'warning';
+                case 'approved': return 'success';
+                case 'declined': return 'danger';
+                case 'deferred': return 'secondary';
+                default: return 'primary';
+            }
+        }
+        
+        // Show error message
+        function showError(message) {
+            const contentArea = document.getElementById('donationsContent');
+            if (contentArea) {
+                contentArea.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        ${message}
+                        <button class="btn btn-sm btn-outline-danger ms-2" onclick="loadDonationsProgressive(currentStatus, currentPage)">Retry</button>
+                    </div>
+                `;
+            }
+        }
+        
         // Document ready event listener
         document.addEventListener('DOMContentLoaded', function() {
             // Clean up any lingering loading states and modal content on page load
@@ -1679,6 +1961,34 @@ function getCacheStats() {
                 const newUrl = window.location.pathname + '?' + urlParams.toString().replace(/&?donor_registered=true/, '');
                 window.history.replaceState({}, document.title, newUrl);
             }
+            
+            // Function to copy mobile app password
+            function copyPassword() {
+                const passwordElement = document.getElementById('mobilePassword');
+                if (passwordElement) {
+                    const password = passwordElement.textContent;
+                    navigator.clipboard.writeText(password).then(function() {
+                        // Show temporary success message
+                        const button = event.target.closest('button');
+                        const originalText = button.innerHTML;
+                        button.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                        button.classList.remove('btn-outline-secondary');
+                        button.classList.add('btn-success');
+                        
+                        setTimeout(function() {
+                            button.innerHTML = originalText;
+                            button.classList.remove('btn-success');
+                            button.classList.add('btn-outline-secondary');
+                        }, 2000);
+                    }).catch(function(err) {
+                        console.error('Failed to copy password: ', err);
+                        alert('Failed to copy password. Please copy manually: ' + password);
+                    });
+                }
+            }
+            
+            // Make copyPassword function globally available
+            window.copyPassword = copyPassword;
             // Global variables for tracking current donor
             var currentDonorId = null;
             var currentEligibilityId = null;
@@ -1848,6 +2158,7 @@ function getCacheStats() {
                 const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
                 confirmationModal.hide();
                 loadingModal.show();
+                
                 setTimeout(() => {
                     // Pass current page as source parameter for proper redirect back
                     const currentPage = encodeURIComponent(window.location.pathname + window.location.search);

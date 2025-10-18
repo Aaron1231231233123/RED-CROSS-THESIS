@@ -1,16 +1,89 @@
 <?php
+// Prevent browser caching (server-side caching is handled below)
+header('Vary: Accept-Encoding');
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
+
 session_start();
 require_once '../../assets/conn/db_conn.php';
 require_once 'module/optimized_functions.php';
-// Send short-term caching headers for better performance on slow networks
-header('Cache-Control: public, max-age=180');
-header('Vary: Accept-Encoding');
 
 // Check if the user is logged in and has admin role (role_id = 1)
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['role_id']) || $_SESSION['role_id'] != 1) {
     // Redirect to login page or show error
     header("Location: ../../public/login.php");
     exit();
+}
+
+// OPTIMIZATION: Include shared optimized functions
+include_once __DIR__ . '/module/optimized_functions.php';
+
+// OPTIMIZATION: Performance monitoring
+$startTime = microtime(true);
+
+// OPTIMIZATION: Smart caching with intelligent change detection
+$cacheKey = 'hospital_requests_v3_' . date('Y-m-d'); // Daily cache key (bumped to v3)
+$cacheFile = sys_get_temp_dir() . '/' . $cacheKey . '.json';
+$cacheMetaFile = sys_get_temp_dir() . '/' . $cacheKey . '_meta.json';
+
+// Cache enabled with improved change detection
+$useCache = false;
+$needsFullRefresh = false;
+$needsCountRefresh = false;
+
+// Manual cache refresh option
+if (isset($_GET['refresh']) && $_GET['refresh'] == '1') {
+    // Force cache refresh
+    if (file_exists($cacheFile)) unlink($cacheFile);
+    if (file_exists($cacheMetaFile)) unlink($cacheMetaFile);
+    error_log("CACHE: Manual refresh requested - cache files deleted");
+}
+
+// Debug mode for cache analysis
+if (isset($_GET['debug_cache']) && $_GET['debug_cache'] == '1') {
+    if (file_exists($cacheFile)) unlink($cacheFile);
+    if (file_exists($cacheMetaFile)) unlink($cacheMetaFile);
+    error_log("CACHE: Debug mode - cache files deleted");
+}
+
+// Check if cache exists and is valid
+if (file_exists($cacheFile) && file_exists($cacheMetaFile)) {
+    $cacheMeta = json_decode(file_get_contents($cacheMetaFile), true);
+    $cacheAge = time() - $cacheMeta['timestamp'];
+    
+    // Simplified change detection - only check cache age
+    $hasChanges = false;
+    
+    // PERFORMANCE FIX: Extended cache lifetime from 1 hour to 2 hours (like main dashboard)
+    if ($cacheAge > 7200) { // 2 hours (was 3600 = 1 hour)
+        $hasChanges = true;
+    }
+    
+    if (!$hasChanges) {
+        // No changes detected - use full cache
+        $useCache = true;
+        $cachedData = json_decode(file_get_contents($cacheFile), true);
+        if (is_array($cachedData)) {
+            $blood_requests = $cachedData['blood_requests'] ?? [];
+            $admin_name = $cachedData['admin_name'] ?? 'Dr. Admin';
+            $status = $cachedData['status'] ?? 'all';
+            $requestStats = $cachedData['requestStats'] ?? [];
+            
+            // Debug cache loading
+            error_log("CACHE LOADED (v3) - Hospital Requests: " . count($blood_requests) . " (Age: " . round($cacheAge/60) . " mins)");
+            error_log("CACHE LOADED - Request Stats: " . json_encode($requestStats));
+            
+            // Skip to the end of data processing
+            goto cache_loaded;
+        } else {
+            // Cache data is invalid or empty - force refresh
+            error_log("CACHE: Invalid or empty cache data - forcing refresh");
+            $useCache = false;
+            if (file_exists($cacheFile)) unlink($cacheFile);
+            if (file_exists($cacheMetaFile)) unlink($cacheMetaFile);
+        }
+    }
 }
 
 // Handle POST requests for request processing
@@ -152,17 +225,11 @@ function getHandedOverByAdminName($handed_over_by) {
     return getAdminName($handed_over_by);
 }
 
-// OPTIMIZATION: Performance monitoring
-$startTime = microtime(true);
-
-// Fetch blood requests based on status from GET parameter
-// Unified view: ignore status filters for this page and show all requests
-$status = 'all';
-
-function fetchAllBloodRequests($limit = 50, $offset = 0) {
-    // Narrow columns and paginate (urgent first, newest first)
+// OPTIMIZATION: Enhanced data fetching with comprehensive statistics
+function fetchAllBloodRequestsOptimized() {
+    // Load all requests at once - much faster than pagination
     $select = "request_id,hospital_admitted,patient_blood_type,rh_factor,units_requested,is_asap,requested_on,status,patient_name,patient_age,patient_gender,patient_diagnosis,physician_name,when_needed,handed_over_by,handed_over_date";
-    $endpoint = "blood_requests?select=" . urlencode($select) . "&order=is_asap.desc,requested_on.desc&limit={$limit}&offset={$offset}";
+    $endpoint = "blood_requests?select=" . urlencode($select) . "&order=is_asap.desc,requested_on.desc";
     $response = supabaseRequest($endpoint);
     if (isset($response['data'])) {
         return $response['data'];
@@ -171,10 +238,124 @@ function fetchAllBloodRequests($limit = 50, $offset = 0) {
     return [];
 }
 
-$page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
-$page_size = 50;
-$offset = ($page - 1) * $page_size;
-$blood_requests = fetchAllBloodRequests($page_size, $offset);
+// OPTIMIZATION: Calculate comprehensive request statistics
+function calculateRequestStats($blood_requests) {
+    $stats = [
+        'total_requests' => count($blood_requests),
+        'pending_count' => 0,
+        'approved_count' => 0,
+        'completed_count' => 0,
+        'declined_count' => 0,
+        'urgent_count' => 0,
+        'total_units_requested' => 0,
+        'blood_type_distribution' => [],
+        'hospital_distribution' => [],
+        'status_distribution' => []
+    ];
+    
+    foreach ($blood_requests as $request) {
+        $status = strtolower($request['status'] ?? 'pending');
+        $blood_type = $request['patient_blood_type'] ?? 'Unknown';
+        $hospital = $request['hospital_admitted'] ?? 'Unknown';
+        $units = intval($request['units_requested'] ?? 0);
+        $is_urgent = !empty($request['is_asap']);
+        
+        // Count by status
+        switch ($status) {
+            case 'pending':
+                $stats['pending_count']++;
+                break;
+            case 'approved':
+                $stats['approved_count']++;
+                break;
+            case 'completed':
+                $stats['completed_count']++;
+                break;
+            case 'declined':
+                $stats['declined_count']++;
+                break;
+        }
+        
+        // Count urgent requests
+        if ($is_urgent) {
+            $stats['urgent_count']++;
+        }
+        
+        // Sum total units
+        $stats['total_units_requested'] += $units;
+        
+        // Blood type distribution
+        if (!isset($stats['blood_type_distribution'][$blood_type])) {
+            $stats['blood_type_distribution'][$blood_type] = 0;
+        }
+        $stats['blood_type_distribution'][$blood_type]++;
+        
+        // Hospital distribution
+        if (!isset($stats['hospital_distribution'][$hospital])) {
+            $stats['hospital_distribution'][$hospital] = 0;
+        }
+        $stats['hospital_distribution'][$hospital]++;
+        
+        // Status distribution
+        if (!isset($stats['status_distribution'][$status])) {
+            $stats['status_distribution'][$status] = 0;
+        }
+        $stats['status_distribution'][$status]++;
+    }
+    
+    return $stats;
+}
+
+// Fetch all blood requests at once
+$blood_requests = fetchAllBloodRequestsOptimized();
+
+// OPTIMIZATION: Calculate comprehensive statistics
+$requestStats = calculateRequestStats($blood_requests);
+
+// OPTIMIZATION: Define status for display purposes (unified view shows all requests)
+$status = 'all';
+
+// OPTIMIZATION: Save to cache with comprehensive data
+$cacheData = [
+    'blood_requests' => $blood_requests,
+    'admin_name' => $admin_name,
+    'status' => $status,
+    'requestStats' => $requestStats,
+    'timestamp' => time()
+];
+
+// Simplified cache metadata (no expensive API calls for change detection)
+$cacheMeta = [
+    'timestamp' => time(),
+    'version' => 'v3',
+    'count' => count($blood_requests),
+    'stats' => $requestStats
+];
+
+file_put_contents($cacheFile, json_encode($cacheData));
+file_put_contents($cacheMetaFile, json_encode($cacheMeta));
+
+// Cache loaded marker
+cache_loaded:
+
+// OPTIMIZATION: Performance logging and headers (like main dashboard)
+$endTime = microtime(true);
+$executionTime = round(($endTime - $startTime) * 1000, 2);
+
+// Add comprehensive performance headers
+header('X-Execution-Time: ' . $executionTime . 'ms');
+header('X-Data-Count: ' . count($blood_requests));
+header('X-Cache-Status: ' . ($useCache ? 'HIT' : 'MISS'));
+header('X-Request-Stats: ' . json_encode($requestStats));
+if ($useCache) {
+    header('X-Cache-Age: ' . round($cacheAge/60) . 'm');
+}
+
+// Log comprehensive performance metrics
+error_log("PERFORMANCE - Hospital Requests Dashboard: {$executionTime}ms, " . count($blood_requests) . " requests, Cache: " . ($useCache ? 'HIT' : 'MISS') . ", Stats: " . json_encode($requestStats));
+
+// Add performance headers using optimized functions
+addPerformanceHeaders($executionTime, count($blood_requests), "Hospital Requests - Loaded: " . count($blood_requests) . " requests, Stats: " . json_encode($requestStats));
 
 // Handle success/error messages
 $success_message = '';
@@ -1198,22 +1379,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             
             
             <div class="container-fluid p-3 email-container">
-                <h2 class="text-left">
-                    <?php
-                        if ($status === 'accepted') {
-                            echo 'Accepted Hospital Requests';
-                        } elseif ($status === 'handedover') {
-                            echo 'Handed Over Hospital Requests';
-                        } elseif ($status === 'declined') {
-                            echo 'Declined Hospital Requests';
-                        } else {
-                            echo 'Hospital Requests';
-                        }
-                    ?>
+                <div class="d-flex justify-content-between align-items-center">
+                    <h2 class="text-left mb-0">
+                        Hospital Requests
                 </h2>
+                </div>
                 
                 <div class="row mb-3">
-                    <div class="col-12">
+                    <div class="col-md-8">
                         <div class="search-container">
                             <div class="input-group">
                                 <span class="input-group-text">
@@ -1225,6 +1398,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     <option value="blood_type">Blood Type</option>
                                     <option value="date">Request Date</option>
                                     <option value="urgent">Urgent</option>
+                                    <option value="status">Status</option>
                                 </select>
                                 <input type="text" 
                                     class="form-control" 
@@ -1232,6 +1406,42 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     placeholder="Search requests...">
                             </div>
                             <div id="searchInfo" class="mt-2 small text-muted"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-flex gap-2 align-items-center">
+                            <label for="statusFilter" class="form-label mb-0">Filter by Status:</label>
+                            <select class="form-select form-select-sm" id="statusFilter" style="max-width: 150px;">
+                                <option value="all">All Status</option>
+                                <option value="pending">Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="completed">Completed</option>
+                                <option value="declined">Declined</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- OPTIMIZATION: Client-side pagination controls -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center gap-2">
+                            <label for="pageSize" class="form-label mb-0">Show:</label>
+                            <select class="form-select form-select-sm" id="pageSize" style="max-width: 80px;">
+                                <option value="25">25</option>
+                                <option value="50" selected>50</option>
+                                <option value="100">100</option>
+                                <option value="all">All</option>
+                            </select>
+                            <span class="text-muted small">per page</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex justify-content-end align-items-center gap-2">
+                            <span id="paginationInfo" class="text-muted small"></span>
+                            <div id="paginationControls" class="btn-group btn-group-sm">
+                                <!-- Pagination buttons will be generated by JavaScript -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1242,17 +1452,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 <!-- Blood Request Items -->
                 <?php if (empty($blood_requests)): ?>
                     <div class="alert alert-info text-center">
-                        <?php
-                            if ($status === 'accepted') {
-                                echo 'No accepted blood requests found.';
-                            } elseif ($status === 'handedover') {
-                                echo 'No handed over blood requests found.';
-                            } elseif ($status === 'declined') {
-                                echo 'No declined blood requests found.';
-                            } else {
-                                echo 'No hospital blood requests found.';
-                            }
-                        ?>
+                        <i class="fas fa-info-circle me-2"></i>
+                        No hospital blood requests found.
                     </div>
                 <?php else: ?>
                 <div class="table-responsive">
@@ -1317,26 +1518,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         data-bs-toggle="modal" 
                                         data-bs-target="#requestModal"
                                         title="View Details"
-                                        onclick="console.log('PHP Status being passed:', '<?php echo addslashes($request['status']); ?>'); loadRequestDetails(
-                                            '<?php echo htmlspecialchars($request['request_id']); ?>',
-                                            '<?php echo htmlspecialchars($request['patient_name']); ?>',
-                                            '<?php echo htmlspecialchars($request['patient_blood_type']); ?>',
-                                            'Whole Blood',
-                                            '<?php echo htmlspecialchars($request['rh_factor']); ?>',
-                                            '<?php echo htmlspecialchars($request['units_requested']); ?>',
-                                            '<?php echo htmlspecialchars($request['patient_diagnosis']); ?>',
-                                            '<?php echo htmlspecialchars($hospital_name); ?>',
-                                            '<?php echo htmlspecialchars($request['physician_name']); ?>',
-                                            '<?php echo htmlspecialchars($priority_display); ?>',
-                                            '<?php echo htmlspecialchars($request['status']); ?>',
-                                            '<?php echo htmlspecialchars($request['requested_on']); ?>',
-                                            '<?php echo htmlspecialchars($request['when_needed']); ?>',
-                                            '<?php echo htmlspecialchars($request['patient_age']); ?>',
-                                            '<?php echo htmlspecialchars($request['patient_gender']); ?>',
-                                            '<?php echo htmlspecialchars($request['handed_over_by'] ?? ''); ?>',
-                                            '<?php echo htmlspecialchars($request['handed_over_date'] ?? ''); ?>',
-                                            '<?php echo htmlspecialchars(getHandedOverByAdminName($request['handed_over_by'] ?? '')); ?>'
-                                        )"
+                                        onclick="loadRequestDetails('<?php echo htmlspecialchars($request['request_id']); ?>')"
                                         >
                                         <i class="fas fa-eye"></i>
                                     </button>
@@ -1345,14 +1527,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <?php endforeach; ?>
                         </tbody>
                     </table>
-                    <div class="d-flex justify-content-end gap-2 mt-2">
-                        <?php if ($page > 1): ?>
-                            <a class="btn btn-outline-secondary btn-sm" href="?page=<?php echo $page-1; ?>">Prev</a>
-                        <?php endif; ?>
-                        <?php if (count($blood_requests) === $page_size): ?>
-                            <a class="btn btn-outline-secondary btn-sm" href="?page=<?php echo $page+1; ?>">Next</a>
-                        <?php endif; ?>
-                    </div>
+                    <!-- OPTIMIZATION: Client-side pagination controls moved to top -->
                 </div>
                 <?php endif; ?>
             </div>
@@ -1738,40 +1913,70 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     // Get admin name from PHP
     const adminName = '<?php echo addslashes($admin_name); ?>';
     
-    // Enhanced function to populate the modal fields based on wireframe design
-    function loadRequestDetails(request_id, patientName, bloodType, component, rhFactor, unitsNeeded, diagnosis, hospital, physician, priority, status, requestDate, whenNeeded, patientAge, patientGender, handedOverBy, handedOverDate, handedOverByAdminName) {
-        console.log('=== loadRequestDetails DEBUG ===');
-        console.log('All arguments:', arguments);
-        console.log('Status parameter (11th argument):', status);
-        console.log('Status type:', typeof status);
-        console.log('Status value:', JSON.stringify(status));
-        console.log('Arguments length:', arguments.length);
+    // OPTIMIZATION: Lazy loading function to populate modal fields
+    function loadRequestDetails(request_id) {
+        console.log('=== loadRequestDetails (Lazy Loading) ===');
+        console.log('Request ID:', request_id);
+        
+        // Show loading state
+        const modalBody = document.querySelector('#requestModal .modal-body');
+        const originalContent = modalBody.innerHTML;
+        modalBody.innerHTML = `
+            <div class="text-center p-4">
+                <div class="spinner-border text-danger" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Loading request details...</p>
+            </div>
+        `;
+        
+        // Fetch request details via API
+        fetch(`../../public/api/get-request-details.php?request_id=${request_id}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    populateModalFields(data.data);
+                } else {
+                    throw new Error(data.error || 'Failed to load request details');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading request details:', error);
+                modalBody.innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>Error:</strong> Failed to load request details. Please try again.
+                        <button type="button" class="btn btn-sm btn-outline-danger ms-2" onclick="loadRequestDetails(${request_id})">Retry</button>
+                    </div>
+                `;
+            });
+    }
+    
+    // Function to populate modal fields with data
+    function populateModalFields(data) {
+        console.log('=== populateModalFields ===');
+        console.log('Data received:', data);
         
         // Set basic request info
-        document.getElementById('modalRequestId').value = request_id;
-        document.getElementById('modalRequestDate').textContent = requestDate ? new Date(requestDate).toLocaleDateString('en-US', { 
+        document.getElementById('modalRequestId').value = data.request_id;
+        document.getElementById('modalRequestDate').textContent = data.requested_on ? new Date(data.requested_on).toLocaleDateString('en-US', { 
             year: 'numeric', 
             month: 'long', 
             day: 'numeric' 
         }) : '-';
         
         // Set patient information
-        document.getElementById('modalPatientName').textContent = patientName || '-';
-        // Remove units/priority line under name per request
+        document.getElementById('modalPatientName').textContent = data.patient_name || '-';
         document.getElementById('modalPatientDetails').textContent = '';
-        // Age and Gender fields (prefer arguments; fallback to __currentRequest)
-        const ageVal = (patientAge !== undefined && patientAge !== null && patientAge !== '') ? patientAge : (window.__currentRequest && window.__currentRequest.patient_age);
-        const genderVal = (patientGender !== undefined && patientGender !== null && patientGender !== '') ? patientGender : (window.__currentRequest && window.__currentRequest.patient_gender);
-        document.getElementById('modalPatientAge').textContent = (ageVal !== undefined && ageVal !== null && ageVal !== '') ? ageVal : '-';
-        document.getElementById('modalPatientGender').textContent = (genderVal !== undefined && genderVal !== null && genderVal !== '') ? genderVal : '-';
+        document.getElementById('modalPatientAge').textContent = data.patient_age || '-';
+        document.getElementById('modalPatientGender').textContent = data.patient_gender || '-';
         
         // Set request details
-        document.getElementById('modalDiagnosis').value = diagnosis || '';
-        document.getElementById('modalBloodType').value = bloodType || '';
-        document.getElementById('modalRhFactor').value = rhFactor || '';
-        document.getElementById('modalUnitsNeeded').value = unitsNeeded || '';
-        document.getElementById('modalHospital').value = hospital || '';
-        document.getElementById('modalPhysician').value = physician || '';
+        document.getElementById('modalDiagnosis').value = data.patient_diagnosis || '';
+        document.getElementById('modalBloodType').value = data.patient_blood_type || '';
+        document.getElementById('modalRhFactor').value = data.rh_factor || '';
+        document.getElementById('modalUnitsNeeded').value = data.units_requested || '';
+        document.getElementById('modalHospital').value = data.hospital_admitted || '';
+        document.getElementById('modalPhysician').value = data.physician_name || '';
         
         // Handle When Needed (ASAP checkbox + scheduled formatted string)
         const asapRadio = document.getElementById('asapRadio');
@@ -2036,84 +2241,185 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             keyboard: false
         });
 
+        // OPTIMIZATION: Client-side pagination and filtering
+        let allRequests = [];
+        let filteredRequests = [];
+        let currentPage = 1;
+        let pageSize = 50;
+        let totalPages = 1;
+
+        // Initialize data from PHP
+        function initializeData() {
+            const tableRows = document.querySelectorAll('#requestTable tbody tr');
+            allRequests = Array.from(tableRows).map((row, index) => {
+                const cells = row.querySelectorAll('td');
+                return {
+                    element: row,
+                    index: index,
+                    requestId: cells[2]?.textContent?.trim() || '',
+                    hospital: cells[3]?.textContent?.trim() || '',
+                    bloodType: cells[4]?.textContent?.trim() || '',
+                    quantity: cells[5]?.textContent?.trim() || '',
+                    requestDate: cells[6]?.textContent?.trim() || '',
+                    status: cells[7]?.textContent?.trim() || '',
+                    isUrgent: row.querySelector('img[alt="Urgent"]') !== null,
+                    originalDisplay: row.style.display
+                };
+            });
+            filteredRequests = [...allRequests];
+            updatePagination();
+        }
+
         // Initialize search functionality
         const searchInput = document.getElementById('searchInput');
         const searchCategory = document.getElementById('searchCategory');
+        const statusFilter = document.getElementById('statusFilter');
+        const pageSizeSelect = document.getElementById('pageSize');
         
         if (searchInput && searchCategory) {
-            // Add event listeners for real-time search
-            searchInput.addEventListener('keyup', searchRequests);
-            searchCategory.addEventListener('change', searchRequests);
+            // Add event listeners for real-time search and filtering
+            searchInput.addEventListener('keyup', filterAndPaginate);
+            searchCategory.addEventListener('change', filterAndPaginate);
+            statusFilter.addEventListener('change', filterAndPaginate);
+            pageSizeSelect.addEventListener('change', function() {
+                pageSize = this.value === 'all' ? filteredRequests.length : parseInt(this.value);
+                currentPage = 1;
+                updatePagination();
+                displayCurrentPage();
+            });
         }
         
-        // Function to search blood requests
-        function searchRequests() {
-            const searchInput = document.getElementById('searchInput').value.toLowerCase();
-            const searchCategory = document.getElementById('searchCategory').value;
-            const requestItems = document.querySelectorAll('.email-item');
+        // Function to filter and paginate requests
+        function filterAndPaginate() {
+            const searchTerm = searchInput.value.toLowerCase();
+            const searchCat = searchCategory.value;
+            const statusFilterValue = statusFilter.value.toLowerCase();
             
-            // Check if no results message already exists
-            let noResultsMsg = document.getElementById('noResultsMsg');
-            if (noResultsMsg) {
-                noResultsMsg.remove();
-            }
-            
-            let visibleItems = 0;
-            const totalItems = requestItems.length;
-            
-            requestItems.forEach(item => {
-                let shouldShow = false;
-                if (searchInput.trim() === '') {
-                    shouldShow = true;
-                } else {
-                    const itemText = item.textContent.toLowerCase();
-                    
-                    if (searchCategory === 'all') {
-                        // Search all text in the item
-                        shouldShow = itemText.includes(searchInput);
-                    } else if (searchCategory === 'priority') {
-                        // Search only priority (Urgent/Routine)
-                        const priorityText = item.querySelector('.email-header').textContent.toLowerCase();
-                        shouldShow = priorityText.includes(searchInput);
-                    } else if (searchCategory === 'hospital') {
-                        // Search hospital name
-                        const hospitalName = item.querySelector('.email-header').textContent.toLowerCase();
-                        shouldShow = hospitalName.includes(searchInput);
-                    } else if (searchCategory === 'date') {
-                        // For date, we'd need to check if it's available in the item
-                        // Since it might not be directly visible, we do a general search
-                        // Create a regex for flexible date matching
-                        const datePattern = new RegExp(searchInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-                        shouldShow = datePattern.test(itemText);
+            filteredRequests = allRequests.filter(request => {
+                // Status filter
+                if (statusFilterValue !== 'all') {
+                    const requestStatus = request.status.toLowerCase();
+                    if (!requestStatus.includes(statusFilterValue)) {
+                        return false;
                     }
                 }
                 
-                item.style.display = shouldShow ? '' : 'none';
-                if (shouldShow) visibleItems++;
+                // Search filter
+                if (searchTerm.trim() === '') {
+                    return true;
+                }
+                
+                let searchText = '';
+                switch (searchCat) {
+                    case 'hospital':
+                        searchText = request.hospital;
+                        break;
+                    case 'blood_type':
+                        searchText = request.bloodType;
+                        break;
+                    case 'date':
+                        searchText = request.requestDate;
+                        break;
+                    case 'urgent':
+                        searchText = request.isUrgent ? 'urgent' : 'routine';
+                        break;
+                    case 'status':
+                        searchText = request.status;
+                        break;
+                    default: // 'all'
+                        searchText = `${request.requestId} ${request.hospital} ${request.bloodType} ${request.requestDate} ${request.status}`;
+                }
+                
+                return searchText.toLowerCase().includes(searchTerm);
             });
             
-            // Show "No results" message if no matches
-            if (visibleItems === 0 && totalItems > 0) {
-                const container = document.querySelector('.email-container');
-                
-                noResultsMsg = document.createElement('div');
-                noResultsMsg.id = 'noResultsMsg';
-                noResultsMsg.className = 'alert alert-info m-3 text-center';
-                noResultsMsg.innerHTML = `
-                    No matching results found. 
-                    <button class="btn btn-sm btn-outline-primary ms-2" onclick="clearSearch()">
-                        Clear Search
-                    </button>
-                `;
-                container.appendChild(noResultsMsg);
+            currentPage = 1;
+            updatePagination();
+            displayCurrentPage();
+            updateSearchInfo();
+        }
+        
+        // Function to update pagination controls
+        function updatePagination() {
+            totalPages = Math.ceil(filteredRequests.length / pageSize);
+            const paginationControls = document.getElementById('paginationControls');
+            const paginationInfo = document.getElementById('paginationInfo');
+            
+            // Update pagination info
+            const startItem = (currentPage - 1) * pageSize + 1;
+            const endItem = Math.min(currentPage * pageSize, filteredRequests.length);
+            paginationInfo.textContent = `Showing ${startItem}-${endItem} of ${filteredRequests.length} requests`;
+            
+            // Generate pagination buttons
+            paginationControls.innerHTML = '';
+            
+            if (totalPages <= 1) return;
+            
+            // Previous button
+            const prevBtn = document.createElement('button');
+            prevBtn.className = 'btn btn-outline-secondary btn-sm';
+            prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    displayCurrentPage();
+                    updatePagination();
+                }
+            };
+            paginationControls.appendChild(prevBtn);
+            
+            // Page numbers (show max 5 pages)
+            const startPage = Math.max(1, currentPage - 2);
+            const endPage = Math.min(totalPages, startPage + 4);
+            
+            for (let i = startPage; i <= endPage; i++) {
+                const pageBtn = document.createElement('button');
+                pageBtn.className = `btn btn-sm ${i === currentPage ? 'btn-primary' : 'btn-outline-secondary'}`;
+                pageBtn.textContent = i;
+                pageBtn.onclick = () => {
+                    currentPage = i;
+                    displayCurrentPage();
+                    updatePagination();
+                };
+                paginationControls.appendChild(pageBtn);
             }
             
-            // Update search results info
-            updateSearchInfo(visibleItems, totalItems);
+            // Next button
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'btn btn-outline-secondary btn-sm';
+            nextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => {
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    displayCurrentPage();
+                    updatePagination();
+                }
+            };
+            paginationControls.appendChild(nextBtn);
+        }
+        
+        // Function to display current page
+        function displayCurrentPage() {
+            // Hide all rows first
+            allRequests.forEach(request => {
+                request.element.style.display = 'none';
+            });
+            
+            // Show only current page rows
+            const startIndex = (currentPage - 1) * pageSize;
+            const endIndex = Math.min(startIndex + pageSize, filteredRequests.length);
+            
+            for (let i = startIndex; i < endIndex; i++) {
+                if (filteredRequests[i]) {
+                    filteredRequests[i].element.style.display = '';
+                }
+            }
         }
         
         // Function to update search results info
-        function updateSearchInfo(visibleItems, totalItems) {
+        function updateSearchInfo() {
             const searchContainer = document.querySelector('.search-container');
             let searchInfo = document.getElementById('searchInfo');
             
@@ -2124,38 +2430,53 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 searchContainer.appendChild(searchInfo);
             }
             
-            const searchInput = document.getElementById('searchInput').value.trim();
-            if (searchInput === '') {
+            const searchTerm = searchInput.value.trim();
+            const statusFilterValue = statusFilter.value;
+            
+            if (searchTerm === '' && statusFilterValue === 'all') {
                 searchInfo.textContent = '';
                 return;
             }
             
-            searchInfo.textContent = `Showing ${visibleItems} of ${totalItems} entries`;
+            let infoText = `Showing ${filteredRequests.length} of ${allRequests.length} requests`;
+            if (searchTerm !== '') {
+                infoText += ` matching "${searchTerm}"`;
+            }
+            if (statusFilterValue !== 'all') {
+                infoText += ` with status "${statusFilterValue}"`;
+            }
+            
+            searchInfo.textContent = infoText;
         }
         
         // Function to clear search
         window.clearSearch = function() {
             document.getElementById('searchInput').value = '';
             document.getElementById('searchCategory').value = 'all';
-            searchRequests();
+            document.getElementById('statusFilter').value = 'all';
+            filterAndPaginate();
         };
+        
+        // Initialize the page
+        initializeData();
+        displayCurrentPage();
 
         // Function to show confirmation modal
         window.showConfirmationModal = function() {
             confirmationModal.show();
         };
 
-        // Function to handle form submission
-        window.proceedToDonorForm = function() {
-            confirmationModal.hide();
-            loadingModal.show();
-            
-            setTimeout(() => {
-                // Pass current page as source parameter for proper redirect back
-                const currentPage = encodeURIComponent(window.location.pathname + window.location.search);
-                window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + currentPage;
-            }, 1500);
-        };
+            // Function to handle form submission
+            window.proceedToDonorForm = function() {
+                confirmationModal.hide();
+                loadingModal.show();
+                
+                setTimeout(() => {
+                    // Pass current page as source parameter for proper redirect back
+                    const currentPage = encodeURIComponent(window.location.pathname + window.location.search);
+                    window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + currentPage;
+                }, 1500);
+            };
 
         // Get elements for declining requests
         const declineButton = document.getElementById("declineRequest");

@@ -157,7 +157,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         <div class="dashboard-home-header bg-light p-3 border-bottom">
             <div class="d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Blood Donor Management System</h4>
-                <div></div>
+                <button class="btn btn-danger" onclick="showConfirmationModal()">
+                    <i class="fas fa-plus me-2"></i>Register Donor
+                </button>
             </div>
         </div>
 
@@ -525,7 +527,37 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Confirmation Modal for Donor Registration -->
+    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title" id="confirmationModalLabel">Confirm Action</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to proceed to the admin donor form?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="proceedToDonorForm()">Proceed</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Modal for Donor Registration -->
+    <div class="modal" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="false" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="background: transparent; border: none; box-shadow: none;">
+                <div class="modal-body text-center">
+                    <div class="spinner-border text-danger" style="width: 3rem; height: 3rem;" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     <script>
         let currentUserId = null;
         let currentUserName = null;
@@ -535,6 +567,33 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             console.log('DOM loaded, checking elements...');
             console.log('confirmActivateBtn exists:', document.getElementById('confirmActivateBtn') !== null);
             console.log('activateModal exists:', document.getElementById('activateModal') !== null);
+            
+            // Initialize donor registration modals
+            const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'), {
+                backdrop: true,
+                keyboard: true
+            });
+            const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
+                backdrop: false,
+                keyboard: false
+            });
+
+            // Function to show confirmation modal
+            window.showConfirmationModal = function() {
+                confirmationModal.show();
+            };
+
+            // Function to handle form submission
+            window.proceedToDonorForm = function() {
+                confirmationModal.hide();
+                loadingModal.show();
+                
+                setTimeout(() => {
+                    // Pass current page as source parameter for proper redirect back
+                    const currentPage = encodeURIComponent(window.location.pathname + window.location.search);
+                    window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + currentPage;
+                }, 1500);
+            };
         });
 
         // Show deactivate confirmation modal
