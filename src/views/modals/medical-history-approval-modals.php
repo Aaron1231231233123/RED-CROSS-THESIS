@@ -58,6 +58,14 @@
                     <p class="text-muted mb-4">The donor will be marked as ineligible for donation.</p>
                     
                     <div class="mb-3">
+                        <label for="declineType" class="form-label fw-semibold">Decline Type:</label>
+                        <select class="form-select" id="declineType" name="decline_type" required>
+                            <option value="Permanently Deferred" selected>Permanently Deferred</option>
+                        </select>
+                        <div class="form-text">The donor will be permanently deferred from donation.</div>
+                    </div>
+                    
+                    <div class="mb-3">
                         <label for="declineReason" class="form-label fw-semibold">Reason for declinement:</label>
                         <textarea class="form-control" id="declineReason" rows="4" 
                                   placeholder="Please provide a detailed reason for declining this donor's medical history..." 

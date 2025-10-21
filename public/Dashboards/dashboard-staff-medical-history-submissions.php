@@ -444,15 +444,15 @@ $donors = [];
 $multi_handle = curl_multi_init();
 $curl_handles = [];
 
-// Define the queries with optimized field selection
+// Define the queries with optimized field selection and pagination to bypass 1000 record limit
 $queries = [
-    'donor_forms' => '/rest/v1/donor_form?select=donor_id,surname,first_name,submitted_at,registration_channel,prc_donor_number&order=submitted_at.desc',
+    'donor_forms' => '/rest/v1/donor_form?select=donor_id,surname,first_name,submitted_at,registration_channel,prc_donor_number&order=submitted_at.desc&limit=5000',
     // include needs_review flag and updated_at to prioritize and display review time
-    'medical_histories' => '/rest/v1/medical_history?select=donor_id,medical_history_id,medical_approval,needs_review,created_at,updated_at&order=created_at.desc',
-    'screening_forms' => '/rest/v1/screening_form?select=screening_id,donor_form_id,interviewer_id,needs_review,created_at&order=created_at.desc',
-    'physical_exams' => '/rest/v1/physical_examination?select=donor_id,needs_review,created_at&order=created_at.desc',
-    'blood_collections' => '/rest/v1/blood_collection?select=screening_id,start_time&order=start_time.desc',
-    'eligibility_records' => '/rest/v1/eligibility?select=donor_id,status&order=created_at.desc'
+    'medical_histories' => '/rest/v1/medical_history?select=donor_id,medical_history_id,medical_approval,needs_review,created_at,updated_at&order=created_at.desc&limit=5000',
+    'screening_forms' => '/rest/v1/screening_form?select=screening_id,donor_form_id,interviewer_id,needs_review,created_at&order=created_at.desc&limit=5000',
+    'physical_exams' => '/rest/v1/physical_examination?select=donor_id,needs_review,created_at&order=created_at.desc&limit=5000',
+    'blood_collections' => '/rest/v1/blood_collection?select=screening_id,start_time&order=start_time.desc&limit=5000',
+    'eligibility_records' => '/rest/v1/eligibility?select=donor_id,status&order=created_at.desc&limit=5000'
 ];
 
 // Create parallel cURL requests
@@ -486,6 +486,15 @@ $screening_forms = json_decode(curl_multi_getcontent($curl_handles['screening_fo
 $physical_exams = json_decode(curl_multi_getcontent($curl_handles['physical_exams']), true) ?: [];
 $blood_collections = json_decode(curl_multi_getcontent($curl_handles['blood_collections']), true) ?: [];
 $eligibility_records = json_decode(curl_multi_getcontent($curl_handles['eligibility_records']), true) ?: [];
+
+// Debug: Log the number of records fetched
+error_log("Medical History Dashboard - Records fetched:");
+error_log("Donor forms: " . count($donor_forms));
+error_log("Medical histories: " . count($medical_histories));
+error_log("Screening forms: " . count($screening_forms));
+error_log("Physical exams: " . count($physical_exams));
+error_log("Blood collections: " . count($blood_collections));
+error_log("Eligibility records: " . count($eligibility_records));
 
 // Fetch interviewer information from users table
 $interviewer_ids = [];
@@ -1283,39 +1292,86 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             padding: 0.5rem 0.75rem;
         }
 
-        /* Pagination Styles */
+        /* Enhanced Pagination Styles */
         .pagination-container {
             margin-top: 2rem;
+            padding: 1rem 0;
         }
 
         .pagination {
             justify-content: center;
+            margin: 0;
+            flex-wrap: wrap;
+        }
+
+        .page-item {
+            margin: 0 2px;
         }
 
         .page-link {
             color: #333;
             border-color: #dee2e6;
-            padding: 0.5rem 1rem;
+            padding: 0.5rem 0.75rem;
             transition: all 0.2s ease;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
+            min-width: 40px;
+            text-align: center;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .page-link:hover {
             background-color: #f8f9fa;
             color: var(--primary-color);
-            border-color: #dee2e6;
+            border-color: var(--primary-color);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .page-item.active .page-link {
             background-color: var(--primary-color);
             border-color: var(--primary-color);
             color: white;
+            font-weight: 600;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
         }
 
         .page-item.disabled .page-link {
             color: #6c757d;
-            background-color: #fff;
+            background-color: #f8f9fa;
             border-color: #dee2e6;
+            cursor: not-allowed;
+        }
+
+        .page-item.disabled .page-link:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Ellipsis styling */
+        .page-item.disabled .page-link {
+            cursor: default;
+        }
+
+        /* Responsive pagination */
+        @media (max-width: 768px) {
+            .pagination {
+                flex-wrap: wrap;
+                gap: 2px;
+            }
+            
+            .page-link {
+                padding: 0.4rem 0.6rem;
+                font-size: 0.85rem;
+                min-width: 35px;
+            }
+            
+            .page-link i {
+                font-size: 0.8rem;
+            }
+        }
         }
 
 
@@ -2432,19 +2488,52 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                 <ul class="pagination justify-content-center">
                                     <!-- Previous button -->
                                     <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Previous</a>
+                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
+                                            Previous
+                                        </a>
                                     </li>
                                     
-                                    <!-- Page numbers -->
-                                    <?php for($i = 1; $i <= $total_pages; $i++): ?>
+                                    <!-- Smart page numbers with ellipsis -->
+                                    <?php
+                                    $start_page = max(1, $current_page - 2);
+                                    $end_page = min($total_pages, $current_page + 2);
+                                    
+                                    // Always show first page
+                                    if ($start_page > 1): ?>
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page=1">1</a>
+                                        </li>
+                                        <?php if ($start_page > 2): ?>
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                    
+                                    <!-- Page numbers around current page -->
+                                    <?php for($i = $start_page; $i <= $end_page; $i++): ?>
                                         <li class="page-item <?php echo $current_page == $i ? 'active' : ''; ?>">
                                             <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
                                         </li>
                                     <?php endfor; ?>
                                     
+                                    <!-- Always show last page -->
+                                    <?php if ($end_page < $total_pages): ?>
+                                        <?php if ($end_page < $total_pages - 1): ?>
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        <?php endif; ?>
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page=<?php echo $total_pages; ?>"><?php echo $total_pages; ?></a>
+                                        </li>
+                                    <?php endif; ?>
+                                    
                                     <!-- Next button -->
                                     <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Next</a>
+                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
+                                            Next
+                                        </a>
                                     </li>
                                 </ul>
                             </nav>
@@ -3228,8 +3317,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                              <i class="fas fa-id-card me-1"></i>
                                              Donor ID: ${safe(donor.prc_donor_number || 'N/A')}
                                          </div>
-                                         <div class="badge fs-6 px-3 py-2" style="background-color: #b22222; color: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; min-width: 80px;">
-                                             <div style="font-size: 1.3rem; font-weight: 700; line-height: 1;">${safe(getBloodTypeFromEligibility(donor) || 'N/A')}</div>
+                                         <div class="blood-type-display" style="background-color: #8B0000; color: white; border-radius: 20px; padding: 12px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 100px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                                             <div style="font-size: 0.8rem; font-weight: 500; line-height: 1; margin-bottom: 2px; opacity: 0.9;">Blood Type</div>
+                                             <div style="font-size: 1.4rem; font-weight: 700; line-height: 1;">${safe(getBloodTypeFromEligibility(donor) || 'N/A')}</div>
                                          </div>
                                      </div>
                                  </div>
@@ -5389,9 +5479,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                     <i class="fas fa-id-card me-1"></i>
                                     Donor ID: ${safe(physicalData.prc_donor_number || 'N/A')}
                                 </div>
-                                <div class="badge fs-6 px-2 py-1" style="background-color: #b22222; color: white;">
-                                    <i class="fas fa-tint me-1"></i>
-                                    ${safe(physicalData.blood_type || 'N/A')}
+                                <div class="blood-type-display" style="background-color: #8B0000; color: white; border-radius: 20px; padding: 8px 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 80px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                                    <div style="font-size: 0.7rem; font-weight: 500; line-height: 1; margin-bottom: 1px; opacity: 0.9;">Blood Type</div>
+                                    <div style="font-size: 1.1rem; font-weight: 700; line-height: 1;">${safe(physicalData.blood_type || 'N/A')}</div>
                                 </div>
                             </div>
                         </div>
@@ -5417,7 +5507,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         <div class="row g-3 mt-2">
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Blood Type</label>
-                                <div class="form-control-plaintext bg-light p-2 rounded">${safe(physicalData.blood_type || 'N/A')}</div>
+                                <div class="blood-type-display" style="background-color: #8B0000; color: white; border-radius: 20px; padding: 10px 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 90px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                                    <div style="font-size: 0.75rem; font-weight: 500; line-height: 1; margin-bottom: 2px; opacity: 0.9;">Blood Type</div>
+                                    <div style="font-size: 1.2rem; font-weight: 700; line-height: 1;">${safe(physicalData.blood_type || 'N/A')}</div>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Type of Donation</label>

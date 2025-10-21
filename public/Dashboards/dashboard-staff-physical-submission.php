@@ -47,6 +47,9 @@ function makeSupabaseApiCall($endpoint, $selectFields = [], $filters = []) {
             $url .= '?' . implode('&', $params);
         }
         
+        // Debug: Log the URL being called
+        error_log("Supabase API call: $url");
+        
         $ch = curl_init($url);
         $headers = [
             'apikey: ' . SUPABASE_API_KEY,
@@ -66,7 +69,18 @@ function makeSupabaseApiCall($endpoint, $selectFields = [], $filters = []) {
             return [];
         }
         
-        return json_decode($response, true) ?: [];
+        if ($httpCode !== 200) {
+            error_log("HTTP error $httpCode in API call to: $endpoint. Response: " . substr($response, 0, 500));
+            return [];
+        }
+        
+        $decoded = json_decode($response, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log("JSON decode error in API call to: $endpoint. Error: " . json_last_error_msg());
+            return [];
+        }
+        
+        return $decoded ?: [];
         
     } catch (Exception $e) {
         error_log("Error in API call to " . $endpoint . ": " . $e->getMessage());
@@ -76,8 +90,33 @@ function makeSupabaseApiCall($endpoint, $selectFields = [], $filters = []) {
 
 // 1. Skip screening records - using only physical examination data
 
-// 2b. Get eligibility records to classify donors as New or Returning
-$eligibility_records = makeSupabaseApiCall('eligibility', ['donor_id']);
+// 2b. Get eligibility records to classify donors as New or Returning using pagination
+$eligibility_records = [];
+$offset = 0;
+$limit = 1000;
+$has_more = true;
+$max_iterations = 10;
+$iteration = 0;
+
+while ($has_more && $iteration < $max_iterations) {
+    $batch = makeSupabaseApiCall('eligibility', ['donor_id'], ['limit' => $limit, 'offset' => $offset]);
+    
+    error_log("Eligibility batch $iteration: fetched " . count($batch) . " records (offset: $offset)");
+    
+    if (empty($batch)) {
+        $has_more = false;
+    } else {
+        $eligibility_records = array_merge($eligibility_records, $batch);
+        $offset += $limit;
+        $iteration++;
+        
+        if (count($batch) < $limit) {
+            $has_more = false;
+        }
+    }
+}
+
+error_log("Total eligibility records fetched: " . count($eligibility_records));
 $eligibility_by_donor = [];
 foreach ($eligibility_records as $er) {
     if (isset($er['donor_id'])) {
@@ -85,11 +124,37 @@ foreach ($eligibility_records as $er) {
     }
 }
 
-// 2c. Get medical history approval map (for UI read-only rules and action swapping)
-$medical_history_rows = makeSupabaseApiCall(
-    'medical_history',
-    ['donor_id', 'medical_approval', 'needs_review']
-);
+// 2c. Get medical history approval map (for UI read-only rules and action swapping) using pagination
+$medical_history_rows = [];
+$offset = 0;
+$limit = 1000;
+$has_more = true;
+$max_iterations = 10;
+$iteration = 0;
+
+while ($has_more && $iteration < $max_iterations) {
+    $batch = makeSupabaseApiCall(
+        'medical_history',
+        ['donor_id', 'medical_approval', 'needs_review'],
+        ['limit' => $limit, 'offset' => $offset]
+    );
+    
+    error_log("Medical history batch $iteration: fetched " . count($batch) . " records (offset: $offset)");
+    
+    if (empty($batch)) {
+        $has_more = false;
+    } else {
+        $medical_history_rows = array_merge($medical_history_rows, $batch);
+        $offset += $limit;
+        $iteration++;
+        
+        if (count($batch) < $limit) {
+            $has_more = false;
+        }
+    }
+}
+
+error_log("Total medical history records fetched: " . count($medical_history_rows));
 $medical_by_donor = [];
 foreach ($medical_history_rows as $mh) {
     if (!isset($mh['donor_id'])) { continue; }
@@ -103,12 +168,39 @@ foreach ($medical_history_rows as $mh) {
     ];
 }
 
-// 2. Get all physical examination records with full details
-$physical_exams = makeSupabaseApiCall(
-    'physical_examination',
-    ['physical_exam_id', 'screening_id', 'donor_id', 'remarks', 'disapproval_reason', 'gen_appearance', 'heart_and_lungs', 'skin', 'reason', 'blood_pressure', 'pulse_rate', 'body_temp', 'blood_bag_type', 'created_at', 'updated_at', 'needs_review', 'physician'],
-    ['order' => 'updated_at.asc']
-);
+// 2. Get all physical examination records with full details using pagination to bypass Supabase limits
+$physical_exams = [];
+$offset = 0;
+$limit = 1000; // Supabase max per request
+$has_more = true;
+$max_iterations = 10; // Safety limit to prevent infinite loops
+$iteration = 0;
+
+while ($has_more && $iteration < $max_iterations) {
+    $batch = makeSupabaseApiCall(
+        'physical_examination',
+        ['physical_exam_id', 'screening_id', 'donor_id', 'remarks', 'disapproval_reason', 'gen_appearance', 'heart_and_lungs', 'skin', 'reason', 'blood_pressure', 'pulse_rate', 'body_temp', 'blood_bag_type', 'created_at', 'updated_at', 'needs_review', 'physician'],
+        ['order' => 'updated_at.asc', 'limit' => $limit, 'offset' => $offset]
+    );
+    
+    error_log("Physical exams batch $iteration: fetched " . count($batch) . " records (offset: $offset)");
+    
+    if (empty($batch)) {
+        $has_more = false;
+    } else {
+        $physical_exams = array_merge($physical_exams, $batch);
+        $offset += $limit;
+        $iteration++;
+        
+        // If we got less than the limit, we've reached the end
+        if (count($batch) < $limit) {
+            $has_more = false;
+        }
+    }
+}
+
+// Debug: Log the number of physical exams fetched
+error_log("Physical exams fetched: " . count($physical_exams));
 
 // Create arrays to organize physical exams by status and collect all donor IDs
 $existing_physical_exam_donor_ids = [];
@@ -138,13 +230,28 @@ $all_donor_ids = array_unique($all_donor_ids);
 $donor_data_cache = [];
 
 if (!empty($all_donor_ids)) {
-    // Batch fetch donor data using IN clause
-    $donor_ids_str = implode(',', $all_donor_ids);
-    $donors_data = makeSupabaseApiCall(
-        'donor_form',
-        ['donor_id', 'surname', 'first_name', 'middle_name'],
-        ['donor_id' => 'in.(' . $donor_ids_str . ')']
-    );
+    // Batch fetch donor data using IN clause with pagination to handle large datasets
+    $donors_data = [];
+    $batch_size = 1000; // Process donor IDs in batches to avoid URL length limits
+    $total_donor_ids = count($all_donor_ids);
+    
+    error_log("Fetching donor data for $total_donor_ids donor IDs in batches of $batch_size");
+    
+    for ($i = 0; $i < $total_donor_ids; $i += $batch_size) {
+        $batch_donor_ids = array_slice($all_donor_ids, $i, $batch_size);
+        $donor_ids_str = implode(',', $batch_donor_ids);
+        
+        $batch_donors = makeSupabaseApiCall(
+            'donor_form',
+            ['donor_id', 'surname', 'first_name', 'middle_name'],
+            ['donor_id' => 'in.(' . $donor_ids_str . ')']
+        );
+        
+        error_log("Donor batch " . ($i / $batch_size + 1) . ": fetched " . count($batch_donors) . " records");
+        $donors_data = array_merge($donors_data, $batch_donors);
+    }
+    
+    error_log("Total donor records fetched: " . count($donors_data));
     
     // Create a cache for quick donor lookup
     foreach ($donors_data as $donor) {
@@ -195,6 +302,9 @@ foreach ($physical_exams as $exam) {
 // Skip screening records processing - using only physical examination data
 
 // Performance optimization complete
+
+// Debug: Log the total number of records
+error_log("Total records processed: " . count($all_records));
 
 // Count stats for dashboard cards
 $pending_physical_exams_count = 0; // Pending or needs_review items
@@ -1699,39 +1809,86 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             padding: 0.5rem 0.75rem;
         }
 
-        /* Pagination Styles */
+        /* Enhanced Pagination Styles */
         .pagination-container {
             margin-top: 2rem;
+            padding: 1rem 0;
         }
 
         .pagination {
             justify-content: center;
+            margin: 0;
+            flex-wrap: wrap;
+        }
+
+        .page-item {
+            margin: 0 2px;
         }
 
         .page-link {
             color: #333;
             border-color: #dee2e6;
-            padding: 0.5rem 1rem;
+            padding: 0.5rem 0.75rem;
             transition: all 0.2s ease;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
+            min-width: 40px;
+            text-align: center;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .page-link:hover {
             background-color: #f8f9fa;
             color: var(--primary-color);
-            border-color: #dee2e6;
+            border-color: var(--primary-color);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .page-item.active .page-link {
             background-color: var(--primary-color);
             border-color: var(--primary-color);
             color: white;
+            font-weight: 600;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
         }
 
         .page-item.disabled .page-link {
             color: #6c757d;
-            background-color: #fff;
+            background-color: #f8f9fa;
             border-color: #dee2e6;
+            cursor: not-allowed;
+        }
+
+        .page-item.disabled .page-link:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Ellipsis styling */
+        .page-item.disabled .page-link {
+            cursor: default;
+        }
+
+        /* Responsive pagination */
+        @media (max-width: 768px) {
+            .pagination {
+                flex-wrap: wrap;
+                gap: 2px;
+            }
+            
+            .page-link {
+                padding: 0.4rem 0.6rem;
+                font-size: 0.85rem;
+                min-width: 35px;
+            }
+            
+            .page-link i {
+                font-size: 0.8rem;
+            }
+        }
         }
 
         /* Badge styling */
@@ -2260,23 +2417,56 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         <!-- Pagination Controls -->
                         <?php if ($total_pages > 1): ?>
                         <div class="pagination-container">
-                            <nav aria-label="Donor medical history navigation">
+                            <nav aria-label="Physical examination navigation">
                                 <ul class="pagination justify-content-center">
                                     <!-- Previous button -->
                                     <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Previous</a>
+                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
+                                            Previous
+                                        </a>
                                     </li>
                                     
-                                    <!-- Page numbers -->
-                                    <?php for($i = 1; $i <= $total_pages; $i++): ?>
+                                    <!-- Smart page numbers with ellipsis -->
+                                    <?php
+                                    $start_page = max(1, $current_page - 2);
+                                    $end_page = min($total_pages, $current_page + 2);
+                                    
+                                    // Always show first page
+                                    if ($start_page > 1): ?>
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page=1<?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>">1</a>
+                                        </li>
+                                        <?php if ($start_page > 2): ?>
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                    
+                                    <!-- Page numbers around current page -->
+                                    <?php for($i = $start_page; $i <= $end_page; $i++): ?>
                                         <li class="page-item <?php echo $current_page == $i ? 'active' : ''; ?>">
                                             <a class="page-link" href="?page=<?php echo $i; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>"><?php echo $i; ?></a>
                                         </li>
                                     <?php endfor; ?>
                                     
+                                    <!-- Always show last page -->
+                                    <?php if ($end_page < $total_pages): ?>
+                                        <?php if ($end_page < $total_pages - 1): ?>
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        <?php endif; ?>
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page=<?php echo $total_pages; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>"><?php echo $total_pages; ?></a>
+                                        </li>
+                                    <?php endif; ?>
+                                    
                                     <!-- Next button -->
                                     <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Next</a>
+                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
+                                            Next
+                                        </a>
                                     </li>
                                 </ul>
                             </nav>
@@ -2327,6 +2517,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
     <?php include '../../src/views/modals/defer-donor-modal.php'; ?>
     <?php include '../../src/views/modals/physical-examination-modal.php'; ?>
     <?php include '../../src/views/modals/staff-physician-account-summary-modal.php'; ?>
+    <?php include '../../src/views/modals/medical-history-approval-modals.php'; ?>
     
     <?php include '../../src/views/forms/physician-screening-form-content-modal.php'; ?>
 

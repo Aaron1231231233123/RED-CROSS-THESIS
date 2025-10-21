@@ -15,49 +15,103 @@ $offset = ($current_page - 1) * $records_per_page;
 $start_time = microtime(true);
 
 
-// STEP 1: Get all blood collection records to identify physical exams that already have blood collection
-$blood_collection_url = SUPABASE_URL . '/rest/v1/blood_collection?select=blood_collection_id,physical_exam_id,is_successful,donor_reaction,management_done,status,blood_bag_type,blood_bag_brand,amount_taken,start_time,end_time,unit_serial_number,needs_review,phlebotomist,created_at,updated_at';
-$ch = curl_init($blood_collection_url);
+// STEP 1: Get all blood collection records using pagination to bypass 1000 record limit
+$blood_collections = [];
+$offset = 0;
+$limit = 1000;
+$has_more = true;
+$max_iterations = 10;
+$iteration = 0;
+
 $headers = array(
     'apikey: ' . SUPABASE_API_KEY,
     'Authorization: Bearer ' . SUPABASE_API_KEY,
     'Accept: application/json'
 );
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-$response = curl_exec($ch);
-$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
 
-// Check for errors in the blood collection query
-if ($http_code !== 200) {
-    error_log("Error fetching blood collections. HTTP code: " . $http_code);
-    error_log("Response: " . $response);
-    $blood_collections = [];
-} else {
-    $blood_collections = json_decode($response, true) ?: [];
+while ($has_more && $iteration < $max_iterations) {
+    $blood_collection_url = SUPABASE_URL . '/rest/v1/blood_collection?select=blood_collection_id,physical_exam_id,is_successful,donor_reaction,management_done,status,blood_bag_type,blood_bag_brand,amount_taken,start_time,end_time,unit_serial_number,needs_review,phlebotomist,created_at,updated_at&limit=' . $limit . '&offset=' . $offset;
+    
+    $ch = curl_init($blood_collection_url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    error_log("Blood collection batch $iteration: fetched " . (($http_code === 200) ? count(json_decode($response, true) ?: []) : 0) . " records (offset: $offset)");
+    
+    if ($http_code !== 200) {
+        error_log("Error fetching blood collections batch $iteration. HTTP code: " . $http_code);
+        error_log("Response: " . $response);
+        $has_more = false;
+    } else {
+        $batch = json_decode($response, true) ?: [];
+        if (empty($batch)) {
+            $has_more = false;
+        } else {
+            $blood_collections = array_merge($blood_collections, $batch);
+            $offset += $limit;
+            $iteration++;
+            
+            if (count($batch) < $limit) {
+                $has_more = false;
+            }
+        }
+    }
 }
 
-// Fetch eligibility blood_collection_id list to detect returnees
-$eligibility_url = SUPABASE_URL . '/rest/v1/eligibility?select=blood_collection_id,donor_id';
-$ch = curl_init($eligibility_url);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-$elig_response = curl_exec($ch);
-$elig_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
+error_log("Total blood collections fetched: " . count($blood_collections));
+
+// Fetch eligibility blood_collection_id list using pagination to detect returnees
+$eligibility_rows = [];
+$offset = 0;
+$limit = 1000;
+$has_more = true;
+$max_iterations = 10;
+$iteration = 0;
+
+while ($has_more && $iteration < $max_iterations) {
+    $eligibility_url = SUPABASE_URL . '/rest/v1/eligibility?select=blood_collection_id,donor_id&limit=' . $limit . '&offset=' . $offset;
+    
+    $ch = curl_init($eligibility_url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    $elig_response = curl_exec($ch);
+    $elig_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    error_log("Eligibility batch $iteration: fetched " . (($elig_http_code === 200) ? count(json_decode($elig_response, true) ?: []) : 0) . " records (offset: $offset)");
+    
+    if ($elig_http_code !== 200) {
+        error_log("Error fetching eligibility batch $iteration. HTTP code: " . $elig_http_code);
+        $has_more = false;
+    } else {
+        $batch = json_decode($elig_response, true) ?: [];
+        if (empty($batch)) {
+            $has_more = false;
+        } else {
+            $eligibility_rows = array_merge($eligibility_rows, $batch);
+            $offset += $limit;
+            $iteration++;
+            
+            if (count($batch) < $limit) {
+                $has_more = false;
+            }
+        }
+    }
+}
+
+error_log("Total eligibility records fetched: " . count($eligibility_rows));
 
 $eligibility_collection_ids = [];
 $eligibility_by_donor = [];
-if ($elig_http_code === 200) {
-    $elig_rows = json_decode($elig_response, true) ?: [];
-    foreach ($elig_rows as $erow) {
-        if (!empty($erow['blood_collection_id'])) {
-            $eligibility_collection_ids[(string)$erow['blood_collection_id']] = true;
-        }
-        if (isset($erow['donor_id'])) {
-            $eligibility_by_donor[(int)$erow['donor_id']] = true;
-        }
+foreach ($eligibility_rows as $erow) {
+    if (!empty($erow['blood_collection_id'])) {
+        $eligibility_collection_ids[(string)$erow['blood_collection_id']] = true;
+    }
+    if (isset($erow['donor_id'])) {
+        $eligibility_by_donor[(int)$erow['donor_id']] = true;
     }
 }
 
@@ -93,39 +147,87 @@ foreach ($blood_collections as $collection) {
     }
 }
 
-// STEP 2: Get ALL physical examinations (not just accepted ones)
-$physical_exam_url = SUPABASE_URL . '/rest/v1/physical_examination?select=physical_exam_id,donor_id,remarks,blood_bag_type,created_at&order=created_at.desc';
+// STEP 2: Get ALL physical examinations using pagination (not just accepted ones)
+$physical_exam_records = [];
+$offset = 0;
+$limit = 1000;
+$has_more = true;
+$max_iterations = 10;
+$iteration = 0;
 
-$ch = curl_init($physical_exam_url);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-$response = curl_exec($ch);
-$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-if ($http_code !== 200) {
-    error_log("Error fetching physical examinations. HTTP code: " . $http_code);
-    $physical_exam_records = [];
-} else {
-    $physical_exam_records = json_decode($response, true) ?: [];
+while ($has_more && $iteration < $max_iterations) {
+    $physical_exam_url = SUPABASE_URL . '/rest/v1/physical_examination?select=physical_exam_id,donor_id,remarks,blood_bag_type,created_at&order=created_at.desc&limit=' . $limit . '&offset=' . $offset;
+    
+    $ch = curl_init($physical_exam_url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    error_log("Physical exam batch $iteration: fetched " . (($http_code === 200) ? count(json_decode($response, true) ?: []) : 0) . " records (offset: $offset)");
+    
+    if ($http_code !== 200) {
+        error_log("Error fetching physical examinations batch $iteration. HTTP code: " . $http_code);
+        $has_more = false;
+    } else {
+        $batch = json_decode($response, true) ?: [];
+        if (empty($batch)) {
+            $has_more = false;
+        } else {
+            $physical_exam_records = array_merge($physical_exam_records, $batch);
+            $offset += $limit;
+            $iteration++;
+            
+            if (count($batch) < $limit) {
+                $has_more = false;
+            }
+        }
+    }
 }
 
-// Query 2: Get all donor_form records
-$donor_form_url = SUPABASE_URL . '/rest/v1/donor_form?select=donor_id,surname,first_name,middle_name,birthdate,age,prc_donor_number';
+error_log("Total physical exam records fetched: " . count($physical_exam_records));
 
-$ch2 = curl_init($donor_form_url);
-curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch2, CURLOPT_HTTPHEADER, $headers);
-$donor_response = curl_exec($ch2);
-$donor_http_code = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
-curl_close($ch2);
+// Query 2: Get all donor_form records using pagination
+$donor_records = [];
+$offset = 0;
+$limit = 1000;
+$has_more = true;
+$max_iterations = 10;
+$iteration = 0;
 
-if ($donor_http_code !== 200) {
-    error_log("Error fetching donor forms. HTTP code: " . $donor_http_code);
-    $donor_records = [];
-} else {
-    $donor_records = json_decode($donor_response, true) ?: [];
+while ($has_more && $iteration < $max_iterations) {
+    $donor_form_url = SUPABASE_URL . '/rest/v1/donor_form?select=donor_id,surname,first_name,middle_name,birthdate,age,prc_donor_number&limit=' . $limit . '&offset=' . $offset;
+    
+    $ch2 = curl_init($donor_form_url);
+    curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch2, CURLOPT_HTTPHEADER, $headers);
+    $donor_response = curl_exec($ch2);
+    $donor_http_code = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
+    curl_close($ch2);
+    
+    error_log("Donor form batch $iteration: fetched " . (($donor_http_code === 200) ? count(json_decode($donor_response, true) ?: []) : 0) . " records (offset: $offset)");
+    
+    if ($donor_http_code !== 200) {
+        error_log("Error fetching donor forms batch $iteration. HTTP code: " . $donor_http_code);
+        $has_more = false;
+    } else {
+        $batch = json_decode($donor_response, true) ?: [];
+        if (empty($batch)) {
+            $has_more = false;
+        } else {
+            $donor_records = array_merge($donor_records, $batch);
+            $offset += $limit;
+            $iteration++;
+            
+            if (count($batch) < $limit) {
+                $has_more = false;
+            }
+        }
+    }
 }
+
+error_log("Total donor records fetched: " . count($donor_records));
 
 // Create donor lookup array
 $donor_lookup = [];
@@ -137,6 +239,8 @@ foreach ($donor_records as $donor) {
 // Create unified data structure with both processed and unprocessed records
 $all_records = [];
 $donor_latest_exams = []; // Track the latest exam per donor
+
+error_log("Blood Collection Dashboard - Starting record processing with " . count($physical_exam_records) . " physical exams and " . count($donor_records) . " donor records");
 
 foreach ($physical_exam_records as $exam) {
     $donor_id = $exam['donor_id'];
@@ -183,6 +287,8 @@ foreach ($physical_exams as $exam) {
         $all_records[] = $record;
     }
 }
+
+error_log("Blood Collection Dashboard - Total records processed: " . count($all_records));
 
 
 
@@ -586,39 +692,86 @@ foreach ($display_records as $index => $record) {
             padding: 0.5rem 0.75rem;
         }
 
-        /* Pagination Styles */
+        /* Enhanced Pagination Styles */
         .pagination-container {
             margin-top: 2rem;
+            padding: 1rem 0;
         }
 
         .pagination {
             justify-content: center;
+            margin: 0;
+            flex-wrap: wrap;
+        }
+
+        .page-item {
+            margin: 0 2px;
         }
 
         .page-link {
             color: #333;
             border-color: #dee2e6;
-            padding: 0.5rem 1rem;
+            padding: 0.5rem 0.75rem;
             transition: all 0.2s ease;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
+            min-width: 40px;
+            text-align: center;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .page-link:hover {
             background-color: #f8f9fa;
             color: var(--primary-color);
-            border-color: #dee2e6;
+            border-color: var(--primary-color);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .page-item.active .page-link {
             background-color: var(--primary-color);
             border-color: var(--primary-color);
             color: white;
+            font-weight: 600;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
         }
 
         .page-item.disabled .page-link {
             color: #6c757d;
-            background-color: #fff;
+            background-color: #f8f9fa;
             border-color: #dee2e6;
+            cursor: not-allowed;
+        }
+
+        .page-item.disabled .page-link:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Ellipsis styling */
+        .page-item.disabled .page-link {
+            cursor: default;
+        }
+
+        /* Responsive pagination */
+        @media (max-width: 768px) {
+            .pagination {
+                flex-wrap: wrap;
+                gap: 2px;
+            }
+            
+            .page-link {
+                padding: 0.4rem 0.6rem;
+                font-size: 0.85rem;
+                min-width: 35px;
+            }
+            
+            .page-link i {
+                font-size: 0.8rem;
+            }
+        }
         }
 
         /* Badge styling */
@@ -1992,19 +2145,52 @@ foreach ($display_records as $index => $record) {
                                 <ul class="pagination justify-content-center">
                                     <!-- Previous button -->
                                     <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Previous</a>
+                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
+                                            Previous
+                                        </a>
                                     </li>
                                     
-                                    <!-- Page numbers -->
-                                    <?php for($i = 1; $i <= $total_pages; $i++): ?>
+                                    <!-- Smart page numbers with ellipsis -->
+                                    <?php
+                                    $start_page = max(1, $current_page - 2);
+                                    $end_page = min($total_pages, $current_page + 2);
+                                    
+                                    // Always show first page
+                                    if ($start_page > 1): ?>
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page=1<?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>">1</a>
+                                        </li>
+                                        <?php if ($start_page > 2): ?>
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                    
+                                    <!-- Page numbers around current page -->
+                                    <?php for($i = $start_page; $i <= $end_page; $i++): ?>
                                         <li class="page-item <?php echo $current_page == $i ? 'active' : ''; ?>">
                                             <a class="page-link" href="?page=<?php echo $i; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>"><?php echo $i; ?></a>
                                         </li>
                                     <?php endfor; ?>
                                     
+                                    <!-- Always show last page -->
+                                    <?php if ($end_page < $total_pages): ?>
+                                        <?php if ($end_page < $total_pages - 1): ?>
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        <?php endif; ?>
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page=<?php echo $total_pages; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>"><?php echo $total_pages; ?></a>
+                                        </li>
+                                    <?php endif; ?>
+                                    
                                     <!-- Next button -->
                                     <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>Next</a>
+                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
+                                            Next
+                                        </a>
                                     </li>
                                 </ul>
                             </nav>
