@@ -105,6 +105,14 @@ class PhysicalExaminationModal {
             backdrops.forEach((backdrop, index) => {
             });
             
+            // Initialize defer button after modal is fully shown
+            if (typeof initializePhysicalExamDeferButton === 'function') {
+                console.log('Modal shown, initializing defer button...');
+                initializePhysicalExamDeferButton();
+            } else {
+                console.warn('initializePhysicalExamDeferButton function not found');
+            }
+            
             // Ensure all backdrops have correct z-index
             backdrops.forEach((backdrop, index) => {
                 if (backdrop.style.zIndex !== '1064') {

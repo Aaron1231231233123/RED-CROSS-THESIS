@@ -99,9 +99,34 @@ if (file_exists($cacheFile) && file_exists($cacheMetaFile)) {
 $bloodInventory = [];
 
 try {
-    // OPTIMIZATION 1: Single query to blood_bank_units table (has all the data we need!)
-    $bloodBankUnitsResponse = supabaseRequest("blood_bank_units?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,hospital_request_id,created_at,updated_at&unit_serial_number=not.is.null&order=collected_at.desc");
-    $bloodBankUnitsData = isset($bloodBankUnitsResponse['data']) ? $bloodBankUnitsResponse['data'] : [];
+    // OPTIMIZATION 1: Fetch ALL blood_bank_units records using pagination to bypass 1000 record limit
+    $bloodBankUnitsData = [];
+    $offset = 0;
+    $limit = 1000;
+    $hasMore = true;
+    $maxIterations = 10; // Safety limit to prevent infinite loops
+    $iteration = 0;
+    
+    while ($hasMore && $iteration < $maxIterations) {
+        $endpoint = "blood_bank_units?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,hospital_request_id,created_at,updated_at&unit_serial_number=not.is.null&order=collected_at.desc&limit={$limit}&offset={$offset}";
+        $bloodBankUnitsResponse = supabaseRequest($endpoint);
+        $batchData = isset($bloodBankUnitsResponse['data']) ? $bloodBankUnitsResponse['data'] : [];
+        
+        if (empty($batchData)) {
+            $hasMore = false;
+        } else {
+            $bloodBankUnitsData = array_merge($bloodBankUnitsData, $batchData);
+            $offset += $limit;
+            $iteration++;
+            
+            // If we got less than the limit, we've reached the end
+            if (count($batchData) < $limit) {
+                $hasMore = false;
+            }
+        }
+    }
+    
+    error_log("Blood Bank Dashboard: Fetched " . count($bloodBankUnitsData) . " total records in " . $iteration . " batches");
     
     // OPTIMIZATION 2: Get donor data only for units we actually have (reduces data transfer)
     if (!empty($bloodBankUnitsData)) {
@@ -293,24 +318,9 @@ file_put_contents($cacheMetaFile, json_encode($cacheMeta));
 // Cache loaded marker
 cache_loaded:
 
-// Pagination settings (needed for both cached and fresh data)
-$itemsPerPage = 10;
+// Display all records without pagination
 $totalItems = count($bloodInventory);
-$totalPages = ceil($totalItems / $itemsPerPage);
-$currentPage = isset($_GET['page']) ? intval($_GET['page']) : 1;
-
-// Ensure current page is valid
-if ($currentPage < 1) {
-    $currentPage = 1;
-} else if ($currentPage > $totalPages && $totalPages > 0) {
-    $currentPage = $totalPages;
-}
-
-// Calculate the starting index for the current page
-$startIndex = ($currentPage - 1) * $itemsPerPage;
-
-// Get the subset of blood inventory for the current page
-$currentPageInventory = array_slice($bloodInventory, $startIndex, $itemsPerPage);
+$currentPageInventory = $bloodInventory; // Show all records
 
 // OPTIMIZATION: Performance logging and caching
 $endTime = microtime(true);
@@ -898,7 +908,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <a href="Dashboard-Inventory-System-Hospital-Request.php" class="nav-link">
                             <span><i class="fas fa-list"></i>Hospital Requests</span>
                         </a>
-                        <a href="dashboard-Inventory-System-Reports-reports-admin.php" class="nav-link">
+                        <a href="#" class="nav-link">
                             <span><i class="fas fa-chart-line"></i>Forecast Reports</span>
                         </a>
                         <a href="Dashboard-Inventory-System-Users.php" class="nav-link">
@@ -1006,12 +1016,23 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
                         'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
                     ]);
+
+                    // Threshold for low availability indicator (danger)
+                    $lowThreshold = 25;
+                    // Helper to render a small danger icon in the card corner when under threshold
+                    function renderDangerIcon($count, $threshold) {
+                        if ($count <= $threshold) {
+                            return '<span class="text-danger" title="Low availability" style="position:absolute; top:8px; right:10px;"><i class="fas fa-exclamation-triangle"></i></span>';
+                        }
+                        return '';
+                    }
                     ?>
                     
                     <div class="row mb-4">
                         <!-- Blood Type Cards -->
                         <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card">
+                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
+                                <?php echo renderDangerIcon((int)$bloodTypeCounts['A+'], $lowThreshold); ?>
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: A+</h5>
                                     <p class="card-text">Availability: 
@@ -1022,7 +1043,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </div>
                         
                         <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card">
+                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
+                                <?php echo renderDangerIcon((int)$bloodTypeCounts['A-'], $lowThreshold); ?>
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: A-</h5>
                                     <p class="card-text">Availability: 
@@ -1033,7 +1055,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </div>
                         
                         <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card">
+                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
+                                <?php echo renderDangerIcon((int)$bloodTypeCounts['B+'], $lowThreshold); ?>
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: B+</h5>
                                     <p class="card-text">Availability: 
@@ -1044,7 +1067,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </div>
                         
                         <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card">
+                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
+                                <?php echo renderDangerIcon((int)$bloodTypeCounts['B-'], $lowThreshold); ?>
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: B-</h5>
                                     <p class="card-text">Availability: 
@@ -1055,7 +1079,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </div>
                         
                         <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card">
+                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
+                                <?php echo renderDangerIcon((int)$bloodTypeCounts['O+'], $lowThreshold); ?>
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: O+</h5>
                                     <p class="card-text">Availability: 
@@ -1066,7 +1091,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </div>
                         
                         <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card">
+                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
+                                <?php echo renderDangerIcon((int)$bloodTypeCounts['O-'], $lowThreshold); ?>
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: O-</h5>
                                     <p class="card-text">Availability: 
@@ -1077,7 +1103,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </div>
                         
                         <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card">
+                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
+                                <?php echo renderDangerIcon((int)$bloodTypeCounts['AB+'], $lowThreshold); ?>
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: AB+</h5>
                                     <p class="card-text">Availability: 
@@ -1088,7 +1115,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </div>
                         
                         <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card">
+                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
+                                <?php echo renderDangerIcon((int)$bloodTypeCounts['AB-'], $lowThreshold); ?>
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: AB-</h5>
                                     <p class="card-text">Availability: 
@@ -1141,69 +1169,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </table>
                     </div>
 
-                    <!-- Pagination Controls -->
-                    <nav aria-label="Page navigation">
-                        <ul class="pagination justify-content-center">
-                            <?php if ($currentPage > 1): ?>
-                                <li class="page-item">
-                                    <a class="page-link" href="Dashboard-Inventory-System-Bloodbank.php?page=<?php echo $currentPage - 1; ?>" aria-label="Previous">
-                                        <span aria-hidden="true">&laquo;</span>
-                                    </a>
-                                </li>
-                            <?php endif; ?>
-
-                            <?php
-                            // Display limited number of page links
-                            $maxPagesToShow = 5;
-                            $startPage = max(1, $currentPage - floor($maxPagesToShow / 2));
-                            $endPage = min($totalPages, $startPage + $maxPagesToShow - 1);
-                            
-                            // Adjust start page if we're near the end
-                            if ($endPage - $startPage + 1 < $maxPagesToShow && $startPage > 1) {
-                                $startPage = max(1, $endPage - $maxPagesToShow + 1);
-                            }
-                            
-                            // Show first page with ellipsis if needed
-                            if ($startPage > 1) {
-                                echo '<li class="page-item"><a class="page-link" href="Dashboard-Inventory-System-Bloodbank.php?page=1">1</a></li>';
-                                if ($startPage > 2) {
-                                    echo '<li class="page-item disabled"><span class="page-link">...</span></li>';
-                                }
-                            }
-                            
-                            // Show page links
-                            for ($i = $startPage; $i <= $endPage; $i++): 
-                            ?>
-                                <li class="page-item <?php echo ($i == $currentPage) ? 'active' : ''; ?>">
-                                    <a class="page-link" href="Dashboard-Inventory-System-Bloodbank.php?page=<?php echo $i; ?>">
-                                        <?php echo $i; ?>
-                                    </a>
-                                </li>
-                            <?php endfor; 
-                            
-                            // Show last page with ellipsis if needed
-                            if ($endPage < $totalPages) {
-                                if ($endPage < $totalPages - 1) {
-                                    echo '<li class="page-item disabled"><span class="page-link">...</span></li>';
-                                }
-                                echo '<li class="page-item"><a class="page-link" href="Dashboard-Inventory-System-Bloodbank.php?page=' . $totalPages . '">' . $totalPages . '</a></li>';
-                            }
-                            ?>
-
-                            <?php if ($currentPage < $totalPages): ?>
-                                <li class="page-item">
-                                    <a class="page-link" href="Dashboard-Inventory-System-Bloodbank.php?page=<?php echo $currentPage + 1; ?>" aria-label="Next">
-                                        <span aria-hidden="true">&raquo;</span>
-                                    </a>
-                                </li>
-                            <?php endif; ?>
-                        </ul>
-                    </nav>
-                    
-                    <!-- Showing entries information -->
+                    <!-- Showing all entries information -->
                     <div class="text-center mt-2 mb-4">
                         <p class="text-muted">
-                            Showing <?php echo min($totalItems, $startIndex + 1); ?> to <?php echo min($totalItems, $startIndex + $itemsPerPage); ?> of <?php echo $totalItems; ?> entries
+                            Showing all <?php echo $totalItems; ?> blood bank units
                         </p>
                     </div>
                 </div>
@@ -1340,16 +1309,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         });
     </script>
     <script>
-        // Data for the current page
+        // Data for all records
         const bloodInventory = <?php echo json_encode($bloodInventory); ?>;
         const currentPageInventory = <?php echo json_encode($currentPageInventory); ?>;
-        const startIndex = <?php echo $startIndex; ?>;
         
         // Function to display blood bank unit details in modal
         function showDonorDetails(index) {
-            // We need to use the real index from the full inventory array
-            const realIndex = startIndex + index;
-            const bag = bloodInventory[realIndex];
+            // Since we're showing all records, the index is the same
+            const bag = bloodInventory[index];
             
             // Show loading indicator
             document.getElementById('modal-loading').style.display = 'block';
@@ -1436,9 +1403,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 loadingModal.show();
                 
                 setTimeout(() => {
-                    // Pass current page as source parameter for proper redirect back
-                    const currentPage = encodeURIComponent(window.location.pathname + window.location.search);
-                    window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + currentPage;
+                    window.location.href = '../../src/views/forms/donor-form-modal.php';
                 }, 1500);
             };
             

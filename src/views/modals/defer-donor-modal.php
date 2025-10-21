@@ -35,8 +35,11 @@
                             <option value="Temporary Deferral" selected>
                                 <i class="fas fa-clock me-2"></i>Temporary Deferral - Donor can donate after specified period
                             </option>
+                            <option value="Permanent Deferral" id="permanentOption" style="display: none;">
+                                <i class="fas fa-ban me-2"></i>Permanent Deferral - Donor permanently ineligible
+                            </option>
                         </select>
-                        <div class="form-text">Temporary deferral is pre-selected for initial screening</div>
+                        <div class="form-text" id="deferralTypeHelp">Temporary deferral is pre-selected for initial screening</div>
                     </div>
 
                     <!-- Duration Selection (only for Temporary Deferral) -->
@@ -131,9 +134,15 @@
                         <label for="disapprovalReason" class="form-label fw-semibold">Disapproval Reason *</label>
                         <select class="form-select" id="disapprovalReason" name="disapproval_reason" required>
                             <option value="">Select reason for deferral...</option>
-                            <option value="Weight out of acceptable range">Weight out of acceptable range</option>
-                            <option value="Low Hemoglobin">Low Hemoglobin</option>
-                            <option value="Both">Both</option>
+                            <!-- Initial Screening Reasons (default) -->
+                            <option value="Weight out of acceptable range" class="screening-reason">Weight out of acceptable range</option>
+                            <option value="Low Hemoglobin" class="screening-reason">Low Hemoglobin</option>
+                            <option value="Both" class="screening-reason">Both</option>
+                            <!-- Physical Examination Reasons (hidden by default) -->
+                            <option value="Abnormal Vital Signs (BP/Pulse/Temp)" class="physical-reason" style="display: none;">Abnormal Vital Signs (BP/Pulse/Temp)</option>
+                            <option value="Unfit General Appearance" class="physical-reason" style="display: none;">Unfit General Appearance</option>
+                            <option value="Skin condition contraindication" class="physical-reason" style="display: none;">Skin condition contraindication</option>
+                            <option value="Heart/Lungs findings contraindication" class="physical-reason" style="display: none;">Heart/Lungs findings contraindication</option>
                         </select>
                         <div class="form-text">Please select the appropriate reason for deferral.</div>
                     </div>

@@ -4138,10 +4138,8 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         }
                     }, 50);
                     
-                    // Initialize defer button after modal opens
-                    if (typeof initializePhysicalExamDeferButton === 'function') {
-                        initializePhysicalExamDeferButton();
-                    }
+                    // Initialize defer button after modal is shown (moved to shown.bs.modal event)
+                    // This will be handled in the physical examination modal's shown.bs.modal event
                     
                     // Initialize medical history approval functionality
                     if (typeof window.initializeMedicalHistoryApproval === 'function') {

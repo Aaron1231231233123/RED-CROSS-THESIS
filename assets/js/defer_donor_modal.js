@@ -7,6 +7,78 @@ let deferModalData = null;
 // Note: fetchAllSourceData, fetchScreeningFormData, fetchPhysicalExamData, and fetchDonorFormData
 // are imported from medical-history-approval.js to avoid duplication
 
+// Comprehensive function to fetch data from all source tables for physical examination deferral
+async function fetchAllSourceData(donorId) {
+    try {
+        const [screeningForm, physicalExam, donorForm] = await Promise.all([
+            fetchScreeningFormData(donorId),
+            fetchPhysicalExamData(donorId),
+            fetchDonorFormData(donorId)
+        ]);
+        
+        return {
+            screeningForm,
+            physicalExam,
+            donorForm
+        };
+    } catch (error) {
+        console.error('Error fetching all source data:', error);
+        return {
+            screeningForm: null,
+            physicalExam: null,
+            donorForm: null
+        };
+    }
+}
+
+// Fetch data from screening_form table for physical examination deferral
+async function fetchScreeningFormData(donorId) {
+    try {
+        const response = await fetch(`../api/get-screening-form.php?donor_id=${donorId}`);
+        const data = await response.json();
+        
+        if (data.success && data.screening_form) {
+            return data.screening_form;
+        }
+        return null;
+    } catch (error) {
+        console.error('Error fetching screening form data:', error);
+        return null;
+    }
+}
+
+// Fetch data from physical_examination table for physical examination deferral
+async function fetchPhysicalExamData(donorId) {
+    try {
+        const response = await fetch(`../api/get-physical-examination.php?donor_id=${donorId}`);
+        const data = await response.json();
+        
+        if (data.success && data.physical_exam) {
+            return data.physical_exam;
+        }
+        return null;
+    } catch (error) {
+        console.error('Error fetching physical exam data:', error);
+        return null;
+    }
+}
+
+// Fetch data from donor_form table for physical examination deferral
+async function fetchDonorFormData(donorId) {
+    try {
+        const response = await fetch(`../api/get-donor-form.php?donor_id=${donorId}`);
+        const data = await response.json();
+        
+        if (data.success && data.donor_form) {
+            return data.donor_form;
+        }
+        return null;
+    } catch (error) {
+        console.error('Error fetching donor form data:', error);
+        return null;
+    }
+}
+
 // Initialize defer modal functionality
 function initializeDeferModal() {
     const deferralTypeSelect = document.getElementById('deferralTypeSelect');
@@ -20,54 +92,20 @@ function initializeDeferModal() {
     const durationOptions = document.querySelectorAll('.duration-option');
     
     // Validation elements
-    const disapprovalReasonTextarea = document.getElementById('disapprovalReason');
-    const deferCharCountElement = document.getElementById('deferCharCount');
-    const deferReasonError = document.getElementById('deferReasonError');
-    const deferReasonSuccess = document.getElementById('deferReasonSuccess');
-    
-    const MIN_LENGTH = 10;
-    const MAX_LENGTH = 200;
+    const disapprovalReasonSelect = document.getElementById('disapprovalReason');
 
     // Update disapproval reason validation
     function updateDeferValidation() {
-        if (!disapprovalReasonTextarea) return;
+        if (!disapprovalReasonSelect) return;
         
-        const currentLength = disapprovalReasonTextarea.value.length;
-        const isValid = currentLength >= MIN_LENGTH && currentLength <= MAX_LENGTH;
-        
-        // Update character count
-        deferCharCountElement.textContent = `${currentLength}/${MAX_LENGTH} characters`;
-        
-        // Update character count color with Red Cross theme
-        if (currentLength < MIN_LENGTH) {
-            deferCharCountElement.className = 'text-muted'; // Gray for incomplete
-        } else if (currentLength > MAX_LENGTH) {
-            deferCharCountElement.className = 'text-danger'; // Red for over limit
-        } else {
-            deferCharCountElement.className = 'text-success'; // Green for valid
-        }
+        const hasReason = !!disapprovalReasonSelect.value;
         
         // Update validation feedback
-        if (currentLength === 0) {
-            deferReasonError.style.display = 'none';
-            deferReasonSuccess.style.display = 'none';
-            disapprovalReasonTextarea.classList.remove('is-valid', 'is-invalid');
-        } else if (currentLength < MIN_LENGTH) {
-            deferReasonError.style.display = 'block';
-            deferReasonSuccess.style.display = 'none';
-            disapprovalReasonTextarea.classList.add('is-invalid');
-            disapprovalReasonTextarea.classList.remove('is-valid');
-        } else if (currentLength > MAX_LENGTH) {
-            deferReasonError.textContent = `Please keep the reason under ${MAX_LENGTH} characters.`;
-            deferReasonError.style.display = 'block';
-            deferReasonSuccess.style.display = 'none';
-            disapprovalReasonTextarea.classList.add('is-invalid');
-            disapprovalReasonTextarea.classList.remove('is-valid');
+        if (!hasReason) {
+            disapprovalReasonSelect.classList.remove('is-valid', 'is-invalid');
         } else {
-            deferReasonError.style.display = 'none';
-            deferReasonSuccess.style.display = 'block';
-            disapprovalReasonTextarea.classList.add('is-valid');
-            disapprovalReasonTextarea.classList.remove('is-invalid');
+            disapprovalReasonSelect.classList.add('is-valid');
+            disapprovalReasonSelect.classList.remove('is-invalid');
         }
         
         // Update submit button state
@@ -76,9 +114,9 @@ function initializeDeferModal() {
     
     // Update submit button state based on all form validation
     function updateDeferSubmitButtonState() {
-        if (!disapprovalReasonTextarea) return;
+        if (!disapprovalReasonSelect) return;
         
-        const reasonValid = disapprovalReasonTextarea.value.length >= MIN_LENGTH && disapprovalReasonTextarea.value.length <= MAX_LENGTH;
+        const reasonValid = !!disapprovalReasonSelect.value;
         const deferralTypeValid = deferralTypeSelect.value !== '';
         
         // For temporary deferral, also check duration
@@ -237,11 +275,8 @@ function initializeDeferModal() {
     }
     
     // Add validation event listeners
-    if (disapprovalReasonTextarea) {
-        disapprovalReasonTextarea.addEventListener('input', updateDeferValidation);
-        disapprovalReasonTextarea.addEventListener('paste', () => {
-            setTimeout(updateDeferValidation, 10); // Small delay to allow paste to complete
-        });
+    if (disapprovalReasonSelect) {
+        disapprovalReasonSelect.addEventListener('change', updateDeferValidation);
     }
     
     // Update validation when deferral type changes
@@ -262,7 +297,7 @@ function validateDeferForm() {
     const selectedType = document.getElementById('deferralTypeSelect').value;
     const durationValue = document.getElementById('deferralDuration').value;
     const customDuration = document.getElementById('customDuration').value;
-    const disapprovalReason = document.getElementById('disapprovalReason').value.trim();
+    const disapprovalReason = document.getElementById('disapprovalReason').value;
 
     if (!selectedType) {
         showDeferToast('Validation Error', 'Please select a deferral type.', 'error');
@@ -272,34 +307,32 @@ function validateDeferForm() {
     }
 
     if (selectedType === 'Temporary Deferral') {
-        if (!durationValue) {
-            showDeferToast('Validation Error', 'Please select a duration for temporary deferral.', 'error');
-            document.getElementById('durationSection').scrollIntoView({ behavior: 'smooth' });
-            return false;
-        }
-        
-        if (durationValue === 'custom' && (!customDuration || customDuration < 1)) {
-            showDeferToast('Validation Error', 'Please enter a valid custom duration (minimum 1 day).', 'error');
-            document.getElementById('customDuration').focus();
-            return false;
-        }
+        const durationSection = document.getElementById('durationSection');
+        // Only validate duration if duration section is visible (physical examination mode)
+        if (durationSection.style.display !== 'none') {
+            if (!durationValue) {
+                showDeferToast('Validation Error', 'Please select a duration for temporary deferral.', 'error');
+                document.getElementById('durationSection').scrollIntoView({ behavior: 'smooth' });
+                return false;
+            }
+            
+            if (durationValue === 'custom' && (!customDuration || customDuration < 1)) {
+                showDeferToast('Validation Error', 'Please enter a valid custom duration (minimum 1 day).', 'error');
+                document.getElementById('customDuration').focus();
+                return false;
+            }
 
-        if (durationValue === 'custom' && customDuration > 3650) {
-            showDeferToast('Validation Error', 'Custom duration cannot exceed 3650 days (10 years).', 'error');
-            document.getElementById('customDuration').focus();
-            return false;
+            if (durationValue === 'custom' && customDuration > 3650) {
+                showDeferToast('Validation Error', 'Custom duration cannot exceed 3650 days (10 years).', 'error');
+                document.getElementById('customDuration').focus();
+                return false;
+            }
         }
     }
 
     if (!disapprovalReason) {
-        showDeferToast('Validation Error', 'Please provide a reason for the deferral.', 'error');
+        showDeferToast('Validation Error', 'Please select a reason for the deferral.', 'error');
         document.getElementById('disapprovalReason').scrollIntoView({ behavior: 'smooth' });
-        document.getElementById('disapprovalReason').focus();
-        return false;
-    }
-
-    if (disapprovalReason.length < 10) {
-        showDeferToast('Validation Error', 'Please provide a more detailed reason (minimum 10 characters).', 'error');
         document.getElementById('disapprovalReason').focus();
         return false;
     }
@@ -324,11 +357,18 @@ async function submitDeferral() {
     // Calculate final duration
     let finalDuration = null;
     if (deferralType === 'Temporary Deferral') {
-        const durationValue = document.getElementById('deferralDuration').value;
-        if (durationValue === 'custom') {
-            finalDuration = document.getElementById('customDuration').value;
+        const durationSection = document.getElementById('durationSection');
+        // Only calculate duration if duration section is visible (physical examination mode)
+        if (durationSection.style.display !== 'none') {
+            const durationValue = document.getElementById('deferralDuration').value;
+            if (durationValue === 'custom') {
+                finalDuration = document.getElementById('customDuration').value;
+            } else {
+                finalDuration = durationValue;
+            }
         } else {
-            finalDuration = durationValue;
+            // For initial screening, use a default duration of 2 days
+            finalDuration = '2';
         }
     }
 
@@ -618,13 +658,16 @@ function showDeferToast(title, message, type = 'success') {
 }
 
 // Open defer modal
-function openDeferModal(screeningData) {
+function openDeferModal(screeningData, source = 'physical') {
     // Set the hidden fields
     document.getElementById('defer-donor-id').value = screeningData.donor_form_id || '';
     document.getElementById('defer-screening-id').value = screeningData.screening_id || '';
     
     // Reset form
     document.getElementById('deferDonorForm').reset();
+    
+    // Configure modal based on source
+    configureDeferModalForSource(source);
     
     // Hide conditional sections
     const durationSection = document.getElementById('durationSection');
@@ -669,16 +712,58 @@ function openDeferModal(screeningData) {
     }, 200);
 }
 
+// Configure defer modal based on source (physical examination vs initial screening)
+function configureDeferModalForSource(source) {
+    const deferralTypeSelect = document.getElementById('deferralTypeSelect');
+    const permanentOption = document.getElementById('permanentOption');
+    const deferralTypeHelp = document.getElementById('deferralTypeHelp');
+    const durationSection = document.getElementById('durationSection');
+    
+    // Get all reason options
+    const screeningReasons = document.querySelectorAll('.screening-reason');
+    const physicalReasons = document.querySelectorAll('.physical-reason');
+    
+    if (source === 'physical') {
+        // Physical examination mode - show both permanent and temporary options
+        permanentOption.style.display = 'block';
+        deferralTypeSelect.value = 'Temporary Deferral';
+        deferralTypeHelp.textContent = 'Select deferral type based on examination findings';
+        
+        // Show physical examination reasons, hide screening reasons
+        screeningReasons.forEach(option => option.style.display = 'none');
+        physicalReasons.forEach(option => option.style.display = 'block');
+        
+        // Duration section is always visible for physical examination
+        durationSection.style.display = 'block';
+        
+    } else {
+        // Initial screening mode - only temporary deferral, no duration needed
+        permanentOption.style.display = 'none';
+        deferralTypeSelect.value = 'Temporary Deferral';
+        deferralTypeHelp.textContent = 'Temporary deferral is pre-selected for initial screening';
+        
+        // Show screening reasons, hide physical examination reasons
+        screeningReasons.forEach(option => option.style.display = 'block');
+        physicalReasons.forEach(option => option.style.display = 'none');
+        
+        // Hide duration section for initial screening
+        durationSection.style.display = 'none';
+    }
+}
+
 // Handle defer button click from physical examination modal
 function handleDeferClick(e) {
+    console.log('Defer button clicked!');
     e.preventDefault();
     
     // Get current screening data from the physical examination modal
     const donorId = document.getElementById('physical-donor-id')?.value;
     const screeningId = document.getElementById('physical-screening-id')?.value;
     
+    console.log('Donor ID:', donorId, 'Screening ID:', screeningId);
     
     if (!donorId || !screeningId) {
+        console.error('Missing donor or screening ID');
         showDeferToast('Error', 'Unable to get donor information. Please try again.', 'error');
         return;
     }
@@ -688,25 +773,41 @@ function handleDeferClick(e) {
         screening_id: screeningId
     };
     
-    openDeferModal(screeningData);
+    console.log('Opening defer modal with data:', screeningData);
+    openDeferModal(screeningData, 'physical');
 }
 
 // Initialize defer button in physical examination modal
 function initializePhysicalExamDeferButton() {
-    // Use a timeout to ensure the modal is fully loaded
-    setTimeout(() => {
-        const physicalDeferBtn = document.querySelector('.physical-defer-btn');
+    console.log('Initializing physical exam defer button...');
+    
+    // Since this is called after modal is shown, we can try immediately
+    const physicalDeferBtn = document.querySelector('.physical-defer-btn');
+    
+    if (physicalDeferBtn) {
+        console.log('Physical defer button found, attaching event listener');
         
-        if (physicalDeferBtn) {
-            // Remove any existing event listeners
-            physicalDeferBtn.removeEventListener('click', handleDeferClick);
-            
-            // Add the event listener
-            physicalDeferBtn.addEventListener('click', handleDeferClick);
-        } else {
-            console.error('Physical defer button not found in DOM');
-        }
-    }, 500);
+        // Remove any existing event listeners
+        physicalDeferBtn.removeEventListener('click', handleDeferClick);
+        
+        // Add the event listener
+        physicalDeferBtn.addEventListener('click', handleDeferClick);
+        
+        console.log('Event listener attached to defer button');
+    } else {
+        console.error('Physical defer button not found in DOM, trying with timeout...');
+        // Try again after a short delay in case DOM isn't fully ready
+        setTimeout(() => {
+            const retryBtn = document.querySelector('.physical-defer-btn');
+            if (retryBtn) {
+                console.log('Physical defer button found on retry, attaching event listener');
+                retryBtn.removeEventListener('click', handleDeferClick);
+                retryBtn.addEventListener('click', handleDeferClick);
+            } else {
+                console.error('Physical defer button still not found after retry');
+            }
+        }, 100);
+    }
 }
 
 // Export functions for use in other files

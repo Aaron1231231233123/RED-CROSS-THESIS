@@ -306,7 +306,10 @@ function validateScreeningDeferForm() {
         return false;
     }
 
-    if (selectedType === 'Temporary Deferral') {
+    // For initial screening, duration validation is skipped since duration section is hidden
+    // Duration validation only applies to physical examination deferrals
+    const durationSection = document.getElementById('durationSection');
+    if (selectedType === 'Temporary Deferral' && durationSection.style.display !== 'none') {
         if (!durationValue) {
             showScreeningDeferToast('Validation Error', 'Please select a duration for temporary deferral.', 'error');
             document.getElementById('durationSection').scrollIntoView({ behavior: 'smooth' });
@@ -353,11 +356,18 @@ async function submitScreeningDeferral() {
     // Calculate final duration
     let finalDuration = null;
     if (deferralType === 'Temporary Deferral') {
-        const durationValue = document.getElementById('deferralDuration').value;
-        if (durationValue === 'custom') {
-            finalDuration = document.getElementById('customDuration').value;
+        const durationSection = document.getElementById('durationSection');
+        // Only calculate duration if duration section is visible (physical examination mode)
+        if (durationSection.style.display !== 'none') {
+            const durationValue = document.getElementById('deferralDuration').value;
+            if (durationValue === 'custom') {
+                finalDuration = document.getElementById('customDuration').value;
+            } else {
+                finalDuration = durationValue;
+            }
         } else {
-            finalDuration = durationValue;
+            // For initial screening, use a default duration of 2 days
+            finalDuration = '2';
         }
     }
 
@@ -703,16 +713,16 @@ function openScreeningDeferModal(screeningData) {
     // Reset form
     document.getElementById('deferDonorForm').reset();
     
-    // Set default values
-    document.getElementById('deferralTypeSelect').value = 'Temporary Deferral';
-    document.getElementById('deferralDuration').value = '2';
-    document.querySelector('.duration-option[data-days="2"]').classList.add('active');
+    // Configure modal for initial screening mode
+    configureDeferModalForSource('screening');
     
-    // Show duration section since Temporary Deferral is pre-selected
+    // Hide conditional sections
     const durationSection = document.getElementById('durationSection');
     const customDurationSection = document.getElementById('customDurationSection');
     
-    durationSection.style.display = 'block';
+    durationSection.classList.remove('show');
+    customDurationSection.classList.remove('show');
+    durationSection.style.display = 'none';
     customDurationSection.style.display = 'none';
     document.getElementById('durationSummary').style.display = 'none';
     
@@ -747,6 +757,45 @@ function openScreeningDeferModal(screeningData) {
     setTimeout(() => {
         initializeScreeningDeferModal();
     }, 200);
+}
+
+// Configure defer modal based on source (physical examination vs initial screening)
+function configureDeferModalForSource(source) {
+    const deferralTypeSelect = document.getElementById('deferralTypeSelect');
+    const permanentOption = document.getElementById('permanentOption');
+    const deferralTypeHelp = document.getElementById('deferralTypeHelp');
+    const durationSection = document.getElementById('durationSection');
+    
+    // Get all reason options
+    const screeningReasons = document.querySelectorAll('.screening-reason');
+    const physicalReasons = document.querySelectorAll('.physical-reason');
+    
+    if (source === 'physical') {
+        // Physical examination mode - show both permanent and temporary options
+        permanentOption.style.display = 'block';
+        deferralTypeSelect.value = 'Temporary Deferral';
+        deferralTypeHelp.textContent = 'Select deferral type based on examination findings';
+        
+        // Show physical examination reasons, hide screening reasons
+        screeningReasons.forEach(option => option.style.display = 'none');
+        physicalReasons.forEach(option => option.style.display = 'block');
+        
+        // Duration section is always visible for physical examination
+        durationSection.style.display = 'block';
+        
+    } else {
+        // Initial screening mode - only temporary deferral, no duration needed
+        permanentOption.style.display = 'none';
+        deferralTypeSelect.value = 'Temporary Deferral';
+        deferralTypeHelp.textContent = 'Temporary deferral is pre-selected for initial screening';
+        
+        // Show screening reasons, hide physical examination reasons
+        screeningReasons.forEach(option => option.style.display = 'block');
+        physicalReasons.forEach(option => option.style.display = 'none');
+        
+        // Hide duration section for initial screening
+        durationSection.style.display = 'none';
+    }
 }
 
 // Handle screening defer button click

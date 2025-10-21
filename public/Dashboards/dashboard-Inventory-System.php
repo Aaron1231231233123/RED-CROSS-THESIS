@@ -29,7 +29,7 @@ include_once __DIR__ . '/module/optimized_functions.php';
 $startTime = microtime(true);
 
 // OPTIMIZATION: Smart caching with intelligent change detection
-$cacheKey = 'home_dashboard_v3_' . date('Y-m-d'); // Daily cache key (bumped to v3)
+$cacheKey = 'home_dashboard_v4_' . date('Y-m-d'); // Daily cache key (bumped to v4 for comprehensive data structure)
 $cacheFile = sys_get_temp_dir() . '/' . $cacheKey . '.json';
 $cacheMetaFile = sys_get_temp_dir() . '/' . $cacheKey . '_meta.json';
 
@@ -76,15 +76,16 @@ if (file_exists($cacheFile) && file_exists($cacheMetaFile)) {
             $bloodInStockCount = $cachedData['bloodInStockCount'] ?? 0;
             $bloodByType = $cachedData['bloodByType'] ?? [];
             $bloodInventory = $cachedData['bloodInventory'] ?? [];
-            $totalDonorCount = $cachedData['totalDonorCount'] ?? 0;
+            $totalDonorCount = $cachedData['totalDonorCount'] ?? $bloodReceivedCount;
             $cityDonorCounts = $cachedData['cityDonorCounts'] ?? [];
             $heatmapData = $cachedData['heatmapData'] ?? [];
             $donorLookup = $cachedData['donorLookup'] ?? [];
             
             // Debug cache loading
-            error_log("CACHE LOADED (v3) - Total Donor Count: " . $totalDonorCount . " (Age: " . round($cacheAge/60) . " mins)");
-            error_log("CACHE LOADED - City Donor Counts: " . json_encode($cityDonorCounts));
-            error_log("CACHE LOADED - Heatmap Data Count: " . count($heatmapData));
+            error_log("CACHE LOADED (v4) - Total Donor Count: " . $totalDonorCount . " (Age: " . round($cacheAge/60) . " mins)");
+            error_log("CACHE LOADED - Blood Received Count: " . $bloodReceivedCount);
+            error_log("CACHE LOADED - Blood In Stock Count: " . $bloodInStockCount);
+            error_log("CACHE LOADED - Blood Inventory Count: " . count($bloodInventory));
             
             // Skip to the end of data processing
             goto cache_loaded;
@@ -111,73 +112,184 @@ if (isset($bloodRequestsResponse['data']) && is_array($bloodRequestsResponse['da
 // ----------------------------------------------------
 // PART 2-3: GET BLOOD RECEIVED, INVENTORY, AND BLOOD TYPE COUNTS IN ONE PASS
 // ----------------------------------------------------
+// Variables will be set by the comprehensive data processing below
+
+// OPTIMIZED: Fetch blood inventory data with enhanced performance (same logic as Blood Bank dashboard)
 $bloodInventory = [];
-$bloodInStockCount = 0;
-$bloodReceivedCount = 0;
-$seenDonorIds = [];
-$bloodByType = [
-    'A+' => 0,
-    'A-' => 0,
-    'B+' => 0,
-    'B-' => 0,
-    'O+' => 0,
-    'O-' => 0,
-    'AB+' => 0,
-    'AB-' => 0
-];
 
-// Single query without ORDER BY for speed
-$bloodBankUnitsResponse = supabaseRequest("blood_bank_units?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,created_at,updated_at&unit_serial_number=not.is.null");
-$bloodBankUnitsData = isset($bloodBankUnitsResponse['data']) ? $bloodBankUnitsResponse['data'] : [];
-
-if (is_array($bloodBankUnitsData) && !empty($bloodBankUnitsData)) {
-    foreach ($bloodBankUnitsData as $item) {
-        // Count unique donors (successful donations)
-        $donorId = $item['donor_id'];
-        if (!isset($seenDonorIds[$donorId])) {
-            $seenDonorIds[$donorId] = true;
-            $bloodReceivedCount++;
+try {
+    // OPTIMIZATION 1: Fetch ALL blood_bank_units records using pagination to bypass 1000 record limit
+    $bloodBankUnitsData = [];
+    $offset = 0;
+    $limit = 1000;
+    $hasMore = true;
+    $maxIterations = 10; // Safety limit to prevent infinite loops
+    $iteration = 0;
+    
+    while ($hasMore && $iteration < $maxIterations) {
+        $endpoint = "blood_bank_units?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,hospital_request_id,created_at,updated_at&unit_serial_number=not.is.null&order=collected_at.desc&limit={$limit}&offset={$offset}";
+        $bloodBankUnitsResponse = supabaseRequest($endpoint);
+        $batchData = isset($bloodBankUnitsResponse['data']) ? $bloodBankUnitsResponse['data'] : [];
+        
+        if (empty($batchData)) {
+            $hasMore = false;
+        } else {
+            $bloodBankUnitsData = array_merge($bloodBankUnitsData, $batchData);
+            $offset += $limit;
+            $iteration++;
+            
+            // If we got less than the limit, we've reached the end
+            if (count($batchData) < $limit) {
+                $hasMore = false;
+            }
         }
-
-        // Parse dates once
-        $collectionDate = new DateTime($item['collected_at']);
-        $expirationDate = new DateTime($item['expires_at']);
-        $today = new DateTime();
-
-        // Skip expired or handed over units for inventory/availability
-        $isExpired = ($today > $expirationDate);
-        $isHandedOver = ($item['status'] === 'handed_over');
-        if ($isExpired || $isHandedOver) {
-            continue;
-        }
-
-        // Count available inventory
-        $bloodInStockCount += 1;
-
-        // Update blood type availability
-        $bt = $item['blood_type'] ?? '';
-        if (isset($bloodByType[$bt])) {
-            $bloodByType[$bt] += 1;
-        }
-
-        // Build simplified inventory list used by UI
-        $bloodInventory[] = [
-            'unit_id' => $item['unit_id'],
-            'donor_id' => $donorId,
-            'serial_number' => $item['unit_serial_number'],
-            'blood_type' => $bt,
-            'bags' => 1,
-            'bag_type' => $item['bag_type'] ?: 'Standard',
-            'bag_brand' => $item['bag_brand'] ?: 'N/A',
-            'collection_date' => $collectionDate->format('Y-m-d'),
-            'expiration_date' => $expirationDate->format('Y-m-d'),
-            'status' => 'Valid',
-            'unit_status' => $item['status'],
-            'created_at' => $item['created_at'],
-            'updated_at' => $item['updated_at'],
-        ];
     }
+    
+    error_log("Main Dashboard: Fetched " . count($bloodBankUnitsData) . " total records in " . $iteration . " batches");
+    
+    // OPTIMIZATION 2: Get donor data only for units we actually have (reduces data transfer)
+    if (!empty($bloodBankUnitsData)) {
+        $donorIds = array_unique(array_column($bloodBankUnitsData, 'donor_id'));
+        $donorIdsFilter = implode(',', array_map('intval', $donorIds));
+        
+        $donorResponse = supabaseRequest("donor_form?select=donor_id,surname,first_name,middle_name,birthdate,sex,civil_status&donor_id=in.({$donorIdsFilter})");
+        $donorData = isset($donorResponse['data']) ? $donorResponse['data'] : [];
+        
+        // Create lookup array for donor data
+        $donorLookup = [];
+        foreach ($donorData as $donor) {
+            $donorLookup[$donor['donor_id']] = $donor;
+        }
+    } else {
+        $donorLookup = [];
+    }
+    
+    // OPTIMIZATION 3: Batch process with array functions instead of loops
+    if (is_array($bloodBankUnitsData) && !empty($bloodBankUnitsData)) {
+        // Filter out empty serial numbers in one pass
+        $filteredUnits = array_filter($bloodBankUnitsData, function($item) {
+            return !empty($item['unit_serial_number']);
+        });
+        
+        // OPTIMIZATION 4: Use array_map for parallel processing
+        $bloodInventory = array_map(function($item) use ($donorLookup) {
+            // Parse dates once
+            $collectionDate = new DateTime($item['collected_at']);
+            $expirationDate = new DateTime($item['expires_at']);
+            $today = new DateTime();
+            
+            // Determine status efficiently
+            $status = 'Valid';
+            if ($today > $expirationDate) {
+                $status = 'Expired';
+            } elseif ($item['status'] === 'handed_over') {
+                $status = 'Handed Over';
+            }
+            
+            // Get donor info efficiently
+            $donor = $donorLookup[$item['donor_id']] ?? null;
+            $donorInfo = [
+                'surname' => 'Not Found',
+                'first_name' => '',
+                'middle_name' => '',
+                'birthdate' => '',
+                'age' => '',
+                'sex' => '',
+                'civil_status' => ''
+            ];
+            
+            if ($donor) {
+                $age = '';
+                if (!empty($donor['birthdate'])) {
+                    $birthdate = new DateTime($donor['birthdate']);
+                    $age = $birthdate->diff($today)->y;
+                }
+                
+                $donorInfo = [
+                    'surname' => $donor['surname'] ?? '',
+                    'first_name' => $donor['first_name'] ?? '',
+                    'middle_name' => $donor['middle_name'] ?? '',
+                    'birthdate' => !empty($donor['birthdate']) ? date('d/m/Y', strtotime($donor['birthdate'])) : '',
+                    'age' => $age,
+                    'sex' => $donor['sex'] ?? '',
+                    'civil_status' => $donor['civil_status'] ?? ''
+                ];
+            }
+            
+            return [
+                'unit_id' => $item['unit_id'],
+                'donor_id' => $item['donor_id'],
+                'serial_number' => $item['unit_serial_number'],
+                'blood_type' => $item['blood_type'],
+                'bags' => 1,
+                'bag_type' => $item['bag_type'] ?: 'Standard',
+                'bag_brand' => $item['bag_brand'] ?: 'N/A',
+                'collection_date' => $collectionDate->format('Y-m-d'),
+                'expiration_date' => $expirationDate->format('Y-m-d'),
+                'status' => $status,
+                'unit_status' => $item['status'],
+                'hospital_request_id' => $item['hospital_request_id'] ?? null,
+                'created_at' => $item['created_at'],
+                'updated_at' => $item['updated_at'],
+                'donor' => $donorInfo
+            ];
+        }, $filteredUnits);
+        
+        // Convert to indexed array
+        $bloodInventory = array_values($bloodInventory);
+    }
+    
+} catch (Exception $e) {
+    error_log("Error in Main Dashboard data fetching: " . $e->getMessage());
+    $bloodInventory = [];
 }
+
+// If no records found, keep the bloodInventory array empty
+if (empty($bloodInventory)) {
+    $bloodInventory = [];
+}
+
+// OPTIMIZATION 5: Efficient statistics calculation using array functions
+$today = new DateTime();
+$expiryLimit = (new DateTime())->modify('+7 days');
+
+// Use array_reduce for single-pass statistics calculation
+$stats = array_reduce($bloodInventory, function($carry, $bag) use ($today, $expiryLimit) {
+    // Count unique donors (successful donations)
+    $donorId = $bag['donor_id'];
+    if (!isset($carry['seenDonorIds'][$donorId])) {
+        $carry['seenDonorIds'][$donorId] = true;
+        $carry['bloodReceivedCount']++;
+    }
+    
+    // Count total bags (exclude expired and handed_over units)
+    if ($bag['status'] != 'Expired' && $bag['status'] != 'Handed Over') {
+        $carry['bloodInStockCount'] += 1;
+    }
+    
+    // Count valid bags and update blood type availability
+    if ($bag['status'] == 'Valid') {
+        $bt = $bag['blood_type'] ?? '';
+        if (isset($carry['bloodByType'][$bt])) {
+            $carry['bloodByType'][$bt] += 1;
+        }
+    }
+    
+    return $carry;
+}, [
+    'bloodReceivedCount' => 0,
+    'bloodInStockCount' => 0,
+    'bloodByType' => [
+        'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
+        'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
+    ],
+    'seenDonorIds' => []
+]);
+
+// Extract statistics
+$bloodReceivedCount = $stats['bloodReceivedCount'];
+$bloodInStockCount = $stats['bloodInStockCount'];
+$bloodByType = $stats['bloodByType'];
 
 // ----------------------------------------------------
 // PART 5: PROCESS GIS MAPPING DATA (DEFERRED FOR PERFORMANCE)
@@ -186,7 +298,7 @@ if (is_array($bloodBankUnitsData) && !empty($bloodBankUnitsData)) {
 // This significantly reduces initial page load time
 $cityDonorCounts = [];
 $heatmapData = [];
-$totalDonorCount = count($seenDonorIds); // Quick count from already-loaded data
+$totalDonorCount = $bloodReceivedCount; // Use bloodReceivedCount as totalDonorCount
 $postgisAvailable = false;
 
 // OPTIMIZATION: Performance logging and caching
@@ -196,14 +308,14 @@ addPerformanceHeaders($executionTime, $bloodReceivedCount, "Dashboard - Hospital
 
 // BLOOD AVAILABILITY BY TYPE is already computed in the single pass above ($bloodByType)
 
-// OPTIMIZATION: Save to cache with metadata
+// OPTIMIZATION: Save to cache with metadata (updated to match comprehensive data structure)
 $cacheData = [
     'hospitalRequestsCount' => $hospitalRequestsCount,
     'bloodReceivedCount' => $bloodReceivedCount,
     'bloodInStockCount' => $bloodInStockCount,
     'bloodByType' => $bloodByType,
     'bloodInventory' => $bloodInventory,
-    'totalDonorCount' => $totalDonorCount,
+    'totalDonorCount' => $bloodReceivedCount, // Use bloodReceivedCount as totalDonorCount
     'cityDonorCounts' => [],  // Will be loaded via AJAX
     'heatmapData' => [],      // Will be loaded via AJAX
     'donorLookup' => [],
@@ -213,7 +325,7 @@ $cacheData = [
 // Simplified cache metadata (no expensive API calls for change detection)
 $cacheMeta = [
     'timestamp' => time(),
-    'version' => 'v1'
+    'version' => 'v4'
 ];
 
 file_put_contents($cacheFile, json_encode($cacheData));
@@ -226,7 +338,7 @@ cache_loaded:
 // PERFORMANCE OPTIMIZATION: Pending donors will be loaded via AJAX
 $pendingDonorsCount = 0;
 
-$maxCapacity = 800;
+$maxCapacity = 300;
 $totalUnits = $bloodInStockCount;
 $totalPercentage = $maxCapacity > 0 ? min(($totalUnits / $maxCapacity) * 100, 100) : 0;
 $statusClass = $totalPercentage < 30 ? 'critical' : ($totalPercentage < 50 ? 'warning' : 'healthy');
@@ -1162,7 +1274,7 @@ h6 {
                         <a href="Dashboard-Inventory-System-Hospital-Request.php" class="nav-link">
                             <span><i class="fas fa-list"></i>Hospital Requests</span>
                         </a>
-                        <a href="dashboard-Inventory-System-Reports-reports-admin.php" class="nav-link">
+                        <a href="#" class="nav-link">
                             <span><i class="fas fa-chart-line"></i>Forecast Reports</span>
                         </a>
                         <a href="Dashboard-Inventory-System-Users.php" class="nav-link">
@@ -2141,11 +2253,27 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                 confirmationModal.hide();
                 loadingModal.show();
                 
+                // Get current URL to pass as source for later return
+                const currentUrl = window.location.href;
+                
+                // Clean up any previous donor registration session data
+                fetch('../../src/views/forms/clean_session.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: 'clean_before_new_registration' })
+                }).then(() => {
+                    setTimeout(() => {
+                        // Redirect to donor form with current page as source
+                        window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + encodeURIComponent(currentUrl);
+                    }, 1500);
+                }).catch(() => {
+                    // If there's an error, continue anyway
                 setTimeout(() => {
-                    // Pass current page as source parameter for proper redirect back
-                    const currentPage = encodeURIComponent(window.location.pathname + window.location.search);
-                    window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + currentPage;
+                        window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + encodeURIComponent(currentUrl);
                 }, 1500);
+                });
             };
         });
     </script>
