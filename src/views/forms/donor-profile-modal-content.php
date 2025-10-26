@@ -446,12 +446,12 @@ if ($physical_exam_info && isset($physical_exam_info['remarks'])) {
                             </span>
                             <?php if ($mhExists): ?>
                                 <?php if ($mhApproved): ?>
-                                    <button class="btn btn-info btn-sm" id="medicalHistoryViewBtn" title="View Medical History" style="padding: 6px 16px; font-size: 0.875rem; min-width: 90px; border-radius: 20px;">
-                                        <i class="fas fa-eye me-1"></i> View
+                                    <button class="btn btn-info btn-sm" id="medicalHistoryViewBtn" title="View Medical History" style="padding: 6px 12px; font-size: 0.875rem; min-width: 40px; border-radius: 20px;">
+                                        <i class="fas fa-eye"></i>
                                     </button>
                                 <?php else: ?>
-                                    <button class="btn btn-warning btn-sm" id="medicalHistoryConfirmBtn" title="Edit Medical History" style="padding: 6px 16px; font-size: 0.875rem; min-width: 90px; border-radius: 20px;">
-                                        <i class="fas fa-edit me-1"></i> Edit
+                                    <button class="btn btn-warning btn-sm" id="medicalHistoryConfirmBtn" title="Edit Medical History" style="padding: 6px 12px; font-size: 0.875rem; min-width: 40px; border-radius: 20px;">
+                                        <i class="fas fa-edit"></i>
                                     </button>
                                 <?php endif; ?>
                             <?php endif; ?>
@@ -470,12 +470,12 @@ if ($physical_exam_info && isset($physical_exam_info['remarks'])) {
                             </span>
                             <?php if ($screening_info): ?>
                                 <?php if ($mhApproved): ?>
-                                    <button class="btn btn-info btn-sm" id="initialScreeningViewBtn" title="View Initial Screening" style="padding: 6px 16px; font-size: 0.875rem; min-width: 90px; border-radius: 20px;">
-                                        <i class="fas fa-eye me-1"></i> View
+                                    <button class="btn btn-info btn-sm" id="initialScreeningViewBtn" title="View Initial Screening" style="padding: 6px 12px; font-size: 0.875rem; min-width: 40px; border-radius: 20px;">
+                                        <i class="fas fa-eye"></i>
                                     </button>
                                 <?php else: ?>
-                                    <button class="btn btn-warning btn-sm" id="initialScreeningEditBtn" title="Edit Initial Screening" style="padding: 6px 16px; font-size: 0.875rem; min-width: 90px; border-radius: 20px;">
-                                        <i class="fas fa-edit me-1"></i> Edit
+                                    <button class="btn btn-warning btn-sm" id="initialScreeningEditBtn" title="Edit Initial Screening" style="padding: 6px 12px; font-size: 0.875rem; min-width: 40px; border-radius: 20px;">
+                                        <i class="fas fa-edit"></i>
                                     </button>
                                 <?php endif; ?>
                             <?php endif; ?>
@@ -535,12 +535,12 @@ if ($physical_exam_info && isset($physical_exam_info['remarks'])) {
                             </span>
                             <?php if ($peRemarks !== ''): ?>
                                 <?php if ($peIsPending): ?>
-                                    <button class="btn btn-warning btn-sm" id="physicalExamConfirmBtn" title="Edit Physical Examination" style="padding: 6px 16px; font-size: 0.875rem; min-width: 90px; border-radius: 20px;">
-                                        <i class="fas fa-edit me-1"></i> Edit
+                                    <button class="btn btn-warning btn-sm" id="physicalExamConfirmBtn" title="Edit Physical Examination" style="padding: 6px 12px; font-size: 0.875rem; min-width: 40px; border-radius: 20px;">
+                                        <i class="fas fa-edit"></i>
                                     </button>
                                 <?php else: ?>
-                                    <button class="btn btn-info btn-sm" id="physicalExamViewBtn" title="View Physical Examination" style="padding: 6px 16px; font-size: 0.875rem; min-width: 90px; border-radius: 20px;">
-                                        <i class="fas fa-eye me-1"></i> View
+                                    <button class="btn btn-info btn-sm" id="physicalExamViewBtn" title="View Physical Examination" style="padding: 6px 12px; font-size: 0.875rem; min-width: 40px; border-radius: 20px;">
+                                        <i class="fas fa-eye"></i>
                                     </button>
                                 <?php endif; ?>
                             <?php endif; ?>

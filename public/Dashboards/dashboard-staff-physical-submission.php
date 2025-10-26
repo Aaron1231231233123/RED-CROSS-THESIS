@@ -91,89 +91,101 @@ function makeSupabaseApiCall($endpoint, $selectFields = [], $filters = []) {
 // 1. Skip screening records - using only physical examination data
 
 // 2b. Get eligibility records to classify donors as New or Returning using pagination
+// OPTIMIZATION: Only fetch eligibility records for donors we actually need
 $eligibility_records = [];
-$offset = 0;
-$limit = 1000;
-$has_more = true;
-$max_iterations = 10;
-$iteration = 0;
-
-while ($has_more && $iteration < $max_iterations) {
-    $batch = makeSupabaseApiCall('eligibility', ['donor_id'], ['limit' => $limit, 'offset' => $offset]);
-    
-    error_log("Eligibility batch $iteration: fetched " . count($batch) . " records (offset: $offset)");
-    
-    if (empty($batch)) {
-        $has_more = false;
-    } else {
-        $eligibility_records = array_merge($eligibility_records, $batch);
-        $offset += $limit;
-        $iteration++;
-        
-        if (count($batch) < $limit) {
-            $has_more = false;
-        }
-    }
-}
-
-error_log("Total eligibility records fetched: " . count($eligibility_records));
 $eligibility_by_donor = [];
-foreach ($eligibility_records as $er) {
-    if (isset($er['donor_id'])) {
-        $eligibility_by_donor[(int)$er['donor_id']] = true;
-    }
-}
+
+// We'll fetch eligibility records after we know which donors we have
+// This will be populated later when we process physical exams
 
 // 2c. Get medical history approval map (for UI read-only rules and action swapping) using pagination
+// OPTIMIZATION: Only fetch medical history for donors we actually need
 $medical_history_rows = [];
+$medical_by_donor = [];
+
+// We'll fetch medical history records after we know which donors we have
+// This will be populated later when we process physical exams
+
+// 2. Get physical examination records with optimized query for card statistics
+// OPTIMIZATION: Use database-level aggregation for card counts instead of PHP loops
+// OPTIMIZATION: Add simple caching to avoid recalculating stats on every page load
+$cache_file = '../../assets/cache/dashboard_stats_' . date('Y-m-d-H') . '.json';
+$cache_duration = 3600; // 1 hour cache
+
+$card_stats_cached = false;
+if (file_exists($cache_file) && (time() - filemtime($cache_file)) < $cache_duration) {
+    $cached_data = json_decode(file_get_contents($cache_file), true);
+    if ($cached_data && isset($cached_data['pending'], $cached_data['active'], $cached_data['today'])) {
+        $pending_physical_exams_count = $cached_data['pending'];
+        $active_physical_exams_count = $cached_data['active'];
+        $todays_summary_count = $cached_data['today'];
+        $card_stats_cached = true;
+        error_log("Using cached card statistics");
+    }
+}
+
+if (!$card_stats_cached) {
+    $card_stats = makeSupabaseApiCall(
+        'physical_examination',
+        ['donor_id', 'remarks', 'needs_review', 'created_at', 'updated_at'],
+        ['select' => 'donor_id,remarks,needs_review,created_at,updated_at']
+    );
+
+    error_log("Physical exams fetched for stats: " . count($card_stats));
+
+    // Calculate card statistics directly from database results (much faster)
+    $pending_physical_exams_count = 0;
+    $active_physical_exams_count = 0;
+    $todays_summary_count = 0;
+    $today = date('Y-m-d');
+
+    foreach ($card_stats as $exam) {
+        // Count pending or needs_review items
+        $is_pending = isset($exam['remarks']) && strtolower($exam['remarks']) === 'pending';
+        $needs_review = isset($exam['needs_review']) && (
+            ($exam['needs_review'] === true) || ($exam['needs_review'] === 1) || ($exam['needs_review'] === '1') ||
+            (is_string($exam['needs_review']) && in_array(strtolower(trim($exam['needs_review'])), ['true','t','yes','y'], true))
+        );
+        
+        if ($is_pending || $needs_review) {
+            $pending_physical_exams_count++;
+        }
+        
+        // Count active (completed physical exams)
+        if (isset($exam['remarks']) && strtolower($exam['remarks']) === 'accepted') {
+            $active_physical_exams_count++;
+        }
+        
+        // Count today's records
+        if (isset($exam['created_at']) && date('Y-m-d', strtotime($exam['created_at'])) === $today) {
+            $todays_summary_count++;
+        }
+    }
+    
+    // Cache the results
+    $cache_data = [
+        'pending' => $pending_physical_exams_count,
+        'active' => $active_physical_exams_count,
+        'today' => $todays_summary_count,
+        'timestamp' => time()
+    ];
+    
+    // Ensure cache directory exists
+    $cache_dir = dirname($cache_file);
+    if (!is_dir($cache_dir)) {
+        mkdir($cache_dir, 0755, true);
+    }
+    
+    file_put_contents($cache_file, json_encode($cache_data));
+    error_log("Card statistics cached to: $cache_file");
+}
+
+// Now get full physical examination records for display (with pagination)
+$physical_exams = [];
 $offset = 0;
 $limit = 1000;
 $has_more = true;
 $max_iterations = 10;
-$iteration = 0;
-
-while ($has_more && $iteration < $max_iterations) {
-    $batch = makeSupabaseApiCall(
-        'medical_history',
-        ['donor_id', 'medical_approval', 'needs_review'],
-        ['limit' => $limit, 'offset' => $offset]
-    );
-    
-    error_log("Medical history batch $iteration: fetched " . count($batch) . " records (offset: $offset)");
-    
-    if (empty($batch)) {
-        $has_more = false;
-    } else {
-        $medical_history_rows = array_merge($medical_history_rows, $batch);
-        $offset += $limit;
-        $iteration++;
-        
-        if (count($batch) < $limit) {
-            $has_more = false;
-        }
-    }
-}
-
-error_log("Total medical history records fetched: " . count($medical_history_rows));
-$medical_by_donor = [];
-foreach ($medical_history_rows as $mh) {
-    if (!isset($mh['donor_id'])) { continue; }
-    $did = (string)$mh['donor_id'];
-    $medical_by_donor[$did] = [
-        'medical_approval' => isset($mh['medical_approval']) ? $mh['medical_approval'] : null,
-        'needs_review' => isset($mh['needs_review']) ? (
-            ($mh['needs_review'] === true) || ($mh['needs_review'] === 1) || ($mh['needs_review'] === '1') ||
-            (is_string($mh['needs_review']) && in_array(strtolower(trim($mh['needs_review'])), ['true','t','yes','y'], true))
-        ) : false,
-    ];
-}
-
-// 2. Get all physical examination records with full details using pagination to bypass Supabase limits
-$physical_exams = [];
-$offset = 0;
-$limit = 1000; // Supabase max per request
-$has_more = true;
-$max_iterations = 10; // Safety limit to prevent infinite loops
 $iteration = 0;
 
 while ($has_more && $iteration < $max_iterations) {
@@ -192,15 +204,13 @@ while ($has_more && $iteration < $max_iterations) {
         $offset += $limit;
         $iteration++;
         
-        // If we got less than the limit, we've reached the end
         if (count($batch) < $limit) {
             $has_more = false;
         }
     }
 }
 
-// Debug: Log the number of physical exams fetched
-error_log("Physical exams fetched: " . count($physical_exams));
+error_log("Total physical exams fetched: " . count($physical_exams));
 
 // Create arrays to organize physical exams by status and collect all donor IDs
 $existing_physical_exam_donor_ids = [];
@@ -225,7 +235,7 @@ foreach ($physical_exams as $exam) {
 
 // Skip screening records - using only physical examination data
 
-// Remove duplicates and batch fetch all donor data
+// OPTIMIZATION: Only fetch donor data for donors we actually need
 $all_donor_ids = array_unique($all_donor_ids);
 $donor_data_cache = [];
 
@@ -258,6 +268,41 @@ if (!empty($all_donor_ids)) {
         if (isset($donor['donor_id'])) {
             $donor_data_cache[$donor['donor_id']] = $donor;
         }
+    }
+    
+    // OPTIMIZATION: Now fetch eligibility and medical history only for donors we have
+    $donor_ids_str = implode(',', $all_donor_ids);
+    
+    // Fetch eligibility records for our donors only
+    $eligibility_records = makeSupabaseApiCall(
+        'eligibility',
+        ['donor_id'],
+        ['donor_id' => 'in.(' . $donor_ids_str . ')']
+    );
+    
+    foreach ($eligibility_records as $er) {
+        if (isset($er['donor_id'])) {
+            $eligibility_by_donor[(int)$er['donor_id']] = true;
+        }
+    }
+    
+    // Fetch medical history for our donors only
+    $medical_history_rows = makeSupabaseApiCall(
+        'medical_history',
+        ['donor_id', 'medical_approval', 'needs_review'],
+        ['donor_id' => 'in.(' . $donor_ids_str . ')']
+    );
+    
+    foreach ($medical_history_rows as $mh) {
+        if (!isset($mh['donor_id'])) { continue; }
+        $did = (string)$mh['donor_id'];
+        $medical_by_donor[$did] = [
+            'medical_approval' => isset($mh['medical_approval']) ? $mh['medical_approval'] : null,
+            'needs_review' => isset($mh['needs_review']) ? (
+                ($mh['needs_review'] === true) || ($mh['needs_review'] === 1) || ($mh['needs_review'] === '1') ||
+                (is_string($mh['needs_review']) && in_array(strtolower(trim($mh['needs_review'])), ['true','t','yes','y'], true))
+            ) : false,
+        ];
     }
 }
 
@@ -306,38 +351,13 @@ foreach ($physical_exams as $exam) {
 // Debug: Log the total number of records
 error_log("Total records processed: " . count($all_records));
 
-// Count stats for dashboard cards
-$pending_physical_exams_count = 0; // Pending or needs_review items
-$active_physical_exams_count = 0; // Completed physical exams
-$todays_summary_count = 0; // Today's records
-$new_count = 0; // New donors (by eligibility absence)
-$returning_count = 0; // Returning donors (by eligibility presence)
+// OPTIMIZATION: Card statistics already calculated above from database query
+// No need to loop through all records again - this was the main performance bottleneck
 
-$today = date('Y-m-d');
-
+// Count New vs Returning donors for additional stats
+$new_count = 0;
+$returning_count = 0;
 foreach ($all_records as $record) {
-    // Count pending (screenings without physical exams) or needs_review items
-    $is_pending = ($record['type'] === 'screening') ||
-                  ($record['type'] === 'physical_exam' && isset($record['physical_exam']['remarks']) && strtolower($record['physical_exam']['remarks']) === 'pending');
-    $needs_review = isset($record['needs_review']) && $record['needs_review'] === true;
-    if ($is_pending || $needs_review) {
-        $pending_physical_exams_count++;
-    }
-    
-    // Count active (completed physical exams)
-    if ($record['type'] === 'physical_exam' && isset($record['physical_exam']['remarks'])) {
-        $remarks = strtolower($record['physical_exam']['remarks']);
-        if ($remarks == 'accepted') {
-            $active_physical_exams_count++;
-        }
-    }
-    
-    // Count today's records
-    if (isset($record['created_at']) && date('Y-m-d', strtotime($record['created_at'])) === $today) {
-        $todays_summary_count++;
-    }
-
-    // Count New vs Returning
     if (isset($record['donor_type'])) {
         if ($record['donor_type'] === 'Returning') $returning_count++;
         else $new_count++;
@@ -5098,7 +5118,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     }
                 });
 
-                // Hide the modalApproveButton (Proceed to Initial Screening) in readonly mode
+                // Hide the modalApproveButton (Approved) in readonly mode
                 const approveBtn = document.getElementById('modalApproveButton');
                 if (approveBtn) {
                     approveBtn.style.display = 'none';
@@ -5233,8 +5253,8 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                             approveBtn.className = 'btn btn-success';
                             // Button label depends on caller flow: Interviewer vs Physician
                             const isPhysFlow = (window.__openMHForPhysician === true);
-                            const label = isPhysFlow ? 'Proceed to Physical Examination' : 'Proceed to Initial Screening';
-                            approveBtn.innerHTML = '<i class="fas fa-arrow-right me-2"></i>' + label;
+                            const label = isPhysFlow ? 'Proceed to Physical Examination' : 'Approved';
+                            approveBtn.innerHTML = '<i class="fas fa-check me-2"></i>' + label;
                             // Place the Approve button next to Next/Close button in the footer controls
                             if (nextButton && nextButton.parentNode) {
                                 nextButton.parentNode.appendChild(approveBtn);
@@ -5245,49 +5265,48 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         // Set the onclick handler for the approve button
                         approveBtn.onclick = function() { 
                         const isPhysFlow = (window.__openMHForPhysician === true);
-                        const promptMsg = isPhysFlow
-                            ? 'Proceed to Physical Examination? (Medical History is for viewing; approval will be handled in the next step)'
-                            : 'Are you sure you want to proceed to Initial Screening?\n\nThis will mark Medical History as Approved and continue to Initial Screening.';
-                        // Reset approval flags
-                        try { 
-                            window.__mhApproveConfirmed = false; 
-                            window.__mhApproveFromPrimary = true; 
-                            window.__mhApprovePending = true;
-                        } catch(_) {}
-                        const proceedHandler = function(){
-                            try { window.__mhApproveConfirmed = true; } catch(_) {}
-                            // Cache Medical History form data for later submission at next step approve
-                            try {
-                                const mhForm = document.getElementById('modalMedicalHistoryForm');
-                                if (mhForm) {
-                                    const fd = new FormData(mhForm);
-                                    const cache = {};
-                                    fd.forEach((v, k) => { cache[k] = v; });
-                                    cache['action'] = 'approve';
-                                    cache['medical_approval'] = 'Approved';
-                                    if (!cache['donor_id'] && window.currentDonorId) cache['donor_id'] = window.currentDonorId;
-                                    window.pendingMedicalApprovalData = cache;
-                                }
+                        
+                        if (isPhysFlow) {
+                            // Physician flow - show PE confirmation modal
+                            const promptMsg = 'Proceed to Physical Examination? (Medical History is for viewing; approval will be handled in the next step)';
+                            // Reset approval flags
+                            try { 
+                                window.__mhApproveConfirmed = false; 
+                                window.__mhApproveFromPrimary = true; 
+                                window.__mhApprovePending = true;
                             } catch(_) {}
-                            // Resolve donor id
-                            let donorId = null;
-                            try {
-                                const donorIdEl = document.querySelector('#modalMedicalHistoryForm input[name="donor_id"]');
-                                if (donorIdEl && donorIdEl.value) donorId = donorIdEl.value;
-                            } catch(_) {}
-                            if (!donorId && window.currentDonorId) donorId = window.currentDonorId;
-                            if (!donorId && window.lastDonorProfileContext && window.lastDonorProfileContext.donorId) donorId = window.lastDonorProfileContext.donorId;
-                            if (!donorId && window.currentScreeningData && window.currentScreeningData.donor_form_id) donorId = window.currentScreeningData.donor_form_id;
-                            if (!donorId) {
+                            const proceedHandler = function(){
+                                try { window.__mhApproveConfirmed = true; } catch(_) {}
+                                // Cache Medical History form data for later submission at next step approve
                                 try {
-                                    const hint = document.querySelector('#donorProfileModal [data-donor-id]');
-                                    if (hint) donorId = hint.getAttribute('data-donor-id');
+                                    const mhForm = document.getElementById('modalMedicalHistoryForm');
+                                    if (mhForm) {
+                                        const fd = new FormData(mhForm);
+                                        const cache = {};
+                                        fd.forEach((v, k) => { cache[k] = v; });
+                                        cache['action'] = 'approve';
+                                        cache['medical_approval'] = 'Approved';
+                                        if (!cache['donor_id'] && window.currentDonorId) cache['donor_id'] = window.currentDonorId;
+                                        window.pendingMedicalApprovalData = cache;
+                                    }
                                 } catch(_) {}
-                            }
-                            if (!donorId) { try { window.customInfo && window.customInfo('Unable to resolve donor. Please reopen the donor and try again.'); } catch(_) {} return; }
+                                // Resolve donor id
+                                let donorId = null;
+                                try {
+                                    const donorIdEl = document.querySelector('#modalMedicalHistoryForm input[name="donor_id"]');
+                                    if (donorIdEl && donorIdEl.value) donorId = donorIdEl.value;
+                                } catch(_) {}
+                                if (!donorId && window.currentDonorId) donorId = window.currentDonorId;
+                                if (!donorId && window.lastDonorProfileContext && window.lastDonorProfileContext.donorId) donorId = window.lastDonorProfileContext.donorId;
+                                if (!donorId && window.currentScreeningData && window.currentScreeningData.donor_form_id) donorId = window.currentScreeningData.donor_form_id;
+                                if (!donorId) {
+                                    try {
+                                        const hint = document.querySelector('#donorProfileModal [data-donor-id]');
+                                        if (hint) donorId = hint.getAttribute('data-donor-id');
+                                    } catch(_) {}
+                                }
+                                if (!donorId) { try { window.customInfo && window.customInfo('Unable to resolve donor. Please reopen the donor and try again.'); } catch(_) {} return; }
 
-                            // Branch by flow
-                            if (isPhysFlow) {
                                 // Show dedicated PE confirmation modal, then open PE
                                 showProceedToPEConfirmModal(function(){
                                     // Mark accepted to prevent MH auto-restore and DP auto-reopen
@@ -5312,29 +5331,185 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                         }
                                     }, 150);
                                 });
-                            } else {
-                                // Interviewer flow → Screening
-                                // Close MH only after user confirms
-                                try { window.__preventReturnToProfile = true; } catch(_) {}
-                                try { if (typeof closeMedicalHistoryModal === 'function') closeMedicalHistoryModal(); } catch(_) {}
-                                setTimeout(function(){
-                                    try {
-                                        if (typeof showScreeningFormModal === 'function' && donorId) {
-                                            showScreeningFormModal(donorId);
-                                        } else if (typeof window.openScreeningModal === 'function' && donorId) {
-                                            window.openScreeningModal({ donor_id: donorId });
-                                        }
-                                    } catch(_) {}
-                                }, 200);
-                            }
-                        };
-
-                        if (isPhysFlow) {
+                            };
                             // Use the dedicated PE confirmation modal chain
                             proceedHandler();
                         } else {
-                            // Interviewer uses the existing confirm UI (explicit approval wording)
-                            window.customConfirm(promptMsg, proceedHandler);
+                            // Interviewer flow - show the correct "Confirm Action" modal
+                            if (window.customConfirm) {
+                                window.customConfirm('Approve Medical History for this donor?', function() {
+                                    // Process the approval after user confirms - same flow as initial screening
+                                    const proceed = function(){
+                                        (async () => {
+                                            try {
+                                                // Show loading indicator
+                                                try { showProcessingModal('Approving medical history...'); } catch(_) {}
+                                                
+                                                // Resolve donor id
+                                                let donorId = null;
+                                                try {
+                                                    const donorIdEl = document.querySelector('#modalMedicalHistoryForm input[name="donor_id"]');
+                                                    if (donorIdEl && donorIdEl.value) donorId = donorIdEl.value;
+                                                } catch(_) {}
+                                                if (!donorId && window.currentDonorId) donorId = window.currentDonorId;
+                                                if (!donorId && window.lastDonorProfileContext && window.lastDonorProfileContext.donorId) donorId = window.lastDonorProfileContext.donorId;
+                                                if (!donorId && window.currentScreeningData && window.currentScreeningData.donor_form_id) donorId = window.currentScreeningData.donor_form_id;
+                                                if (!donorId) {
+                                                    try {
+                                                        const hint = document.querySelector('#donorProfileModal [data-donor-id]');
+                                                        if (hint) donorId = hint.getAttribute('data-donor-id');
+                                                    } catch(_) {}
+                                                }
+                                                if (!donorId) { 
+                                                    try { window.customInfo && window.customInfo('Unable to resolve donor. Please reopen the donor and try again.'); } catch(_) {} 
+                                                    try { hideProcessingModal(); } catch(_) {}
+                                                    return; 
+                                                }
+
+                                                // Submit the approval
+                                                const fd = new FormData();
+                                                fd.append('donor_id', donorId);
+                                                fd.append('medical_approval', 'Approved');
+                                                const res = await fetch('../../public/api/update-medical-approval.php', { method: 'POST', body: fd });
+                                                const json = await res.json().catch(() => ({ success:false }));
+                                                if (!json || !json.success) {
+                                                    if (window.customInfo) window.customInfo('Failed to set Medical History to Approved.'); else alert('Failed to set Medical History to Approved.');
+                                                    try { hideProcessingModal(); } catch(_) {}
+                                                    return;
+                                                }
+                                                
+                                                // Update in-memory cache so UI doesn't flash Not Approved
+                                                try {
+                                                    if (typeof window.medicalByDonor === 'object') {
+                                                        const key = donorId; const k2 = String(donorId);
+                                                        window.medicalByDonor[key] = window.medicalByDonor[key] || {};
+                                                        window.medicalByDonor[key].medical_approval = 'Approved';
+                                                        window.medicalByDonor[k2] = window.medicalByDonor[k2] || {};
+                                                        window.medicalByDonor[k2].medical_approval = 'Approved';
+                                                    }
+                                                } catch(_) {}
+
+                                                // Close medical history modal
+                                                try { if (typeof closeMedicalHistoryModal === 'function') closeMedicalHistoryModal(); } catch(_) {}
+                                                
+                                                // Show success modal and then return to donor profile
+                                                setTimeout(function(){
+                                                    // Use the medical history success flow - this already handles opening donor profile
+                                                    if (typeof window.showApprovedThenReturn === 'function') {
+                                                        try { 
+                                                            window.lastDonorProfileContext = { donorId: donorId, screeningData: { donor_form_id: donorId } };
+                                                            window.showApprovedThenReturn(donorId, { donor_form_id: donorId }); 
+                                                        } catch (e) {
+                                                            console.error('Error in showApprovedThenReturn:', e);
+                                                        }
+                                                    } else {
+                                                        // Fallback: show donor profile and refresh (only if showApprovedThenReturn fails)
+                                                        const dpEl = document.getElementById('donorProfileModal');
+                                                        if (dpEl) {
+                                                            const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
+                                                            try { dp.show(); } catch(_) {}
+                                                            // Force-refresh donor profile to pull latest data
+                                                            try { refreshDonorProfileModal({ donorId, screeningData: { donor_form_id: donorId } }); } catch(_) {}
+                                                        }
+                                                    }
+                                                    try { setTimeout(()=>hideProcessingModal(), 400); } catch(_) {}
+                                                }, 1200);
+                                            } catch(_) {
+                                                if (window.customInfo) window.customInfo('Network error approving Medical History.'); else alert('Network error.');
+                                                try { hideProcessingModal(); } catch(_) {}
+                                            }
+                                        })();
+                                    };
+                                    proceed();
+                                });
+                            } else {
+                                // Fallback to browser confirm
+                                if (confirm('Approve Medical History for this donor?')) {
+                                    // Same approval logic as above with loading indicator
+                                    const proceed = function(){
+                                        (async () => {
+                                            try {
+                                                // Show loading indicator
+                                                try { showProcessingModal('Approving medical history...'); } catch(_) {}
+                                                
+                                                // Resolve donor id
+                                                let donorId = null;
+                                                try {
+                                                    const donorIdEl = document.querySelector('#modalMedicalHistoryForm input[name="donor_id"]');
+                                                    if (donorIdEl && donorIdEl.value) donorId = donorIdEl.value;
+                                                } catch(_) {}
+                                                if (!donorId && window.currentDonorId) donorId = window.currentDonorId;
+                                                if (!donorId && window.lastDonorProfileContext && window.lastDonorProfileContext.donorId) donorId = window.lastDonorProfileContext.donorId;
+                                                if (!donorId && window.currentScreeningData && window.currentScreeningData.donor_form_id) donorId = window.currentScreeningData.donor_form_id;
+                                                if (!donorId) {
+                                                    try {
+                                                        const hint = document.querySelector('#donorProfileModal [data-donor-id]');
+                                                        if (hint) donorId = hint.getAttribute('data-donor-id');
+                                                    } catch(_) {}
+                                                }
+                                                if (!donorId) { 
+                                                    alert('Unable to resolve donor. Please reopen the donor and try again.');
+                                                    try { hideProcessingModal(); } catch(_) {}
+                                                    return; 
+                                                }
+
+                                                // Submit the approval
+                                                const fd = new FormData();
+                                                fd.append('donor_id', donorId);
+                                                fd.append('medical_approval', 'Approved');
+                                                const res = await fetch('../../public/api/update-medical-approval.php', { method: 'POST', body: fd });
+                                                const json = await res.json().catch(() => ({ success:false }));
+                                                if (!json || !json.success) {
+                                                    alert('Failed to set Medical History to Approved.');
+                                                    try { hideProcessingModal(); } catch(_) {}
+                                                    return;
+                                                }
+                                                
+                                                // Update in-memory cache so UI doesn't flash Not Approved
+                                                try {
+                                                    if (typeof window.medicalByDonor === 'object') {
+                                                        const key = donorId; const k2 = String(donorId);
+                                                        window.medicalByDonor[key] = window.medicalByDonor[key] || {};
+                                                        window.medicalByDonor[key].medical_approval = 'Approved';
+                                                        window.medicalByDonor[k2] = window.medicalByDonor[k2] || {};
+                                                        window.medicalByDonor[k2].medical_approval = 'Approved';
+                                                    }
+                                                } catch(_) {}
+
+                                                // Close medical history modal
+                                                try { if (typeof closeMedicalHistoryModal === 'function') closeMedicalHistoryModal(); } catch(_) {}
+                                                
+                                                // Show success modal and then return to donor profile
+                                                setTimeout(function(){
+                                                    // Use the medical history success flow - this already handles opening donor profile
+                                                    if (typeof window.showApprovedThenReturn === 'function') {
+                                                        try { 
+                                                            window.lastDonorProfileContext = { donorId: donorId, screeningData: { donor_form_id: donorId } };
+                                                            window.showApprovedThenReturn(donorId, { donor_form_id: donorId }); 
+                                                        } catch (e) {
+                                                            console.error('Error in showApprovedThenReturn:', e);
+                                                        }
+                                                    } else {
+                                                        // Fallback: show donor profile and refresh (only if showApprovedThenReturn fails)
+                                                        const dpEl = document.getElementById('donorProfileModal');
+                                                        if (dpEl) {
+                                                            const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
+                                                            try { dp.show(); } catch(_) {}
+                                                            // Force-refresh donor profile to pull latest data
+                                                            try { refreshDonorProfileModal({ donorId, screeningData: { donor_form_id: donorId } }); } catch(_) {}
+                                                        }
+                                                    }
+                                                    try { setTimeout(()=>hideProcessingModal(), 400); } catch(_) {}
+                                                }, 1200);
+                                            } catch(_) {
+                                                alert('Network error approving Medical History.');
+                                                try { hideProcessingModal(); } catch(_) {}
+                                            }
+                                        })();
+                                    };
+                                    proceed();
+                                }
+                            }
                         }
                     };
                     } else {
@@ -6039,4 +6214,5 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
 <?php
 // Flush output buffer
 ob_end_flush();
+?>
 ?>

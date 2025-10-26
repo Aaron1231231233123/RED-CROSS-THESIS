@@ -34,9 +34,7 @@
                 
                 <!-- Right side - Action buttons -->
                 <div style="display: flex; gap: 8px;">
-                    <button type="button" class="btn btn-success" id="physApproveBtn" style="display: none;">
-                        <i class="fas fa-check me-1"></i>Approve
-                    </button>
+                    <!-- Approved button removed -->
                 </div>
             </div>
         </div>
@@ -50,8 +48,7 @@
     try {
         const modalEl = document.getElementById('screeningFormModal');
         const formEl = document.getElementById('screeningForm');
-        const approveBtn = document.getElementById('physApproveBtn');
-        let __approveCheckTimer = null;
+        // Approved button removed
 
         // Resolve donor id robustly from multiple sources
         function resolveDonorId(){
@@ -72,46 +69,9 @@
             } catch(_) { return ''; }
         }
 
-        // Normalize and check Approved state from medicalByDonor
-        function isMedicalApprovedFor(donorId){
-            try {
-                if (!donorId || !window.medicalByDonor) return false;
-                const rec = window.medicalByDonor[donorId] || window.medicalByDonor[String(donorId)] || null;
-                if (!rec || rec.medical_approval == null) return false;
-                const raw = String(rec.medical_approval).trim().toLowerCase();
-                return raw === 'approved';
-            } catch(_) { return false; }
-        }
+        // Approval functions removed
 
-        // Fallback: fetch live medical approval from server and update cache
-        async function refreshMhApprovalAndUpdate(donorId){
-            try {
-                if (!donorId) return false;
-                // Try preferred helper if available in this project
-                let status = null;
-                try {
-                    const res = await fetch(`../../assets/php_func/fetch_medical_history_info.php?donor_id=${encodeURIComponent(donorId)}`);
-                    if (res && res.ok) {
-                        const json = await res.json().catch(()=>null);
-                        if (json && json.success && json.data) {
-                            status = json.data.medical_approval || json.data.medicalApproval || json.data.status || null;
-                        }
-                    }
-                } catch(_) {}
-                if (status == null) return false;
-                const raw = String(status).trim();
-                // Update in-memory cache for both numeric and string keys
-                try {
-                    window.medicalByDonor = window.medicalByDonor || {};
-                    const k1 = donorId; const k2 = String(donorId);
-                    window.medicalByDonor[k1] = window.medicalByDonor[k1] || {};
-                    window.medicalByDonor[k1].medical_approval = raw;
-                    window.medicalByDonor[k2] = window.medicalByDonor[k2] || {};
-                    window.medicalByDonor[k2].medical_approval = raw;
-                } catch(_) {}
-                return (raw.toLowerCase() === 'approved');
-            } catch(_) { return false; }
-        }
+        // Approval functions removed
 
         // Helper: simple confirm UI fallback
         function confirmProceed(message, onConfirm){
@@ -204,43 +164,7 @@
             } catch(_) {}
         }
 
-        function ensureApproveVisibility(){
-            try {
-                if (!approveBtn) return;
-                let mhApproved = false;
-                try { mhApproved = isMedicalApprovedFor(resolveDonorId()); } catch(_) {}
-                approveBtn.style.display = (!mhApproved) ? 'inline-block' : 'none';
-                // Schedule a short re-check to catch late data hydration
-                try {
-                    if (__approveCheckTimer) clearTimeout(__approveCheckTimer);
-                    __approveCheckTimer = setTimeout(function(){ try { _recheckApproveVisibility(); } catch(_) {} }, 150);
-                } catch(_) {}
-                // If still showing and we do not have Approved in cache, try live refresh once
-                if (!mhApproved) {
-                    const donorId = resolveDonorId();
-                    refreshMhApprovalAndUpdate(donorId).then((isApproved) => {
-                        try { if (isApproved) _recheckApproveVisibility(); } catch(_) {}
-                    }).catch(()=>{});
-                }
-            } catch(_) {}
-        }
-
-        function _recheckApproveVisibility(){
-            try {
-                if (!approveBtn) return;
-                let mhApproved = false;
-                try { mhApproved = isMedicalApprovedFor(resolveDonorId()); } catch(_) {}
-                approveBtn.style.display = (!mhApproved) ? 'inline-block' : 'none';
-            } catch(_) {}
-        }
-
-        // Combined approval: approve MH (if cached), then submit screening
-        async function handleApproveFlow(){
-            try {
-                // For physician flow: do not submit or close; confirmation handled by Approve click
-                if (window.customConfirm) window.customConfirm('Medical History approved.', function(){});
-            } catch(_) {}
-        }
+        // Approval functions removed
 
         // Build summary HTML
         function generateSummaryHtml(data){
@@ -268,20 +192,9 @@
 
         // Bind once when modal exists
         if (modalEl) {
-            // When shown, render summary and place Approve control
+            // When shown, render summary
             modalEl.addEventListener('shown.bs.modal', function(){
                 renderSummary();
-                try { const approveLocal = document.getElementById('physApproveBtn'); if (approveLocal) approveLocal.style.display = 'none'; } catch(_) {}
-                    // Immediately enforce approve visibility based on MH status
-                setTimeout(function(){ try { ensureApproveVisibility(); } catch(_) {} }, 50);
-                // Poll briefly after open to catch async updates to medicalByDonor
-                try {
-                    let c = 0; const max = 10; // ~1.5s total at 150ms
-                    const t = setInterval(function(){
-                        try { _recheckApproveVisibility(); } catch(_) {}
-                        if (++c >= max) clearInterval(t);
-                    }, 150);
-                } catch(_) {}
             });
 
             // On hide, only normalize body; do not remove global backdrops
@@ -296,78 +209,7 @@
                 } catch(_) {}
             });
 
-            // Bind approve button
-            if (approveBtn) approveBtn.addEventListener('click', function(){
-                try {
-                    // Guard: prevent modal from closing during approve flow
-                    try { window.__physApproveActive = true; } catch(_) {}
-                    const donorId = (formEl.querySelector('input[name="donor_id"]').value) || (window.lastDonorProfileContext && window.lastDonorProfileContext.donorId) || '';
-                    if (!donorId) {
-                        try { window.__physApproveActive = false; } catch(_) {}
-                        if (window.customConfirm) window.customConfirm('Unable to resolve donor. Please close and reopen this record.', function(){});
-                        return;
-                    }
-                    // Show confirmation modal first
-                    if (window.customConfirm) {
-                        window.customConfirm('Approve Medical History for this donor?', async function(){
-                            try {
-                                try { if (window.showProcessingModal) window.showProcessingModal('Approving medical history...'); } catch(_) {}
-                                const fd = new FormData();
-                                fd.append('donor_id', donorId);
-                                fd.append('medical_approval', 'Approved');
-                                const res = await fetch('../../public/api/update-medical-approval.php', { method: 'POST', body: fd });
-                                const json = await res.json().catch(() => ({ success:false }));
-                                if (!json || !json.success) {
-                                    if (window.customConfirm) window.customConfirm('Failed to approve Medical History.', function(){});
-                                } else {
-                                    // Success - close modal and redirect to donor profile
-                                    try {
-                                        const sEl = document.getElementById('screeningFormModal');
-                                        if (sEl) {
-                                            const sInst = bootstrap.Modal.getInstance(sEl) || new bootstrap.Modal(sEl);
-                                            try { sInst.hide(); } catch(_) {}
-                                            try { sEl.classList.remove('show'); sEl.style.display='none'; sEl.setAttribute('aria-hidden','true'); } catch(_) {}
-                                        }
-                                        // Leave backdrop management to Bootstrap
-                                    } catch(_) {}
-                                }
-                            } catch(_) {
-                                if (window.customConfirm) window.customConfirm('Network error while approving Medical History.', function(){});
-                            }
-                            // Release guard after confirm completes
-                            try { window.__physApproveActive = false; } catch(_) {}
-                            // Ensure donor profile context and refresh on reopen
-                            try { 
-                                window.lastDonorProfileContext = { donorId: donorId, screeningData: { donor_form_id: donorId } }; 
-                                refreshDonorProfileModal({ donorId, screeningData: { donor_form_id: donorId } }); 
-                            } catch(_) {}
-                            // Don't close modal immediately - let the success confirmation handle it
-                            // The modal will be closed after the user confirms the success message
-                            try { if (window.hideProcessingModal) window.hideProcessingModal(); } catch(_) {}
-                        });
-                    } else {
-                        if (confirm('Approve Medical History for this donor?')) {
-                            // Fallback without custom modal
-                            fetch('../../public/api/update-medical-approval.php', {
-                                method: 'POST',
-                                body: new URLSearchParams({ donor_id: donorId, medical_approval: 'Approved' })
-                            }).then(() => {
-                                    // Close modal and redirect to donor profile
-                                try {
-                                    const sEl = document.getElementById('screeningFormModal');
-                                    if (sEl) {
-                                        const sInst = bootstrap.Modal.getInstance(sEl) || new bootstrap.Modal(sEl);
-                                        try { sInst.hide(); } catch(_) {}
-                                        try { sEl.classList.remove('show'); sEl.style.display='none'; sEl.setAttribute('aria-hidden','true'); } catch(_) {}
-                                    }
-                                        // Leave backdrop management to Bootstrap
-                                } catch(_) {}
-                            });
-                        }
-                        try { window.__physApproveActive = false; } catch(_) {}
-                    }
-                } catch(_) { /* noop */ }
-            });
+            // Approve button removed
 
             // Removed navigation and step logic for summary-only view
         }

@@ -52,6 +52,9 @@ function initializeMedicalHistoryApproval() {
     if (restrictionType) {
         restrictionType.addEventListener('change', handleRestrictionTypeChange);
     }
+
+    // Initialize new medical history decline modal functionality
+    initializeMedicalHistoryDeclineModal();
     
 }
 
@@ -285,13 +288,71 @@ function showDeclineModal() {
         }, 100);
         
         // Reset form
-        const form = document.getElementById('declineMedicalHistoryForm');
+        const form = document.getElementById('medicalHistoryDeclineForm');
         if (form) {
             form.reset();
         }
         
-        // Reset restriction type change handler
-        handleRestrictionTypeChange();
+        // Populate hidden fields with current medical history data
+        const donorIdField = document.getElementById('mh-decline-donor-id');
+        const screeningIdField = document.getElementById('mh-decline-screening-id');
+        
+        if (donorIdField && currentMedicalHistoryData && currentMedicalHistoryData.donor_id) {
+            donorIdField.value = currentMedicalHistoryData.donor_id;
+        }
+        
+        if (screeningIdField && currentMedicalHistoryData && currentMedicalHistoryData.screening_id) {
+            screeningIdField.value = currentMedicalHistoryData.screening_id;
+        }
+        
+        // Reset all visual elements
+        document.querySelectorAll('#mhDurationSection .duration-option').forEach(option => {
+            option.classList.remove('active');
+        });
+        
+        // Set default active option (2 days)
+        const defaultOption = document.querySelector('#mhDurationSection .duration-option[data-days="2"]');
+        if (defaultOption) {
+            defaultOption.classList.add('active');
+        }
+        
+        // Reset custom duration display
+        const customOption = document.querySelector('#mhDurationSection .duration-option[data-days="custom"]');
+        if (customOption) {
+            const numberDiv = customOption.querySelector('.duration-number');
+            numberDiv.innerHTML = '<i class="fas fa-edit"></i>';
+            const unitDiv = customOption.querySelector('.duration-unit');
+            unitDiv.textContent = 'Custom';
+        }
+        
+        // Clear any validation states
+        document.querySelectorAll('#medicalHistoryDeclineForm .form-control, #medicalHistoryDeclineForm .form-select').forEach(control => {
+            control.classList.remove('is-invalid', 'is-valid');
+        });
+        
+        // Hide conditional sections initially
+        const durationSection = document.getElementById('mhDurationSection');
+        const customDurationSection = document.getElementById('mhCustomDurationSection');
+        const durationSummary = document.getElementById('mhDurationSummary');
+        
+        if (durationSection) {
+            durationSection.classList.remove('show');
+            durationSection.style.display = 'block'; // Show for temporary deferral
+        }
+        
+        if (customDurationSection) {
+            customDurationSection.classList.remove('show');
+            customDurationSection.style.display = 'none';
+        }
+        
+        if (durationSummary) {
+            durationSummary.style.display = 'none';
+        }
+        
+        // Initialize the new modal functionality
+        setTimeout(() => {
+            initializeMedicalHistoryDeclineModal();
+        }, 200);
         
         // Prevent layout shifts by monitoring body changes
         const observer = new MutationObserver(() => {
@@ -1967,6 +2028,409 @@ function showFooterActionFailureModal(message = 'Unable to process the eligibili
         }, 5000);
     } catch(e) {
         console.warn('[MH] Error showing footer failure modal:', e);
+    }
+}
+
+// Initialize new medical history decline modal functionality
+function initializeMedicalHistoryDeclineModal() {
+    const deferralTypeSelect = document.getElementById('mhDeclineTypeSelect');
+    const durationSection = document.getElementById('mhDurationSection');
+    const customDurationSection = document.getElementById('mhCustomDurationSection');
+    const durationSelect = document.getElementById('mhDeclineDuration');
+    const customDurationInput = document.getElementById('mhCustomDuration');
+    const submitBtn = document.getElementById('submitDeclineBtn');
+    const durationSummary = document.getElementById('mhDurationSummary');
+    const summaryText = document.getElementById('mhSummaryText');
+    const durationOptions = document.querySelectorAll('#mhDurationSection .duration-option');
+    const disapprovalReasonSelect = document.getElementById('mhDisapprovalReason');
+
+    if (!deferralTypeSelect || !submitBtn) return;
+
+    // Update disapproval reason validation
+    function updateMHDeclineValidation() {
+        if (!disapprovalReasonSelect) return;
+        
+        const hasReason = !!disapprovalReasonSelect.value;
+        
+        // Update validation feedback
+        if (!hasReason) {
+            disapprovalReasonSelect.classList.remove('is-valid', 'is-invalid');
+        } else {
+            disapprovalReasonSelect.classList.add('is-valid');
+            disapprovalReasonSelect.classList.remove('is-invalid');
+        }
+        
+        // Update submit button state
+        updateMHDeclineSubmitButtonState();
+    }
+    
+    // Update submit button state based on all form validation
+    function updateMHDeclineSubmitButtonState() {
+        if (!disapprovalReasonSelect) return;
+        
+        const reasonValid = !!disapprovalReasonSelect.value;
+        const deferralTypeValid = deferralTypeSelect.value !== '';
+        
+        // For temporary deferral, also check duration
+        let durationValid = true;
+        if (deferralTypeSelect.value === 'Temporary Deferral') {
+            durationValid = durationSelect.value !== '' || customDurationInput.value !== '';
+        }
+        
+        const allValid = reasonValid && deferralTypeValid && durationValid;
+        
+        submitBtn.disabled = !allValid;
+        
+        if (allValid) {
+            submitBtn.style.backgroundColor = '#dc3545';
+            submitBtn.style.borderColor = '#dc3545';
+            submitBtn.style.color = 'white';
+        } else {
+            submitBtn.style.backgroundColor = '#6c757d';
+            submitBtn.style.borderColor = '#6c757d';
+            submitBtn.style.color = 'white';
+        }
+    }
+
+    // Handle deferral type change
+    deferralTypeSelect.addEventListener('change', function() {
+        if (this.value === 'Temporary Deferral') {
+            durationSection.style.display = 'block';
+            setTimeout(() => {
+                durationSection.classList.add('show');
+                durationSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 50);
+        } else {
+            durationSection.classList.remove('show');
+            customDurationSection.classList.remove('show');
+            setTimeout(() => {
+                if (!durationSection.classList.contains('show')) {
+                    durationSection.style.display = 'none';
+                }
+                if (!customDurationSection.classList.contains('show')) {
+                    customDurationSection.style.display = 'none';
+                }
+            }, 400);
+            durationSummary.style.display = 'none';
+            // Clear duration selections
+            durationOptions.forEach(opt => opt.classList.remove('active'));
+            durationSelect.value = '';
+            customDurationInput.value = '';
+        }
+        updateMHSummary();
+    });
+
+    // Handle duration option clicks
+    durationOptions.forEach(option => {
+        option.addEventListener('click', function() {
+            // Remove active class from all options
+            durationOptions.forEach(opt => opt.classList.remove('active'));
+            
+            // Add active class to clicked option
+            this.classList.add('active');
+            
+            const days = this.getAttribute('data-days');
+            
+            if (days === 'custom') {
+                durationSelect.value = 'custom';
+                customDurationSection.style.display = 'block';
+                setTimeout(() => {
+                    customDurationSection.classList.add('show');
+                    customDurationSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    customDurationInput.focus();
+                }, 50);
+            } else {
+                durationSelect.value = days;
+                customDurationSection.classList.remove('show');
+                setTimeout(() => {
+                    if (!customDurationSection.classList.contains('show')) {
+                        customDurationSection.style.display = 'none';
+                    }
+                }, 300);
+                customDurationInput.value = '';
+            }
+            
+            updateMHSummary();
+        });
+    });
+
+    // Handle custom duration input
+    customDurationInput.addEventListener('input', function() {
+        updateMHSummary();
+        
+        // Update the custom option to show the entered value
+        const customOption = document.querySelector('#mhDurationSection .duration-option[data-days="custom"]');
+        if (customOption && this.value) {
+            const numberDiv = customOption.querySelector('.duration-number');
+            numberDiv.innerHTML = this.value;
+            const unitDiv = customOption.querySelector('.duration-unit');
+            unitDiv.textContent = this.value == 1 ? 'Day' : 'Days';
+        } else if (customOption) {
+            const numberDiv = customOption.querySelector('.duration-number');
+            numberDiv.innerHTML = '<i class="fas fa-edit"></i>';
+            const unitDiv = customOption.querySelector('.duration-unit');
+            unitDiv.textContent = 'Custom';
+        }
+    });
+
+    // Handle form submission
+    submitBtn.addEventListener('click', function() {
+        if (validateMHDeclineForm()) {
+            submitMHDecline();
+        }
+    });
+
+    function updateMHSummary() {
+        const selectedType = deferralTypeSelect.value;
+        const durationValue = durationSelect.value;
+        const customDuration = customDurationInput.value;
+        
+        if (!selectedType) {
+            durationSummary.style.display = 'none';
+            return;
+        }
+
+        let summaryMessage = '';
+        
+        if (selectedType === 'Temporary Deferral') {
+            let days = 0;
+            if (durationValue && durationValue !== 'custom') {
+                days = parseInt(durationValue);
+            } else if (durationValue === 'custom' && customDuration) {
+                days = parseInt(customDuration);
+            }
+            
+            if (days > 0) {
+                const endDate = new Date();
+                endDate.setDate(endDate.getDate() + days);
+                
+                const dayText = days === 1 ? 'day' : 'days';
+                summaryMessage = `Donor will be deferred for ${days} ${dayText} until ${endDate.toLocaleDateString()}.`;
+            }
+        } else if (selectedType === 'Permanent Deferral') {
+            summaryMessage = 'Donor will be permanently deferred from future donations.';
+        }
+
+        if (summaryMessage) {
+            summaryText.textContent = summaryMessage;
+            durationSummary.style.display = 'block';
+        } else {
+            durationSummary.style.display = 'none';
+        }
+        
+        // Update submit button state when summary changes
+        updateMHDeclineSubmitButtonState();
+    }
+    
+    // Add validation event listeners
+    if (disapprovalReasonSelect) {
+        disapprovalReasonSelect.addEventListener('change', updateMHDeclineValidation);
+    }
+    
+    // Update validation when deferral type changes
+    deferralTypeSelect.addEventListener('change', updateMHDeclineSubmitButtonState);
+    
+    // Update validation when duration changes
+    if (customDurationInput) {
+        customDurationInput.addEventListener('input', updateMHDeclineSubmitButtonState);
+    }
+    
+    // Initial validation
+    updateMHDeclineValidation();
+}
+
+// Validate medical history decline form
+function validateMHDeclineForm() {
+    const selectedType = document.getElementById('mhDeclineTypeSelect').value;
+    const durationValue = document.getElementById('mhDeclineDuration').value;
+    const customDuration = document.getElementById('mhCustomDuration').value;
+    const disapprovalReason = document.getElementById('mhDisapprovalReason').value;
+
+    if (!selectedType) {
+        showMedicalHistoryToast('Validation Error', 'Please select a deferral type.', 'error');
+        document.getElementById('mhDeclineTypeSelect').scrollIntoView({ behavior: 'smooth' });
+        return false;
+    }
+
+    if (selectedType === 'Temporary Deferral') {
+        const durationSection = document.getElementById('mhDurationSection');
+        if (durationSection.style.display !== 'none') {
+            if (!durationValue) {
+                showMedicalHistoryToast('Validation Error', 'Please select a duration for temporary deferral.', 'error');
+                document.getElementById('mhDurationSection').scrollIntoView({ behavior: 'smooth' });
+                return false;
+            }
+            
+            if (durationValue === 'custom' && (!customDuration || customDuration < 1)) {
+                showMedicalHistoryToast('Validation Error', 'Please enter a valid custom duration (minimum 1 day).', 'error');
+                document.getElementById('mhCustomDuration').focus();
+                return false;
+            }
+
+            if (durationValue === 'custom' && customDuration > 3650) {
+                showMedicalHistoryToast('Validation Error', 'Custom duration cannot exceed 3650 days (10 years).', 'error');
+                document.getElementById('mhCustomDuration').focus();
+                return false;
+            }
+        }
+    }
+
+    if (!disapprovalReason) {
+        showMedicalHistoryToast('Validation Error', 'Please select a reason for the deferral.', 'error');
+        document.getElementById('mhDisapprovalReason').scrollIntoView({ behavior: 'smooth' });
+        document.getElementById('mhDisapprovalReason').focus();
+        return false;
+    }
+
+    return true;
+}
+
+// Submit medical history decline
+async function submitMHDecline() {
+    const formData = new FormData(document.getElementById('medicalHistoryDeclineForm'));
+    const submitBtn = document.getElementById('submitDeclineBtn');
+    const originalText = submitBtn.innerHTML;
+    
+    const donorId = formData.get('donor_id');
+    const screeningId = formData.get('screening_id');
+    const deferralType = document.getElementById('mhDeclineTypeSelect').value;
+    const disapprovalReason = formData.get('disapproval_reason');
+    
+    // Convert empty string to null for screening_id
+    const finalScreeningId = screeningId && screeningId.trim() !== '' ? screeningId : null;
+    
+    // Calculate final duration
+    let finalDuration = null;
+    if (deferralType === 'Temporary Deferral') {
+        const durationSection = document.getElementById('mhDurationSection');
+        if (durationSection.style.display !== 'none') {
+            const durationValue = document.getElementById('mhDeclineDuration').value;
+            if (durationValue === 'custom') {
+                finalDuration = document.getElementById('mhCustomDuration').value;
+            } else {
+                finalDuration = durationValue;
+            }
+        } else {
+            // For medical history, use a default duration of 2 days
+            finalDuration = '2';
+        }
+    }
+
+    // Show loading state
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+    submitBtn.disabled = true;
+
+    try {
+        // Fetch all source data
+        const allSourceData = await fetchAllSourceData(donorId);
+        
+        // Calculate temporary_deferred text based on deferral type
+        let temporaryDeferredText;
+        if (deferralType === 'Temporary Deferral' && finalDuration) {
+            const days = parseInt(finalDuration);
+            if (days > 0) {
+                // Calculate months and remaining days
+                const months = Math.floor(days / 30);
+                const remainingDays = days % 30;
+                
+                if (months > 0 && remainingDays > 0) {
+                    temporaryDeferredText = `${months} month${months > 1 ? 's' : ''} ${remainingDays} day${remainingDays > 1 ? 's' : ''}`;
+                } else if (months > 0) {
+                    temporaryDeferredText = `${months} month${months > 1 ? 's' : ''}`;
+                } else {
+                    temporaryDeferredText = `${days} day${days > 1 ? 's' : ''}`;
+                }
+            } else {
+                temporaryDeferredText = 'Immediate';
+            }
+        } else if (deferralType === 'Permanent Deferral') {
+            temporaryDeferredText = 'Permanent/Indefinite';
+        } else {
+            temporaryDeferredText = 'Not specified';
+        }
+        
+        // Prepare eligibility data
+        const eligibilityData = {
+            donor_id: parseInt(donorId),
+            medical_history_id: allSourceData.screeningForm?.medical_history_id || null,
+            screening_id: finalScreeningId || allSourceData.screeningForm?.screening_id || null,
+            physical_exam_id: allSourceData.physicalExam?.physical_exam_id || null,
+            blood_collection_id: null,
+            blood_type: allSourceData.screeningForm?.blood_type || null,
+            donation_type: allSourceData.screeningForm?.donation_type || null,
+            blood_bag_type: allSourceData.screeningForm?.blood_bag_type || allSourceData.physicalExam?.blood_bag_type || 'Deferred',
+            blood_bag_brand: allSourceData.screeningForm?.blood_bag_brand || 'Deferred',
+            amount_collected: 0,
+            collection_successful: false,
+            donor_reaction: 'Deferred',
+            management_done: 'Donor marked as deferred',
+            collection_start_time: null,
+            collection_end_time: null,
+            unit_serial_number: null,
+            disapproval_reason: disapprovalReason,
+            start_date: new Date().toISOString(),
+            end_date: deferralType === 'Temporary Deferral' && finalDuration ? 
+                new Date(Date.now() + parseInt(finalDuration) * 24 * 60 * 60 * 1000).toISOString() : null,
+            status: deferralType === 'Temporary Deferral' ? 'temporary deferred' : 'permanently deferred',
+            registration_channel: allSourceData.donorForm?.registration_channel || 'PRC Portal',
+            blood_pressure: allSourceData.physicalExam?.blood_pressure || null,
+            pulse_rate: allSourceData.physicalExam?.pulse_rate || null,
+            body_temp: allSourceData.physicalExam?.body_temp || null,
+            gen_appearance: allSourceData.physicalExam?.gen_appearance || null,
+            skin: allSourceData.physicalExam?.skin || null,
+            heent: allSourceData.physicalExam?.heent || null,
+            heart_and_lungs: allSourceData.physicalExam?.heart_and_lungs || null,
+            body_weight: allSourceData.screeningForm?.body_weight || allSourceData.physicalExam?.body_weight || null,
+            temporary_deferred: temporaryDeferredText,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        };
+        
+        // Submit to update-eligibility endpoint
+        const response = await fetch('../api/update-eligibility.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(eligibilityData)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.text().then(text => {
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error('Response text:', text);
+                throw new Error('Invalid JSON response: ' + text.substring(0, 100));
+            }
+        });
+        
+        if (result.success) {
+            // Close decline modal
+            const declineModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryDeclineModal'));
+            if (declineModal) {
+                declineModal.hide();
+            }
+            
+            // Show confirmation modal
+            setTimeout(() => {
+                showDeclinedModal();
+            }, 300);
+        } else {
+            console.error('Failed to record deferral:', result.error || result.message);
+            showMedicalHistoryToast('Error', result.message || result.error || 'Failed to record deferral. Please try again.', 'error');
+        }
+        
+    } catch (error) {
+        console.error('Error processing deferral:', error);
+        showMedicalHistoryToast('Error', 'An error occurred while processing the deferral.', 'error');
+    } finally {
+        // Reset button state
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
     }
 }
 
