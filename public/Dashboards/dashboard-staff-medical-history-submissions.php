@@ -2576,9 +2576,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     <button type="button" class="btn" id="proceedToMedicalHistory" style="background-color: #b22222; color: white; border: none;">
                         <i class="fas fa-clipboard-list me-1"></i>Proceed to Medical History
                     </button>
-                    <button type="button" class="btn" id="markReviewFromMain" style="background-color: #ffc107; border: 1px solid #ffc107; color: #212529; font-weight: 600; border-radius: 6px; padding: 0.5rem 1rem; transition: all 0.3s ease;">
-                        <i class="fas fa-flag me-2"></i>Mark for Medical Review
-                    </button>
+                    <!-- Mark for Medical Review button removed as requested -->
                 </div>
             </div>
                             </div>
@@ -2636,9 +2634,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn" id="markReturningReviewBtn" style="background-color: #ffc107; border: 1px solid #ffc107; color: #212529; font-weight: 600; border-radius: 6px; padding: 0.5rem 1rem; transition: all 0.3s ease;">
-                        <i class="fas fa-flag me-2"></i>Mark for Medical Review
-                    </button>
+                    <!-- Mark for Medical Review button removed as requested -->
             </div>
         </div>
     </div>
@@ -3286,19 +3282,20 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                                      return null;
                                                  }
                                                  
-                                                 const remainingDays = calculateRemainingDays();
-                                                 if (remainingDays !== null && remainingDays > 0) {
-                                                     // Color based on eligibility status
-                                                     let color = '#17a2b8'; // Default blue
-                                                     if (status === 'refused') {
-                                                         color = '#dc3545'; // Red
-                                                     } else if (status === 'deferred' || status === 'temporary_deferred') {
-                                                         color = '#ffc107'; // Yellow
-                                                     } else if (status === 'approved' || status === 'eligible') {
-                                                         color = '#28a745'; // Green
-                                                     }
-                                                     return ` • <span style="font-weight: bold; color: ${color};">${remainingDays} days left</span>`;
-                                                 }
+                                                 // Days display removed as requested
+                                                 // const remainingDays = calculateRemainingDays();
+                                                 // if (remainingDays !== null && remainingDays > 0) {
+                                                 //     // Color based on eligibility status
+                                                 //     let color = '#17a2b8'; // Default blue
+                                                 //     if (status === 'refused') {
+                                                 //         color = '#dc3545'; // Red
+                                                 //     } else if (status === 'deferred' || status === 'temporary_deferred') {
+                                                 //         color = '#ffc107'; // Yellow
+                                                 //     } else if (status === 'approved' || status === 'eligible') {
+                                                 //         color = '#28a745'; // Green
+                                                 //     }
+                                                 //     return ` • <span style="font-weight: bold; color: ${color};">${remainingDays} days left</span>`;
+                                                 // }
                                              }
                                              return '';
                                          })()}
