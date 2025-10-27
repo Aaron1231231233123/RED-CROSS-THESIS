@@ -368,7 +368,7 @@ function fetchEligibilityRecord($eligibilityId) {
             ];
         }
         
-        $eligibilityRecord = !empty($data) ? $data[0] : null;
+        $eligibilityRecord = (!empty($data) && is_array($data) && isset($data[0])) ? $data[0] : null;
         
         // If there's a screening_id, fetch blood_type and donation_type from screening_form
         if (!empty($eligibilityRecord['screening_id'])) {

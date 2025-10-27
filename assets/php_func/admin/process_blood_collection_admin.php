@@ -39,18 +39,9 @@ try {
     $blood_bag_type     = $_POST['blood_bag_type'] ?? null;
     $original_bag_type  = $_POST['blood_bag_type'] ?? null; // keep raw for brand inference
     $amount_taken       = isset($_POST['amount_taken']) ? (int)$_POST['amount_taken'] : 1;
-    $is_successful_raw  = $_POST['is_successful'] ?? null;
-    $is_successful      = null;
-    if ($is_successful_raw !== null) {
-        // Handle both boolean and string values from form, convert to proper boolean
-        if (is_bool($is_successful_raw)) {
-            $is_successful = $is_successful_raw;
-        } elseif (is_string($is_successful_raw)) {
-            $is_successful = strtoupper($is_successful_raw) === 'YES';
-        } else {
-            $is_successful = (bool)$is_successful_raw;
-        }
-    }
+    // Admin workflow: always treat collection as successful (status step removed in admin UI)
+    $is_successful      = true;
+    error_log("Blood Collection Admin - Forcing is_successful=true for admin submission");
     $donor_reaction     = $_POST['donor_reaction'] ?? null;
     $management_done    = $_POST['management_done'] ?? null;
     $unit_serial_number = $_POST['unit_serial_number'] ?? null;
@@ -150,10 +141,6 @@ try {
     if (!$blood_bag_type) {
         error_log("Blood Collection Admin - Missing blood_bag_type");
         throw new Exception('Missing required parameters: blood_bag_type');
-    }
-    if ($is_successful === null) {
-        error_log("Blood Collection Admin - Missing is_successful");
-        throw new Exception('Missing required parameters: is_successful');
     }
     if (!$unit_serial_number) {
         error_log("Blood Collection Admin - Missing unit_serial_number");

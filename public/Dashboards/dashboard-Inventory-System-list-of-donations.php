@@ -83,6 +83,8 @@ header('Cache-Control: public, max-age=300, stale-while-revalidate=60');
 header('Vary: Accept-Encoding');
 // Get the status parameter from URL
 $status = isset($_GET['status']) ? $_GET['status'] : 'all';
+// Default perf mode on; allow explicit off
+$perfMode = !((isset($_GET['perf_mode']) && $_GET['perf_mode'] === 'off'));
 $statusFilter = $status; // Preserve original status filter to avoid includes overwriting it
 $donations = [];
 $error = null;
@@ -97,16 +99,23 @@ if ($currentPage < 1) { $currentPage = 1; }
 $startIndex = ($currentPage - 1) * $itemsPerPage;
 // Only push LIMIT/OFFSET to modules for specific status tabs; keep existing behavior for 'all'
 if ($status !== 'all') {
-    // Use higher limit for pending filter to ensure all pending donors are captured
-    if ($status === 'pending') {
-        $GLOBALS['DONATION_LIMIT'] = $pendingItemsPerPage; // Fetch more records for processing
-        $GLOBALS['DONATION_OFFSET'] = 0; // Start from beginning for processing
-        // But still use normal pagination for display
-        $GLOBALS['DONATION_DISPLAY_OFFSET'] = $startIndex; // Use normal pagination for display
-    } else {
-        $GLOBALS['DONATION_LIMIT'] = $itemsPerPage;
-        $GLOBALS['DONATION_OFFSET'] = $startIndex;
-    }
+	if ($status === 'pending') {
+		// In perf mode, fetch only page-size via keyset; else fetch more for processing and slice in module
+		if ($perfMode) {
+			$GLOBALS['DONATION_LIMIT'] = $itemsPerPage;
+			$GLOBALS['DONATION_OFFSET'] = 0;
+		} else {
+			$GLOBALS['DONATION_LIMIT'] = $pendingItemsPerPage; // broader fetch
+			$GLOBALS['DONATION_OFFSET'] = 0;
+		}
+		// Ensure module slices display to page size
+		$GLOBALS['DONATION_DISPLAY_OFFSET'] = $startIndex;
+		$GLOBALS['DONATION_DISPLAY_LIMIT'] = $itemsPerPage;
+	} else {
+		$GLOBALS['DONATION_LIMIT'] = $itemsPerPage;
+		$GLOBALS['DONATION_OFFSET'] = $startIndex;
+		$GLOBALS['DONATION_DISPLAY_LIMIT'] = $itemsPerPage;
+	}
 }
 // OPTIMIZATION: Enhanced multi-layer caching system for maximum performance
 // Layer 1: Memory cache (fastest, session-based)
@@ -129,7 +138,14 @@ unset($filtersForKey['page']);
 ksort($filtersForKey);
 $filtersHash = md5(json_encode($filtersForKey));
 $cacheKey = 'donations_list_' . $statusKey . '_p' . $currentPage . '_' . $filtersHash;
-$cacheFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . $cacheKey . '.json.gz';
+// Use a unified local cache directory when perf mode is enabled to align with invalidateCache/getCacheStats
+$localCacheDir = __DIR__ . DIRECTORY_SEPARATOR . 'cache';
+if (!is_dir($localCacheDir)) {
+	@mkdir($localCacheDir, 0777, true);
+}
+$cacheFile = $perfMode
+	? ($localCacheDir . DIRECTORY_SEPARATOR . $cacheKey . '.json.gz')
+	: (sys_get_temp_dir() . DIRECTORY_SEPARATOR . $cacheKey . '.json.gz');
 // Initialize cache state
 $useCache = false;
 $cacheSource = '';
@@ -698,19 +714,19 @@ function getCacheStats() {
                         <div class="row mb-3">
                             <div class="col-12">
                                 <div class="d-flex flex-wrap gap-2 mb-3 status-filter-buttons">
-                                    <a href="dashboard-Inventory-System-list-of-donations.php?status=all"
+                                    <a href="dashboard-Inventory-System-list-of-donations.php?status=all&perf_mode=on"
                                        class="btn <?php echo ($status === 'all' || !$status) ? 'btn-primary' : 'btn-outline-primary'; ?> btn-sm">
                                         <i class="fas fa-list me-1"></i>All Donors
                                     </a>
-                                    <a href="dashboard-Inventory-System-list-of-donations.php?status=pending"
+                                    <a href="dashboard-Inventory-System-list-of-donations.php?status=pending&perf_mode=on"
                                        class="btn <?php echo $status === 'pending' ? 'btn-warning' : 'btn-outline-warning'; ?> btn-sm">
                                         <i class="fas fa-clock me-1"></i>Pending
                                     </a>
-                                    <a href="dashboard-Inventory-System-list-of-donations.php?status=approved"
+                                    <a href="dashboard-Inventory-System-list-of-donations.php?status=approved&perf_mode=on"
                                        class="btn <?php echo $status === 'approved' ? 'btn-success' : 'btn-outline-success'; ?> btn-sm">
                                         <i class="fas fa-check me-1"></i>Approved
                                     </a>
-                                    <a href="dashboard-Inventory-System-list-of-donations.php?status=declined"
+                                    <a href="dashboard-Inventory-System-list-of-donations.php?status=declined&perf_mode=on"
                                        class="btn <?php echo ($status === 'declined' || $status === 'deferred') ? 'btn-danger' : 'btn-outline-danger'; ?> btn-sm">
                                         <i class="fas fa-times me-1"></i>Declined/Deferred
                                     </a>
@@ -1146,6 +1162,106 @@ function getCacheStats() {
                                 </tbody>
                             </table>
                         </div>
+                        <?php if ($status === 'all' && (isset($_GET['perf_mode']) && $_GET['perf_mode'] === 'on')): ?>
+                        <div id="allCursorNav" class="d-flex align-items-center gap-2 mb-3">
+                            <button type="button" id="allPrevBtn" class="btn btn-outline-secondary btn-sm" disabled>Prev</button>
+                            <button type="button" id="allNextBtn" class="btn btn-outline-secondary btn-sm">Next</button>
+                            <small id="allInfo" class="text-muted ms-2"></small>
+                        </div>
+                        <script>
+                        (function(){
+                            const tableBody = document.querySelector('#donationsTable tbody');
+                            const prevBtn = document.getElementById('allPrevBtn');
+                            const nextBtn = document.getElementById('allNextBtn');
+                            const infoEl = document.getElementById('allInfo');
+                            const apiBase = '../api/load-donations-data.php?status=all&perf_mode=on';
+                            let cursors = { approved:{prev:null,next:null}, declined:{prev:null,next:null}, pending:{prev:null,next:null} };
+
+                            async function fetchAll(dir){
+                                // dir: 'next' | 'prev'
+                                let url = apiBase;
+                                const params = new URLSearchParams();
+                                if (dir === 'next') {
+                                    if (cursors.approved.next) {
+                                        params.set('approved_cursor_ts', cursors.approved.next.cursor_ts || '');
+                                        params.set('approved_cursor_id', cursors.approved.next.cursor_id || '');
+                                        params.set('approved_cursor_dir', 'next');
+                                    }
+                                    if (cursors.declined.next) {
+                                        params.set('declined_cursor_ts', cursors.declined.next.cursor_ts || '');
+                                        params.set('declined_cursor_id', cursors.declined.next.cursor_id || '');
+                                        params.set('declined_cursor_dir', 'next');
+                                    }
+                                    if (cursors.pending.next) {
+                                        params.set('pending_cursor_ts', cursors.pending.next.cursor_ts || '');
+                                        params.set('pending_cursor_id', cursors.pending.next.cursor_id || '');
+                                        params.set('pending_cursor_dir', 'next');
+                                    }
+                                } else if (dir === 'prev') {
+                                    if (cursors.approved.prev) {
+                                        params.set('approved_cursor_ts', cursors.approved.prev.cursor_ts || '');
+                                        params.set('approved_cursor_id', cursors.approved.prev.cursor_id || '');
+                                        params.set('approved_cursor_dir', 'prev');
+                                    }
+                                    if (cursors.declined.prev) {
+                                        params.set('declined_cursor_ts', cursors.declined.prev.cursor_ts || '');
+                                        params.set('declined_cursor_id', cursors.declined.prev.cursor_id || '');
+                                        params.set('declined_cursor_dir', 'prev');
+                                    }
+                                    if (cursors.pending.prev) {
+                                        params.set('pending_cursor_ts', cursors.pending.prev.cursor_ts || '');
+                                        params.set('pending_cursor_id', cursors.pending.prev.cursor_id || '');
+                                        params.set('pending_cursor_dir', 'prev');
+                                    }
+                                }
+                                if ([...params.keys()].length) {
+                                    url += '&' + params.toString();
+                                }
+                                prevBtn.disabled = true; nextBtn.disabled = true; infoEl.textContent = 'Loading...';
+                                const res = await fetch(url, { headers: { 'Accept':'application/json' }});
+                                const json = await res.json();
+                                const rows = Array.isArray(json.data) ? json.data : [];
+                                // Update cursors
+                                if (json.streams) {
+                                    cursors.approved.prev = json.streams.approved ? json.streams.approved.prev : null;
+                                    cursors.approved.next = json.streams.approved ? json.streams.approved.next : null;
+                                    cursors.declined.prev = json.streams.declined ? json.streams.declined.prev : null;
+                                    cursors.declined.next = json.streams.declined ? json.streams.declined.next : null;
+                                    cursors.pending.prev = json.streams.pending ? json.streams.pending.prev : null;
+                                    cursors.pending.next = json.streams.pending ? json.streams.pending.next : null;
+                                }
+                                // Render
+                                const html = rows.map(d => {
+                                    const donorId = (d.donor_id || '');
+                                    const eligId = (d.eligibility_id || '');
+                                    const donorType = (d.donor_type || 'New');
+                                    const reg = (d.registration_source || d.registration_channel || 'PRC System');
+                                    const statusText = (d.status_text || 'Pending (Screening)');
+                                    const statusClass = (d.status_class || 'bg-warning');
+                                    return `<tr class="donor-row" data-donor-id="${String(donorId)}" data-eligibility-id="${String(eligId)}">
+                                        <td>${String(donorId)}</td>
+                                        <td>${(d.surname||'')}</td>
+                                        <td>${(d.first_name||'')}</td>
+                                        <td><span class="badge ${donorType==='Returning'?'bg-info':'bg-primary'}">${donorType}</span></td>
+                                        <td>${reg==='PRC Portal'?'PRC System':(reg==='Mobile'?'Mobile System':reg)}</td>
+                                        <td><span class="badge ${statusClass}">${statusText}</span></td>
+                                        <td><button type="button" class="btn btn-sm ${statusText.startsWith('Pending')?'btn-warning':'btn-info'}">${statusText.startsWith('Pending')?'Edit':'View'}</button></td>
+                                    </tr>`;
+                                }).join('');
+                                tableBody.innerHTML = html;
+                                // Enable/disable nav
+                                prevBtn.disabled = !(cursors.approved.prev || cursors.declined.prev || cursors.pending.prev);
+                                nextBtn.disabled = !(cursors.approved.next || cursors.declined.next || cursors.pending.next);
+                                infoEl.textContent = `Loaded ${rows.length} records`;
+                            }
+
+                            // Initialize by fetching to acquire cursors
+                            fetchAll('next').catch(()=>{ infoEl.textContent='Failed to load'; });
+                            prevBtn.addEventListener('click', function(){ fetchAll('prev'); });
+                            nextBtn.addEventListener('click', function(){ fetchAll('next'); });
+                        })();
+                        </script>
+                        <?php endif; ?>
                         <?php else: ?>
                         <div class="alert alert-info">
                             <i class="fas fa-info-circle me-2"></i>No donors found. New donor submissions will appear here.
@@ -2361,6 +2477,10 @@ function getCacheStats() {
     if (file_exists('../../src/views/modals/blood-collection-modal-admin.php')) {
         include_once '../../src/views/modals/blood-collection-modal-admin.php';
     }
+    // Blood collection view modal (Admin version)
+    if (file_exists('../../src/views/modals/blood-collection-view-modal-admin.php')) {
+        include_once '../../src/views/modals/blood-collection-view-modal-admin.php';
+    }
     ?>
     <!-- Admin modal styles/scripts -->
     <link rel="stylesheet" href="../../assets/css/medical-history-approval-modals.css">
@@ -2422,6 +2542,7 @@ function getCacheStats() {
      }
      </script>
     <script src="../../assets/js/blood_collection_modal_admin.js"></script>
+    <script src="../../assets/js/blood_collection_view_modal_admin.js"></script>
     <script>
         // Load phlebotomist details modal only when its container exists
         (function(){
@@ -3084,17 +3205,60 @@ function getCacheStats() {
             // Redirect to admin physical examination form
             window.location.href = `../../src/views/forms/physical-examination-form-admin.php?donor_id=${encodeURIComponent(context?.donor_id || '')}`;
         };
-        window.openPhlebotomistCollection = function(context) {
+        window.openPhlebotomistCollection = async function(context) {
             try {
+                const donorId = context?.donor_id || '';
+                
                 if (window.bloodCollectionModal && typeof window.bloodCollectionModal.openModal === 'function') {
-                    window.bloodCollectionModal.openModal({
-                        donor_id: context?.donor_id || '',
-                        physical_exam_id: context?.physical_exam_id || ''
-                    });
+                    const modalData = {
+                        donor_id: donorId
+                    };
+                    
+                    // If physical_exam_id is not provided, try to resolve it
+                    if (!context?.physical_exam_id) {
+                        try {
+                            const resp = await fetch(`../../assets/php_func/admin/get_physical_exam_details_admin.php?donor_id=${encodeURIComponent(donorId)}`);
+                            if (resp.ok) {
+                                const data = await resp.json();
+                                if (data?.success && data?.data?.physical_exam_id) {
+                                    modalData.physical_exam_id = data.data.physical_exam_id;
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Failed to resolve physical_exam_id:', e);
+                        }
+                    } else {
+                        modalData.physical_exam_id = context.physical_exam_id;
+                    }
+                    
+                    // Check if blood collection already exists for this donor
+                    if (modalData.physical_exam_id) {
+                        try {
+                            const collectionResp = await fetch(`../../public/api/blood_collection.php?physical_exam_id=${encodeURIComponent(modalData.physical_exam_id)}`);
+                            if (collectionResp.ok) {
+                                const collectionData = await collectionResp.json();
+                                if (collectionData && Array.isArray(collectionData) && collectionData.length > 0) {
+                                    // Collection exists, show view modal
+                                    if (window.bloodCollectionViewModalAdmin && typeof window.bloodCollectionViewModalAdmin.openModal === 'function') {
+                                        console.log('[Admin] Opening blood collection view modal');
+                                        await window.bloodCollectionViewModalAdmin.openModal(collectionData[0]);
+                                        return;
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Failed to check existing collection:', e);
+                        }
+                    }
+                    
+                    // No collection exists or error, open edit modal
+                    console.log('[Admin] Opening blood collection edit modal');
+                    await window.bloodCollectionModal.openModal(modalData);
                 } else {
-                    window.location.href = `dashboard-staff-blood-collection-submission.php?donor_id=${encodeURIComponent(context?.donor_id || '')}`;
+                    window.location.href = `dashboard-staff-blood-collection-submission.php?donor_id=${encodeURIComponent(donorId)}`;
                 }
             } catch (e) {
+                console.error('Error opening phlebotomist collection modal:', e);
                 window.location.href = `dashboard-staff-blood-collection-submission.php?donor_id=${encodeURIComponent(context?.donor_id || '')}`;
             }
         };
@@ -5881,8 +6045,14 @@ function getCacheStats() {
                     const donor = data.donor || {};
                     const eligibility = data.eligibility || {};
                     const safe = (v, fb = '-') => (v === null || v === undefined || v === '' ? fb : v);
-                    // Determine legacy success from eligibility (fallback API)
-                    const legacySuccess = ((eligibility.collection_status || '') + '').toLowerCase().includes('success');
+                    // Determine legacy success from eligibility collection_status
+                    const collectionStatus = (eligibility.collection_status || '') + '';
+                    const legacySuccess = collectionStatus.toLowerCase().includes('success');
+                    
+                    // Debug logging
+                    console.log('[Donor Details] Collection Status:', collectionStatus);
+                    console.log('[Donor Details] Legacy Success:', legacySuccess);
+                    console.log('[Donor Details] Eligibility data:', eligibility);
                     // Create legacy-style donor details HTML
                     const donorDetailsHTML = `
                         <div class="donor-details-container">
@@ -6046,9 +6216,7 @@ function getCacheStats() {
                                             <td>${legacySuccess ? 'Successful' : (eligibility.collection_status ? eligibility.collection_status : 'Pending')}</td>
                                             <td>${legacySuccess ? safe(eligibility.phlebotomist_note, 'Successful') : safe(eligibility.phlebotomist_note, '-')}</td>
                                             <td>
-                                                <button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="View Blood Collection" onclick="openPhlebotomistCollection({ donor_id: '${safe(donor.donor_id || eligibility.donor_id,'')}' })">
-                                                    <i class="fas fa-eye"></i>
-                                                </button>
+                                                ${!legacySuccess && !eligibility.collection_status ? `<button type="button" class="btn btn-sm btn-outline-secondary circular-btn" title="View Not Available" disabled><i class="fas fa-eye"></i></button>` : `<button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="View Blood Collection" onclick="openPhlebotomistCollection({ donor_id: '${safe(donor.donor_id || eligibility.donor_id,'')}' })"><i class="fas fa-eye"></i></button>`}
                                             </td>
                                         </tr>
                                     </tbody>

@@ -185,7 +185,10 @@ window.AdminDonorModal = (function() {
             } else if (isPendingBloodCollection) {
                 actionButton = `<button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="Edit Blood Collection" onclick="editBloodCollection('${donor.donor_id || ''}')"><i class="fas fa-pen"></i></button>`;
             } else if (isCompletedBloodCollection) {
-                actionButton = `<button type="button" class="btn btn-sm btn-outline-secondary circular-btn" title="View Not Available" disabled><i class="fas fa-eye"></i></button>`;
+                // Collection is completed/successful - enable view button
+                const donorId = donor.donor_id || '';
+                // Directly fetch and open the collection view modal, not the edit modal
+                actionButton = `<button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="View Blood Collection" onclick="openBloodCollectionView('${donorId}')"><i class="fas fa-eye"></i></button>`;
             } else {
                 actionButton = `<button type="button" class="btn btn-sm btn-outline-secondary circular-btn" title="View Not Available" disabled><i class="fas fa-eye"></i></button>`;
             }
@@ -452,4 +455,48 @@ window.viewInitialScreening = function(donorId) {
     
     // Show the screening summary modal
     window.showScreeningSummary(donorId, eligibilityId);
+};
+
+// Function to open blood collection view modal
+window.openBloodCollectionView = async function(donorId) {
+    console.log('[Admin] Opening blood collection view for donor:', donorId);
+    
+    try {
+        // Step 1: Get physical_exam_id
+        const examResp = await fetch(`../../assets/php_func/admin/get_physical_exam_details_admin.php?donor_id=${encodeURIComponent(donorId)}`);
+        if (!examResp.ok) {
+            throw new Error('Failed to fetch physical exam details');
+        }
+        
+        const examData = await examResp.json();
+        if (!examData.success || !examData.data || !examData.data.physical_exam_id) {
+            console.error('[Admin] No physical exam found for donor:', donorId);
+            alert('No physical examination found for this donor');
+            return;
+        }
+        
+        const physicalExamId = examData.data.physical_exam_id;
+        console.log('[Admin] Found physical_exam_id:', physicalExamId);
+        
+        // Step 2: Get blood collection data - use direct Supabase query
+        // Create collection data object with the physical_exam_id
+        const collectionData = {
+            physical_exam_id: physicalExamId,
+            donor_id: donorId
+        };
+        
+        console.log('[Admin] Opening view modal with collection data:', collectionData);
+        
+        // Step 3: Open the view modal - fetch the actual collection data in the modal
+        if (window.bloodCollectionViewModalAdmin && typeof window.bloodCollectionViewModalAdmin.openModal === 'function') {
+            await window.bloodCollectionViewModalAdmin.openModal(collectionData);
+        } else {
+            console.error('[Admin] bloodCollectionViewModalAdmin not available');
+            alert('Blood collection view modal not available');
+        }
+        
+    } catch (error) {
+        console.error('[Admin] Error opening blood collection view:', error);
+        alert('Error loading blood collection data: ' + error.message);
+    }
 };

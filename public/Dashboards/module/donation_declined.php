@@ -21,7 +21,13 @@ $declinedDonations = [];
 $error = null;
 
 // Debug flag - set to true for additional logging
-$DEBUG = true;
+$DEBUG = (isset($_GET['debug']) && $_GET['debug'] == '1');
+
+$perfMode = (isset($_GET['perf_mode']) && $_GET['perf_mode'] === 'on');
+// Keyset cursor params (perf mode)
+$cursorTs = isset($_GET['cursor_ts']) ? $_GET['cursor_ts'] : null;
+$cursorId = isset($_GET['cursor_id']) ? $_GET['cursor_id'] : null;
+$cursorDir = isset($_GET['cursor_dir']) ? $_GET['cursor_dir'] : 'next'; // next|prev
 
 // Log if debug is enabled
 function debug_log($message) {
@@ -39,7 +45,26 @@ try {
     // STEP 1: Get declined/deferred donors from eligibility table (primary source)
     $limit = isset($GLOBALS['DONATION_LIMIT']) ? intval($GLOBALS['DONATION_LIMIT']) : 100;
     $offset = isset($GLOBALS['DONATION_OFFSET']) ? intval($GLOBALS['DONATION_OFFSET']) : 0;
-    $eligibilityResponse = supabaseRequest("eligibility?or=(status.eq.declined,status.eq.deferred,status.eq.refused,status.eq.ineligible)&select=eligibility_id,donor_id,status,disapproval_reason,created_at&order=created_at.desc&limit={$limit}&offset={$offset}");
+    // Base params
+    $params = [
+        'select' => 'eligibility_id,donor_id,status,disapproval_reason,created_at',
+        'or' => '(status.eq.declined,status.eq.deferred,status.eq.refused,status.eq.ineligible)',
+        'order' => 'created_at.desc,eligibility_id.desc',
+        'limit' => $limit
+    ];
+    if (!$perfMode || !$cursorTs) {
+        $params['offset'] = $offset;
+        $eligibilityResponse = supabaseRequest('eligibility?' . http_build_query($params));
+    } else {
+        $ts = rawurlencode($cursorTs);
+        $id = rawurlencode((string)$cursorId);
+        if ($cursorDir === 'prev') {
+            $orKeyset = "(created_at.gt.{$ts},and(created_at.eq.{$ts},eligibility_id.gt.{$id}))";
+        } else {
+            $orKeyset = "(created_at.lt.{$ts},and(created_at.eq.{$ts},eligibility_id.lt.{$id}))";
+        }
+        $eligibilityResponse = supabaseRequest('eligibility?' . http_build_query($params) . '&or=' . rawurlencode($orKeyset));
+    }
     
     if (isset($eligibilityResponse['data']) && is_array($eligibilityResponse['data'])) {
         debug_log("Found " . count($eligibilityResponse['data']) . " declined/deferred eligibility records");
@@ -109,6 +134,16 @@ try {
                 
                 debug_log("Added declined/deferred donor from eligibility: " . ($donor['surname'] ?? 'Unknown') . ", " . ($donor['first_name'] ?? 'Unknown') . " - " . $statusText);
             }
+        }
+
+        // cursors
+        if ($perfMode && !empty($eligibilityResponse['data'])) {
+            $first = $eligibilityResponse['data'][0];
+            $last = $eligibilityResponse['data'][count($eligibilityResponse['data']) - 1];
+            $GLOBALS['DECLINED_PREV_CURSOR_TS'] = $first['created_at'] ?? null;
+            $GLOBALS['DECLINED_PREV_CURSOR_ID'] = $first['eligibility_id'] ?? null;
+            $GLOBALS['DECLINED_NEXT_CURSOR_TS'] = $last['created_at'] ?? null;
+            $GLOBALS['DECLINED_NEXT_CURSOR_ID'] = $last['eligibility_id'] ?? null;
         }
     }
     

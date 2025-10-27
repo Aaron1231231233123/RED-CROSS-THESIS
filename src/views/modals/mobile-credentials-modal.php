@@ -19,7 +19,7 @@ $donorName = $_SESSION['donor_registered_name'] ?? 'Donor';
 ?>
 
 <!-- Mobile Credentials Modal -->
-<div class="modal fade" id="mobileCredentialsModal" tabindex="-1" aria-labelledby="mobileCredentialsModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+<div class="modal" id="mobileCredentialsModal" tabindex="-1" aria-labelledby="mobileCredentialsModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-success text-white">
@@ -80,7 +80,7 @@ $donorName = $_SESSION['donor_registered_name'] ?? 'Donor';
                         <h6 class="text-secondary">Mobile App Access:</h6>
                         <p class="text-muted mb-0">
                             <i class="fas fa-globe me-2"></i>
-                            <strong>URL:</strong> <code>http://localhost/Mobile-Web-Based-App-System/mobile-app/</code>
+                            <strong>URL:</strong> <code>localhost/Mobile-Web-Based-App-System/mobile-app/</code>
                         </p>
                     </div>
                 </div>
@@ -96,6 +96,23 @@ $donorName = $_SESSION['donor_registered_name'] ?? 'Donor';
 </div>
 
 <style>
+/* Remove backdrop completely and instantly */
+#mobileCredentialsModal {
+    background: none !important;
+}
+
+#mobileCredentialsModal ~ .modal-backdrop,
+.modal-backdrop.show {
+    opacity: 0 !important;
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Force backdrop removal on hide */
+body.modal-open {
+    overflow: auto !important;
+}
+
 .credentials-container {
     background-color: #f8f9fa;
     border: 1px solid #dee2e6;
@@ -224,6 +241,51 @@ function showSuccessMessage(message) {
             alert.parentNode.removeChild(alert);
         }
     }, 3000);
+}
+
+// Auto-show modal when page loads if credentials are available
+window.addEventListener('load', function() {
+    console.log('[Mobile Credentials] Page loaded, checking for modal');
+    
+    setTimeout(function() {
+        const modal = document.getElementById('mobileCredentialsModal');
+        if (modal) {
+            console.log('[Mobile Credentials] Modal element found');
+            // Check if modal should be shown based on the modal's existence and visibility
+            const emailValue = document.getElementById('mobileEmail')?.value || '';
+            const passwordValue = document.getElementById('mobilePassword')?.value || '';
+            
+            console.log('[Mobile Credentials] Email value:', emailValue);
+            console.log('[Mobile Credentials] Password value:', passwordValue ? '***' : 'empty');
+            
+            if (emailValue && passwordValue) {
+                console.log('[Mobile Credentials] Auto-opening modal with credentials');
+                const modalInstance = new bootstrap.Modal(modal);
+                modalInstance.show();
+            } else {
+                console.log('[Mobile Credentials] No credentials to display');
+            }
+        } else {
+            console.log('[Mobile Credentials] Modal element not found');
+        }
+    }, 500);
+});
+
+// Remove backdrop immediately when modal is hidden
+const modalElement = document.getElementById('mobileCredentialsModal');
+if (modalElement) {
+    modalElement.addEventListener('hidden.bs.modal', function() {
+        // Remove all modal backdrops immediately
+        const backdrops = document.querySelectorAll('.modal-backdrop');
+        backdrops.forEach(backdrop => backdrop.remove());
+        
+        // Remove modal-open class from body
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+        
+        console.log('[Mobile Credentials] Backdrop removed instantly');
+    });
 }
 
 // Show error feedback

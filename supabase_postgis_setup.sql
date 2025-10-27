@@ -189,6 +189,16 @@ CREATE INDEX IF NOT EXISTS donor_form_donor_id_idx ON donor_form(donor_id);
 CREATE INDEX IF NOT EXISTS blood_bank_units_donor_id_idx ON blood_bank_units(donor_id);
 CREATE INDEX IF NOT EXISTS blood_bank_units_status_idx ON blood_bank_units(status);
 
+-- Additional non-spatial indexes for dashboard performance (keyset + filters)
+CREATE INDEX IF NOT EXISTS idx_donor_form_submitted_at ON donor_form (submitted_at);
+CREATE INDEX IF NOT EXISTS idx_eligibility_donor_id ON eligibility (donor_id);
+CREATE INDEX IF NOT EXISTS idx_eligibility_created_at ON eligibility (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_eligibility_status ON eligibility (status);
+CREATE INDEX IF NOT EXISTS idx_screening_form_donor_form_id ON screening_form (donor_form_id);
+CREATE INDEX IF NOT EXISTS idx_medical_history_donor_id ON medical_history (donor_id);
+CREATE INDEX IF NOT EXISTS idx_physical_examination_donor_id ON physical_examination (donor_id);
+CREATE INDEX IF NOT EXISTS idx_blood_collection_physical_exam_id ON blood_collection (physical_exam_id);
+
 -- =====================================================
 -- USAGE INSTRUCTIONS:
 -- =====================================================

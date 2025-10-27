@@ -24,32 +24,28 @@ function getOptimizedGISData() {
             return getFallbackGISData();
         }
         
-        // PostGIS available - use optimized spatial queries
-        $query = "donor_form?select=donor_id,permanent_address,office_address,permanent_latitude,permanent_longitude,office_latitude,office_longitude,permanent_geom,office_geom";
+        // PostGIS available - use optimized spatial queries with coordinates
+        // Get ALL donors with coordinates (not just those with blood bank units)
+        $query = "donor_form?select=donor_id,permanent_address,office_address,permanent_latitude,permanent_longitude,office_latitude,office_longitude,permanent_geom,office_geom&permanent_latitude=not.is.null&permanent_longitude=not.is.null";
         $results = supabaseRequest($query);
         
         if (empty($results['data'])) {
             return getFallbackGISData();
         }
         
-        // Filter results to only include donors with blood bank units
-        $bloodBankUnits = supabaseRequest("blood_bank_units?select=donor_id");
-        $validDonorIds = array_column($bloodBankUnits['data'] ?? [], 'donor_id');
-        
+        // Process results with coordinates
         $filteredResults = [];
         foreach ($results['data'] as $donor) {
-            if (in_array($donor['donor_id'], $validDonorIds)) {
-                $filteredResults[] = [
-                    'donor_id' => $donor['donor_id'],
-                    'permanent_address' => $donor['permanent_address'],
-                    'office_address' => $donor['office_address'],
-                    'permanent_latitude' => $donor['permanent_latitude'],
-                    'permanent_longitude' => $donor['permanent_longitude'],
-                    'office_latitude' => $donor['office_latitude'],
-                    'office_longitude' => $donor['office_longitude'],
-                    'location_source' => $donor['permanent_geom'] ? 'permanent' : ($donor['office_geom'] ? 'office' : 'none')
-                ];
-            }
+            $filteredResults[] = [
+                'donor_id' => $donor['donor_id'],
+                'permanent_address' => $donor['permanent_address'],
+                'office_address' => $donor['office_address'],
+                'permanent_latitude' => $donor['permanent_latitude'],
+                'permanent_longitude' => $donor['permanent_longitude'],
+                'office_latitude' => $donor['office_latitude'],
+                'office_longitude' => $donor['office_longitude'],
+                'location_source' => $donor['permanent_geom'] ? 'permanent' : ($donor['office_geom'] ? 'office' : 'none')
+            ];
         }
         
         return processGISResults($filteredResults);
@@ -63,17 +59,8 @@ function getOptimizedGISData() {
 // Fallback function for when PostGIS is not available
 function getFallbackGISData() {
     try {
-        // Get all unique donor IDs from blood_bank_units
-        $bloodBankUnits = supabaseRequest("blood_bank_units?select=donor_id");
-        $donorIds = array_unique(array_column($bloodBankUnits['data'] ?? [], 'donor_id'));
-        
-        if (empty($donorIds)) {
-            return processGISResults([]);
-        }
-        
-        // Get donor addresses
-        $donorIdsString = implode(',', $donorIds);
-        $donorFormResponse = supabaseRequest("donor_form?select=donor_id,permanent_address,office_address&donor_id=in.(" . $donorIdsString . ")");
+        // Get all donors (not just those with blood bank units)
+        $donorFormResponse = supabaseRequest("donor_form?select=donor_id,permanent_address,office_address");
         $donorData = $donorFormResponse['data'] ?? [];
         
         $results = [];
@@ -175,7 +162,7 @@ function processGISResults($results) {
             $cityDonorCounts['Unidentified Location']++;
         }
         
-        // For Heatmap: Use permanent address
+        // For Heatmap: Use coordinates if available, otherwise use address
         if (!empty($donor['permanent_address'])) {
             $standardizedAddress = standardizeAddress($donor['permanent_address']);
             $heatmapData[] = [
@@ -184,7 +171,8 @@ function processGISResults($results) {
                 'address' => $standardizedAddress,
                 'latitude' => $donor['permanent_latitude'],
                 'longitude' => $donor['permanent_longitude'],
-                'location_source' => $donor['location_source']
+                'location_source' => $donor['location_source'],
+                'has_coordinates' => !empty($donor['permanent_latitude']) && !empty($donor['permanent_longitude'])
             ];
         }
     }
@@ -192,11 +180,21 @@ function processGISResults($results) {
     // Sort cities by donor count
     arsort($cityDonorCounts);
     
+    // Count donors with coordinates
+    $donorsWithCoords = 0;
+    foreach ($heatmapData as $donor) {
+        if ($donor['has_coordinates']) {
+            $donorsWithCoords++;
+        }
+    }
+    
     return [
         'totalDonorCount' => $totalDonorCount,
         'cityDonorCounts' => $cityDonorCounts,
         'heatmapData' => $heatmapData,
-        'postgis_available' => !empty($results) && !empty($results[0]['permanent_latitude'])
+        'postgis_available' => !empty($results) && !empty($results[0]['permanent_latitude']),
+        'donorsWithCoordinates' => $donorsWithCoords,
+        'coordinateCoverage' => $totalDonorCount > 0 ? round(($donorsWithCoords / $totalDonorCount) * 100, 1) : 0
     ];
 }
 

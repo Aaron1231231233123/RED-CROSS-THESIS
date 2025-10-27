@@ -4,11 +4,15 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-// Test debug logging
-error_log("DEBUG - donation_pending.php module loaded at " . date('Y-m-d H:i:s'));
+// Test debug logging (gated by ?debug=1)
+if (isset($_GET['debug']) && $_GET['debug'] == '1') {
+    error_log("DEBUG - donation_pending.php module loaded at " . date('Y-m-d H:i:s'));
+}
 
-// Also write to a custom log file for easier debugging
-file_put_contents('../../assets/logs/donation_pending_debug.log', "[" . date('Y-m-d H:i:s') . "] donation_pending.php module loaded\n", FILE_APPEND | LOCK_EX);
+// Also write to a custom log file for easier debugging when debug flag is set
+if (isset($_GET['debug']) && $_GET['debug'] == '1') {
+    file_put_contents('../../assets/logs/donation_pending_debug.log', "[" . date('Y-m-d H:i:s') . "] donation_pending.php module loaded\n", FILE_APPEND | LOCK_EX);
+}
 
 // Include database connection
 include_once '../../assets/conn/db_conn.php';
@@ -26,115 +30,168 @@ $startTime = microtime(true);
 $pendingDonations = [];
 $error = null;
 
-try {
-    // OPTIMIZATION 1: Pull latest eligibility records to determine donor type (New vs Returning)
-    $donorsWithEligibility = [];
-    $eligibilityResponse = supabaseRequest("eligibility?select=donor_id,created_at&order=created_at.desc");
-    if (isset($eligibilityResponse['data']) && is_array($eligibilityResponse['data'])) {
-        foreach ($eligibilityResponse['data'] as $eligibility) {
-            if (!empty($eligibility['donor_id'])) {
-                $donorsWithEligibility[$eligibility['donor_id']] = true; // set for quick lookup
-            }
-        }
-    }
-    
-    // OPTIMIZATION 2: Fetch related process tables with status fields for accurate status determination
-    // Include status fields from each stage to determine accurate pending status
-    $screeningResponse = supabaseRequest("screening_form?select=screening_id,donor_form_id,needs_review,disapproval_reason,created_at");
-    $medicalResponse   = supabaseRequest("medical_history?select=donor_id,needs_review,medical_approval,is_admin,updated_at");
-    $physicalResponse  = supabaseRequest("physical_examination?select=physical_exam_id,donor_id,needs_review,remarks,created_at");
-    
-    // Fetch blood collection data with proper linking
-    $collectionResponse = supabaseRequest("blood_collection?select=physical_exam_id,needs_review,status,start_time,created_at&order=created_at.desc");
+// Feature flag to enable batched, scoped queries
+$perfMode = (isset($_GET['perf_mode']) && $_GET['perf_mode'] === 'on');
+// Optional keyset cursor params (perf mode only)
+$cursorTs = isset($_GET['cursor_ts']) ? $_GET['cursor_ts'] : null;
+$cursorId = isset($_GET['cursor_id']) ? intval($_GET['cursor_id']) : null;
+$cursorDir = isset($_GET['cursor_dir']) ? $_GET['cursor_dir'] : 'next'; // next|prev
 
-    // Build lookup maps with status fields
-    $screeningByDonorId = [];
-    if (isset($screeningResponse['data']) && is_array($screeningResponse['data'])) {
-        foreach ($screeningResponse['data'] as $row) {
-            if (!empty($row['donor_form_id'])) {
-                $screeningByDonorId[$row['donor_form_id']] = [
-                    'screening_id' => $row['screening_id'] ?? null,
-                    'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
-                    'disapproval_reason' => $row['disapproval_reason'] ?? null
-                ];
+try {
+    // Determine limit/offset for the donor page
+    $limit = isset($GLOBALS['DONATION_LIMIT']) ? intval($GLOBALS['DONATION_LIMIT']) : 100;
+    $offset = isset($GLOBALS['DONATION_OFFSET']) ? intval($GLOBALS['DONATION_OFFSET']) : 0;
+
+    // Fetch donors (authoritative list to scope downstream queries)
+    if ($perfMode && $cursorTs) {
+        // Keyset pagination: oldest-first (FIFO)
+        $order = 'order=submitted_at.asc,donor_id.asc';
+        $endpoint = "donor_form?{$order}&limit={$limit}";
+        $ts = rawurlencode($cursorTs);
+        if ($cursorDir === 'prev') {
+            // Go to earlier donors (before current first): submitted_at.lt OR (eq AND donor_id.lt)
+            if ($cursorId) {
+                $endpoint .= "&or=(submitted_at.lt.{$ts},and(submitted_at.eq.{$ts},donor_id.lt.{$cursorId}))";
+            } else {
+                $endpoint .= "&submitted_at=lt.{$ts}";
+            }
+        } else {
+            // Next page (forward in time)
+            if ($cursorId) {
+                $endpoint .= "&or=(submitted_at.gt.{$ts},and(submitted_at.eq.{$ts},donor_id.gt.{$cursorId}))";
+            } else {
+                $endpoint .= "&submitted_at=gt.{$ts}";
             }
         }
+        $donorResponse = supabaseRequest($endpoint);
+    } else {
+        // Offset pagination fallback
+        $donorResponse = supabaseRequest("donor_form?order=submitted_at.desc&limit={$limit}&offset={$offset}");
     }
     
-    $medicalByDonorId = [];
-    if (isset($medicalResponse['data']) && is_array($medicalResponse['data'])) {
-        foreach ($medicalResponse['data'] as $row) {
-            if (!empty($row['donor_id'])) {
-                $medicalByDonorId[$row['donor_id']] = [
-                    'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
-                    'medical_approval' => $row['medical_approval'] ?? null,
-                    'is_admin' => $row['is_admin'] ?? null
-                ];
-            }
+    if (!isset($donorResponse['data']) || !is_array($donorResponse['data'])) {
+        throw new Exception("Failed to fetch donors: " . ($donorResponse['error'] ?? 'Unknown error'));
+    }
+
+    // Build donor id list
+    $donorIds = array_values(array_filter(array_column($donorResponse['data'], 'donor_id')));
+
+    // Compute next cursor from the raw donor list (if using keyset mode)
+    if ($perfMode && !empty($donorResponse['data'])) {
+        $first = $donorResponse['data'][0];
+        $last = $donorResponse['data'][count($donorResponse['data']) - 1];
+        $firstTs = $first['submitted_at'] ?? ($first['created_at'] ?? null);
+        $firstId = $first['donor_id'] ?? null;
+        $lastTs = $last['submitted_at'] ?? ($last['created_at'] ?? null);
+        $lastId = $last['donor_id'] ?? null;
+        if ($firstTs && $firstId) {
+            $GLOBALS['PENDING_PREV_CURSOR_TS'] = $firstTs;
+            $GLOBALS['PENDING_PREV_CURSOR_ID'] = $firstId;
         }
+        if ($lastTs && $lastId) {
+            $GLOBALS['PENDING_NEXT_CURSOR_TS'] = $lastTs;
+            $GLOBALS['PENDING_NEXT_CURSOR_ID'] = $lastId;
+        }
+        // Oldest-first guarantee: ensure sort_ts calculation later aligns
     }
-    
-    $physicalByDonorId = [];
-    $physicalExamIdByDonorId = []; // Add mapping for physical_exam_id
-    if (isset($physicalResponse['data']) && is_array($physicalResponse['data'])) {
-        foreach ($physicalResponse['data'] as $row) {
-            if (!empty($row['donor_id'])) {
-                $physicalByDonorId[$row['donor_id']] = [
-                    'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
-                    'remarks' => $row['remarks'] ?? null
-                ];
-                // Also store physical_exam_id for blood collection lookup
-                if (!empty($row['physical_exam_id'])) {
-                    $physicalExamIdByDonorId[$row['donor_id']] = $row['physical_exam_id'];
+
+    // Short-circuit if no donors on this page
+    if (empty($donorIds)) {
+        $pendingDonations = [];
+    } else {
+        // OPTIMIZATION 1: Pull latest eligibility records for only current donor ids
+        $donorsWithEligibility = [];
+        $eligibilityBatch = supabaseRequest("eligibility?donor_id=in.(" . implode(',', $donorIds) . ")&select=donor_id,status,created_at&order=created_at.desc");
+        if (isset($eligibilityBatch['data']) && is_array($eligibilityBatch['data'])) {
+            foreach ($eligibilityBatch['data'] as $elig) {
+                if (!empty($elig['donor_id'])) {
+                    $donorsWithEligibility[$elig['donor_id']] = true;
                 }
             }
         }
-        error_log("DEBUG - Fetched " . count($physicalExamIdByDonorId) . " physical exam records");
-        // Log some sample physical exam records for debugging
-        $sampleCount = 0;
-        foreach ($physicalExamIdByDonorId as $donorId => $examId) {
-            if ($sampleCount < 3) {
-                error_log("DEBUG - Sample physical exam: donorId=$donorId, examId=$examId");
-                $sampleCount++;
-            }
+
+        if ($perfMode) {
+            // OPTIMIZATION 2 (perf mode): Fetch related tables scoped by donor ids using in() filters
+            $screeningResponse = supabaseRequest("screening_form?donor_form_id=in.(" . implode(',', $donorIds) . ")&select=screening_id,donor_form_id,needs_review,disapproval_reason,created_at");
+            $medicalResponse   = supabaseRequest("medical_history?donor_id=in.(" . implode(',', $donorIds) . ")&select=donor_id,needs_review,medical_approval,is_admin,updated_at");
+            $physicalResponse  = supabaseRequest("physical_examination?donor_id=in.(" . implode(',', $donorIds) . ")&select=physical_exam_id,donor_id,needs_review,remarks,created_at");
+        } else {
+            // Fallback to previous broader fetches when perf mode is off
+            $screeningResponse = supabaseRequest("screening_form?select=screening_id,donor_form_id,needs_review,disapproval_reason,created_at");
+            $medicalResponse   = supabaseRequest("medical_history?select=donor_id,needs_review,medical_approval,is_admin,updated_at");
+            $physicalResponse  = supabaseRequest("physical_examination?select=physical_exam_id,donor_id,needs_review,remarks,created_at");
         }
-    } else {
-        error_log("DEBUG - No physical exam data found or invalid response");
-    }
-    
-    $collectionByPhysicalExamId = [];
-    if (isset($collectionResponse['data']) && is_array($collectionResponse['data'])) {
-        foreach ($collectionResponse['data'] as $row) {
-            if (!empty($row['physical_exam_id'])) {
-                // Store the most recent record for each physical_exam_id (since we ordered by created_at.desc)
-                if (!isset($collectionByPhysicalExamId[$row['physical_exam_id']])) {
-                    $collectionByPhysicalExamId[$row['physical_exam_id']] = [
+
+        // Build lookup maps
+        $screeningByDonorId = [];
+        if (isset($screeningResponse['data']) && is_array($screeningResponse['data'])) {
+            foreach ($screeningResponse['data'] as $row) {
+                if (!empty($row['donor_form_id'])) {
+                    $screeningByDonorId[$row['donor_form_id']] = [
+                        'screening_id' => $row['screening_id'] ?? null,
                         'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
-                        'status' => $row['status'] ?? null,
-                        'created_at' => $row['created_at'] ?? null
+                        'disapproval_reason' => $row['disapproval_reason'] ?? null
                     ];
                 }
             }
         }
-        error_log("DEBUG - Fetched " . count($collectionByPhysicalExamId) . " blood collection records");
-        // Log some sample blood collection records for debugging
-        $sampleCount = 0;
-        foreach ($collectionByPhysicalExamId as $examId => $data) {
-            if ($sampleCount < 3) {
-                error_log("DEBUG - Sample blood collection: examId=$examId, status=" . ($data['status'] ?? 'null') . ", needs_review=" . ($data['needs_review'] ? 'true' : 'false'));
-                $sampleCount++;
+
+        $medicalByDonorId = [];
+        if (isset($medicalResponse['data']) && is_array($medicalResponse['data'])) {
+            foreach ($medicalResponse['data'] as $row) {
+                if (!empty($row['donor_id'])) {
+                    $medicalByDonorId[$row['donor_id']] = [
+                        'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
+                        'medical_approval' => $row['medical_approval'] ?? null,
+                        'is_admin' => $row['is_admin'] ?? null
+                    ];
+                }
             }
         }
-    } else {
-        error_log("DEBUG - No blood collection data found or invalid response");
-    }
+
+        $physicalByDonorId = [];
+        $physicalExamIdByDonorId = [];
+        if (isset($physicalResponse['data']) && is_array($physicalResponse['data'])) {
+            foreach ($physicalResponse['data'] as $row) {
+                if (!empty($row['donor_id'])) {
+                    $physicalByDonorId[$row['donor_id']] = [
+                        'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
+                        'remarks' => $row['remarks'] ?? null
+                    ];
+                    if (!empty($row['physical_exam_id'])) {
+                        $physicalExamIdByDonorId[$row['donor_id']] = $row['physical_exam_id'];
+                    }
+                }
+            }
+        }
+
+        // Blood collection: fetch only for relevant physical_exam_ids (if any)
+        $collectionByPhysicalExamId = [];
+        if (!empty($physicalExamIdByDonorId)) {
+            $examIds = array_values(array_filter($physicalExamIdByDonorId));
+            if (!empty($examIds)) {
+                if ($perfMode) {
+                    $collectionResponse = supabaseRequest("blood_collection?physical_exam_id=in.(" . implode(',', $examIds) . ")&select=physical_exam_id,needs_review,status,created_at&order=created_at.desc");
+                } else {
+                    $collectionResponse = supabaseRequest("blood_collection?select=physical_exam_id,needs_review,status,start_time,created_at&order=created_at.desc");
+                }
+                if (isset($collectionResponse['data']) && is_array($collectionResponse['data'])) {
+                    foreach ($collectionResponse['data'] as $row) {
+                        if (!empty($row['physical_exam_id']) && !isset($collectionByPhysicalExamId[$row['physical_exam_id']])) {
+                            $collectionByPhysicalExamId[$row['physical_exam_id']] = [
+                                'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
+                                'status' => $row['status'] ?? null,
+                                'created_at' => $row['created_at'] ?? null
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+
+    // (Removed duplicate lookup map rebuilding to avoid redefinition and extra work)
 
     // OPTIMIZATION 3: Get donor_form data with limit/offset for pagination
-    $limit = isset($GLOBALS['DONATION_LIMIT']) ? intval($GLOBALS['DONATION_LIMIT']) : 100;
-    $offset = isset($GLOBALS['DONATION_OFFSET']) ? intval($GLOBALS['DONATION_OFFSET']) : 0;
-    error_log("DEBUG - Fetching donors with limit=$limit, offset=$offset");
-    $donorResponse = supabaseRequest("donor_form?order=submitted_at.desc&limit={$limit}&offset={$offset}");
-    
     if (isset($donorResponse['data']) && is_array($donorResponse['data'])) {
         // Log the first donor record to see all available fields
         if (!empty($donorResponse['data'])) {
@@ -186,42 +243,13 @@ try {
             // Compute current process status
             $statusLabel = 'Pending (Screening)';
             if ($donorId !== null) {
-                // PRIORITY CHECK: Look for ANY decline/deferral status anywhere in the workflow
+                // PRIORITY CHECK: Look for ANY decline/deferral status anywhere in the workflow using batched maps
                 $hasDeclineDeferStatus = false;
                 $declineDeferType = '';
-                
-                // 1. Check eligibility table first (most authoritative)
-                $eligibilityCurl = curl_init(SUPABASE_URL . '/rest/v1/eligibility?donor_id=eq.' . $donorId . '&order=created_at.desc&limit=1');
-                curl_setopt($eligibilityCurl, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($eligibilityCurl, CURLOPT_HTTPHEADER, [
-                    'apikey: ' . SUPABASE_API_KEY,
-                    'Authorization: Bearer ' . SUPABASE_API_KEY,
-                    'Content-Type: application/json'
-                ]);
-                $eligibilityResponse = curl_exec($eligibilityCurl);
-                $eligibilityHttpCode = curl_getinfo($eligibilityCurl, CURLINFO_HTTP_CODE);
-                curl_close($eligibilityCurl);
-                
-                if ($eligibilityHttpCode === 200) {
-                    $eligibilityData = json_decode($eligibilityResponse, true) ?: [];
-                    if (!empty($eligibilityData)) {
-                        $eligibilityStatus = strtolower($eligibilityData[0]['status'] ?? '');
-
-                        // Check for decline/deferral in eligibility table
-                        if (in_array($eligibilityStatus, ['declined', 'refused'])) {
-                            $hasDeclineDeferStatus = true;
-                            $declineDeferType = 'Declined';
-                        } elseif (in_array($eligibilityStatus, ['deferred', 'ineligible'])) {
-                            $hasDeclineDeferStatus = true;
-                            $declineDeferType = 'Deferred';
-                        } elseif (in_array($eligibilityStatus, ['approved', 'eligible'])) {
-                            // Donor has final approved status, should not appear in pending
-                            if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
-                                error_log("DEBUG - Donor $donorId: Skipped due to eligibility status: '$eligibilityStatus'");
-                            }
-                            continue;
-                        }
-                    }
+                // Eligibility
+                if (isset($donorsWithEligibility[$donorId])) {
+                    // We only know the donor has eligibility; if needed, perf_mode could enrich with latest status
+                    // For now, assume presence of eligibility indicates returning donor; status decision remains via other tables
                 }
                 
                 // 2. Check screening form for decline status
@@ -264,42 +292,11 @@ try {
                 if ($hasDeclineDeferStatus) {
                     if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120])) {
                         error_log("DEBUG - Donor $donorId: Skipped due to decline/deferral status: '$declineDeferType'");
-                    }                    continue; // Skip this donor - they have a final decline/deferral status
-                }                // Based on user specifications: Interviewer role as primary checking, needs_review as fallback
-                
-                // 0. Determine completion for Medical History and Initial Screening first.
-                // New donors (no records yet) should remain "Pending (Screening)" by default.
-                $medicalHistoryCompleted = false;
-                $screeningCompleted = false;
-                
-                // Medical History completion: Approved or Not Approved AND does not need review
-                if (isset($medicalByDonorId[$donorId])) {
-                    $medRecordForCompletion = $medicalByDonorId[$donorId];
-                    if (is_array($medRecordForCompletion)) {
-                        $medicalApprovalVal = $medRecordForCompletion['medical_approval'] ?? '';
-                        $medNeedsVal = $medRecordForCompletion['needs_review'] ?? null;
-                        if (in_array($medicalApprovalVal, ['Approved', 'Not Approved'], true) && $medNeedsVal !== true) {
-                            $medicalHistoryCompleted = true;
-                        }
                     }
+                    continue; // Skip this donor - they have a final decline/deferral status
                 }
                 
-                // Initial Screening completion: no needs_review and no disapproval_reason
-                if (isset($screeningByDonorId[$donorId])) {
-                    $screenForCompletion = $screeningByDonorId[$donorId];
-                    if (is_array($screenForCompletion)) {
-                        $screenNeedsVal = $screenForCompletion['needs_review'] ?? null;
-                        $disapprovalReasonVal = $screenForCompletion['disapproval_reason'] ?? '';
-                        if ($screenNeedsVal !== true && empty($disapprovalReasonVal)) {
-                            $screeningCompleted = true;
-                        }
-                    }
-                }
-                
-                // Gate downstream stage checks to only run when both early stages are completed
-                $shouldCheckDownstreamStages = ($medicalHistoryCompleted && $screeningCompleted);
-                
-                // NEW WORKFLOW: Check interviewer phase completion first
+                // WORKFLOW: Check interviewer phase completion
                 $isMedicalHistoryCompleted = false;
                 $isScreeningPassed = false;
                 $isPhysicalExamApproved = false;
@@ -310,22 +307,20 @@ try {
                     if (is_array($medRecord)) {
                         $medNeeds = $medRecord['needs_review'] ?? null;
                         $isAdmin = $medRecord['is_admin'] ?? null;
-                        // Medical History is completed if:
-                        // 1. Admin side: is_admin is TRUE, OR
-                        // 2. Staff side: needs_review is false (completed by staff)
-                        $isMedicalHistoryCompleted = ($isAdmin === true || $isAdmin === 'true' || $isAdmin === 'True') || 
-                                                    ($medNeeds === false);
+                        $medicalApproval = $medRecord['medical_approval'] ?? '';
                         
-                        // Debug logging for donor 189
-                        if ($donorId == 189) {
-                            error_log("DEBUG - Donor 189 Medical History: needs_review = " . ($medNeeds ? 'true' : 'false') . 
-                                     ", is_admin = " . ($isAdmin ? 'true' : 'false') . ", completed = " . ($isMedicalHistoryCompleted ? 'true' : 'false'));
+                        // Medical History is completed if:
+                        // 1. Admin side: is_admin is TRUE (string or boolean)
+                        // 2. OR needs_review is false/null
+                        $isMedicalHistoryCompleted = ($isAdmin === true || $isAdmin === 'true' || $isAdmin === 'True') || 
+                                                    ($medNeeds === false || $medNeeds === null || $medNeeds === 0);
+                        
+                        // Debug logging for specific donors
+                        if (in_array($donorId, [195, 200, 211, 1887, 2514, 3203, 3204, 3205, 3208])) {
+                            error_log("DEBUG - Donor $donorId Medical History: is_admin = " . var_export($isAdmin, true) . 
+                                     ", needs_review = " . var_export($medNeeds, true) . 
+                                     ", medical_approval = '$medicalApproval' completed = " . var_export($isMedicalHistoryCompleted, true));
                         }
-                    }
-                } else {
-                    // Debug logging for donor 189
-                    if ($donorId == 189) {
-                        error_log("DEBUG - Donor 189: No medical history record found");
                     }
                 }
                 
@@ -335,19 +330,15 @@ try {
                     if (is_array($screen)) {
                         $screenNeeds = $screen['needs_review'] ?? null;
                         $disapprovalReason = $screen['disapproval_reason'] ?? '';
-                        // Screening is passed if it doesn't need review and has no disapproval reason
-                        $isScreeningPassed = ($screenNeeds !== true) && empty($disapprovalReason);
                         
-                        // Debug logging for donor 189
-                        if ($donorId == 189) {
-                            error_log("DEBUG - Donor 189 Screening: needs_review = " . ($screenNeeds ? 'true' : 'false') . 
-                                     ", disapproval_reason = '$disapprovalReason', passed = " . ($isScreeningPassed ? 'true' : 'false'));
+                        // Screening is passed if needs_review is false/null/0 AND no disapproval reason
+                        $isScreeningPassed = ($screenNeeds === false || $screenNeeds === null || $screenNeeds === 0) && empty($disapprovalReason);
+                        
+                        // Debug logging for specific donors
+                        if (in_array($donorId, [195, 200, 211, 1887, 2514, 3203, 3204, 3205, 3208])) {
+                            error_log("DEBUG - Donor $donorId Screening: needs_review = " . var_export($screenNeeds, true) . 
+                                     ", disapproval_reason = '$disapprovalReason', passed = " . var_export($isScreeningPassed, true));
                         }
-                    }
-                } else {
-                    // Debug logging for donor 189
-                    if ($donorId == 189) {
-                        error_log("DEBUG - Donor 189: No screening record found");
                     }
                 }
                 
@@ -376,11 +367,11 @@ try {
                     $statusLabel = 'Pending (Screening)';
                 }
                 
-                // Debug logging for specific donor IDs
-                if (in_array($donorId, [176, 169, 170, 144, 140, 142, 135, 120, 182, 189])) {
-                    error_log("DEBUG - Donor $donorId: MH Completed = " . ($isMedicalHistoryCompleted ? 'true' : 'false') . 
-                             ", Screening Passed = " . ($isScreeningPassed ? 'true' : 'false') . 
-                             ", PE Approved = " . ($isPhysicalExamApproved ? 'true' : 'false') . 
+                // Debug logging for specific donor IDs - ALL VISIBLE DONORS
+                if (in_array($donorId, [195, 200, 211, 1887, 2514, 3203, 3204, 3205, 3208, 781])) {
+                    error_log("DEBUG - Donor $donorId: MH Completed = " . var_export($isMedicalHistoryCompleted, true) . 
+                             ", Screening Passed = " . var_export($isScreeningPassed, true) . 
+                             ", PE Approved = " . var_export($isPhysicalExamApproved, true) . 
                              ", Status = $statusLabel");
                 }
                 
@@ -421,10 +412,8 @@ try {
             return ($ta < $tb) ? -1 : 1;
         });
         
-        // Apply pagination for display (20 items per page)
-        $displayLimit = 20;
-        $displayOffset = isset($GLOBALS['DONATION_DISPLAY_OFFSET']) ? intval($GLOBALS['DONATION_DISPLAY_OFFSET']) : 0;
-        $pendingDonations = array_slice($pendingDonations, $displayOffset, $displayLimit);
+        // Pagination is handled by the main dashboard
+        // No slicing here - return all filtered results for the main dashboard to paginate
     } else {
         // Handle API errors
         if (isset($donorResponse['error'])) {
@@ -433,7 +422,9 @@ try {
             $error = "API Error: HTTP Code " . ($donorResponse['code'] ?? 'Unknown');
         }
     }
-    
+
+}
+
 } catch (Exception $e) {
     $error = "Exception: " . $e->getMessage();
 }

@@ -32,4 +32,10 @@ if (!function_exists('calculateAge')) {
         }
     }
 }
+
+if (!function_exists('isPerfModeEnabled')) {
+    function isPerfModeEnabled() {
+        return (isset($_GET['perf_mode']) && $_GET['perf_mode'] === 'on');
+    }
+}
 ?>

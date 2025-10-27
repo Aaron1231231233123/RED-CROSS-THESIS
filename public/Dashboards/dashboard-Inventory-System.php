@@ -1807,6 +1807,11 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     // Summary fields
                     const totalDonorsEl = document.getElementById('totalDonors');
                     const locationListEl = document.getElementById('locationList');
+                    
+                    // Coordinate usage counters
+                    let databaseCount = 0;
+                    let predefinedCount = 0;
+                    let geocodedCount = 0;
 
                     // Separate data for Top Donors and Heatmap
                     let cityDonorCounts = {};
@@ -1887,19 +1892,20 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                          'Tigbauan': { lat: 10.6833, lng: 122.3667 }
                      };
 
-                     // OPTIMIZED: Function to get coordinates with caching and fallback
+                     // OPTIMIZED: Function to get coordinates with database priority
                      async function getCoordinates(location) {
-                         // First, check if we already have coordinates from PostGIS
-                         if (location.latitude && location.longitude) {
+                         // First priority: Use coordinates from database (PostGIS)
+                         if (location.latitude && location.longitude && location.has_coordinates) {
                              return {
                                  lat: parseFloat(location.latitude),
                                  lng: parseFloat(location.longitude),
                                  display_name: location.address,
-                                 source: location.location_source || 'database'
+                                 source: 'database',
+                                 accuracy: 'high'
                              };
                          }
                          
-                         // Then, try to extract city name from address
+                         // Second priority: Try to extract city name from address for predefined coordinates
                          const address = location.address.toLowerCase();
                          
                          // Check if we have pre-defined coordinates for this location
@@ -1909,12 +1915,14 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                      lat: coords.lat,
                                      lng: coords.lng,
                                      display_name: `${city}, Iloilo, Philippines`,
-                                     source: 'predefined'
+                                     source: 'predefined',
+                                     accuracy: 'medium'
                                  };
                              }
                          }
 
-                         // If no pre-defined coordinates, use geocoding as fallback
+                         // Last resort: Use geocoding as fallback (only for addresses without coordinates)
+                         console.log(`⚠️ No coordinates found for: ${location.address}, using geocoding fallback`);
                          return await geocodeAddress(location);
                      }
 
@@ -2050,10 +2058,19 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
 
                              const batchResults = await Promise.all(batchPromises);
                              
-                             // Add results to points array
+                             // Add results to points array and count coordinate sources
                              batchResults.forEach(result => {
                                  if (result) {
                                      points.push([result.coords.lat, result.coords.lng, 0.8]);
+                                     
+                                     // Count coordinate sources
+                                     if (result.coords.source === 'database') {
+                                         databaseCount++;
+                                     } else if (result.coords.source === 'predefined') {
+                                         predefinedCount++;
+                                     } else {
+                                         geocodedCount++;
+                                     }
                                      
                                      // Add marker with popup
                                      const marker = L.marker([result.coords.lat, result.coords.lng])
@@ -2062,18 +2079,19 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                              ${result.location.original_address}<br><br>
                                              <strong>Geocoded Address:</strong><br>
                                              ${result.coords.display_name}<br><br>
-                                             <small><em>Source: ${result.coords.source}</em></small>
+                                             <small><em>Source: ${result.coords.source} (${result.coords.accuracy || 'unknown'} accuracy)</em></small>
                                          `);
                                      markers.addLayer(marker);
                                  }
                              });
 
-                             // Update progress with geocoding stats
+                             // Update progress with coordinate usage stats
                              const progress = Math.min(((i + batchSize) / totalLocations) * 100, 100);
+                             
                              loadingDiv.innerHTML = `
                                  <div class="text-center p-3">
                                      <i class="fas fa-spinner fa-spin"></i> Loading map data... ${Math.round(progress)}%<br>
-                                     <small>Geocoded: ${geocodedCount} | Cached: ${cachedCount}</small>
+                                     <small>Database: ${databaseCount} | Predefined: ${predefinedCount} | Geocoded: ${geocodedCount}</small>
                                  </div>
                              `;
 
@@ -2149,6 +2167,9 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                             if (unidentifiedLocations.length > 0) {
                                 unidentifiedLocations.forEach(li => locationListEl.appendChild(li));
                             }
+                            
+                            // Attach click event listeners to the newly created location items
+                            attachLocationClickListeners();
                         }
                     }
 
@@ -2222,6 +2243,79 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                             }
                         }, 1000);
                     }
+
+                    // Function to attach click event listeners to location items
+                    function attachLocationClickListeners() {
+                        const locationListEl = document.getElementById('locationList');
+                        const selectedLocationInput = document.getElementById('selectedLocation');
+                        const notifyBtn = document.getElementById('notifyDonorsBtn');
+                        const scheduleBtn = document.getElementById('scheduleDriveBtn');
+                        const driveDate = document.getElementById('driveDate');
+                        const driveTime = document.getElementById('driveTime');
+                        
+                        if (!locationListEl || !selectedLocationInput) {
+                            console.log('Location elements not found');
+                            return;
+                        }
+                        
+                        Array.from(locationListEl.querySelectorAll('li')).forEach(li => {
+                            // Remove any existing event listeners to avoid duplicates
+                            li.replaceWith(li.cloneNode(true));
+                        });
+                        
+                        // Re-query after cloning to get fresh elements
+                        Array.from(locationListEl.querySelectorAll('li')).forEach(li => {
+                            li.style.cursor = 'pointer';
+                            li.addEventListener('click', function() {
+                                console.log('Location clicked:', this.querySelector('strong').textContent);
+                                
+                                // Remove highlight from all
+                                Array.from(locationListEl.querySelectorAll('li')).forEach(l => l.classList.remove('bg-light', 'fw-bold'));
+                                
+                                // Highlight selected
+                                this.classList.add('bg-light', 'fw-bold');
+                                
+                                // Set location input
+                                selectedLocationInput.value = this.querySelector('strong').textContent;
+                                console.log('Selected location set to:', selectedLocationInput.value);
+                                
+                                // Enable buttons if date and time are set
+                                checkEnableButtons();
+                            });
+                        });
+                    }
+                    
+                    // Function to check if buttons should be enabled
+                    function checkEnableButtons() {
+                        const selectedLocationInput = document.getElementById('selectedLocation');
+                        const notifyBtn = document.getElementById('notifyDonorsBtn');
+                        const scheduleBtn = document.getElementById('scheduleDriveBtn');
+                        const driveDate = document.getElementById('driveDate');
+                        const driveTime = document.getElementById('driveTime');
+                        
+                        if (!selectedLocationInput || !notifyBtn || !scheduleBtn || !driveDate || !driveTime) {
+                            return;
+                        }
+                        
+                        const hasLocation = selectedLocationInput.value.trim() !== '';
+                        const hasDate = driveDate.value.trim() !== '';
+                        const hasTime = driveTime.value.trim() !== '';
+                        
+                        const allFieldsSet = hasLocation && hasDate && hasTime;
+                        
+                        console.log('Button check:', {
+                            hasLocation,
+                            hasDate,
+                            hasTime,
+                            allFieldsSet,
+                            locationValue: selectedLocationInput.value,
+                            dateValue: driveDate.value,
+                            timeValue: driveTime.value
+                        });
+                        
+                        notifyBtn.disabled = !allFieldsSet;
+                        scheduleBtn.disabled = !allFieldsSet;
+                    }
                     </script>
                 </div>
             </main>
@@ -2279,45 +2373,148 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
     </script>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Make Top Donor Locations pressable and connect to the form
-        const locationListEl = document.getElementById('locationList');
-        const selectedLocationInput = document.getElementById('selectedLocation');
-        const notifyBtn = document.getElementById('notifyDonorsBtn');
-        const scheduleBtn = document.getElementById('scheduleDriveBtn');
+        // Connect form inputs to button state checking
         const driveDate = document.getElementById('driveDate');
         const driveTime = document.getElementById('driveTime');
-
-        // Add click event to each location
-        Array.from(locationListEl.querySelectorAll('li')).forEach(li => {
-            li.style.cursor = 'pointer';
-            li.addEventListener('click', function() {
-                // Remove highlight from all
-                Array.from(locationListEl.querySelectorAll('li')).forEach(l => l.classList.remove('bg-light', 'fw-bold'));
-                // Highlight selected
-                this.classList.add('bg-light', 'fw-bold');
-                // Set location input
-                selectedLocationInput.value = this.querySelector('strong').textContent;
-                // Enable buttons if date and time are set
-                checkEnableButtons();
-            });
-        });
-        // Enable buttons only if location, date, and time are set
-        function checkEnableButtons() {
-            const hasLocation = selectedLocationInput.value.trim() !== '';
-            const hasDate = driveDate.value.trim() !== '';
-            const hasTime = driveTime.value.trim() !== '';
-            notifyBtn.disabled = !(hasLocation && hasDate && hasTime);
-            scheduleBtn.disabled = !(hasLocation && hasDate && hasTime);
+        
+        if (driveDate && driveTime) {
+            driveDate.addEventListener('input', checkEnableButtons);
+            driveTime.addEventListener('input', checkEnableButtons);
         }
-        driveDate.addEventListener('input', checkEnableButtons);
-        driveTime.addEventListener('input', checkEnableButtons);
-        // Placeholder actions
-        notifyBtn.addEventListener('click', function() {
-            alert('Notify donors in ' + selectedLocationInput.value + ' on ' + driveDate.value + ' at ' + driveTime.value);
-        });
-        scheduleBtn.addEventListener('click', function() {
-            alert('Schedule blood drive in ' + selectedLocationInput.value + ' on ' + driveDate.value + ' at ' + driveTime.value);
-        });
+        // Real notification actions
+        const notifyBtn = document.getElementById('notifyDonorsBtn');
+        const scheduleBtn = document.getElementById('scheduleDriveBtn');
+        
+        if (notifyBtn && scheduleBtn) {
+            notifyBtn.addEventListener('click', function() {
+                sendBloodDriveNotification();
+            });
+            scheduleBtn.addEventListener('click', function() {
+                sendBloodDriveNotification();
+            });
+        }
+        
+        // Function to send blood drive notifications
+        async function sendBloodDriveNotification() {
+            const selectedLocationInput = document.getElementById('selectedLocation');
+            const driveDate = document.getElementById('driveDate');
+            const driveTime = document.getElementById('driveTime');
+            
+            const location = selectedLocationInput.value;
+            const date = driveDate.value;
+            const time = driveTime.value;
+            
+            if (!location || !date || !time) {
+                alert('Please fill in all fields: Location, Date, and Time');
+                return;
+            }
+            
+            // Get coordinates for the selected location
+            const coords = getLocationCoordinates(location);
+            if (!coords) {
+                alert('Could not find coordinates for the selected location');
+                return;
+            }
+            
+            // Show loading state
+            const notifyBtn = document.getElementById('notifyDonorsBtn');
+            const scheduleBtn = document.getElementById('scheduleDriveBtn');
+            
+            notifyBtn.disabled = true;
+            scheduleBtn.disabled = true;
+            notifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+            scheduleBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+            
+            try {
+                const response = await fetch('/RED-CROSS-THESIS/public/api/broadcast-blood-drive.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        location: location,
+                        drive_date: date,
+                        drive_time: time,
+                        latitude: coords.lat,
+                        longitude: coords.lng,
+                        radius_km: 15, // 15km radius
+                        blood_types: [], // Empty array = all blood types
+                        custom_message: `🩸 Blood Drive Alert! A blood drive is scheduled in ${location} on ${date} at ${time}. Your blood type is urgently needed! Please consider donating.`
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Show success message
+                    showNotificationSuccess(result);
+                    
+                    // Reset form
+                    selectedLocationInput.value = '';
+                    driveDate.value = '';
+                    driveTime.value = '';
+                    checkEnableButtons();
+                    
+                    // Remove highlights from location list
+                    const locationListEl = document.getElementById('locationList');
+                    Array.from(locationListEl.querySelectorAll('li')).forEach(l => l.classList.remove('bg-light', 'fw-bold'));
+                    
+                } else {
+                    throw new Error(result.message || 'Failed to send notifications');
+                }
+                
+            } catch (error) {
+                console.error('Notification error:', error);
+                alert('Failed to send notifications: ' + error.message);
+            } finally {
+                // Reset button states
+                const notifyBtn = document.getElementById('notifyDonorsBtn');
+                const scheduleBtn = document.getElementById('scheduleDriveBtn');
+                
+                notifyBtn.disabled = false;
+                scheduleBtn.disabled = false;
+                notifyBtn.innerHTML = 'Notify Donors';
+                scheduleBtn.innerHTML = 'Schedule Blood Drive';
+                checkEnableButtons();
+            }
+        }
+        
+        // Function to get coordinates for a location
+        function getLocationCoordinates(locationName) {
+            // Check if location exists in our predefined coordinates
+            for (const [city, coords] of Object.entries(locationCoordinates)) {
+                if (locationName.toLowerCase().includes(city.toLowerCase())) {
+                    return coords;
+                }
+            }
+            
+            // If not found in predefined, return Iloilo City as default
+            return { lat: 10.7202, lng: 122.5621 };
+        }
+        
+        // Function to show success notification
+        function showNotificationSuccess(result) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'alert alert-success alert-dismissible fade show';
+            successDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 400px;';
+            successDiv.innerHTML = `
+                <h6><i class="fas fa-check-circle"></i> Blood Drive Notifications Sent!</h6>
+                <p class="mb-1"><strong>Location:</strong> ${result.results ? 'Multiple locations' : 'Selected location'}</p>
+                <p class="mb-1"><strong>Donors Found:</strong> ${result.total_donors_found || 0}</p>
+                <p class="mb-1"><strong>Notifications Sent:</strong> ${result.results?.sent || 0}</p>
+                <p class="mb-1"><strong>Failed:</strong> ${result.results?.failed || 0}</p>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(successDiv);
+            
+            // Auto-remove after 10 seconds
+            setTimeout(() => {
+                if (successDiv.parentNode) {
+                    successDiv.parentNode.removeChild(successDiv);
+                }
+            }, 10000);
+        }
     });
     </script>
 </body>
