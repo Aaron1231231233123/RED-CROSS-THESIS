@@ -53,6 +53,9 @@ function generateSkeletonHTML() {
         .skeleton-filter { height: 40px; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; margin: 8px; display: inline-block; width: 200px; }
         .skeleton-row { height: 60px; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; margin: 8px 0; }
         @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .skeleton-row { animation: pulse 1.5s ease-in-out infinite; }
+        .skeleton-cell { height: 20px; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; margin: 4px 0; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     </style>';
 }
 
@@ -134,6 +137,17 @@ $moduleHashes = [
     md5_file(__DIR__ . '/module/donation_declined.php')
 ];
 $combinedHash = md5($codeHash . implode('', $moduleHashes));
+
+// OPTIMIZATION: Enhanced cache strategy for pending filter LCP
+if ($status === 'pending' && $perfMode) {
+    // Use shorter cache TTL for pending filter to ensure fresh data
+    $cacheTTL = 300; // 5 minutes for pending filter
+    $cacheKey = "donations_list_pending_{$combinedHash}_v2";
+} else {
+    // Standard cache TTL for other filters
+    $cacheTTL = 7200; // 2 hours for other filters
+    $cacheKey = "donations_list_{$status}_{$combinedHash}_v2";
+}
 
 // INTELLIGENT CACHING: Fast hash detection that doesn't block LCP
 function getDataChangeHash() {
@@ -489,6 +503,41 @@ if (isset($_GET['progressive']) && $_GET['progressive'] == '1') {
     }
     echo generateSkeletonHTML();
     exit;
+}
+
+// OPTIMIZATION: Enhanced LCP optimization for pending filter
+if ($status === 'pending' && $perfMode) {
+    // Check for fast-load request (show skeleton immediately, load data via AJAX)
+    if (isset($_GET['fast_load']) && $_GET['fast_load'] == '1') {
+        if (!headers_sent()) {
+            header('Content-Type: text/html');
+            header('X-Fast-Load: 1');
+            header('Cache-Control: public, max-age=60, stale-while-revalidate=30');
+        }
+        echo generateSkeletonHTML();
+        exit;
+    }
+    
+    // Pre-warm pending filter cache in background for faster subsequent loads
+    if (!isset($_GET['no_warm'])) {
+        register_shutdown_function(function() {
+            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'localhost';
+            $path = isset($_SERVER['REQUEST_URI']) ? strtok($_SERVER['REQUEST_URI'], '?') : $_SERVER['PHP_SELF'];
+            
+            $warmUrl = $scheme . '://' . $host . $path . '?status=pending&perf_mode=on&warm=1';
+            
+            // Fire-and-forget cache warming
+            $ch = curl_init($warmUrl);
+            curl_setopt($ch, CURLOPT_NOSIGNAL, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 2);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
+            curl_setopt($ch, CURLOPT_HEADER, false);
+            @curl_exec($ch);
+            @curl_close($ch);
+        });
+    }
 }
 // Add cache headers for browser caching and ETag for conditional requests
 if (!headers_sent()) {
@@ -1962,10 +2011,48 @@ function getCacheStats() {
             });
         })();
         
-        // OPTIMIZATION: Progressive loading for donations dashboard
+        // OPTIMIZATION: Enhanced progressive loading for donations dashboard with LCP focus
         let isLoading = false;
         let currentStatus = '<?php echo $status; ?>';
         let currentPage = <?php echo $currentPage; ?>;
+        let isLCPOptimized = false;
+        
+        // LCP Optimization: Load critical content first for pending filter
+        function optimizeLCP() {
+            if (currentStatus === 'pending' && !isLCPOptimized) {
+                // Show skeleton immediately for better LCP
+                const tableBody = document.querySelector('#donationsTable tbody');
+                if (tableBody && tableBody.children.length === 0) {
+                    tableBody.innerHTML = generateSkeletonRows(10);
+                }
+                
+                // Load data progressively after LCP
+                setTimeout(() => {
+                    loadDonationsProgressive(currentStatus, currentPage);
+                }, 100);
+                
+                isLCPOptimized = true;
+            }
+        }
+        
+        // Generate skeleton rows for better perceived performance
+        function generateSkeletonRows(count) {
+            let html = '';
+            for (let i = 0; i < count; i++) {
+                html += `
+                    <tr class="skeleton-row">
+                        <td><div class="skeleton-cell"></div></td>
+                        <td><div class="skeleton-cell"></div></td>
+                        <td><div class="skeleton-cell"></div></td>
+                        <td><div class="skeleton-cell"></div></td>
+                        <td><div class="skeleton-cell"></div></td>
+                        <td><div class="skeleton-cell"></div></td>
+                        <td><div class="skeleton-cell"></div></td>
+                    </tr>
+                `;
+            }
+            return html;
+        }
         
         // Progressive loading function
         function loadDonationsProgressive(status = 'all', page = 1) {
@@ -2091,6 +2178,9 @@ function getCacheStats() {
             if (loadingIndicator) {
                 loadingIndicator.style.display = 'none';
             }
+            
+            // Initialize LCP optimization for pending filter
+            optimizeLCP();
             
             // Reset all modal content to prevent loading text from showing
             const modalContents = [

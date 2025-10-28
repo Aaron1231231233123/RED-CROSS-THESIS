@@ -73,14 +73,15 @@ switch ($action) {
                 $query .= '&donor_id=eq.' . intval($searchTerm);
                 // Don't apply limit/offset for exact ID match  
             } else if (!empty($searchTerm)) {
-                // Comprehensive search approach - fetch from multiple batches to ensure ALL donors are searchable
+                // COMPREHENSIVE SEARCH: Only for text searches - fetch multiple batches to ensure ALL donors are searchable
                 // This ensures we can find any donor regardless of their position in the dataset
                 
                 // Strategy: Fetch multiple batches with different orderings to cover all donors
                 // We'll combine results and filter in PHP
                 $query .= '&limit=1000&offset=0'; // Start with first 1000 newest donors
             } else {
-                // No search term - just fetch with pagination
+                // STATUS FILTER BROWSING: No search term - use efficient single query for status filtering
+                // This optimizes LCP when switching between status filters (all, pending, approved, etc.)
                 $query .= '&limit=' . min(1000, (int)($limit * 20)) . '&offset=' . (int)$offset;
             }
             

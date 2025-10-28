@@ -38,14 +38,22 @@ $cursorId = isset($_GET['cursor_id']) ? intval($_GET['cursor_id']) : null;
 $cursorDir = isset($_GET['cursor_dir']) ? $_GET['cursor_dir'] : 'next'; // next|prev
 
 try {
-    // For pending filter, we need to fetch ALL donors to ensure all eligible donors are captured
-    // Since we have 3000+ donors in the database, fetch ALL of them
-    // The module filters in PHP, so we need to fetch everything
-    $limit = 5000; // Fetch enough to cover all 3000+ donors and growth
-    $offset = 0; // Always start from beginning
+    // OPTIMIZATION: For LCP improvement, reduce initial fetch size for pending filter
+    // This significantly improves LCP by reducing the amount of data processed initially
+    $initialLimit = $perfMode ? 100 : 5000; // Start with smaller batch for faster LCP
+    $offset = 0;
+    
+    // Check if this is a continuation request (for pagination)
+    $isContinuation = isset($_GET['continuation']) && $_GET['continuation'] == '1';
+    $continuationOffset = isset($_GET['continuation_offset']) ? intval($_GET['continuation_offset']) : 0;
+    
+    if ($isContinuation && $continuationOffset > 0) {
+        $offset = $continuationOffset;
+        $initialLimit = 200; // Larger batches for continuation requests
+    }
     
     // Fetch donors (authoritative list to scope downstream queries)
-    $donorResponse = supabaseRequest("donor_form?order=submitted_at.desc&limit={$limit}&offset={$offset}");
+    $donorResponse = supabaseRequest("donor_form?order=submitted_at.desc&limit={$initialLimit}&offset={$offset}");
     
     if (!isset($donorResponse['data']) || !is_array($donorResponse['data'])) {
         throw new Exception("Failed to fetch donors: " . ($donorResponse['error'] ?? 'Unknown error'));
