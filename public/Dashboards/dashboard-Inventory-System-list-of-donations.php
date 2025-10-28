@@ -56,6 +56,66 @@ function generateSkeletonHTML() {
         .skeleton-row { animation: pulse 1.5s ease-in-out infinite; }
         .skeleton-cell { height: 20px; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; margin: 4px 0; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        /* OPTIMIZATION: Smooth pagination transitions */
+        .pagination .page-link {
+            transition: all 0.2s ease-in-out;
+        }
+        .pagination .page-link:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .pagination .page-item.active .page-link {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+        }
+        .pagination .page-link:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        /* OPTIMIZATION: Smooth table transitions */
+        #donationsTable tbody {
+            transition: opacity 0.3s ease-in-out;
+        }
+        #donationsTable tbody.loading {
+            opacity: 0.7;
+        }
+        
+        /* OPTIMIZATION: Prevent backdrop stacking and ensure proper cleanup */
+        .modal-backdrop {
+            transition: opacity 0.15s linear;
+        }
+        .modal-backdrop.fade {
+            opacity: 0;
+        }
+        .modal-backdrop.show {
+            opacity: 0.5;
+        }
+        
+        /* Ensure clean modal state */
+        .modal {
+            transition: opacity 0.15s linear;
+        }
+        .modal.fade {
+            opacity: 0;
+        }
+        .modal.show {
+            opacity: 1;
+        }
+        
+        /* Prevent backdrop stacking - ensure only one backdrop exists */
+        .modal-backdrop + .modal-backdrop {
+            display: none !important;
+        }
+        
+        /* Ensure proper z-index for modals */
+        .modal {
+            z-index: 1050;
+        }
+        .modal-backdrop {
+            z-index: 1040;
+        }
     </style>';
 }
 
@@ -2016,6 +2076,7 @@ function getCacheStats() {
         let currentStatus = '<?php echo $status; ?>';
         let currentPage = <?php echo $currentPage; ?>;
         let isLCPOptimized = false;
+        let paginationCache = new Map(); // Cache for pagination data
         
         // LCP Optimization: Load critical content first for pending filter
         function optimizeLCP() {
@@ -2033,6 +2094,162 @@ function getCacheStats() {
                 
                 isLCPOptimized = true;
             }
+        }
+        
+        // OPTIMIZATION: Enhanced pagination with LCP focus
+        function handlePaginationClick(event) {
+            event.preventDefault();
+            
+            const link = event.target.closest('a');
+            if (!link || link.classList.contains('disabled')) return;
+            
+            const href = link.getAttribute('href');
+            const urlParams = new URLSearchParams(href.split('?')[1]);
+            const targetPage = parseInt(urlParams.get('page')) || 1;
+            const targetStatus = urlParams.get('status') || currentStatus;
+            
+            // Show skeleton immediately for better perceived performance
+            showPaginationSkeleton();
+            
+            // Load page data progressively
+            loadPageProgressive(targetStatus, targetPage);
+        }
+        
+        // Show skeleton during pagination
+        function showPaginationSkeleton() {
+            const tableBody = document.querySelector('#donationsTable tbody');
+            if (tableBody) {
+                tableBody.classList.add('loading');
+                tableBody.innerHTML = generateSkeletonRows(10);
+            }
+            
+            // Disable pagination buttons during loading
+            document.querySelectorAll('.pagination .page-link').forEach(btn => {
+                btn.style.pointerEvents = 'none';
+                btn.style.opacity = '0.6';
+            });
+        }
+        
+        // Progressive page loading
+        function loadPageProgressive(status, page) {
+            if (isLoading) return;
+            
+            isLoading = true;
+            
+            // Check cache first
+            const cacheKey = `${status}_${page}`;
+            if (paginationCache.has(cacheKey)) {
+                const cachedData = paginationCache.get(cacheKey);
+                renderDonationsData(cachedData);
+                updatePaginationState(status, page);
+                isLoading = false;
+                return;
+            }
+            
+            // Load data via API
+            fetch(`../../public/api/load-donations-data.php?status=${status}&page=${page}&perf_mode=on`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Cache the data
+                        paginationCache.set(cacheKey, data);
+                        
+                        // Render data
+                        renderDonationsData(data);
+                        updatePaginationState(status, page);
+                        
+                        // Update URL without page reload
+                        updateURL(status, page);
+                    } else {
+                        showError('Failed to load page data: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading page:', error);
+                    showError('Network error: ' + error.message);
+                })
+                .finally(() => {
+                    isLoading = false;
+                    
+                    // Re-enable pagination buttons
+                    document.querySelectorAll('.pagination .page-link').forEach(btn => {
+                        btn.style.pointerEvents = '';
+                        btn.style.opacity = '';
+                    });
+                });
+        }
+        
+        // Update pagination state
+        function updatePaginationState(status, page) {
+            currentStatus = status;
+            currentPage = page;
+            
+            // Update pagination info
+            const paginationInfo = document.getElementById('paginationInfo');
+            if (paginationInfo) {
+                paginationInfo.textContent = `Page ${page} of ${totalPages || '?'} (${totalItems || '?'} total items)`;
+            }
+            
+            // Update active page in pagination
+            document.querySelectorAll('.pagination .page-item').forEach(item => {
+                item.classList.remove('active');
+                const link = item.querySelector('.page-link');
+                if (link) {
+                    const href = link.getAttribute('href');
+                    const urlParams = new URLSearchParams(href.split('?')[1]);
+                    const linkPage = parseInt(urlParams.get('page')) || 1;
+                    if (linkPage === page) {
+                        item.classList.add('active');
+                    }
+                }
+            });
+        }
+        
+        // Update URL without page reload
+        function updateURL(status, page) {
+            const newUrl = `?status=${status}&page=${page}&perf_mode=on`;
+            window.history.pushState({status, page}, '', newUrl);
+        }
+        
+        // Initialize progressive pagination
+        function initializeProgressivePagination() {
+            // Add event listeners to pagination links
+            document.querySelectorAll('.pagination .page-link').forEach(link => {
+                link.addEventListener('click', handlePaginationClick);
+            });
+            
+            // Handle browser back/forward navigation
+            window.addEventListener('popstate', function(event) {
+                if (event.state) {
+                    const {status, page} = event.state;
+                    loadPageProgressive(status, page);
+                }
+            });
+            
+            // Pre-load adjacent pages for faster navigation
+            preloadAdjacentPages();
+        }
+        
+        // Pre-load adjacent pages for faster navigation
+        function preloadAdjacentPages() {
+            const adjacentPages = [currentPage - 1, currentPage + 1].filter(p => p > 0);
+            
+            adjacentPages.forEach(page => {
+                const cacheKey = `${currentStatus}_${page}`;
+                if (!paginationCache.has(cacheKey)) {
+                    // Pre-load in background
+                    fetch(`../../public/api/load-donations-data.php?status=${currentStatus}&page=${page}&perf_mode=on`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                paginationCache.set(cacheKey, data);
+                            }
+                        })
+                        .catch(error => {
+                            console.log('Pre-load failed for page', page, error);
+                        });
+                }
+            });
         }
         
         // Generate skeleton rows for better perceived performance
@@ -2098,6 +2315,12 @@ function getCacheStats() {
         function renderDonationsData(data) {
             const contentArea = document.getElementById('donationsContent');
             if (!contentArea) return;
+            
+            // Remove loading class from table body
+            const tableBody = document.querySelector('#donationsTable tbody');
+            if (tableBody) {
+                tableBody.classList.remove('loading');
+            }
             
             // Update pagination info
             const paginationInfo = document.getElementById('paginationInfo');
@@ -2181,6 +2404,9 @@ function getCacheStats() {
             
             // Initialize LCP optimization for pending filter
             optimizeLCP();
+            
+            // Initialize progressive pagination
+            initializeProgressivePagination();
             
             // Reset all modal content to prevent loading text from showing
             const modalContents = [
@@ -2389,23 +2615,127 @@ function getCacheStats() {
             }
         });
 
-        // Ensure donor detail modals clean up properly when closed
-        (function ensureDonorDetailCleanup(){
-            function cleanupBody(){
+        // OPTIMIZATION: Comprehensive backdrop cleanup for all modals
+        (function comprehensiveBackdropCleanup(){
+            // Enhanced cleanup function that removes ALL unnecessary backdrops
+            function removeAllBackdrops(){
                 try {
+                    // Remove all modal backdrops (including stacked ones)
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    backdrops.forEach(backdrop => {
+                        backdrop.remove();
+                    });
+                    
+                    // Clean up body state
                     document.body.classList.remove('modal-open');
                     document.body.style.overflow = '';
                     document.body.style.paddingRight = '';
-                } catch(_) {}
+                    
+                    // Remove any lingering modal classes from hidden modals
+                    document.querySelectorAll('.modal').forEach(modal => {
+                        if (!modal.classList.contains('show')) {
+                            modal.style.display = 'none';
+                            modal.setAttribute('aria-hidden', 'true');
+                            modal.removeAttribute('aria-modal');
+                        }
+                    });
+                    
+                    console.log('Comprehensive backdrop cleanup completed');
+                } catch(error) {
+                    console.warn('Backdrop cleanup error:', error);
+                }
             }
+            
+            // Cleanup function for individual modals
+            function cleanupModal(modalId){
+                try {
+                    const modal = document.getElementById(modalId);
+                    if (modal) {
+                        // Remove backdrop
+                        removeAllBackdrops();
+                        
+                        // Clean up modal state
+                        modal.classList.remove('show');
+                        modal.style.display = 'none';
+                        modal.setAttribute('aria-hidden', 'true');
+                        modal.removeAttribute('aria-modal');
+                    }
+                } catch(error) {
+                    console.warn(`Cleanup error for modal ${modalId}:`, error);
+                }
+            }
+            
             document.addEventListener('DOMContentLoaded', function(){
-                ['donorDetailsModal','donorModal'].forEach(function(id){
-                    var el = document.getElementById(id);
-                    if (!el) return;
-                    el.addEventListener('hidden.bs.modal', cleanupBody);
-                    el.addEventListener('hide.bs.modal', function(){ setTimeout(cleanupBody, 0); });
+                // List of all modals that need cleanup
+                const modalIds = [
+                    'donorDetailsModal', 'donorModal', 'medicalHistoryModal', 
+                    'medicalHistoryModalAdmin', 'screeningFormModal', 
+                    'physicalExaminationModalAdmin', 'bloodCollectionModalAdmin',
+                    'medicalHistoryApprovalModal', 'medicalHistoryDeclinedModal',
+                    'donorProfileModal'
+                ];
+                
+                modalIds.forEach(function(modalId){
+                    const modal = document.getElementById(modalId);
+                    if (!modal) return;
+                    
+                    // Clean up on modal hide
+                    modal.addEventListener('hide.bs.modal', function(){
+                        setTimeout(removeAllBackdrops, 50);
+                    });
+                    
+                    // Clean up on modal hidden
+                    modal.addEventListener('hidden.bs.modal', function(){
+                        removeAllBackdrops();
+                    });
+                    
+                    // Clean up on close button click
+                    const closeButtons = modal.querySelectorAll('[data-bs-dismiss="modal"], .btn-close');
+                    closeButtons.forEach(btn => {
+                        btn.addEventListener('click', function(){
+                            setTimeout(removeAllBackdrops, 100);
+                        });
+                    });
+                });
+                
+                // Global cleanup on any modal close
+                document.addEventListener('click', function(e){
+                    if (e.target.matches('[data-bs-dismiss="modal"], .btn-close')) {
+                        setTimeout(removeAllBackdrops, 150);
+                    }
+                });
+                
+                // Cleanup on escape key
+                document.addEventListener('keydown', function(e){
+                    if (e.key === 'Escape') {
+                        setTimeout(removeAllBackdrops, 100);
+                    }
                 });
             });
+            
+            // Expose cleanup functions globally
+            window.removeAllBackdrops = removeAllBackdrops;
+            window.cleanupModal = cleanupModal;
+            
+            // Periodic cleanup to catch any missed backdrops (every 5 seconds)
+            setInterval(function(){
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                const openModals = document.querySelectorAll('.modal.show');
+                
+                // If there are backdrops but no open modals, clean up
+                if (backdrops.length > 0 && openModals.length === 0) {
+                    console.log('Periodic cleanup: Removing orphaned backdrops');
+                    removeAllBackdrops();
+                }
+                
+                // If there are multiple backdrops, remove extras
+                if (backdrops.length > 1) {
+                    console.log('Periodic cleanup: Removing duplicate backdrops');
+                    for (let i = 1; i < backdrops.length; i++) {
+                        backdrops[i].remove();
+                    }
+                }
+            }, 5000);
         })();
         // Function to fetch donor details - now using extracted admin module   
         function fetchDonorDetails(donorId, eligibilityId) {
@@ -4524,18 +4854,21 @@ function getCacheStats() {
                         modalElement.setAttribute('aria-hidden', 'true');
                         modalElement.removeAttribute('aria-modal');
                         
-                        // Remove backdrop
-                        const backdrop = document.querySelector('.modal-backdrop');
-                        if (backdrop) {
-                            backdrop.remove();
+                        // Use comprehensive backdrop cleanup
+                        if (typeof window.removeAllBackdrops === 'function') {
+                            window.removeAllBackdrops();
+                        } else {
+                            // Fallback cleanup
+                            const backdrop = document.querySelector('.modal-backdrop');
+                            if (backdrop) {
+                                backdrop.remove();
+                            }
+                            document.body.classList.remove('modal-open');
+                            document.body.style.overflow = '';
+                            document.body.style.paddingRight = '';
                         }
                         
-                        // Clean up body classes
-                        document.body.classList.remove('modal-open');
-                        document.body.style.overflow = '';
-                        document.body.style.paddingRight = '';
-                        
-                        console.log('Force close completed');
+                        console.log('Force close completed with comprehensive cleanup');
                     }
                 }, 100);
                 
@@ -4959,16 +5292,25 @@ function getCacheStats() {
             });
             document.dispatchEvent(event);
         }
-        // Removed heavy backdrop cleanup; rely on Bootstrap's modal lifecycle.
-        // Provide a local, lightweight cleanup used by this page.
+        // Enhanced modal state cleanup function
         function cleanupModalState() {
             try {
-                // If no Bootstrap modals are currently shown, clean up body state
+                // Use comprehensive cleanup if available
+                if (typeof window.removeAllBackdrops === 'function') {
+                    window.removeAllBackdrops();
+                    return;
+                }
+                
+                // Fallback: If no Bootstrap modals are currently shown, clean up body state
                 const openModals = document.querySelectorAll('.modal.show');
                 if (openModals.length === 0) {
                     try { document.body.classList.remove('modal-open'); } catch(_) {}
                     try { document.body.style.removeProperty('overflow'); } catch(_) {}
                     try { document.body.style.removeProperty('paddingRight'); } catch(_) {}
+                    
+                    // Remove any lingering backdrops
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    backdrops.forEach(backdrop => backdrop.remove());
                 }
             } catch(_) {}
         }

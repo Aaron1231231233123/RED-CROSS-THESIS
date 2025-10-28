@@ -25,22 +25,26 @@ if ($perfMode && !is_dir($localCacheDir)) {
 	@mkdir($localCacheDir, 0777, true);
 }
 
-// OPTIMIZATION: Use aggressive caching for API
+// OPTIMIZATION: Enhanced caching for pagination with LCP focus
 $cacheKey = 'donations_api_' . $status . '_p' . $page;
 $cacheFile = $perfMode
 	? ($localCacheDir . DIRECTORY_SEPARATOR . $cacheKey . '.json')
 	: (sys_get_temp_dir() . DIRECTORY_SEPARATOR . $cacheKey . '.json');
 $cacheAge = 0;
 
+// OPTIMIZATION: Shorter cache TTL for better data freshness during pagination
+$cacheTTL = ($status === 'pending') ? 180 : 300; // 3 min for pending, 5 min for others
+
 // Check cache first
 if (file_exists($cacheFile)) {
     $cacheAge = time() - filemtime($cacheFile);
-    if ($cacheAge < 300) { // 5 minutes cache
+    if ($cacheAge < $cacheTTL) {
         $cachedData = json_decode(file_get_contents($cacheFile), true);
         if (is_array($cachedData)) {
             header('X-Cache-Status: HIT');
             header('X-Cache-Age: ' . $cacheAge);
             header('X-Perf-Mode: ' . ($perfMode ? 'on' : 'off'));
+            header('X-Pagination-Cache: 1');
             echo json_encode($cachedData);
             exit();
         }

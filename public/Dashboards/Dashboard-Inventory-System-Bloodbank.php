@@ -318,9 +318,17 @@ file_put_contents($cacheMetaFile, json_encode($cacheMeta));
 // Cache loaded marker
 cache_loaded:
 
-// Display all records without pagination
+// OPTIMIZATION: Implement pagination like donor management
+$itemsPerPage = 10; // Show only 10 items per page
+$currentPage = isset($_GET['page']) ? intval($_GET['page']) : 1;
+if ($currentPage < 1) { $currentPage = 1; }
+
 $totalItems = count($bloodInventory);
-$currentPageInventory = $bloodInventory; // Show all records
+$totalPages = ceil($totalItems / $itemsPerPage);
+if ($currentPage > $totalPages && $totalPages > 0) { $currentPage = $totalPages; }
+
+$startIndex = ($currentPage - 1) * $itemsPerPage;
+$currentPageInventory = array_slice($bloodInventory, $startIndex, $itemsPerPage);
 
 // OPTIMIZATION: Performance logging and caching
 $endTime = microtime(true);
@@ -873,6 +881,26 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     border: none;
     box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
 }
+
+/* OPTIMIZATION: Smooth pagination transitions (same as donor management) */
+.pagination .page-link {
+    transition: all 0.2s ease-in-out;
+}
+
+.pagination .page-link:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.pagination .page-item.active .page-link {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.pagination .page-link:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
     </style>
 </head>
 <body>
@@ -1129,10 +1157,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     
                     <!-- Blood Bank Table -->
                     <div class="table-responsive mt-4">
-                        <!-- Total Records Display -->
+                        <!-- Pagination Info -->
                         <div class="row mb-3">
                             <div class="col-12 text-center">
-                                <span class="text-muted">Total records: <?php echo $totalItems; ?></span>
+                                <span class="text-muted">Showing <?php echo $startIndex + 1; ?> to <?php echo min($startIndex + $itemsPerPage, $totalItems); ?> of <?php echo $totalItems; ?> entries</span>
                             </div>
                         </div>
                         
@@ -1154,7 +1182,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     <td><?php echo $bag['collection_date']; ?></td>
                                     <td><?php echo $bag['expiration_date']; ?></td>
                                     <td class="text-center">
-                                        <button class="btn btn-primary btn-sm" onclick="showDonorDetails(<?php echo $index; ?>)">
+                                        <button class="btn btn-primary btn-sm" onclick="showDonorDetails(<?php echo $startIndex + $index; ?>)">
                                             <i class="fas fa-eye"></i>
                                         </button>
                                     </td>
@@ -1167,13 +1195,84 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 <?php endif; ?>
                             </tbody>
                         </table>
-                    </div>
-
-                    <!-- Showing all entries information -->
-                    <div class="text-center mt-2 mb-4">
-                        <p class="text-muted">
-                            Showing all <?php echo $totalItems; ?> blood bank units
-                        </p>
+                        
+                        <!-- Pagination Controls -->
+                        <?php if ($totalPages > 1): ?>
+                        <div class="d-flex justify-content-center mt-4">
+                            <nav aria-label="Blood Bank pagination">
+                                <?php
+                                // Build query string for pagination URLs (same as donor management)
+                                $qs = $_GET;
+                                unset($qs['page']);
+                                $baseQs = http_build_query($qs);
+                                $makePageUrl = function ($page) use ($baseQs) {
+                                    $page = max(1, (int)$page);
+                                    return '?' . ($baseQs ? $baseQs . '&' : '') . 'page=' . $page;
+                                };
+                                ?>
+                                <ul class="pagination">
+                                    <!-- Previous button -->
+                                    <li class="page-item <?php echo $currentPage <= 1 ? 'disabled' : ''; ?>">
+                                        <a class="page-link" href="<?php echo htmlspecialchars($makePageUrl(max(1, $currentPage - 1))); ?>" aria-label="Previous">
+                                            <i class="fas fa-chevron-left"></i>
+                                        </a>
+                                    </li>
+                                    <!-- Page numbers -->
+                                    <?php
+                                    // Show up to 4 page numbers around current page
+                                    $startPage = max(1, $currentPage - 1);
+                                    $endPage = min($totalPages, $currentPage + 2);
+                                    
+                                    // If we're near the beginning, show more pages at the end
+                                    if ($currentPage <= 2) {
+                                        $endPage = min($totalPages, 4);
+                                    }
+                                    
+                                    // If we're near the end, show more pages at the beginning
+                                    if ($currentPage >= $totalPages - 1) {
+                                        $startPage = max(1, $totalPages - 3);
+                                    }
+                                    
+                                    // Show first page if not in range
+                                    if ($startPage > 1): ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="<?php echo htmlspecialchars($makePageUrl(1)); ?>">1</a>
+                                    </li>
+                                    <?php if ($startPage > 2): ?>
+                                    <li class="page-item disabled">
+                                        <span class="page-link">...</span>
+                                    </li>
+                                    <?php endif; ?>
+                                    <?php endif; ?>
+                                    
+                                    <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
+                                    <li class="page-item <?php echo $i === $currentPage ? 'active' : ''; ?>">
+                                        <a class="page-link" href="<?php echo htmlspecialchars($makePageUrl($i)); ?>"><?php echo $i; ?></a>
+                                    </li>
+                                    <?php endfor; ?>
+                                    
+                                    <!-- Show last page if not in range -->
+                                    <?php if ($endPage < $totalPages): ?>
+                                    <?php if ($endPage < $totalPages - 1): ?>
+                                    <li class="page-item disabled">
+                                        <span class="page-link">...</span>
+                                    </li>
+                                    <?php endif; ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="<?php echo htmlspecialchars($makePageUrl($totalPages)); ?>"><?php echo $totalPages; ?></a>
+                                    </li>
+                                    <?php endif; ?>
+                                    
+                                    <!-- Next button -->
+                                    <li class="page-item <?php echo $currentPage >= $totalPages ? 'disabled' : ''; ?>">
+                                        <a class="page-link" href="<?php echo htmlspecialchars($makePageUrl(min($totalPages, $currentPage + 1))); ?>" aria-label="Next">
+                                            <i class="fas fa-chevron-right"></i>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </main>
@@ -1312,11 +1411,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         // Data for all records
         const bloodInventory = <?php echo json_encode($bloodInventory); ?>;
         const currentPageInventory = <?php echo json_encode($currentPageInventory); ?>;
+        const currentPage = <?php echo $currentPage; ?>;
+        const itemsPerPage = <?php echo $itemsPerPage; ?>;
         
         // Function to display blood bank unit details in modal
         function showDonorDetails(index) {
-            // Since we're showing all records, the index is the same
-            const bag = bloodInventory[index];
+            // Calculate the actual index in the full bloodInventory array
+            const actualIndex = (currentPage - 1) * itemsPerPage + index;
+            const bag = bloodInventory[actualIndex];
             
             // Show loading indicator
             document.getElementById('modal-loading').style.display = 'block';
