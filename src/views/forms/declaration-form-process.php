@@ -295,12 +295,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         
                         // Update medical_history needs_review to false (staff has completed the medical history interview)
                         // The physician will review during the physical examination stage
+                        // Note: medical_approval should remain null for admin - physician will set it during physical exam
+                        // Only set medical_approval for staff role (role_id 3), not admin (role_id 1)
                         $medical_update_data = [
                             'donor_id' => $donor_id, // Use donor_id for medical_history table
                             'needs_review' => false, // Set to false - staff has completed the interview
-                            'medical_approval' => 'Not Approved', // Set to Not Approved - awaiting physician approval
                             'updated_at' => date('Y-m-d H:i:s')
                         ];
+                        
+                        // Only set medical_approval to 'Not Approved' for staff role (not admin)
+                        // Admin role should leave medical_approval as null for physician to set during physical exam
+                        if ($_SESSION['role_id'] == 3) {
+                            // For staff (role_id 3), set to Not Approved - awaiting physician approval
+                            $medical_update_data['medical_approval'] = 'Not Approved';
+                        }
+                        // For admin (role_id 1), medical_approval remains null - physician will approve during physical exam
                         
                         $mh_ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $donor_id);
                         curl_setopt($mh_ch, CURLOPT_RETURNTRANSFER, true);
@@ -324,7 +333,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         
                         if ($mh_http_code === 200) {
-                            $log_message = "[" . date('Y-m-d H:i:s') . "] Medical history updated successfully - needs_review=false, medical_approval='Not Approved' (staff has completed the medical history interview, awaiting physician approval)\n";
+                            $approval_status = isset($medical_update_data['medical_approval']) ? $medical_update_data['medical_approval'] : 'null (preserved for physician)';
+                            $role_context = $_SESSION['role_id'] == 1 ? 'admin' : 'staff';
+                            $log_message = "[" . date('Y-m-d H:i:s') . "] Medical history updated successfully - needs_review=false, medical_approval='{$approval_status}' ({$role_context} has completed the medical history interview)\n";
                             file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         } else {
                             $log_message = "[" . date('Y-m-d H:i:s') . "] Failed to update medical history: " . $mh_response . "\n";

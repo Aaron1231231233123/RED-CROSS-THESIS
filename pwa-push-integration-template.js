@@ -340,3 +340,4 @@ function getDonorIdFromAuth() {
 window.PushNotificationManager = PushNotificationManager;
 
 
+

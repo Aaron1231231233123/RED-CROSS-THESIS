@@ -64,6 +64,7 @@
     this.autobind = config.autobind !== false; // default true
     this.currentQuery = '';
     this.isSearching = false;
+    this.onClear = typeof config.onClear === 'function' ? config.onClear : null; // Callback when search is cleared
     this.init();
   }
 
@@ -145,18 +146,49 @@
   };
 
   UnifiedSearch.prototype.searchBackend = function(query, category) {
-    if (!this.backend || !this.backend.url) return;
-    if (this.isSearching) return;
+    if (!this.backend || !this.backend.url) {
+      console.log('UnifiedSearch: No backend URL configured');
+      return;
+    }
+    // Skip API call if query is empty - let the page display its original content
+    if (!query || query.trim() === '') {
+      console.log('UnifiedSearch: Empty query, skipping backend search');
+      // Call onClear callback if provided to restore original content
+      if (this.onClear) {
+        console.log('UnifiedSearch: Calling onClear callback');
+        this.onClear();
+      }
+      return;
+    }
+    if (this.isSearching) {
+      console.log('UnifiedSearch: Already searching, skipping');
+      return;
+    }
     var url = this.backend.url;
     var action = this.backend.action || '';
     var pageSize = this.backend.pageSize || 50;
     var page = 1;
-    var params = new URLSearchParams({ action: action, q: query || '', category: category || 'all', page: String(page), limit: String(pageSize) });
+    // Build params - only include status filter if NO search term is provided
+    // When searching, we want to search across all statuses
+    var params = { action: action, q: query || '', category: category || 'all', page: String(page), limit: String(pageSize) };
+    // Only add status filter when NOT searching (browsing by status)
+    if (this.backend.status && (!query || query.trim() === '')) {
+      params.status = this.backend.status;
+    }
+    var paramsObj = new URLSearchParams(params);
     var self = this;
     this.isSearching = true;
-    fetch(url + '?' + params.toString(), { method: 'GET', headers: { 'Accept': 'application/json' } })
-      .then(function(r) { return r.json(); })
+    
+    var fullUrl = url + '?' + paramsObj.toString();
+    console.log('UnifiedSearch: Calling backend API:', fullUrl);
+    
+    fetch(fullUrl, { method: 'GET', headers: { 'Accept': 'application/json' } })
+      .then(function(r) { 
+        console.log('UnifiedSearch: API response status:', r.status);
+        return r.json(); 
+      })
       .then(function(data) {
+        console.log('UnifiedSearch: API response data:', data);
         self.isSearching = false;
         if (typeof self.renderResults === 'function') {
           self.renderResults(data);
@@ -182,7 +214,10 @@
           if (self.highlight && self.currentQuery) highlightText(self.tableEl, self.currentQuery);
         }
       })
-      .catch(function() { self.isSearching = false; });
+      .catch(function(err) { 
+        console.error('UnifiedSearch: API error:', err);
+        self.isSearching = false; 
+      });
   };
 
   // Expose globally

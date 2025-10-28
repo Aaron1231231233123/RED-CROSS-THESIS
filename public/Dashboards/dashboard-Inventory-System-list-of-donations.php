@@ -65,6 +65,14 @@ if (isset($_GET['refresh']) && $_GET['refresh'] == '1') {
     if (function_exists('invalidateCache')) {
         invalidateCache('donations_list_*');
     }
+    // Also clear session cache
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        foreach ($_SESSION as $key => $value) {
+            if (strpos($key, 'donor_cache_') === 0) {
+                unset($_SESSION[$key]);
+            }
+        }
+    }
     error_log("CACHE: Manual refresh requested - all donation caches cleared");
 }
 
@@ -97,38 +105,107 @@ $pendingItemsPerPage = 200; // Increased limit for pending filter to capture all
 $currentPage = isset($_GET['page']) ? intval($_GET['page']) : 1;
 if ($currentPage < 1) { $currentPage = 1; }
 $startIndex = ($currentPage - 1) * $itemsPerPage;
-// Only push LIMIT/OFFSET to modules for specific status tabs; keep existing behavior for 'all'
+// Configure pagination for ALL status modes (including 'all')
 if ($status !== 'all') {
-	if ($status === 'pending') {
-		// In perf mode, fetch only page-size via keyset; else fetch more for processing and slice in module
-		if ($perfMode) {
-			$GLOBALS['DONATION_LIMIT'] = $itemsPerPage;
-			$GLOBALS['DONATION_OFFSET'] = 0;
-		} else {
-			$GLOBALS['DONATION_LIMIT'] = $pendingItemsPerPage; // broader fetch
-			$GLOBALS['DONATION_OFFSET'] = 0;
-		}
-		// Ensure module slices display to page size
-		$GLOBALS['DONATION_DISPLAY_OFFSET'] = $startIndex;
-		$GLOBALS['DONATION_DISPLAY_LIMIT'] = $itemsPerPage;
-	} else {
-		$GLOBALS['DONATION_LIMIT'] = $itemsPerPage;
-		$GLOBALS['DONATION_OFFSET'] = $startIndex;
-		$GLOBALS['DONATION_DISPLAY_LIMIT'] = $itemsPerPage;
-	}
+	// For specific status filters: fetch ALL donors to ensure all eligible donors are captured
+	// We have 3000+ donors, so fetch enough to cover all of them
+	// The module filters in PHP, so we need to fetch more than just the filtered count
+	$GLOBALS['DONATION_LIMIT'] = 5000; // Fetch enough to cover all 3000+ donors and growth
+	$GLOBALS['DONATION_OFFSET'] = 0; // Always start from beginning for filtering
+	$GLOBALS['DONATION_DISPLAY_LIMIT'] = 0; // 0 = return all, dashboard handles pagination
+	$GLOBALS['DONATION_DISPLAY_OFFSET'] = 0;
+} else {
+	// For 'all' status: fetch and return all records for aggregation
+	$GLOBALS['DONATION_LIMIT'] = 5000; // Fetch all 3000+ donors for "all" status
+	$GLOBALS['DONATION_OFFSET'] = 0;
+	$GLOBALS['DONATION_DISPLAY_LIMIT'] = 0; // Return all for aggregation
+	$GLOBALS['DONATION_DISPLAY_OFFSET'] = 0;
 }
 // OPTIMIZATION: Enhanced multi-layer caching system for maximum performance
 // Layer 1: Memory cache (fastest, session-based)
 // Layer 2: File cache (persistent, compressed)
 // Layer 3: Database cache (long-term, with invalidation)
 // OPTIMIZATION: AGGRESSIVE cache configuration for maximum performance
+// Auto-invalidate cache when code changes
+$codeHash = md5_file(__FILE__); // Hash of this file
+$moduleHashes = [
+    md5_file(__DIR__ . '/module/donation_pending.php'),
+    md5_file(__DIR__ . '/module/donation_approved.php'),
+    md5_file(__DIR__ . '/module/donation_declined.php')
+];
+$combinedHash = md5($codeHash . implode('', $moduleHashes));
+
+// INTELLIGENT CACHING: Fast hash detection that doesn't block LCP
+function getDataChangeHash() {
+    // Use a lightweight file-based cache to avoid blocking
+    $cacheFile = sys_get_temp_dir() . '/dch_' . md5(SUPABASE_URL) . '.txt';
+    
+    // Try to use cached hash (updated in background)
+    if (file_exists($cacheFile)) {
+        $age = time() - filemtime($cacheFile);
+        if ($age < 60) { // Use cached version if less than 1 minute old
+            $cached = file_get_contents($cacheFile);
+            if ($cached) return $cached;
+        }
+    }
+    
+    // If no cache or too old, return a time-based hash (background will update)
+    return md5((int)(time() / 60)); // Changes every minute
+}
+
+function updateDataChangeHashInBackground() {
+    try {
+        // Query Supabase for the most recent timestamp from key tables
+        $keyTables = ['eligibility', 'medical_history', 'screening_form', 'physical_examination', 'blood_collection'];
+        $timestamps = [];
+        
+        foreach ($keyTables as $table) {
+            // Use single query with union to get all timestamps at once
+            $url = SUPABASE_URL . "/rest/v1/{$table}?select=updated_at,created_at&order=updated_at.desc,created_at.desc&limit=1";
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                "Content-Type: application/json",
+                "apikey: " . SUPABASE_API_KEY,
+                "Authorization: Bearer " . SUPABASE_API_KEY
+            ]);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 1); // Fast timeout
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 0.5);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            $response = curl_exec($ch);
+            curl_close($ch);
+            
+            if ($response) {
+                $data = json_decode($response, true);
+                if (isset($data[0])) {
+                    $ts = $data[0]['updated_at'] ?? $data[0]['created_at'] ?? null;
+                    if ($ts) $timestamps[] = $ts;
+                }
+            }
+        }
+        
+        $hash = md5(implode('|', $timestamps));
+        $cacheFile = sys_get_temp_dir() . '/dch_' . md5(SUPABASE_URL) . '.txt';
+        @file_put_contents($cacheFile, $hash);
+    } catch (Exception $e) {
+        error_log("Background hash update failed: " . $e->getMessage());
+    }
+}
+
+// Get hash immediately (uses cache if available)
+$dataChangeHash = getDataChangeHash();
+
+// Update hash in background for next request
+register_shutdown_function('updateDataChangeHashInBackground');
+
 $cacheConfig = [
-    'memory_ttl' => 300,       // 5 minutes memory cache (5x increase)
-    'file_ttl' => 1800,        // 30 minutes file cache (6x increase)
-    'db_ttl' => 7200,          // 2 hours database cache (4x increase)
+    'memory_ttl' => 3600,      // 1 hour memory cache (longer for stability)
+    'file_ttl' => 3600,        // 1 hour file cache (smarter invalidation instead of longer cache)
+    'db_ttl' => 7200,          // 2 hours database cache
     'compression' => true,     // Enable compression
     'warm_cache' => true,      // Enable cache warming
-    'version' => 'v3',         // Cache version for invalidation
+    'version' => 'v3.' . substr($combinedHash, 0, 8), // Code version
+    'data_version' => substr($dataChangeHash, 0, 8), // Data change version
     'aggressive_mode' => true  // Enable aggressive optimizations
 ];
 // Generate cache keys (filter-aware)
@@ -138,6 +215,7 @@ unset($filtersForKey['page']);
 ksort($filtersForKey);
 $filtersHash = md5(json_encode($filtersForKey));
 $cacheKey = 'donations_list_' . $statusKey . '_p' . $currentPage . '_' . $filtersHash;
+
 // Use a unified local cache directory when perf mode is enabled to align with invalidateCache/getCacheStats
 $localCacheDir = __DIR__ . DIRECTORY_SEPARATOR . 'cache';
 if (!is_dir($localCacheDir)) {
@@ -149,12 +227,19 @@ $cacheFile = $perfMode
 // Initialize cache state
 $useCache = false;
 $cacheSource = '';
+
+// For pending status, disable caching to ensure fresh data
+if ($status === 'pending') {
+    $useCache = false;
+    error_log("CACHE: Pending status detected - caching disabled for fresh data");
+}
+
 // Layer 1: Memory Cache (Session-based)
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 $memoryCacheKey = 'donor_cache_' . $cacheKey;
-if (isset($_SESSION[$memoryCacheKey])) {
+if (!$useCache && $status !== 'pending' && isset($_SESSION[$memoryCacheKey])) {
     $memoryData = $_SESSION[$memoryCacheKey];
     if (isset($memoryData['timestamp']) && (time() - $memoryData['timestamp']) < $cacheConfig['memory_ttl']) {
         $donations = $memoryData['data'];
@@ -163,7 +248,7 @@ if (isset($_SESSION[$memoryCacheKey])) {
     }
 }
 // Layer 2: File Cache (if memory cache miss) - Enhanced validation
-if (!$useCache && file_exists($cacheFile)) {
+if (!$useCache && $status !== 'pending' && file_exists($cacheFile)) {
     $age = time() - filemtime($cacheFile);
     if ($age < $cacheConfig['file_ttl']) {
         $cached = @file_get_contents($cacheFile);
@@ -176,10 +261,18 @@ if (!$useCache && file_exists($cacheFile)) {
             
             // Enhanced cache validation (like main dashboard)
             if (is_array($cachedData)) {
-                // Check cache version compatibility
+                // Check cache version compatibility (code changes)
                 $cacheVersion = $cachedData['version'] ?? 'v1';
-                if ($cacheVersion !== $cacheConfig['version']) {
-                    error_log("CACHE: Version mismatch ({$cacheVersion} vs {$cacheConfig['version']}) - invalidating");
+                $cacheDataVersion = $cachedData['data_version'] ?? '';
+                $currentDataVersion = $cacheConfig['data_version'] ?? '';
+                
+                // Invalidate if code changed OR data changed
+                if ($cacheVersion !== $cacheConfig['version'] || $cacheDataVersion !== $currentDataVersion) {
+                    if ($cacheVersion !== $cacheConfig['version']) {
+                        error_log("CACHE: Code version mismatch ({$cacheVersion} vs {$cacheConfig['version']}) - invalidating");
+                    } else {
+                        error_log("CACHE: Data changed ({$cacheDataVersion} vs {$currentDataVersion}) - invalidating cache");
+                    }
                     @unlink($cacheFile);
                 } else {
                     // Unwrap cached envelope if present
@@ -238,14 +331,11 @@ try {
                 break;
             case 'all':
             default:
-                // OPTIMIZATION: For 'all' status, load data progressively
+                // OPTIMIZATION: For 'all' status, load data progressively from all modules
                 $allDonations = [];
                 $moduleErrors = [];
                 
-                // Load modules in parallel using output buffering
-                $moduleData = [];
-                
-                // Pending donors (most critical)
+                // Load ALL modules and aggregate results
                 ob_start();
                 include_once 'module/donation_pending.php';
                 $pendingOutput = ob_get_clean();
@@ -255,7 +345,6 @@ try {
                     $moduleErrors[] = 'Pending: ' . $pendingDonations['error'];
                 }
                 
-                // Approved donors
                 ob_start();
                 include_once 'module/donation_approved.php';
                 $approvedOutput = ob_get_clean();
@@ -265,7 +354,6 @@ try {
                     $moduleErrors[] = 'Approved: ' . $approvedDonations['error'];
                 }
                 
-                // Declined/deferred donors
                 ob_start();
                 include_once 'module/donation_declined.php';
                 $declinedOutput = ob_get_clean();
@@ -275,7 +363,7 @@ try {
                     $moduleErrors[] = 'Declined: ' . $declinedDonations['error'];
                 }
                 
-                // Sort all donations by date (newest first) - optimized sorting
+                // Sort all donations by date (newest first)
                 if (count($allDonations) > 0) {
                     usort($allDonations, function($a, $b) {
                         $dateA = $a['date_submitted'] ?? $a['rejection_date'] ?? '';
@@ -286,6 +374,7 @@ try {
                         return strtotime($dateB) - strtotime($dateA);
                     });
                 }
+                
                 $donations = $allDonations;
                 $pageTitle = "All Donors";
                 break;
@@ -313,26 +402,15 @@ if (!is_array($donations)) {
 // This ensures newest entries appear at the top of the table on the first page
 // OPTIMIZATION: Add performance monitoring
 $startTime = microtime(true);
-// Derive pagination display variables depending on status mode
-if ($status !== 'all') {
-    // Modules already applied LIMIT/OFFSET; use results directly for the current page
-    $currentPageDonations = is_array($donations) ? $donations : [];
-    $pageCount = count($currentPageDonations);
-    // Dynamic totals to enable traversal without full COUNT()
-    $totalItems = ($currentPage - 1) * $itemsPerPage + $pageCount;
-    // If we received a full page, allow a next page; otherwise, we're at the last page
-    $totalPages = ($pageCount === $itemsPerPage) ? ($currentPage + 1) : max(1, $currentPage);
-} else {
-    // 'All' combines multiple sources; keep existing in-memory pagination behavior
-    $totalItems = count($donations);
-    $totalPages = ceil($totalItems / $itemsPerPage);
-    if ($currentPage > $totalPages && $totalPages > 0) { $currentPage = $totalPages; }
-    $startIndex = ($currentPage - 1) * $itemsPerPage;
-    $currentPageDonations = array_slice($donations, $startIndex, $itemsPerPage);
-}
+// Derive pagination display variables - same logic for all status modes
+$totalItems = count($donations);
+$totalPages = ceil($totalItems / $itemsPerPage);
+if ($currentPage > $totalPages && $totalPages > 0) { $currentPage = $totalPages; }
+$startIndex = ($currentPage - 1) * $itemsPerPage;
+$currentPageDonations = array_slice($donations, $startIndex, $itemsPerPage);
 
 // OPTIMIZATION: Enhanced cache writing with compression and multi-layer storage (after pagination)
-if (!$useCache) {
+if (!$useCache && $status !== 'pending') {
     // Prepare comprehensive cache data (like main dashboard)
     $cacheData = [
         'data' => $donations,
@@ -344,6 +422,7 @@ if (!$useCache) {
         'totalPages' => $totalPages,
         'itemsPerPage' => $itemsPerPage,
         'version' => $cacheConfig['version'],
+        'data_version' => $cacheConfig['data_version'],
         'filters' => $filtersForKey,
         'executionTime' => 0 // Will be updated after performance monitoring
     ];
@@ -361,9 +440,14 @@ if (!$useCache) {
     if (function_exists('storeDatabaseCache')) {
         storeDatabaseCache($cacheKey, $cacheData, $cacheConfig['db_ttl']);
     }
-    // Cache warming: Pre-load related data
+    // Cache warming: Pre-load related data (background process, non-blocking)
     if ($cacheConfig['warm_cache']) {
-        warmCache($statusKey);
+        // Use fastCGI/background process for cache warming to not slow down current request
+        register_shutdown_function(function() use ($statusKey, $currentPage) {
+            warmCache($statusKey);
+            // Also pre-load other status filters for instant switching
+            warmOtherFilters($statusKey, $currentPage);
+        });
     }
 }
 
@@ -489,6 +573,35 @@ function warmCache($statusKey) {
         @curl_exec($ch);
         @curl_close($ch);
     }
+}
+
+function warmOtherFilters($currentStatus, $currentPage) {
+    // Pre-load other status filters (page 1) for instant switching
+    $otherFilters = ['all', 'pending', 'approved', 'declined'];
+    $targetPage = min($currentPage, 1); // Only warm page 1 for other filters
+    
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'localhost';
+    $path = isset($_SERVER['REQUEST_URI']) ? strtok($_SERVER['REQUEST_URI'], '?') : $_SERVER['PHP_SELF'];
+    
+    foreach ($otherFilters as $filter) {
+        if ($filter === $currentStatus) continue; // Skip current filter
+        
+        $params = ['status' => $filter, 'page' => $targetPage, 'warm' => 1];
+        $url = $scheme . '://' . $host . $path . '?' . http_build_query($params);
+        
+        // Fire-and-forget request
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_NOSIGNAL, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 1);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
+        curl_setopt($ch, CURLOPT_HEADER, false);
+        @curl_exec($ch);
+        @curl_close($ch);
+    }
+    
+    error_log("CACHE: Pre-warmed other filters for instant switching");
 }
 function invalidateCache($pattern = null) {
     // Invalidate cache entries matching pattern
@@ -2108,153 +2221,6 @@ function getCacheStats() {
             // Global variables for tracking current donor
             var currentDonorId = null;
             var currentEligibilityId = null;
-            // OPTIMIZATION: Debounced search function for better performance
-            let searchTimeout;
-            // Search function for the donations table
-            function searchDonations() {
-                const searchInput = document.getElementById('searchInput');
-                const searchCategory = document.getElementById('searchCategory');
-                const searchInfo = document.getElementById('searchInfo');
-                const table = document.getElementById('donationsTable');
-                const tbody = table.querySelector('tbody');
-                const rows = Array.from(tbody.querySelectorAll('tr:not(.no-results)'));
-                // Update search info based on visible rows
-                function updateSearchInfo() {
-                    const visibleCount = rows.filter(row => row.style.display !== 'none').length;
-                    const totalCount = rows.length;
-                    if (searchInfo) {
-                        searchInfo.textContent = `Showing ${visibleCount} of ${totalCount} entries`;
-                    }
-                }
-                // Clear search and reset display
-                window.clearSearch = function() {
-                    if (searchInput) searchInput.value = '';
-                    if (searchCategory) searchCategory.value = 'all';
-                    rows.forEach(row => {
-                        row.style.display = '';
-                    });
-                    // Remove any existing "no results" message
-                    const existingNoResults = tbody.querySelector('.no-results');
-                    if (existingNoResults) {
-                        existingNoResults.remove();
-                    }
-                    updateSearchInfo();
-                };
-                // OPTIMIZATION: Perform search filtering with early exit for better performance
-                function performSearch() {
-                    const value = searchInput.value.toLowerCase().trim();
-                    const category = searchCategory.value;
-                    // Early exit if search is empty
-                    if (!value) {
-                        rows.forEach(row => row.style.display = '');
-                        updateSearchInfo();
-                        return;
-                    }
-                    // Remove any existing "no results" message
-                    const existingNoResults = tbody.querySelector('.no-results');
-                    if (existingNoResults) {
-                        existingNoResults.remove();
-                    }
-                    let visibleCount = 0;
-                    // OPTIMIZATION: Use more efficient filtering with early exit
-                    for (let i = 0; i < rows.length; i++) {
-                        const row = rows[i];
-                        let found = false;
-                        if (category === 'all') {
-                            // Search all cells with early exit
-                            const cells = row.querySelectorAll('td');
-                            for (let j = 0; j < cells.length; j++) {
-                                if (cells[j].textContent.toLowerCase().includes(value)) {
-                                    found = true;
-                                    break; // Early exit once found
-                                }
-                            }
-                        } else if (category === 'donor') {
-                            // Search donor name (columns 1 and 2 for surname and first name)
-                            const nameColumns = [row.cells[1], row.cells[2]];
-                            for (let j = 0; j < nameColumns.length; j++) {
-                                if (nameColumns[j] && nameColumns[j].textContent.toLowerCase().includes(value)) {
-                                    found = true;
-                                    break; // Early exit once found
-                                }
-                            }
-                        } else if (category === 'donor_number') {
-                            // Search donor number (column 0)
-                            if (row.cells[0] && row.cells[0].textContent.toLowerCase().includes(value)) {
-                                found = true;
-                            }
-                        } else if (category === 'donor_type') {
-                            // Search donor type (column 3)
-                            if (row.cells[3] && row.cells[3].textContent.toLowerCase().includes(value)) {
-                                found = true;
-                            }
-                        } else if (category === 'registered_via') {
-                            // Search registered via (column 4)
-                            if (row.cells[4] && row.cells[4].textContent.toLowerCase().includes(value)) {
-                                        found = true;
-                            }
-                        } else if (category === 'status') {
-                            // Search for status badge (column 5)
-                            if (row.cells[5] && row.cells[5].textContent.toLowerCase().includes(value)) {
-                                found = true;
-                            }
-                            // Also search for related status terms
-                            if (row.cells[5] && (
-                                (value.toLowerCase().includes('declined') && row.cells[5].textContent.toLowerCase().includes('declined')) ||
-                                (value.toLowerCase().includes('deferred') && row.cells[5].textContent.toLowerCase().includes('deferred')) ||
-                                (value.toLowerCase().includes('temporarily') && row.cells[5].textContent.toLowerCase().includes('temporarily')) ||
-                                (value.toLowerCase().includes('permanently') && row.cells[5].textContent.toLowerCase().includes('permanently'))
-                            )) {
-                                found = true;
-                            }
-                        }
-                        // Show/hide row based on search result
-                        if (found) {
-                            row.style.display = '';
-                            visibleCount++;
-                        } else {
-                            row.style.display = 'none';
-                        }
-                    }
-                    // Show "no results" message if needed
-                    if (visibleCount === 0 && rows.length > 0) {
-                        const noResultsRow = document.createElement('tr');
-                        noResultsRow.className = 'no-results';
-                        const colspan = table.querySelector('thead th:last-child') ?
-                                      table.querySelector('thead th:last-child').cellIndex + 1 : 6;
-                        noResultsRow.innerHTML = `
-                            <td colspan="${colspan}" class="text-center">
-                                <div class="alert alert-info m-2">
-                                    No matching donors found
-                                    <button class="btn btn-outline-primary btn-sm ms-2" onclick="clearSearch()">
-                                        Clear Search
-                                    </button>
-                                </div>
-                            </td>
-                        `;
-                        tbody.appendChild(noResultsRow);
-                    }
-                    updateSearchInfo();
-                }
-                // Initialize
-                if (searchInput && searchCategory) {
-                    // Add input event for real-time filtering (delegate to latest window.performSearch)
-                    searchInput.addEventListener('input', function() { if (window.performSearch) window.performSearch(); });
-                    searchCategory.addEventListener('change', function() { if (window.performSearch) window.performSearch(); });
-                    // Initial update
-                    updateSearchInfo();
-                }
-            }
-            // Initialize search when page loads
-            console.log('DOM loaded, initializing modals and buttons...');
-            // Initialize search
-            searchDonations();
-            // OPTIMIZATION: Debounced search for better performance
-            document.getElementById('searchInput').addEventListener('keyup', function() {
-                clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(function(){ if (window.performSearch) window.performSearch(); }, 300); // Wait 300ms after user stops typing
-            });
-            document.getElementById('searchCategory').addEventListener('change', searchDonations);
             // Initialize loading modal (kept)
             const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
                 backdrop: false,
@@ -6706,15 +6672,20 @@ function getCacheStats() {
     <script>
         (function() {
             try {
+                console.log('Initializing UnifiedSearch...');
+                // Get current status from URL
+                var currentStatus = '<?php echo htmlspecialchars($status, ENT_QUOTES, 'UTF-8'); ?>';
+                console.log('Current status filter:', currentStatus);
+                
                 var adminSearch = new UnifiedSearch({
                     inputId: 'searchInput',
                     categoryId: 'searchCategory',
                     tableId: 'donationsTable',
                     rowSelector: 'tbody tr:not(.no-results)',
-                    mode: 'hybrid',
-                    debounceMs: 250,
+                    mode: 'backend',  // Search entire database, not just current page
+                    debounceMs: 500,  // Slightly longer delay since we're querying database
                     highlight: false,
-                    autobind: false,
+                    autobind: true,  // Auto-bind to input events
                     columnsMapping: {
                         all: 'all',
                         donor: [1, 2],
@@ -6726,7 +6697,13 @@ function getCacheStats() {
                     backend: {
                         url: '../api/unified-search_admin.php',
                         action: 'donors',
-                        pageSize: 50
+                        status: currentStatus,  // Pass current status filter
+                        pageSize: 100  // Show up to 100 results from database
+                    },
+                    onClear: function() {
+                        // This will be called when search is cleared (empty query detected)
+                        console.log('UnifiedSearch: onClear callback triggered');
+                        restoreOriginalTable();
                     },
                     renderResults: function(data) {
                         try {
@@ -6734,80 +6711,128 @@ function getCacheStats() {
                             if (!table) return;
                             var tbody = table.querySelector('tbody');
                             if (!tbody) return;
-                            // Fallback: if no backend results, do nothing (frontend already filtered)
-                            if (!data || !Array.isArray(data.results) || data.results.length === 0) return;
-                            // Replace rows with backend results (basic mapping)
+                            
+                            // Clear existing rows
                             while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+                            
+                            if (!data || !Array.isArray(data.results) || data.results.length === 0) {
+                                // No results - show message
+                                var noResultsRow = document.createElement('tr');
+                                noResultsRow.className = 'no-results';
+                                noResultsRow.innerHTML = '<td colspan="7" class="text-center"><div class="alert alert-info m-2">No matching donors found <button class="btn btn-outline-primary btn-sm ms-2" onclick="clearSearch()">Clear Search</button></div></td>';
+                                tbody.appendChild(noResultsRow);
+                                
+                                var searchInfo = document.getElementById('searchInfo');
+                                if (searchInfo) {
+                                    searchInfo.textContent = 'No results found';
+                                }
+                                return;
+                            }
+                            
+                            // Render results from API
                             for (var i = 0; i < data.results.length; i++) {
                                 var r = data.results[i];
                                 var tr = document.createElement('tr');
-                                tr.innerHTML = '<td>' + (r[0] || '') + '</td>' +
-                                               '<td>' + (r[1] || '') + '</td>' +
-                                               '<td>' + (r[2] || '') + '</td>' +
-                                               '<td><span class="badge ' + ((String(r[3]||'').toLowerCase()==='returning')?'bg-info':'bg-primary') + '">' + (r[3] || 'New') + '</span></td>' +
-                                               '<td>' + (r[4] || '') + '</td>' +
-                                               '<td>' + (r[5] || '') + '</td>' +
-                                               '<td><button type="button" class="btn btn-info btn-sm" disabled><i class="fas fa-eye"></i></button></td>';
+                                tr.className = 'donor-row';
+                                tr.setAttribute('data-donor-id', r[0] || '');
+                                tr.setAttribute('data-eligibility-id', r[6] || '');
+                                
+                                var donorType = String(r[3] || 'New').toLowerCase();
+                                var isReturning = donorType === 'returning';
+                                
+                                var regChannel = String(r[4] || 'PRC Portal');
+                                var regDisplay = regChannel === 'PRC Portal' ? 'PRC System' : (regChannel === 'Mobile' ? 'Mobile System' : regChannel);
+                                
+                                var status = r[5] || 'Pending (Screening)';
+                                var statusClass = status.includes('Collection') ? 'bg-success' : 
+                                                 status.includes('Examination') ? 'bg-info' : 
+                                                 status.includes('Approved') ? 'bg-success' :
+                                                 status.includes('Declined') ? 'bg-danger' : 'bg-warning';
+                                
+                                tr.innerHTML = '<td>' + escapeHtml(r[0] || '') + '</td>' +
+                                               '<td>' + escapeHtml(r[1] || '') + '</td>' +
+                                               '<td>' + escapeHtml(r[2] || '') + '</td>' +
+                                               '<td><span class="badge ' + (isReturning ? 'bg-info' : 'bg-primary') + '">' + escapeHtml(r[3] || 'New') + '</span></td>' +
+                                               '<td>' + escapeHtml(regDisplay) + '</td>' +
+                                               '<td><span class="badge ' + statusClass + '">' + escapeHtml(status) + '</span></td>' +
+                                               '<td><button type="button" class="btn btn-info btn-sm" data-donor-id="' + escapeHtml(r[0] || '') + '" data-eligibility-id="' + escapeHtml(r[6] || '') + '"><i class="fas fa-eye"></i></button></td>';
                                 tbody.appendChild(tr);
                             }
+                            
+                            // Update search info
                             var searchInfo = document.getElementById('searchInfo');
-                            if (searchInfo) searchInfo.textContent = 'Showing ' + data.results.length + ' of ' + data.results.length + ' entries';
-                        } catch (e) { /* no-op */ }
+                            if (searchInfo) {
+                                searchInfo.textContent = 'Showing ' + data.results.length + ' results from search';
+                            }
+                            
+                            // Re-bind row click handlers for new rows
+                            setTimeout(function() {
+                                document.querySelectorAll('tr.donor-row').forEach(function(row) {
+                                    row.addEventListener('click', function() {
+                                        var donorId = this.getAttribute('data-donor-id') || '';
+                                        var eligibilityId = this.getAttribute('data-eligibility-id') || '';
+                                        if (typeof openDetails === 'function') {
+                                            openDetails(donorId, eligibilityId);
+                                        }
+                                    });
+                                });
+                            }, 100);
+                        } catch (e) {
+                            console.error('Error rendering search results:', e);
+                        }
                     }
                 });
+                
+                // Helper function to escape HTML
+                function escapeHtml(text) {
+                    if (!text) return '';
+                    var div = document.createElement('div');
+                    div.textContent = text;
+                    return div.innerHTML;
+                }
                 window.adminUnifiedSearch = adminSearch;
-
-                var originalPerformSearch = window.performSearch;
-                window.performSearch = function() {
+                
+                // Store original table HTML for "clear search" functionality
+                window.originalTableHTML = null;
+                var table = document.getElementById('donationsTable');
+                if (table) {
+                    window.originalTableHTML = table.querySelector('tbody').innerHTML;
+                }
+                
+                // Function to restore original table HTML
+                function restoreOriginalTable() {
+                    var tbody = document.querySelector('#donationsTable tbody');
+                    if (window.originalTableHTML && tbody) {
+                        tbody.innerHTML = window.originalTableHTML;
+                        // Re-bind event handlers after restoring original HTML
+                        setTimeout(function() {
+                            document.querySelectorAll('tr.donor-row').forEach(function(row) {
+                                row.addEventListener('click', function() {
+                                    var donorId = this.getAttribute('data-donor-id') || '';
+                                    var eligibilityId = this.getAttribute('data-eligibility-id') || '';
+                                    if (typeof openDetails === 'function') {
+                                        openDetails(donorId, eligibilityId);
+                                    }
+                                });
+                            });
+                        }, 100);
+                    }
+                    // Clear search info
+                    var searchInfo = document.getElementById('searchInfo');
+                    if (searchInfo) searchInfo.textContent = '';
+                }
+                
+                // Clear search function - restore original table
+                window.clearSearch = function() {
                     var searchInput = document.getElementById('searchInput');
-                    var searchCategory = document.getElementById('searchCategory');
-                    var table = document.getElementById('donationsTable');
-                    if (!searchInput || !table) {
-                        if (typeof originalPerformSearch === 'function') return originalPerformSearch();
-                        return;
-                    }
-                    var tbody = table.querySelector('tbody');
-                    if (!tbody) return;
-                    var value = (searchInput.value || '').toLowerCase().trim();
-                    var category = searchCategory ? searchCategory.value : 'all';
-                    // Remove any existing "no results" message
-                    var existingNoResults = tbody.querySelector('.no-results');
-                    if (existingNoResults) existingNoResults.remove();
-
-                    if (!value) {
-                        adminSearch.resetFrontend();
-                        // Update results info
-                        var rowsAll = Array.prototype.slice.call(tbody.querySelectorAll('tr:not(.no-results)'));
-                        var searchInfo = document.getElementById('searchInfo');
-                        if (searchInfo) searchInfo.textContent = 'Showing ' + rowsAll.length + ' of ' + rowsAll.length + ' entries';
-                        return;
-                    }
-
-                    adminSearch.searchFrontend(value, category);
-
-                    // Update results info and handle no-results state
-                    var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr:not(.no-results)'));
-                    var visibleCount = 0;
-                    for (var i = 0; i < rows.length; i++) {
-                        if (rows[i].style.display !== 'none') visibleCount++;
-                    }
-                    var searchInfoEl = document.getElementById('searchInfo');
-                    if (searchInfoEl) searchInfoEl.textContent = 'Showing ' + visibleCount + ' of ' + rows.length + ' entries';
-
-                    if (visibleCount === 0 && rows.length > 0) {
-                        var noResultsRow = document.createElement('tr');
-                        noResultsRow.className = 'no-results';
-                        var lastTh = table.querySelector('thead th:last-child');
-                        var colspan = lastTh ? lastTh.cellIndex + 1 : 6;
-                        noResultsRow.innerHTML = '<td colspan="' + colspan + '" class="text-center">\
-                                <div class="alert alert-info m-2">\
-                                    No matching donors found\
-                                    <button class="btn btn-outline-primary btn-sm ms-2" onclick="clearSearch()">\
-                                        Clear Search\
-                                    </button>\
-                                </div>\
-                            </td>';
-                        tbody.appendChild(noResultsRow);
+                    
+                    // Clear input value (this will trigger onInput)
+                    if (searchInput) {
+                        searchInput.value = '';
+                        // Trigger input event to notify UnifiedSearch that search was cleared
+                        var event = new Event('input', { bubbles: true });
+                        searchInput.dispatchEvent(event);
+                        // The onClear callback in UnifiedSearch will handle restoring the table
                     }
                 };
             } catch (e) {

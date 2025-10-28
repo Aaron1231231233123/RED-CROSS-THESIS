@@ -46,3 +46,4 @@ COMMENT ON COLUMN blood_drive_notifications.blood_types IS 'Array of blood types
 COMMENT ON COLUMN blood_drive_notifications.message_template IS 'Custom message template for notifications';
 
 
+

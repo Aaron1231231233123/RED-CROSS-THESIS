@@ -280,12 +280,12 @@ window.proceedToAdminDeclarationForm = function(donorId) {
                     for (let [key, value] of formData.entries()) {
                         debugFormData.append('debug_log', '  ' + key + ': ' + value);
                     }
-                    fetch('../../src/views/forms/declaration-form-process.php', {
+                    fetch('../../src/views/forms/admin-declaration-form-process.php', {
                         method: 'POST',
                         body: debugFormData
                     }).catch(() => {});
                     
-                    fetch('../../src/views/forms/declaration-form-process.php', {
+                    fetch('../../src/views/forms/admin-declaration-form-process.php', {
                         method: 'POST',
                         body: formData
                     })
@@ -327,7 +327,7 @@ window.proceedToAdminDeclarationForm = function(donorId) {
                         // Log error to server
                         const errorFormData = new FormData();
                         errorFormData.append('debug_log', 'Admin JavaScript Error: ' + error.message);
-                        fetch('../../src/views/forms/declaration-form-process.php', {
+                        fetch('../../src/views/forms/admin-declaration-form-process.php', {
                             method: 'POST',
                             body: errorFormData
                         }).catch(() => {});

@@ -1,0 +1,42 @@
+# Cache files - generated data that shouldn't be committed
+assets/cache/
+public/cache/
+
+# Log files
+*.log
+assets/logs/
+public/debug_log.txt
+
+# Temporary files
+temp_*
+*_temp.*
+
+# Test files
+*test*.php
+*test*.html
+*debug*.php
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node modules (if any)
+node_modules/
+
+# Composer vendor (if any)
+vendor/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Backup files
+*.backup
+*.bak

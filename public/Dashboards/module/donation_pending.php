@@ -38,36 +38,14 @@ $cursorId = isset($_GET['cursor_id']) ? intval($_GET['cursor_id']) : null;
 $cursorDir = isset($_GET['cursor_dir']) ? $_GET['cursor_dir'] : 'next'; // next|prev
 
 try {
-    // Determine limit/offset for the donor page
-    $limit = isset($GLOBALS['DONATION_LIMIT']) ? intval($GLOBALS['DONATION_LIMIT']) : 100;
-    $offset = isset($GLOBALS['DONATION_OFFSET']) ? intval($GLOBALS['DONATION_OFFSET']) : 0;
-
+    // For pending filter, we need to fetch ALL donors to ensure all eligible donors are captured
+    // Since we have 3000+ donors in the database, fetch ALL of them
+    // The module filters in PHP, so we need to fetch everything
+    $limit = 5000; // Fetch enough to cover all 3000+ donors and growth
+    $offset = 0; // Always start from beginning
+    
     // Fetch donors (authoritative list to scope downstream queries)
-    if ($perfMode && $cursorTs) {
-        // Keyset pagination: oldest-first (FIFO)
-        $order = 'order=submitted_at.asc,donor_id.asc';
-        $endpoint = "donor_form?{$order}&limit={$limit}";
-        $ts = rawurlencode($cursorTs);
-        if ($cursorDir === 'prev') {
-            // Go to earlier donors (before current first): submitted_at.lt OR (eq AND donor_id.lt)
-            if ($cursorId) {
-                $endpoint .= "&or=(submitted_at.lt.{$ts},and(submitted_at.eq.{$ts},donor_id.lt.{$cursorId}))";
-            } else {
-                $endpoint .= "&submitted_at=lt.{$ts}";
-            }
-        } else {
-            // Next page (forward in time)
-            if ($cursorId) {
-                $endpoint .= "&or=(submitted_at.gt.{$ts},and(submitted_at.eq.{$ts},donor_id.gt.{$cursorId}))";
-            } else {
-                $endpoint .= "&submitted_at=gt.{$ts}";
-            }
-        }
-        $donorResponse = supabaseRequest($endpoint);
-    } else {
-        // Offset pagination fallback
-        $donorResponse = supabaseRequest("donor_form?order=submitted_at.desc&limit={$limit}&offset={$offset}");
-    }
+    $donorResponse = supabaseRequest("donor_form?order=submitted_at.desc&limit={$limit}&offset={$offset}");
     
     if (!isset($donorResponse['data']) || !is_array($donorResponse['data'])) {
         throw new Exception("Failed to fetch donors: " . ($donorResponse['error'] ?? 'Unknown error'));
@@ -76,26 +54,7 @@ try {
     // Build donor id list
     $donorIds = array_values(array_filter(array_column($donorResponse['data'], 'donor_id')));
 
-    // Compute next cursor from the raw donor list (if using keyset mode)
-    if ($perfMode && !empty($donorResponse['data'])) {
-        $first = $donorResponse['data'][0];
-        $last = $donorResponse['data'][count($donorResponse['data']) - 1];
-        $firstTs = $first['submitted_at'] ?? ($first['created_at'] ?? null);
-        $firstId = $first['donor_id'] ?? null;
-        $lastTs = $last['submitted_at'] ?? ($last['created_at'] ?? null);
-        $lastId = $last['donor_id'] ?? null;
-        if ($firstTs && $firstId) {
-            $GLOBALS['PENDING_PREV_CURSOR_TS'] = $firstTs;
-            $GLOBALS['PENDING_PREV_CURSOR_ID'] = $firstId;
-        }
-        if ($lastTs && $lastId) {
-            $GLOBALS['PENDING_NEXT_CURSOR_TS'] = $lastTs;
-            $GLOBALS['PENDING_NEXT_CURSOR_ID'] = $lastId;
-        }
-        // Oldest-first guarantee: ensure sort_ts calculation later aligns
-    }
-
-    // Short-circuit if no donors on this page
+    // Short-circuit if no donors
     if (empty($donorIds)) {
         $pendingDonations = [];
     } else {
@@ -301,26 +260,34 @@ try {
                 $isScreeningPassed = false;
                 $isPhysicalExamApproved = false;
                 
-                // Check Medical History completion
-                if (isset($medicalByDonorId[$donorId])) {
-                    $medRecord = $medicalByDonorId[$donorId];
-                    if (is_array($medRecord)) {
-                        $medNeeds = $medRecord['needs_review'] ?? null;
-                        $isAdmin = $medRecord['is_admin'] ?? null;
-                        $medicalApproval = $medRecord['medical_approval'] ?? '';
-                        
-                        // Medical History is completed if:
-                        // 1. Admin side: is_admin is TRUE (string or boolean)
-                        // 2. OR needs_review is false/null
-                        $isMedicalHistoryCompleted = ($isAdmin === true || $isAdmin === 'true' || $isAdmin === 'True') || 
-                                                    ($medNeeds === false || $medNeeds === null || $medNeeds === 0);
-                        
-                        // Debug logging for specific donors
-                        if (in_array($donorId, [195, 200, 211, 1887, 2514, 3203, 3204, 3205, 3208])) {
-                            error_log("DEBUG - Donor $donorId Medical History: is_admin = " . var_export($isAdmin, true) . 
-                                     ", needs_review = " . var_export($medNeeds, true) . 
-                                     ", medical_approval = '$medicalApproval' completed = " . var_export($isMedicalHistoryCompleted, true));
-                        }
+                // Check Medical History completion - SKIP if no medical history record exists
+                if (!isset($medicalByDonorId[$donorId])) {
+                    // Skip donors without medical history - they haven't been processed yet
+                    // Debug logging for donor 3205
+                    if ($donorId == 3205) {
+                        error_log("DEBUG - Donor 3205: No medical history record found, skipping (should not appear in pending)");
+                    }
+                    continue;
+                }
+                
+                // Medical history record exists - check if completed
+                $medRecord = $medicalByDonorId[$donorId];
+                if (is_array($medRecord)) {
+                    $medNeeds = $medRecord['needs_review'] ?? null;
+                    $isAdmin = $medRecord['is_admin'] ?? null;
+                    $medicalApproval = $medRecord['medical_approval'] ?? '';
+                    
+                    // Medical History is completed if:
+                    // 1. Admin side: is_admin is TRUE (string or boolean)
+                    // 2. OR needs_review is false/null
+                    $isMedicalHistoryCompleted = ($isAdmin === true || $isAdmin === 'true' || $isAdmin === 'True') || 
+                                                ($medNeeds === false || $medNeeds === null || $medNeeds === 0);
+                    
+                    // Debug logging for specific donors
+                    if (in_array($donorId, [195, 200, 211, 1887, 2514, 3203, 3204, 3205, 3208])) {
+                        error_log("DEBUG - Donor $donorId Medical History: is_admin = " . var_export($isAdmin, true) . 
+                                 ", needs_review = " . var_export($medNeeds, true) . 
+                                 ", medical_approval = '$medicalApproval' completed = " . var_export($isMedicalHistoryCompleted, true));
                     }
                 }
                 
@@ -412,8 +379,9 @@ try {
             return ($ta < $tb) ? -1 : 1;
         });
         
-        // Pagination is handled by the main dashboard
-        // No slicing here - return all filtered results for the main dashboard to paginate
+        // Do NOT slice here - return ALL filtered results
+        // Dashboard handles pagination for specific status filters
+        // For "all" status, return all for aggregation
     } else {
         // Handle API errors
         if (isset($donorResponse['error'])) {
