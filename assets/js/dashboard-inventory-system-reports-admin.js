@@ -37,6 +37,7 @@
                     demand: data.monthly_demand || {}
                 };
                 forecastMonths = data.forecast_months || []; // Future months = forecasts
+<<<<<<< Updated upstream
                 currentMonths = data.all_months || data.historical_months || data.current_months || []; // All database months for display
                 
                 // Debug: Log received data
@@ -55,6 +56,14 @@
                     console.log(`Years Covered: ${summary.years_covered}`);
                     console.log(`2023 Months: ${summary.months_2023}, 2024 Months: ${summary.months_2024}, 2025 Months: ${summary.months_2025}`);
                 }
+=======
+                currentMonths = data.historical_months || []; // Historical data (CSV + database)
+                
+                // Debug: Log received data
+                console.log('Received forecast data:', data);
+                console.log('Historical months (CSV + Database):', currentMonths);
+                console.log('Forecast months (Future):', forecastMonths);
+>>>>>>> Stashed changes
                 console.log('Forecast data:', forecastData);
                 
                 // Log training data info
@@ -150,13 +159,20 @@
                 const itemMonth = new Date(item.forecast_month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
                 
                 if (itemMonth === monthName) {
+<<<<<<< Updated upstream
                     console.log(`Adding forecast item for ${monthName}: ${item.blood_type} - Demand: ${item.forecasted_demand}, Supply: ${item.forecasted_supply}, Balance: ${item.projected_balance}`);
+=======
+                    console.log(`Adding forecast item for ${monthName}: ${item.blood_type} - Demand: ${item.forecasted_demand}, Supply: ${item.forecasted_supply}`);
+>>>>>>> Stashed changes
                     totalDemand += item.forecasted_demand || 0;
                     totalSupply += item.forecasted_supply || 0;
                     
                     if (item.projected_balance < 0) {
                         criticalTypes.push(item.blood_type);
+<<<<<<< Updated upstream
                         console.log(`Found critical forecast blood type: ${item.blood_type} with balance: ${item.projected_balance}`);
+=======
+>>>>>>> Stashed changes
                     }
                 }
             });
@@ -213,9 +229,14 @@
             }
         } else if (selectedMonth === 'All Months') {
             console.log('Using all data for KPIs - aggregating historical + forecast');
+<<<<<<< Updated upstream
             console.log(`Processing ${currentMonths.length} historical months and ${forecastData.length} forecast records`);
             
             // Aggregate all historical data (2023-2025 database data)
+=======
+            
+            // Aggregate all historical data
+>>>>>>> Stashed changes
             currentMonths.forEach(monthKey => {
                 const supplyData = monthlyData.supply[monthKey] || {};
                 const demandData = monthlyData.demand[monthKey] || {};
@@ -236,7 +257,11 @@
                 });
             });
             
+<<<<<<< Updated upstream
             // Add all forecast data (December 2025+ predictions)
+=======
+            // Add all forecast data
+>>>>>>> Stashed changes
             forecastData.forEach(item => {
                 totalDemand += item.forecasted_demand || 0;
                 totalSupply += item.forecasted_supply || 0;
@@ -247,7 +272,11 @@
                 }
             });
             
+<<<<<<< Updated upstream
             console.log(`All Months aggregation: ${currentMonths.length} Historical + ${forecastData.length} Forecast = Demand: ${totalDemand}, Supply: ${totalSupply}`);
+=======
+            console.log(`All Months aggregation: Historical + Forecast = Demand: ${totalDemand}, Supply: ${totalSupply}`);
+>>>>>>> Stashed changes
         }
         
         const totalBalance = totalSupply - totalDemand;
@@ -257,12 +286,15 @@
             criticalTypes = [];
         }
         
+<<<<<<< Updated upstream
         // Use critical types from API if available, otherwise use calculated ones
         const apiCriticalTypes = kpiData.critical_types_list || [];
         if (apiCriticalTypes.length > 0) {
             criticalTypes = apiCriticalTypes;
         }
         
+=======
+>>>>>>> Stashed changes
         const mostCritical = criticalTypes.length > 0 ? criticalTypes[0] : 'None';
         
         console.log(`Critical types found: [${criticalTypes.join(', ')}]`);
@@ -430,10 +462,22 @@
             console.log(`Added forecast option: "${option.value}"`);
         });
         
+<<<<<<< Updated upstream
         // Add historical months LAST (ALL DATABASE DATA 2023-2025) - sorted newest to oldest
         const sortedHistoricalMonths = [...currentMonths].sort((a, b) => new Date(b) - new Date(a));
         console.log(`Adding ${sortedHistoricalMonths.length} historical months to filter dropdown`);
         
+=======
+        // Add historical months LAST (CSV + Database data) - sorted newest to oldest
+        // Filter out September 2025 completely from the data source
+        const filteredHistoricalMonths = currentMonths.filter(monthKey => {
+            const monthDate = new Date(monthKey);
+            const monthName = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            return monthName !== 'September 2025' && monthKey !== '2025-09-01';
+        });
+        
+        const sortedHistoricalMonths = filteredHistoricalMonths.sort((a, b) => new Date(b) - new Date(a));
+>>>>>>> Stashed changes
         sortedHistoricalMonths.forEach(monthKey => {
             const monthDate = new Date(monthKey);
             const monthName = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -442,9 +486,14 @@
             option.value = monthName + ' (Historical Data)';
             option.textContent = monthName + ' (Historical Data)';
             monthFilter.appendChild(option);
+<<<<<<< Updated upstream
         });
         
         console.log(`Total filter options added: ${monthFilter.children.length} (1 All Months + ${forecastMonths.length} Forecast + ${sortedHistoricalMonths.length} Historical)`);
+=======
+            console.log(`Added historical option: "${option.value}"`);
+        });
+>>>>>>> Stashed changes
     }
 
     function statusFor(balance){
@@ -484,17 +533,26 @@
         // Get filtered forecast data for pagination
         const filteredForecastData = filtered();
         
+<<<<<<< Updated upstream
         // Show historical data (ALL DATABASE DATA 2023-2025)
         console.log(`Rendering table with ${currentMonths.length} historical months and ${forecastMonths.length} forecast months`);
         
+=======
+        // Show historical data (CSV + Database data)
+>>>>>>> Stashed changes
         currentMonths.sort().forEach(monthKey => {
             const monthDate = new Date(monthKey);
             const monthName = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
             
             // Skip if month filter is set and this month doesn't match
             if (selectedMonth && selectedMonth !== 'All Months' && !monthName.includes(selectedMonth.replace(' (Historical Data)', '').replace(' (R Studio Forecast)', ''))) {
+<<<<<<< Updated upstream
                 return;
             }
+=======
+            return;
+        }
+>>>>>>> Stashed changes
         
             // Get current data for this month
             const supplyData = monthlyData.supply[monthKey] || {};
@@ -517,7 +575,11 @@
                     
                     allRows.push(`
                     <tr>
+<<<<<<< Updated upstream
                         <td>${monthName} <small class="text-muted">(Database Data)</small></td>
+=======
+                        <td>${monthName} <small class="text-muted">(Historical Data)</small></td>
+>>>>>>> Stashed changes
                         <td>${bloodType}</td>
                         <td>${demand}</td>
                         <td>${supply}</td>

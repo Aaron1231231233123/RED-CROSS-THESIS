@@ -2566,18 +2566,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             
                     
                         </div>
-             <div class="modal-footer d-flex justify-content-between align-items-center" style="background-color: #f8f9fa; border-top: 1px solid #dee2e6; border-radius: 0 0 15px 15px;">
-                <div>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-1"></i>Close
-                    </button>
-                </div>
-                <div class="d-flex gap-2">
-                    <button type="button" class="btn" id="proceedToMedicalHistory" style="background-color: #b22222; color: white; border: none;">
-                        <i class="fas fa-clipboard-list me-1"></i>Proceed to Medical History
-                    </button>
-                    <!-- Mark for Medical Review button removed as requested -->
-                </div>
+             <div class="modal-footer d-flex justify-content-end align-items-center" style="background-color: #f8f9fa; border-top: 1px solid #dee2e6; border-radius: 0 0 15px 15px;">
+                <button type="button" class="btn" id="proceedToMedicalHistory" style="background-color: #b22222; color: white; border: none;">
+                    <i class="fas fa-clipboard-list me-1"></i>Proceed to Medical History
+                </button>
             </div>
                             </div>
                             </div>
@@ -2634,7 +2626,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <!-- Mark for Medical Review button removed as requested -->
+                    <button type="button" class="btn" id="markReturningReviewBtn" style="background-color: #ffc107; border: 1px solid #ffc107; color: #212529; font-weight: 600; border-radius: 6px; padding: 0.5rem 1rem; transition: all 0.3s ease;">
+                        <i class="fas fa-flag me-2"></i>Mark for Medical Review
+                    </button>
             </div>
         </div>
     </div>
@@ -3282,20 +3276,19 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                                      return null;
                                                  }
                                                  
-                                                 // Days display removed as requested
-                                                 // const remainingDays = calculateRemainingDays();
-                                                 // if (remainingDays !== null && remainingDays > 0) {
-                                                 //     // Color based on eligibility status
-                                                 //     let color = '#17a2b8'; // Default blue
-                                                 //     if (status === 'refused') {
-                                                 //         color = '#dc3545'; // Red
-                                                 //     } else if (status === 'deferred' || status === 'temporary_deferred') {
-                                                 //         color = '#ffc107'; // Yellow
-                                                 //     } else if (status === 'approved' || status === 'eligible') {
-                                                 //         color = '#28a745'; // Green
-                                                 //     }
-                                                 //     return ` • <span style="font-weight: bold; color: ${color};">${remainingDays} days left</span>`;
-                                                 // }
+                                                 const remainingDays = calculateRemainingDays();
+                                                 if (remainingDays !== null && remainingDays > 0) {
+                                                     // Color based on eligibility status
+                                                     let color = '#17a2b8'; // Default blue
+                                                     if (status === 'refused') {
+                                                         color = '#dc3545'; // Red
+                                                     } else if (status === 'deferred' || status === 'temporary_deferred') {
+                                                         color = '#ffc107'; // Yellow
+                                                     } else if (status === 'approved' || status === 'eligible') {
+                                                         color = '#28a745'; // Green
+                                                     }
+                                                     return ` • <span style="font-weight: bold; color: ${color};">${remainingDays} days left</span>`;
+                                                 }
                                              }
                                              return '';
                                          })()}
@@ -5453,6 +5446,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             const age = calculateAge(physicalData.birthdate);
             const donorAgeGender = `${age}${physicalData.sex ? ', ' + physicalData.sex : ''}`;
             
+            // Get assessments using the assessment functions
+            const assessment = getPhysicalExaminationAssessment(physicalData);
+            
             const physicalHTML = `
                 <!-- Donor Information Header (Compact Design) -->
                 <div class="mb-3">
@@ -5497,17 +5493,18 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Physical Exam Notes</label>
-                                <div class="form-control-plaintext bg-light p-2 rounded" style="white-space: pre-wrap;">${safe(physicalData.physical_exam_notes || 'N/A')}</div>
+                                <label class="form-label fw-semibold">Physical Exam Notes (Skin, HEENT, Lungs, etc.)</label>
+                                <div class="form-control-plaintext bg-light p-2 rounded">
+                                    ${safe(assessment.physical_exam_notes)}
+                                </div>
                             </div>
                         </div>
                         <div class="row g-3 mt-2">
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Blood Type</label>
-                                <div class="blood-type-display" style="background-color: #8B0000; color: white; border-radius: 20px; padding: 10px 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 90px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-                                    <div style="font-size: 0.75rem; font-weight: 500; line-height: 1; margin-bottom: 2px; opacity: 0.9;">Blood Type</div>
-                                    <div style="font-size: 1.2rem; font-weight: 700; line-height: 1;">${safe(physicalData.blood_type || 'N/A')}</div>
-                                </div>
+                                <div class="form-control-plaintext bg-light p-2 rounded">
+    <div>${safe(physicalData.blood_type || 'N/A')}</div>
+</div>  
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Type of Donation</label>
@@ -5521,20 +5518,28 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         <h6 class="mb-2" style="color:#b22222; font-weight:600; border-bottom: 2px solid #b22222; padding-bottom: 0.3rem;">Vital Signs</h6>
                         <div class="row g-2">
                             <div class="col-md-3">
-                                <label class="form-label fw-semibold">Blood Pressure</label>
-                                <div class="form-control-plaintext bg-light p-2 rounded text-center">${safe(physicalData.blood_pressure || 'N/A')}</div>
+                                <label class="form-label fw-semibold">Blood Pressure (BP)</label>
+                                <div class="form-control-plaintext bg-light p-2 rounded text-center">
+                                    ${safe(assessment.blood_pressure)}
+                                </div>
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label fw-semibold">Weight</label>
-                                <div class="form-control-plaintext bg-light p-2 rounded text-center">${safe(physicalData.body_weight || 'N/A')}</div>
+                                <div class="form-control-plaintext bg-light p-2 rounded text-center">
+                                    ${safe(assessment.weight)}
+                                </div>
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label fw-semibold">Pulse Rate</label>
-                                <div class="form-control-plaintext bg-light p-2 rounded text-center">${safe(physicalData.pulse_rate || 'N/A')}</div>
+                                <label class="form-label fw-semibold">Pulse</label>
+                                <div class="form-control-plaintext bg-light p-2 rounded text-center">
+                                    ${safe(assessment.pulse)}
+                                </div>
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label fw-semibold">Temperature</label>
-                                <div class="form-control-plaintext bg-light p-2 rounded text-center">${safe(physicalData.body_temp || 'N/A')}</div>
+                                <div class="form-control-plaintext bg-light p-2 rounded text-center">
+                                    ${safe(assessment.temperature)}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -5739,5 +5744,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
 
     <!-- Load eligibility alert script first -->
     <script src="../../assets/js/donor_eligibility_alert.js"></script>
+    <!-- Load physical examination assessment script -->
+    <script src="../../assets/js/assess_physical_exam_medical_history.js"></script>
 </body>
 </html>

@@ -11,6 +11,7 @@ function reports_admin_placeholder_info(): array {
 
 
 
+<<<<<<< Updated upstream
 
 
 
@@ -19,3 +20,9 @@ function reports_admin_placeholder_info(): array {
 
 
 
+
+
+
+
+=======
+>>>>>>> Stashed changes

@@ -72,6 +72,10 @@ try {
                 'body_weight' => $combined_data['body_weight'],
                 'pulse_rate' => $combined_data['pulse_rate'],
                 'body_temp' => $combined_data['body_temp'],
+                'gen_appearance' => $combined_data['gen_appearance'] ?? null,
+                'skin' => $combined_data['skin'] ?? null,
+                'heent' => $combined_data['heent'] ?? null,
+                'heart_and_lungs' => $combined_data['heart_and_lungs'] ?? null,
                 'reason' => $combined_data['disapproval_reason'] ?? 'No issues noted',
                 // Combine physical examination fields
                 'physical_exam_notes' => implode(' | ', array_filter([
