@@ -3,35 +3,56 @@
 
 /* Ensure ONLY medical history approval modals appear on top */
 #medicalHistoryApprovalModal,
-#medicalHistoryDeclineModal,
-#medicalHistoryDeclinedModal {
+#medicalHistoryDeclineModal {
     z-index: 9999 !important;
 }
 
 /* Force modal content to be on top */
 #medicalHistoryApprovalModal .modal-dialog,
-#medicalHistoryDeclineModal .modal-dialog,
-#medicalHistoryDeclinedModal .modal-dialog {
+#medicalHistoryDeclineModal .modal-dialog {
     z-index: 10000 !important;
 }
 
-
-/* Make decline modal appear right in front - MAXIMUM PRIORITY */
+/* Make decline modal appear above medical history modal (9999), donor profile modal (10060) but below confirmation modal (10100) */
 #medicalHistoryDeclineModal {
-    z-index: 99999 !important;
+    z-index: 10090 !important;
+    position: fixed !important;
 }
 
 #medicalHistoryDeclineModal .modal-dialog {
-    z-index: 100000 !important;
+    z-index: 10091 !important;
 }
 
-/* Ensure declined confirmation modal appears on top of everything */
-#medicalHistoryDeclinedModal {
-    z-index: 100001 !important;
+#medicalHistoryDeclineModal .modal-content {
+    z-index: 10092 !important;
 }
 
-#medicalHistoryDeclinedModal .modal-dialog {
-    z-index: 100002 !important;
+/* Ensure confirmation modal appears on top of everything (including decline modal, medical history modal, physical exam, donor profile) */
+#medicalHistoryDeclineConfirmModal {
+    z-index: 10100 !important;
+    position: fixed !important;
+}
+
+#medicalHistoryDeclineConfirmModal .modal-dialog {
+    z-index: 10101 !important;
+}
+
+#medicalHistoryDeclineConfirmModal .modal-content {
+    z-index: 10102 !important;
+}
+
+/* Ensure success modal appears on top of everything */
+#medicalHistoryDeclinedSuccessModal {
+    z-index: 10080 !important;
+    position: fixed !important;
+}
+
+#medicalHistoryDeclinedSuccessModal .modal-dialog {
+    z-index: 10081 !important;
+}
+
+#medicalHistoryDeclinedSuccessModal .modal-content {
+    z-index: 10082 !important;
 }
 
 

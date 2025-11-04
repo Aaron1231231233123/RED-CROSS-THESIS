@@ -517,6 +517,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
     <link rel="stylesheet" href="../../assets/css/medical-history-approval-modals.css">
     <script src="../../assets/js/physical_examination_modal.js?v=<?php echo time(); ?>"></script>
     <script src="../../assets/js/defer_donor_modal.js"></script>
+    <script src="../../assets/js/medical-history-decline.js?v=<?php echo time(); ?>"></script>
     <script src="../../assets/js/search_func/search_accont_physical_exam.js?v=<?php echo time(); ?>"></script>
     <script src="../../assets/js/search_func/filter_search_accont_physical_exam.js?v=<?php echo time(); ?>"></script>
     
@@ -5769,6 +5770,9 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 
                 const modal = new bootstrap.Modal(modalElement);
                 modal.show();
+                
+                // Initialize submit button handler if not already done
+                initializeDeclineSubmitHandler();
             } else {
                 
                 alert('Error: Decline modal not found. Please refresh the page.');
@@ -5776,6 +5780,44 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             
             return false;
         }
+        
+        // Initialize decline submit button handler
+        function initializeDeclineSubmitHandler() {
+            const submitDeclineBtn = document.getElementById('submitDeclineBtn');
+            if (!submitDeclineBtn) return;
+            
+            // Remove existing handler to prevent duplicates
+            const newSubmitBtn = submitDeclineBtn.cloneNode(true);
+            submitDeclineBtn.parentNode.replaceChild(newSubmitBtn, submitDeclineBtn);
+            
+            // Add click handler
+            newSubmitBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                handleDeclineSubmit();
+            });
+        }
+        
+        // Handle decline form submission from the decline modal (using new handler)
+        function handleDeclineSubmit() {
+            // Use the new medical history decline handler
+            if (typeof handleMedicalHistoryDeclineSubmit === 'function') {
+                handleMedicalHistoryDeclineSubmit();
+            } else {
+                // Fallback to old method if new handler not loaded
+                alert('Error: Medical history decline handler not loaded. Please refresh the page.');
+                console.error('handleMedicalHistoryDeclineSubmit function not found');
+            }
+        }
+        
+        // Initialize decline submit handler when modal is shown
+        document.addEventListener('DOMContentLoaded', function() {
+            const declineModal = document.getElementById('medicalHistoryDeclineModal');
+            if (declineModal) {
+                declineModal.addEventListener('shown.bs.modal', function() {
+                    setTimeout(initializeDeclineSubmitHandler, 100);
+                });
+            }
+        });
 
         // Fallback function to handle approve button clicks when medical history approval functions aren't loaded
         function handleApproveClickFallback(e) {

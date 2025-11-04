@@ -191,17 +191,40 @@
     font-weight: 600;
 }
 
-/* Custom styling for duration section */
+/* Custom styling for duration section - used in defer donor modal */
 #durationSection {
+    display: block !important;
     opacity: 0;
     max-height: 0;
     overflow: hidden;
     transition: all 0.4s ease;
+    visibility: hidden;
 }
 
 #durationSection.show {
-    opacity: 1;
-    max-height: 500px;
+    opacity: 1 !important;
+    max-height: 500px !important;
+    visibility: visible !important;
+}
+
+/* Custom styling for duration section - used in medical history decline modal */
+#mhDurationSection {
+    display: block !important;
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: all 0.4s ease;
+    visibility: hidden;
+    margin-bottom: 0 !important;
+    padding: 0 !important;
+}
+
+#mhDurationSection.show {
+    opacity: 1 !important;
+    max-height: 500px !important;
+    visibility: visible !important;
+    margin-bottom: 1rem !important;
+    padding: 0 !important;
 }
 
 #customDurationSection {

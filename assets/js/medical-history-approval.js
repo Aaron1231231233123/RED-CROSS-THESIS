@@ -47,14 +47,23 @@ function initializeMedicalHistoryApproval() {
         submitDeclineBtn.addEventListener('click', handleDeclineSubmit);
     }
 
-    // Handle restriction type change
+    // Handle restriction type change (only if modal script doesn't handle it)
+    // The modal has its own script that handles this, so we don't need to interfere
     const restrictionType = document.getElementById('restrictionType');
-    if (restrictionType) {
-        restrictionType.addEventListener('change', handleRestrictionTypeChange);
-    }
+    // Only add handler if the modal script doesn't exist
+    // The modal script in medical-history-approval-modals.php handles this
 
     // Initialize new medical history decline modal functionality
-    initializeMedicalHistoryDeclineModal();
+    // Only if modal doesn't have its own handler
+    // Check if modal script already initialized by looking for the duration section handler
+    setTimeout(() => {
+        const durationSection = document.getElementById('durationSection');
+        // If durationSection exists and modal script should handle it, skip initialization
+        if (!durationSection || durationSection.getAttribute('data-initialized') === 'true') {
+            return; // Modal script is handling it
+        }
+        initializeMedicalHistoryDeclineModal();
+    }, 300);
     
 }
 
@@ -211,25 +220,43 @@ function handleApproveClick(e) {
 
 // Handle restriction type change
 function handleRestrictionTypeChange() {
-    const restrictionType = document.getElementById('restrictionType').value;
+    const restrictionTypeEl = document.getElementById('restrictionType');
+    if (!restrictionTypeEl) return;
+    
+    const restrictionType = restrictionTypeEl.value;
+    
+    // Check if this is the old modal with dateSelectionSection (date picker)
     const dateSelectionSection = document.getElementById('dateSelectionSection');
     const donationRestrictionDate = document.getElementById('donationRestrictionDate');
     
-    if (restrictionType === 'temporary') {
-        dateSelectionSection.style.display = 'block';
-        donationRestrictionDate.required = true;
-        // Set minimum date to tomorrow
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        donationRestrictionDate.min = tomorrow.toISOString().split('T')[0];
-    } else if (restrictionType === 'permanent') {
-        dateSelectionSection.style.display = 'none';
-        donationRestrictionDate.required = false;
-        donationRestrictionDate.value = '';
-    } else {
-        dateSelectionSection.style.display = 'none';
-        donationRestrictionDate.required = false;
-        donationRestrictionDate.value = '';
+    // Check if this is the new modal with durationSection (duration grid)
+    const durationSection = document.getElementById('durationSection');
+    
+    // Handle old modal (with date picker)
+    if (dateSelectionSection && donationRestrictionDate) {
+        if (restrictionType === 'temporary') {
+            dateSelectionSection.style.display = 'block';
+            donationRestrictionDate.required = true;
+            // Set minimum date to tomorrow
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            donationRestrictionDate.min = tomorrow.toISOString().split('T')[0];
+        } else if (restrictionType === 'permanent') {
+            dateSelectionSection.style.display = 'none';
+            donationRestrictionDate.required = false;
+            donationRestrictionDate.value = '';
+        } else {
+            dateSelectionSection.style.display = 'none';
+            donationRestrictionDate.required = false;
+            donationRestrictionDate.value = '';
+        }
+    }
+    
+    // New modal with duration grid is handled by the modal's own script
+    // Don't interfere if durationSection exists (modal script handles it)
+    if (durationSection && durationSection.getAttribute('data-initialized') === 'true') {
+        // Modal script is handling this, don't interfere
+        return;
     }
 }
 
@@ -275,17 +302,31 @@ function showDeclineModal() {
             document.body.style.paddingRight = '0px';
         }, 100);
         
-        // Force z-index to ensure modal appears on top
+        // Force z-index to ensure modal appears on top (above medical history modal 9999, donor profile 10060, below confirmation 10100)
         setTimeout(() => {
             if (modalElement) {
-                modalElement.style.zIndex = '9999';
-                modalElement.style.position = 'relative';
+                modalElement.style.zIndex = '10090';
+                modalElement.style.position = 'fixed';
                 const modalDialog = modalElement.querySelector('.modal-dialog');
                 if (modalDialog) {
-                    modalDialog.style.zIndex = '10000';
+                    modalDialog.style.zIndex = '10091';
+                }
+                const modalContent = modalElement.querySelector('.modal-content');
+                if (modalContent) {
+                    modalContent.style.zIndex = '10092';
                 }
             }
         }, 100);
+        
+        // Also set z-index after modal is shown
+        modalElement.addEventListener('shown.bs.modal', function() {
+            modalElement.style.zIndex = '10090';
+            modalElement.style.position = 'fixed';
+            const modalDialog = modalElement.querySelector('.modal-dialog');
+            if (modalDialog) modalDialog.style.zIndex = '10091';
+            const modalContent = modalElement.querySelector('.modal-content');
+            if (modalContent) modalContent.style.zIndex = '10092';
+        }, { once: true });
         
         // Reset form
         const form = document.getElementById('medicalHistoryDeclineForm');
@@ -2033,18 +2074,24 @@ function showFooterActionFailureModal(message = 'Unable to process the eligibili
 
 // Initialize new medical history decline modal functionality
 function initializeMedicalHistoryDeclineModal() {
-    const deferralTypeSelect = document.getElementById('mhDeclineTypeSelect');
-    const durationSection = document.getElementById('mhDurationSection');
-    const customDurationSection = document.getElementById('mhCustomDurationSection');
+    // Try to find elements using the correct IDs from the modal
+    // Support both old IDs (mhDeclineTypeSelect) and new IDs (restrictionType)
+    const deferralTypeSelect = document.getElementById('restrictionType') || document.getElementById('mhDeclineTypeSelect');
+    const durationSection = document.getElementById('durationSection') || document.getElementById('mhDurationSection');
+    const customDurationSection = document.getElementById('customDurationSection') || document.getElementById('mhCustomDurationSection');
     const durationSelect = document.getElementById('mhDeclineDuration');
-    const customDurationInput = document.getElementById('mhCustomDuration');
+    const customDurationInput = document.getElementById('customDuration') || document.getElementById('mhCustomDuration');
     const submitBtn = document.getElementById('submitDeclineBtn');
-    const durationSummary = document.getElementById('mhDurationSummary');
-    const summaryText = document.getElementById('mhSummaryText');
-    const durationOptions = document.querySelectorAll('#mhDurationSection .duration-option');
-    const disapprovalReasonSelect = document.getElementById('mhDisapprovalReason');
+    const durationSummary = document.getElementById('durationSummary') || document.getElementById('mhDurationSummary');
+    const summaryText = document.getElementById('summaryText') || document.getElementById('mhSummaryText');
+    const durationOptions = durationSection ? durationSection.querySelectorAll('.duration-option') : [];
+    const disapprovalReasonSelect = document.getElementById('declineReason') || document.getElementById('mhDisapprovalReason');
 
-    if (!deferralTypeSelect || !submitBtn) return;
+    // If we don't have the essential elements, return early
+    if (!deferralTypeSelect || !submitBtn) {
+        // If modal script already handles this, don't interfere
+        return;
+    }
 
     // Update disapproval reason validation
     function updateMHDeclineValidation() {
@@ -2093,92 +2140,121 @@ function initializeMedicalHistoryDeclineModal() {
     }
 
     // Handle deferral type change
+    // Support both 'temporary' and 'Temporary Deferral' values
     deferralTypeSelect.addEventListener('change', function() {
-        if (this.value === 'Temporary Deferral') {
+        const selectedValue = this.value;
+        const isTemporary = selectedValue === 'temporary' || selectedValue === 'Temporary Deferral';
+        
+        if (isTemporary && durationSection) {
             durationSection.style.display = 'block';
+            // Force reflow
+            void durationSection.offsetHeight;
             setTimeout(() => {
                 durationSection.classList.add('show');
                 durationSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }, 50);
-        } else {
+        } else if (durationSection) {
             durationSection.classList.remove('show');
-            customDurationSection.classList.remove('show');
+            if (customDurationSection) {
+                customDurationSection.classList.remove('show');
+            }
             setTimeout(() => {
                 if (!durationSection.classList.contains('show')) {
                     durationSection.style.display = 'none';
                 }
-                if (!customDurationSection.classList.contains('show')) {
+                if (customDurationSection && !customDurationSection.classList.contains('show')) {
                     customDurationSection.style.display = 'none';
                 }
             }, 400);
-            durationSummary.style.display = 'none';
+            if (durationSummary) {
+                durationSummary.style.display = 'none';
+            }
             // Clear duration selections
             durationOptions.forEach(opt => opt.classList.remove('active'));
-            durationSelect.value = '';
-            customDurationInput.value = '';
+            if (durationSelect) durationSelect.value = '';
+            if (customDurationInput) customDurationInput.value = '';
         }
-        updateMHSummary();
+        if (typeof updateMHSummary === 'function') {
+            updateMHSummary();
+        }
     });
 
     // Handle duration option clicks
-    durationOptions.forEach(option => {
-        option.addEventListener('click', function() {
-            // Remove active class from all options
-            durationOptions.forEach(opt => opt.classList.remove('active'));
-            
-            // Add active class to clicked option
-            this.classList.add('active');
-            
-            const days = this.getAttribute('data-days');
-            
-            if (days === 'custom') {
-                durationSelect.value = 'custom';
-                customDurationSection.style.display = 'block';
-                setTimeout(() => {
-                    customDurationSection.classList.add('show');
-                    customDurationSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    customDurationInput.focus();
-                }, 50);
-            } else {
-                durationSelect.value = days;
-                customDurationSection.classList.remove('show');
-                setTimeout(() => {
-                    if (!customDurationSection.classList.contains('show')) {
-                        customDurationSection.style.display = 'none';
+    if (durationOptions && durationOptions.length > 0) {
+        durationOptions.forEach(option => {
+            option.addEventListener('click', function() {
+                // Remove active class from all options
+                durationOptions.forEach(opt => opt.classList.remove('active'));
+                
+                // Add active class to clicked option
+                this.classList.add('active');
+                
+                const days = this.getAttribute('data-days');
+                
+                if (days === 'custom') {
+                    if (durationSelect) durationSelect.value = 'custom';
+                    if (customDurationSection) {
+                        customDurationSection.style.display = 'block';
+                        setTimeout(() => {
+                            customDurationSection.classList.add('show');
+                            customDurationSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            if (customDurationInput) customDurationInput.focus();
+                        }, 50);
                     }
-                }, 300);
-                customDurationInput.value = '';
-            }
-            
-            updateMHSummary();
+                } else {
+                    if (durationSelect) durationSelect.value = days;
+                    if (customDurationSection) {
+                        customDurationSection.classList.remove('show');
+                        setTimeout(() => {
+                            if (!customDurationSection.classList.contains('show')) {
+                                customDurationSection.style.display = 'none';
+                            }
+                        }, 300);
+                    }
+                    if (customDurationInput) customDurationInput.value = '';
+                }
+                
+                if (typeof updateMHSummary === 'function') {
+                    updateMHSummary();
+                }
+            });
         });
-    });
+    }
 
     // Handle custom duration input
-    customDurationInput.addEventListener('input', function() {
-        updateMHSummary();
-        
-        // Update the custom option to show the entered value
-        const customOption = document.querySelector('#mhDurationSection .duration-option[data-days="custom"]');
-        if (customOption && this.value) {
-            const numberDiv = customOption.querySelector('.duration-number');
-            numberDiv.innerHTML = this.value;
-            const unitDiv = customOption.querySelector('.duration-unit');
-            unitDiv.textContent = this.value == 1 ? 'Day' : 'Days';
-        } else if (customOption) {
-            const numberDiv = customOption.querySelector('.duration-number');
-            numberDiv.innerHTML = '<i class="fas fa-edit"></i>';
-            const unitDiv = customOption.querySelector('.duration-unit');
-            unitDiv.textContent = 'Custom';
-        }
-    });
+    if (customDurationInput) {
+        customDurationInput.addEventListener('input', function() {
+            if (typeof updateMHSummary === 'function') {
+                updateMHSummary();
+            }
+            
+            // Update the custom option to show the entered value
+            // Support both ID patterns
+            const customOption = durationSection ? durationSection.querySelector('.duration-option[data-days="custom"]') : null;
+            if (customOption && this.value) {
+                const numberDiv = customOption.querySelector('.duration-number');
+                if (numberDiv) numberDiv.innerHTML = this.value;
+                const unitDiv = customOption.querySelector('.duration-unit');
+                if (unitDiv) unitDiv.textContent = this.value == 1 ? 'Day' : 'Days';
+            } else if (customOption) {
+                const numberDiv = customOption.querySelector('.duration-number');
+                if (numberDiv) numberDiv.innerHTML = '<i class="fas fa-edit"></i>';
+                const unitDiv = customOption.querySelector('.duration-unit');
+                if (unitDiv) unitDiv.textContent = 'Custom';
+            }
+        });
+    }
 
-    // Handle form submission
-    submitBtn.addEventListener('click', function() {
-        if (validateMHDeclineForm()) {
-            submitMHDecline();
-        }
-    });
+    // Handle form submission - only if the modal's own handler doesn't exist
+    if (!window.handleMedicalHistoryDeclineSubmit) {
+        submitBtn.addEventListener('click', function() {
+            if (typeof validateMHDeclineForm === 'function' && validateMHDeclineForm()) {
+                if (typeof submitMHDecline === 'function') {
+                    submitMHDecline();
+                }
+            }
+        });
+    }
 
     function updateMHSummary() {
         const selectedType = deferralTypeSelect.value;

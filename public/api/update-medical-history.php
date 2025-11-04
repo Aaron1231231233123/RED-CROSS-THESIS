@@ -25,30 +25,49 @@ $medicalApproval = $input['medical_approval'] ?? null; // optional
 error_log('Medical history update request received: ' . json_encode($input));
 error_log('Extracted medical_history_id: ' . $medicalHistoryId);
 error_log('Extracted donor_id: ' . $donorId);
-error_log('Extracted needs_review: ' . ($needsReview ? 'true' : 'false'));
+error_log('Extracted needs_review: ' . ($needsReview !== null ? ($needsReview ? 'true' : 'false') : 'null'));
 
 // Accept either medical_history_id or donor_id
 $identifier = $medicalHistoryId ?: $donorId;
 $identifierField = $medicalHistoryId ? 'medical_history_id' : 'donor_id';
 
-if (!$identifier || !isset($needsReview)) {
-    error_log('Missing required fields - identifier: ' . ($identifier ? 'present' : 'missing') . ', needs_review: ' . (isset($needsReview) ? 'present' : 'missing'));
+if (!$identifier) {
+    error_log('Missing required field - identifier missing');
     http_response_code(400);
     echo json_encode([
         'success' => false, 
-        'error' => 'Missing required fields: medical_history_id or donor_id, needs_review'
+        'error' => 'Missing required field: medical_history_id or donor_id'
     ]);
     exit;
 }
 
 try {
-    // Prepare data for update
+    // Prepare data for update - include all fields that might be sent
     $updateData = [
-        'needs_review' => (bool)$needsReview,
         'updated_at' => date('c')
     ];
+    
+    // Add optional fields if provided
+    if ($needsReview !== null) {
+        $updateData['needs_review'] = (bool)$needsReview;
+    }
     if ($medicalApproval !== null) {
         $updateData['medical_approval'] = $medicalApproval;
+    }
+    if (isset($input['decline_reason'])) {
+        $updateData['decline_reason'] = $input['decline_reason'];
+    }
+    if (isset($input['decline_date'])) {
+        $updateData['decline_date'] = $input['decline_date'];
+    }
+    if (isset($input['restriction_type'])) {
+        $updateData['restriction_type'] = $input['restriction_type'];
+    }
+    if (isset($input['deferral_duration'])) {
+        $updateData['deferral_duration'] = $input['deferral_duration'];
+    }
+    if (isset($input['deferral_end_date'])) {
+        $updateData['deferral_end_date'] = $input['deferral_end_date'];
     }
     
     // Log the data being updated
@@ -77,16 +96,15 @@ try {
     }
     
     if ($httpCode >= 200 && $httpCode < 300) {
-        // Invalidate cache to ensure status updates immediately
+        // Invalidate cache to ensure status updates immediately (if function exists)
         try {
-            // Include the proper cache invalidation function
-            require_once __DIR__ . '/../Dashboards/dashboard-Inventory-System-list-of-donations.php';
-            
-            // Use the proper cache invalidation function
-            invalidateCache();
-            
-            error_log("Medical History Update API - Cache invalidated for donor: " . $donor_id);
+            // Try to invalidate cache if the function exists
+            if (function_exists('invalidateCache')) {
+                invalidateCache();
+                error_log("Medical History Update API - Cache invalidated for donor: " . ($donorId ?: $identifier));
+            }
         } catch (Exception $cache_error) {
+            // Cache invalidation is optional, don't fail if it errors
             error_log("Medical History Update API - Cache invalidation error: " . $cache_error->getMessage());
         }
 

@@ -3253,45 +3253,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                      <div class="text-muted small mb-1">
                                          <i class="fas fa-calendar-alt me-1"></i>
                                          Current Status: ${currentStatus}
-                                         ${(() => {
-                                             if (donor.eligibility && donor.eligibility.length > 0) {
-                                                 const latestEligibility = donor.eligibility[donor.eligibility.length - 1];
-                                                 const status = String(latestEligibility.status || '').toLowerCase();
-                                                 const startDate = latestEligibility.start_date ? new Date(latestEligibility.start_date) : null;
-                                                 const endDate = latestEligibility.end_date ? new Date(latestEligibility.end_date) : null;
-                                                 const today = new Date();
-                                                 
-                                                 function calculateRemainingDays() {
-                                                     if (status === 'approved' && startDate) {
-                                                         const threeMonthsLater = new Date(startDate);
-                                                         threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
-                                                         const endOfDay = new Date(threeMonthsLater);
-                                                         endOfDay.setHours(23, 59, 59, 999);
-                                                         return Math.ceil((endOfDay - today) / (1000 * 60 * 60 * 24));
-                                                     } else if (endDate) {
-                                                         const endOfDay = new Date(endDate);
-                                                         endOfDay.setHours(23, 59, 59, 999);
-                                                         return Math.ceil((endOfDay - today) / (1000 * 60 * 60 * 24));
-                                                     }
-                                                     return null;
-                                                 }
-                                                 
-                                                 const remainingDays = calculateRemainingDays();
-                                                 if (remainingDays !== null && remainingDays > 0) {
-                                                     // Color based on eligibility status
-                                                     let color = '#17a2b8'; // Default blue
-                                                     if (status === 'refused') {
-                                                         color = '#dc3545'; // Red
-                                                     } else if (status === 'deferred' || status === 'temporary_deferred') {
-                                                         color = '#ffc107'; // Yellow
-                                                     } else if (status === 'approved' || status === 'eligible') {
-                                                         color = '#28a745'; // Green
-                                                     }
-                                                     return ` • <span style="font-weight: bold; color: ${color};">${remainingDays} days left</span>`;
-                                                 }
-                                             }
-                                             return '';
-                                         })()}
                             </div>
                                      <h4 class="mb-1" style="color:#b22222; font-weight:700;">
                                          ${fullName}

@@ -1,12 +1,9 @@
 <?php
 // Forecast Reports API - Integrates R Studio model predictions with dashboard
-<<<<<<< Updated upstream
 error_reporting(E_ALL);
 ini_set('display_errors', 0); // Don't display errors, log them instead
 ini_set('log_errors', 1);
 
-=======
->>>>>>> Stashed changes
 session_start();
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -17,7 +14,6 @@ header('Access-Control-Allow-Headers: Content-Type');
 include_once '../../assets/conn/db_conn.php';
 
 try {
-<<<<<<< Updated upstream
     // Function to make Supabase requests with pagination support
     function supabaseRequest($endpoint, $limit = 1000) {
         $allData = [];
@@ -33,12 +29,6 @@ try {
             
         $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
-=======
-    // Function to make Supabase requests with better error handling
-    function supabaseRequest($endpoint) {
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, SUPABASE_URL . '/rest/v1/' . $endpoint);
->>>>>>> Stashed changes
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 30);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
@@ -65,7 +55,6 @@ try {
             throw new Exception('JSON decode error: ' . json_last_error_msg());
         }
         
-<<<<<<< Updated upstream
             $allData = array_merge($allData, $data);
             $offset += $limit;
             
@@ -77,29 +66,20 @@ try {
         } while (count($data) == $limit);
         
         return $allData;
-=======
-        return $data;
->>>>>>> Stashed changes
     }
 
     // Get ALL blood bank units data (including disposed/handed_over units)
     // Each row in blood_bank_units = 1 unit, so we count rows, not sum a quantity field
-<<<<<<< Updated upstream
     error_log("Fetching ALL blood bank units with pagination...");
     $bloodUnitsResponse = supabaseRequest("blood_bank_units?select=blood_type,collected_at,created_at,status,handed_over_at&order=collected_at.asc");
     $bloodUnits = isset($bloodUnitsResponse) ? $bloodUnitsResponse : [];
     error_log("Total blood units fetched: " . count($bloodUnits));
-=======
-    $bloodUnitsResponse = supabaseRequest("blood_bank_units?select=blood_type,collected_at,created_at,status,handed_over_at&order=collected_at.asc");
-    $bloodUnits = isset($bloodUnitsResponse) ? $bloodUnitsResponse : [];
->>>>>>> Stashed changes
 
     // Get ALL blood requests data (hospital requests = demand)
     // Each request has units_requested field - we sum this field, not count rows
     $bloodRequestsResponse = supabaseRequest("blood_requests?select=patient_blood_type,rh_factor,units_requested,requested_on,status,handed_over_date&order=requested_on.asc");
     $bloodRequests = isset($bloodRequestsResponse) ? $bloodRequestsResponse : [];
     
-<<<<<<< Updated upstream
     // Debug: Check if we're getting data from blood_bank_units
     error_log("=== DATABASE CONNECTION DEBUG ===");
     error_log("Blood Units Response: " . json_encode($bloodUnitsResponse));
@@ -159,78 +139,12 @@ try {
     // Use ONLY database data - no CSV integration
     $allBloodUnits = $bloodUnits;
     error_log("Using ONLY database blood units: " . count($allBloodUnits));
-=======
-    // Debug: Check if we're getting data
-    error_log("Blood Requests Response: " . json_encode($bloodRequestsResponse));
-    error_log("Blood Requests Count: " . count($bloodRequests));
-    
-    // Debug: Show sample date formats
-    if (!empty($bloodRequests)) {
-        $sampleRequest = $bloodRequests[0];
-        error_log("Sample blood request date format: " . ($sampleRequest['requested_on'] ?? 'N/A'));
-    }
-
-    // Load HISTORICAL data from CSV (2016-2025) for training the R Studio models
-    $historicalData = [];
-    $csvFile = '../../assets/reports-model/synthetic_blood_inventory_2016_2025.csv';
-    
-    if (file_exists($csvFile)) {
-        $handle = fopen($csvFile, 'r');
-        if ($handle) {
-            // Skip header row
-            fgetcsv($handle);
-            
-            while (($data = fgetcsv($handle)) !== FALSE) {
-                if (count($data) >= 9) {
-                    $historicalData[] = [
-                        'blood_type' => $data[1],
-                        'collected_at' => $data[2],
-                        'created_at' => $data[8],
-                        'status' => $data[4],
-                        'data_source' => 'historical' // Mark as historical data
-                    ];
-                }
-            }
-            fclose($handle);
-        }
-        error_log("Loaded " . count($historicalData) . " HISTORICAL blood units from CSV (2016-2025)");
-    } else {
-        error_log("Historical CSV file not found: " . $csvFile);
-    }
-    
-    // Mark real database data as current data (not historical)
-    // Only mark recent data (last 2 years) as current
-    $currentYear = (int)date('Y');
-    $cutoffYear = $currentYear - 2; // Only last 2 years are "current"
-    
-    foreach ($bloodUnits as &$unit) {
-        $dateField = !empty($unit['collected_at']) ? $unit['collected_at'] : $unit['created_at'];
-        if ($dateField) {
-            $date = new DateTime($dateField);
-            $unitYear = (int)$date->format('Y');
-            
-            // Only mark as current if it's from the last 2 years
-            if ($unitYear >= $cutoffYear) {
-                $unit['data_source'] = 'current';
-            } else {
-                $unit['data_source'] = 'historical'; // Older database data is also historical
-            }
-        } else {
-            $unit['data_source'] = 'current'; // Default to current if no date
-        }
-    }
-    
-    // Combine historical (CSV) + current (database) data for comprehensive dataset
-    $allBloodUnits = array_merge($historicalData, $bloodUnits);
-    error_log("Total blood units (HISTORICAL: " . count($historicalData) . " + CURRENT: " . count($bloodUnits) . ") = " . count($allBloodUnits));
->>>>>>> Stashed changes
     
     // Debug: Log data counts and sample data
     error_log("Real Database Blood Units Count: " . count($bloodUnits));
     error_log("Total Blood Units Count: " . count($allBloodUnits));
     error_log("Blood Requests Count: " . count($bloodRequests));
     
-<<<<<<< Updated upstream
     // Debug: Show sample blood_bank_units data structure
     if (!empty($bloodUnits)) {
         $sampleUnit = $bloodUnits[0];
@@ -241,8 +155,6 @@ try {
                  ", status=" . ($sampleUnit['status'] ?? 'N/A'));
     }
     
-=======
->>>>>>> Stashed changes
     // Debug: Show sample date formats
     if (!empty($bloodUnits)) {
         $sampleUnit = $bloodUnits[0];
@@ -278,7 +190,6 @@ try {
         error_log("This means demand will be 0 - we need to check database connection!");
     }
 
-<<<<<<< Updated upstream
     // Process blood units data for supply forecasting (database-only)
     $monthlySupply = [];
     $bloodTypes = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
@@ -286,14 +197,6 @@ try {
     // Ensure arrays are always initialized
     if (!is_array($monthlySupply)) $monthlySupply = [];
     
-=======
-    // Process blood units data for supply forecasting (like R model: group_by(blood_type, month = floor_date(collected_at, "month")))
-    $monthlySupply = [];
-    $monthlyHistoricalSupply = []; // Separate historical data
-    $monthlyCurrentSupply = []; // Separate current data
-    $bloodTypes = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
-    
->>>>>>> Stashed changes
     foreach ($allBloodUnits as $unit) {
         // Use collected_at if available, otherwise use created_at
         $dateField = !empty($unit['collected_at']) ? $unit['collected_at'] : $unit['created_at'];
@@ -301,23 +204,12 @@ try {
         
         // Use floor_date equivalent: get first day of month
         try {
-<<<<<<< Updated upstream
         $date = new DateTime($dateField);
-=======
-            $date = new DateTime($dateField);
-            // Debug: Log successful date parsing for first few entries
-            static $dateParseCount = 0;
-            if ($dateParseCount < 3) {
-                error_log("Successfully parsed blood unit date: {$dateField} -> " . $date->format('Y-m-d H:i:s'));
-                $dateParseCount++;
-            }
->>>>>>> Stashed changes
         } catch (Exception $e) {
             error_log("Date parsing error for blood unit: {$dateField} - " . $e->getMessage());
             continue;
         }
         
-<<<<<<< Updated upstream
         // Process all dates including future years (for CSV data up to 2025)
         // Allow all years since CSV data was inserted directly into database
         $unitYear = (int)$date->format('Y');
@@ -332,30 +224,14 @@ try {
         // Only skip dates that are too far in the future (beyond 2030)
         if ($unitYear > 2030) {
             error_log("Skipping date too far in future: {$dateField} (Year: {$unitYear})");
-=======
-        // CRITICAL FIX: Don't process future dates beyond current year
-        $currentYear = (int)date('Y');
-        $unitYear = (int)$date->format('Y');
-        
-        if ($unitYear > $currentYear) {
-            error_log("Skipping future date in blood units: {$dateField} (year: {$unitYear})");
->>>>>>> Stashed changes
             continue;
         }
         
         $monthKey = $date->format('Y-m-01'); // First day of month like floor_date
         $bloodType = $unit['blood_type'];
-<<<<<<< Updated upstream
         
         // Ensure blood type is in correct format (A+, B-, etc.)
         if (!in_array($bloodType, $bloodTypes)) {
-=======
-        $dataSource = $unit['data_source'] ?? 'unknown';
-        
-        // Ensure blood type is in correct format (A+, B-, etc.)
-        if (!in_array($bloodType, $bloodTypes)) {
-            error_log("Invalid blood type in supply data: {$bloodType}");
->>>>>>> Stashed changes
             continue;
         }
         
@@ -363,7 +239,6 @@ try {
         if (!isset($monthlySupply[$monthKey])) {
             $monthlySupply[$monthKey] = array_fill_keys($bloodTypes, 0);
         }
-<<<<<<< Updated upstream
         
         // Count units
         if (isset($monthlySupply[$monthKey][$bloodType])) {
@@ -439,58 +314,11 @@ try {
         $dateField = $request['requested_on'];
         if (!isset($dateField) || empty($dateField)) {
             error_log("Skipping request - no requested_on date available: " . json_encode($request));
-=======
-        if (!isset($monthlyHistoricalSupply[$monthKey])) {
-            $monthlyHistoricalSupply[$monthKey] = array_fill_keys($bloodTypes, 0);
-        }
-        if (!isset($monthlyCurrentSupply[$monthKey])) {
-            $monthlyCurrentSupply[$monthKey] = array_fill_keys($bloodTypes, 0);
-        }
-        
-        // Count units in appropriate arrays
-        if (isset($monthlySupply[$monthKey][$bloodType])) {
-            $monthlySupply[$monthKey][$bloodType]++; // Combined data
-            
-            if ($dataSource === 'historical') {
-                $monthlyHistoricalSupply[$monthKey][$bloodType]++; // Historical only
-            } else if ($dataSource === 'current') {
-                $monthlyCurrentSupply[$monthKey][$bloodType]++; // Current only
-            }
-        }
-    }
-    
-    error_log("Historical supply months: " . count($monthlyHistoricalSupply));
-    error_log("Current supply months: " . count($monthlyCurrentSupply));
-    error_log("Combined supply months: " . count($monthlySupply));
-    
-    // Debug: Show sample data integration for a specific month and blood type
-    $sampleMonth = '2019-05-01'; // May 2019
-    $sampleBloodType = 'A+';
-    if (isset($monthlySupply[$sampleMonth][$sampleBloodType])) {
-        $total = $monthlySupply[$sampleMonth][$sampleBloodType];
-        $historical = $monthlyHistoricalSupply[$sampleMonth][$sampleBloodType] ?? 0;
-        $current = $monthlyCurrentSupply[$sampleMonth][$sampleBloodType] ?? 0;
-        error_log("EXAMPLE INTEGRATION for {$sampleMonth} {$sampleBloodType}: Total={$total} (Historical={$historical} + Current={$current})");
-    }
-    
-    // Debug: Show all available months
-    error_log("ALL AVAILABLE MONTHS: " . implode(', ', array_keys($monthlySupply)));
-    error_log("HISTORICAL MONTHS: " . implode(', ', array_keys($monthlyHistoricalSupply)));
-    error_log("CURRENT MONTHS: " . implode(', ', array_keys($monthlyCurrentSupply)));
-    
-    // Process blood requests data for demand forecasting (hospital requests = demand)
-    $monthlyDemand = [];
-    
-    foreach ($bloodRequests as $request) {
-        if (!isset($request['requested_on']) || !isset($request['patient_blood_type']) || !isset($request['rh_factor'])) {
-            error_log("Skipping request - missing data: " . json_encode($request));
->>>>>>> Stashed changes
             continue;
         }
         
         // Use floor_date equivalent: get first day of month
         try {
-<<<<<<< Updated upstream
             $date = new DateTime($dateField);
             // Debug: Log successful date parsing for first few entries
             static $requestDateParseCount = 0;
@@ -510,26 +338,6 @@ try {
         // Only skip dates that are too far in the future (beyond 2030)
         if ($requestYear > 2030) {
             error_log("Skipping date too far in future: {$dateField} (Year: {$requestYear})");
-=======
-            $date = new DateTime($request['requested_on']);
-            // Debug: Log successful date parsing for first few entries
-            static $requestDateParseCount = 0;
-            if ($requestDateParseCount < 3) {
-                error_log("Successfully parsed blood request date: {$request['requested_on']} -> " . $date->format('Y-m-d H:i:s'));
-                $requestDateParseCount++;
-            }
-        } catch (Exception $e) {
-            error_log("Date parsing error for blood request: {$request['requested_on']} - " . $e->getMessage());
-            continue;
-        }
-        
-        // CRITICAL FIX: Don't process future dates beyond current year
-        $currentYear = (int)date('Y');
-        $requestYear = (int)$date->format('Y');
-        
-        if ($requestYear > $currentYear) {
-            error_log("Skipping future date in blood requests: {$request['requested_on']} (year: {$requestYear})");
->>>>>>> Stashed changes
             continue;
         }
         
@@ -560,11 +368,7 @@ try {
             $units = 1; // Default to 1 unit if invalid
         }
         
-<<<<<<< Updated upstream
         error_log("Processing blood request: {$patientBloodType} + {$rhFactor} = {$bloodType}, units_requested: {$units}, date: {$dateField}, month: {$monthKey}");
-=======
-        error_log("Processing blood request: {$patientBloodType} + {$rhFactor} = {$bloodType}, units_requested: {$units}, month: {$monthKey}");
->>>>>>> Stashed changes
         
         if (!isset($monthlyDemand[$monthKey])) {
             $monthlyDemand[$monthKey] = array_fill_keys($bloodTypes, 0);
@@ -575,11 +379,8 @@ try {
             $monthlyDemand[$monthKey][$bloodType] += $units;
             error_log("Added {$units} units to {$bloodType} demand for {$monthKey}. New total: {$monthlyDemand[$monthKey][$bloodType]}");
         } else {
-<<<<<<< Updated upstream
             // Ensure bloodTypes is an array
             if (!is_array($bloodTypes)) $bloodTypes = [];
-=======
->>>>>>> Stashed changes
             error_log("Blood type {$bloodType} not found in blood types array. Available types: " . implode(', ', $bloodTypes));
         }
     }
@@ -594,11 +395,7 @@ try {
         
         foreach ($monthlySupply as $monthKey => $supplyData) {
             if (!isset($monthlyDemand[$monthKey])) {
-<<<<<<< Updated upstream
             $monthlyDemand[$monthKey] = array_fill_keys($bloodTypes, 0);
-=======
-                $monthlyDemand[$monthKey] = array_fill_keys($bloodTypes, 0);
->>>>>>> Stashed changes
             }
             
             foreach ($bloodTypes as $bloodType) {
@@ -606,11 +403,7 @@ try {
                     // Only generate demand if we don't already have real demand data
                     if (!isset($monthlyDemand[$monthKey][$bloodType]) || $monthlyDemand[$monthKey][$bloodType] == 0) {
                         // EXACT R logic: runif(n(), 0.7, 1.2) - uniform random between 0.7 and 1.2
-<<<<<<< Updated upstream
                     $demandMultiplier = 0.7 + (mt_rand() / mt_getrandmax()) * 0.5; // 0.7 to 1.2
-=======
-                        $demandMultiplier = 0.7 + (mt_rand() / mt_getrandmax()) * 0.5; // 0.7 to 1.2
->>>>>>> Stashed changes
                         $monthlyDemand[$monthKey][$bloodType] = (int)($supplyData[$bloodType] * $demandMultiplier);
                         
                         error_log("R Studio demand for {$bloodType} in {$monthKey}: {$supplyData[$bloodType]} * {$demandMultiplier} = {$monthlyDemand[$monthKey][$bloodType]}");
@@ -624,7 +417,6 @@ try {
     
     // Log final demand data
     error_log("Final monthly demand data: " . json_encode($monthlyDemand));
-<<<<<<< Updated upstream
         
         // Calculate total demand for debugging
         $totalDemandUnits = 0;
@@ -633,16 +425,6 @@ try {
                 $totalDemandUnits += $units;
             }
         }
-=======
-    
-    // Calculate total demand for debugging
-    $totalDemandUnits = 0;
-    foreach ($monthlyDemand as $month => $demandData) {
-        foreach ($demandData as $bloodType => $units) {
-            $totalDemandUnits += $units;
-        }
-    }
->>>>>>> Stashed changes
     error_log("Total demand units (real + synthetic): {$totalDemandUnits}");
     
     // Debug: Show demand calculation example
@@ -653,7 +435,6 @@ try {
         error_log("DEMAND EXAMPLE for {$sampleDemandMonth} {$sampleDemandType}: {$demandUnits} units (from blood_requests table)");
     }
     
-<<<<<<< Updated upstream
     // Debug: Show demand calculation summary
     $totalDemandUnits = 0;
     foreach ($monthlyDemand as $month => $demandData) {
@@ -698,13 +479,6 @@ try {
     error_log("Common months between supply and demand: " . (is_array($commonMonths) ? implode(', ', $commonMonths) : 'NOT AN ARRAY: ' . gettype($commonMonths)));
     error_log("Supply-only months: " . (is_array($supplyMonths) && is_array($demandMonths) ? implode(', ', array_diff($supplyMonths, $demandMonths)) : 'ARRAYS NOT READY'));
     error_log("Demand-only months: " . (is_array($supplyMonths) && is_array($demandMonths) ? implode(', ', array_diff($demandMonths, $supplyMonths)) : 'ARRAYS NOT READY'));
-=======
-    // Debug: Log monthly data
-    error_log("Monthly Supply Keys: " . implode(', ', array_keys($monthlySupply)));
-    error_log("Monthly Demand Keys: " . implode(', ', array_keys($monthlyDemand)));
-    error_log("Monthly Supply Sample: " . json_encode(array_slice($monthlySupply, 0, 2, true)));
-    error_log("Monthly Demand Sample: " . json_encode(array_slice($monthlyDemand, 0, 2, true)));
->>>>>>> Stashed changes
 
     // EXACT R Studio logic translation - 100% contextual with R files
     function forecastNextMonth($monthlyData, $bloodTypes, $isDemand = false) {
@@ -728,12 +502,8 @@ try {
             error_log("R Studio: Blood type {$bloodType} has " . count($values) . " months of data");
             
             // EXACT R logic: if (nrow(data_bt) < 6) next  # skip short series
-<<<<<<< Updated upstream
             // But for database-only system, use minimum 3 months to ensure forecasts
             if (count($values) >= 3) {
-=======
-            if (count($values) >= 6) {
->>>>>>> Stashed changes
                 // EXACT R logic: ts_bt <- ts(data_bt$units_collected, frequency = 12)
                 // EXACT R logic: model <- auto.arima(ts_bt)
                 // EXACT R logic: forecast_val <- forecast(model, h = 1)$mean[1]
@@ -756,13 +526,8 @@ try {
                 
                 // Calculate ARIMA forecast with trend
                 if ($n * $sum_x2 - $sum_x * $sum_x != 0) {
-<<<<<<< Updated upstream
                 $slope = ($n * $sum_xy - $sum_x * $sum_y) / ($n * $sum_x2 - $sum_x * $sum_x);
                 $intercept = ($sum_y - $slope * $sum_x) / $n;
-=======
-                    $slope = ($n * $sum_xy - $sum_x * $sum_y) / ($n * $sum_x2 - $sum_x * $sum_x);
-                    $intercept = ($sum_y - $slope * $sum_x) / $n;
->>>>>>> Stashed changes
                     $trend_forecast = $intercept + $slope * $n;
                 } else {
                     $trend_forecast = array_sum($recent) / $n;
@@ -774,17 +539,10 @@ try {
                     $last_year = array_slice($values, -24, 12);
                     $current_year = array_slice($values, -12);
                     if (array_sum($last_year) > 0) {
-<<<<<<< Updated upstream
                     $seasonal_factor = array_sum($current_year) / array_sum($last_year);
                         // R's auto.arima bounds seasonal factors
                     if ($seasonal_factor > 2) $seasonal_factor = 2;
                     if ($seasonal_factor < 0.5) $seasonal_factor = 0.5;
-=======
-                        $seasonal_factor = array_sum($current_year) / array_sum($last_year);
-                        // R's auto.arima bounds seasonal factors
-                        if ($seasonal_factor > 2) $seasonal_factor = 2;
-                        if ($seasonal_factor < 0.5) $seasonal_factor = 0.5;
->>>>>>> Stashed changes
                     }
                 }
                 
@@ -815,31 +573,20 @@ try {
                 
                 error_log("R Studio ARIMA forecast for {$bloodType}: {$forecast} (from {$n} months, seasonal: {$seasonal_factor}, noise: {$arima_noise})");
             } else {
-<<<<<<< Updated upstream
                 // For database-only system, provide default forecast instead of 0
                 error_log("R Studio: Insufficient data for {$bloodType} (" . count($values) . " < 3 months), using default forecast");
                 $forecasts[$bloodType] = 5; // Default forecast value
-=======
-                // EXACT R logic: skip if insufficient data
-                error_log("R Studio: Skipping {$bloodType} - insufficient data (" . count($values) . " < 6 months)");
-                $forecasts[$bloodType] = 0;
->>>>>>> Stashed changes
             }
         }
         
         return $forecasts;
     }
 
-<<<<<<< Updated upstream
     // Generate forecasts using R Studio models trained on database data
-=======
-    // Generate forecasts using R Studio models trained on CSV data
->>>>>>> Stashed changes
     $forecastMonths = [];
     $currentDate = new DateTime();
     $currentYear = (int)$currentDate->format('Y');
     
-<<<<<<< Updated upstream
     // Ensure all arrays are properly initialized
     if (!is_array($forecastMonths)) $forecastMonths = [];
     
@@ -927,36 +674,6 @@ try {
     
     // Ensure forecastMonths is an array before implode
     if (!is_array($forecastMonths)) $forecastMonths = [];
-=======
-    // Find the latest date from ALL historical data (CSV + database)
-    $latestDate = null;
-    foreach ($monthlySupply as $monthKey => $data) {
-        $date = new DateTime($monthKey);
-        if ($latestDate === null || $date > $latestDate) {
-            $latestDate = $date;
-        }
-    }
-    
-    // If no historical data, use current date
-    if ($latestDate === null) {
-        $latestDate = $currentDate;
-    }
-    
-    error_log("Latest historical data date: {$latestDate->format('Y-m-01')}");
-    
-    // Generate forecasts for next 6 months from the latest historical data
-    for ($i = 1; $i <= 6; $i++) {
-        $forecastDate = clone $latestDate;
-        $forecastDate->add(new DateInterval('P' . $i . 'M'));
-        
-        // Generate forecasts for future years (2026, 2027, etc.)
-        $forecastYear = (int)$forecastDate->format('Y');
-        $forecastMonths[] = $forecastDate->format('Y-m-01');
-        
-        error_log("Generated forecast month: {$forecastDate->format('Y-m-01')} (Year: {$forecastYear})");
-    }
-    
->>>>>>> Stashed changes
     error_log("Generated forecast months: " . implode(', ', $forecastMonths));
     
     // Generate forecasts for EACH month individually (like R Studio does)
@@ -965,14 +682,11 @@ try {
     $totalSupply = 0;
     $criticalTypes = [];
     
-<<<<<<< Updated upstream
     // Ensure criticalTypes is always an array
     if (!is_array($criticalTypes)) $criticalTypes = [];
     
     // Ensure forecastMonths is an array before implode
     if (!is_array($forecastMonths)) $forecastMonths = [];
-=======
->>>>>>> Stashed changes
     error_log("Generating forecasts for " . count($forecastMonths) . " months: " . implode(', ', $forecastMonths));
     
     foreach ($forecastMonths as $forecastMonth) {
@@ -984,14 +698,10 @@ try {
         $demandForecast = forecastNextMonth($monthlyDemand, $bloodTypes, true);  // Blood Demand Forecast.R
         
         // Add some variation to make forecasts different for each month
-<<<<<<< Updated upstream
         // Use the month number to create consistent but different variations
         $monthDate = new DateTime($forecastMonth);
         $monthNum = (int)$monthDate->format('n'); // 1-12
         $monthVariation = 0.8 + ($monthNum / 12) * 0.4; // 0.8 to 1.2 based on month
-=======
-        $monthVariation = 0.9 + (mt_rand() / mt_getrandmax()) * 0.2; // 0.9 to 1.1 variation
->>>>>>> Stashed changes
         
         foreach ($bloodTypes as $bloodType) {
             if (isset($supplyForecast[$bloodType])) {
@@ -1005,7 +715,6 @@ try {
         error_log("Supply Forecast for {$forecastMonth}: " . json_encode($supplyForecast));
         error_log("Demand Forecast for {$forecastMonth}: " . json_encode($demandForecast));
         
-<<<<<<< Updated upstream
         // Debug: Show connection between blood_bank_units data and forecasted donations
         $totalSupplyForecast = array_sum($supplyForecast);
         error_log("Total forecasted donations (supply) for {$forecastMonth}: {$totalSupplyForecast} units");
@@ -1025,54 +734,23 @@ try {
             } else {
                 $status = 'surplus'; // EXACT R: "✅ Stable (Surplus)"
         }
-=======
-        foreach ($bloodTypes as $bloodType) {
-            $supply = $supplyForecast[$bloodType];
-            $demand = $demandForecast[$bloodType];
-            $balance = $supply - $demand; // Like R: Forecast_Supply - Forecast_Demand
-            
-            // EXACT R Studio logic from Projected Stock Level.R
-            // R code: Stock Status = ifelse(Projected Stock Level < 0, "⚠️ Critical (Shortage)", "✅ Stable (Surplus)")
-            $status = 'surplus';
-            if ($balance < 0) {
-                $status = 'critical'; // EXACT R: "⚠️ Critical (Shortage)"
-                $criticalTypes[] = $bloodType;
-            } else {
-                $status = 'surplus'; // EXACT R: "✅ Stable (Surplus)"
-            }
->>>>>>> Stashed changes
             
             // EXACT R Studio logic from Supply vs Demand Forecast.R
             // R code: Status = ifelse(Forecast_Gap < 0, "🔴 Shortage", "🟢 Surplus")
             $gapStatus = $balance < 0 ? 'shortage' : 'surplus'; // EXACT R: "🔴 Shortage" vs "🟢 Surplus"
-<<<<<<< Updated upstream
         
         $forecastData[] = [
             'blood_type' => $bloodType,
             'forecasted_demand' => $demand,
             'forecasted_supply' => $supply,
-=======
-            
-            $forecastData[] = [
-                'blood_type' => $bloodType,
-                'forecasted_demand' => $demand,
-                'forecasted_supply' => $supply,
->>>>>>> Stashed changes
                 'projected_balance' => $balance, // Like R: "Projected Stock Level (Next Month)"
                 'status' => $status,
                 'gap_status' => $gapStatus, // EXACT R: Supply vs Demand Forecast.R status
                 'forecast_month' => $forecastMonth // Add month identifier
-<<<<<<< Updated upstream
         ];
         
         $totalDemand += $demand;
         $totalSupply += $supply;
-=======
-            ];
-            
-            $totalDemand += $demand;
-            $totalSupply += $supply;
->>>>>>> Stashed changes
             
             error_log("R Studio Projected Stock Level for {$bloodType} in {$forecastMonth}: Forecast_Supply={$supply}, Forecast_Demand={$demand}, Projected_Stock_Level={$balance}, Stock_Status={$status}");
         }
@@ -1084,7 +762,6 @@ try {
     // Find the most critical blood type (lowest balance)
     $mostCritical = 'None';
     $lowestBalance = 0;
-<<<<<<< Updated upstream
     $criticalTypesList = [];
     
     foreach ($forecastData as $data) {
@@ -1094,12 +771,6 @@ try {
             $lowestBalance = $data['projected_balance'];
             $mostCritical = $data['blood_type'];
             }
-=======
-    foreach ($forecastData as $data) {
-        if ($data['projected_balance'] < $lowestBalance) {
-            $lowestBalance = $data['projected_balance'];
-            $mostCritical = $data['blood_type'];
->>>>>>> Stashed changes
         }
     }
     
@@ -1117,7 +788,6 @@ try {
         }
     }
 
-<<<<<<< Updated upstream
     // Ensure criticalTypesList is always an array
     if (!is_array($criticalTypesList)) {
         $criticalTypesList = [];
@@ -1160,16 +830,12 @@ try {
     error_log("Forecast months (Dec 2025+): " . implode(', ', $forecastMonths));
     
     // Prepare response with properly categorized data
-=======
-    // Prepare response with both historical and forecast data
->>>>>>> Stashed changes
     $response = [
         'success' => true,
         'kpis' => [
             'total_forecasted_demand' => $totalDemand,
             'total_forecasted_supply' => $totalSupply,
             'projected_balance' => $totalBalance,
-<<<<<<< Updated upstream
             'critical_blood_types' => $mostCritical,
             'critical_types_list' => $criticalTypesList
         ],
@@ -1206,24 +872,6 @@ try {
         ],
         'debug_info' => [
             'database_blood_units_count' => count($bloodUnits),
-=======
-            'critical_blood_types' => $mostCritical
-        ],
-        'forecast_data' => $forecastData,
-        'monthly_supply' => $monthlySupply, // Combined historical + current data for display
-        'monthly_demand' => $monthlyDemand,
-        'forecast_months' => $forecastMonths, // Future months = forecasts
-        'historical_months' => array_keys($monthlySupply), // All historical months (CSV + database data)
-        'current_months' => array_keys($monthlyCurrentSupply), // Only recent database months
-        'training_data_info' => [
-            'historical_months_count' => count($monthlyHistoricalSupply),
-            'current_months_count' => count($monthlyCurrentSupply),
-            'total_training_months' => count($monthlySupply)
-        ],
-        'debug_info' => [
-            'current_blood_units_count' => count($bloodUnits),
-            'historical_blood_units_count' => count($historicalData),
->>>>>>> Stashed changes
             'total_blood_units_count' => count($allBloodUnits),
             'blood_requests_count' => count($bloodRequests),
             'supply_forecast' => $supplyForecast,
@@ -1231,7 +879,6 @@ try {
             'monthly_supply_keys' => array_keys($monthlySupply),
             'monthly_demand_keys' => array_keys($monthlyDemand),
             'forecast_months_count' => count($forecastMonths),
-<<<<<<< Updated upstream
             'database_months_count' => count($monthlySupply),
             'r_studio_integration_example' => [
                 'sample_month' => '2019-05-01',
@@ -1244,17 +891,6 @@ try {
                     'forecasting' => 'R Studio ARIMA model on aggregated data',
                     'output' => 'Forecasted donations (supply) for future months'
                 ],
-=======
-            'historical_months_count' => count($monthlyHistoricalSupply),
-            'current_months_count' => count($monthlyCurrentSupply),
-            'r_studio_integration_example' => [
-                'sample_month' => '2019-05-01',
-                'sample_blood_type' => 'A+',
-                'total_units' => $monthlySupply['2019-05-01']['A+'] ?? 0,
-                'historical_units' => $monthlyHistoricalSupply['2019-05-01']['A+'] ?? 0,
-                'current_units' => $monthlyCurrentSupply['2019-05-01']['A+'] ?? 0,
-                'integration_formula' => 'Total = Historical (CSV) + Current (Database)',
->>>>>>> Stashed changes
                 'r_studio_files_used' => [
                     'Blood Supply Forecast.R',
                     'Blood Demand Forecast.R', 
@@ -1269,12 +905,7 @@ try {
                 ]
             ],
             'data_sources' => [
-<<<<<<< Updated upstream
                 'database_only' => count($bloodUnits) > 0,
-=======
-                'current_database' => count($bloodUnits) > 0,
-                'historical_csv' => count($historicalData) > 0,
->>>>>>> Stashed changes
                 'real_requests' => count($bloodRequests) > 0,
                 'synthetic_demand' => $totalDemandUnits > 0
             ]
@@ -1285,7 +916,6 @@ try {
     echo json_encode($response, JSON_PRETTY_PRINT);
 
 } catch (Exception $e) {
-<<<<<<< Updated upstream
     error_log("Forecast API Exception: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
     echo json_encode([
         'success' => false,
@@ -1302,13 +932,6 @@ try {
         'message' => $e->getMessage(),
         'file' => $e->getFile(),
         'line' => $e->getLine()
-=======
-    error_log("Forecast API Error: " . $e->getMessage());
-    echo json_encode([
-        'success' => false,
-        'error' => 'Failed to generate forecasts',
-        'message' => $e->getMessage()
->>>>>>> Stashed changes
     ]);
 }
 ?>
