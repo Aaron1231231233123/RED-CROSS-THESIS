@@ -397,8 +397,8 @@ try {
                         'donor_id' => $donor_id,
                         'payload_json' => $payload_json,
                         'status' => 'sent',
-                        'blood_drive_id' => $blood_drive_id,
-                        'sent_at' => date('c')  // Use sent_at instead of created_at
+                        'blood_drive_id' => $blood_drive_id
+                        // sent_at will be set automatically by database DEFAULT NOW()
                     ];
                     @supabaseRequest("donor_notifications", "POST", $notification_data);
                     
@@ -412,7 +412,16 @@ try {
                         'error' => $result['error'] ?? 'Unknown error'
                     ];
                     
-                    // Log failed push - non-blocking
+                    // Log failed push to donor_notifications table - non-blocking
+                    $failed_notification_data = [
+                        'donor_id' => $donor_id,
+                        'payload_json' => $payload_json,
+                        'status' => 'failed',
+                        'blood_drive_id' => $blood_drive_id
+                    ];
+                    @supabaseRequest("donor_notifications", "POST", $failed_notification_data);
+                    
+                    // Log failed push to notification_logs - non-blocking
                     @logNotification($blood_drive_id, $donor_id, 'push', 'failed', 'push_send_failed', $subscription['endpoint'] ?? null, $push_payload, $result['error'] ?? 'Unknown error');
                 }
                 
@@ -422,6 +431,15 @@ try {
                     'donor_id' => $donor_id,
                     'error' => $e->getMessage()
                 ];
+                
+                // Log exception to donor_notifications table - non-blocking
+                $exception_notification_data = [
+                    'donor_id' => $donor_id,
+                    'payload_json' => $payload_json ?? json_encode($push_payload),
+                    'status' => 'failed',
+                    'blood_drive_id' => $blood_drive_id
+                ];
+                @supabaseRequest("donor_notifications", "POST", $exception_notification_data);
                 
                 @logNotification($blood_drive_id, $donor_id, 'push', 'failed', 'exception', $subscription['endpoint'] ?? null, $push_payload, $e->getMessage());
                 error_log("Push notification error for donor $donor_id: " . $e->getMessage());
@@ -469,6 +487,24 @@ try {
             if ($emailResult['success']) {
                 $results['email']['sent']++;
                 $notified_donors[$donor_id] = 'email';
+                
+                // Log to donor_notifications table (if exists) - non-blocking
+                $email_payload = [
+                    'type' => 'blood_drive',
+                    'blood_drive_id' => $blood_drive_id,
+                    'location' => $location,
+                    'date' => $drive_date,
+                    'time' => $drive_time,
+                    'message' => $custom_message ?: "Blood drive near you! Please consider donating."
+                ];
+                $email_notification_data = [
+                    'donor_id' => $donor_id,
+                    'payload_json' => json_encode($email_payload),
+                    'status' => 'sent',
+                    'blood_drive_id' => $blood_drive_id
+                ];
+                @supabaseRequest("donor_notifications", "POST", $email_notification_data);
+                
                 @logNotification($blood_drive_id, $donor_id, 'email', 'sent', null, $donor_email);
             } else {
                 $results['email']['failed']++;
@@ -589,4 +625,3 @@ try {
     ob_end_flush();
     exit();
 }
-?>

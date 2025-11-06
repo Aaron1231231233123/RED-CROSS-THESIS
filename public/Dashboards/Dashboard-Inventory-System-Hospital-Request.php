@@ -3,7 +3,7 @@ session_start();
 require_once '../../assets/conn/db_conn.php';
 require_once 'module/optimized_functions.php';
 // Send short-term caching headers for better performance on slow networks
-header('Cache-Control: public, max-age=180');
+header('Cache-Control: public, max-age=180, stale-while-revalidate=60');
 header('Vary: Accept-Encoding');
 
 // Check if the user is logged in and has admin role (role_id = 1)
@@ -172,7 +172,7 @@ function fetchAllBloodRequests($limit = 50, $offset = 0) {
 }
 
 $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
-$page_size = 50;
+$page_size = 12;
 $offset = ($page - 1) * $page_size;
 $blood_requests = fetchAllBloodRequests($page_size, $offset);
 
@@ -429,10 +429,29 @@ addPerformanceHeaders($executionTime, count($blood_requests), "Hospital Requests
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard</title>
-    <!-- Bootstrap 5.3 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- FontAwesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <?php
+        // Preconnect to Supabase host to speed up API calls
+        if (defined('SUPABASE_URL')) {
+            $___scheme = parse_url(SUPABASE_URL, PHP_URL_SCHEME);
+            $___host = parse_url(SUPABASE_URL, PHP_URL_HOST);
+            if ($___scheme && $___host) {
+                $___sup_preconnect = htmlspecialchars($___scheme . '://' . $___host);
+                echo '<link rel="preconnect" href="' . $___sup_preconnect . '" crossorigin>' . "\n";
+            }
+        }
+    ?>
+    <!-- Preload small header logo to stabilize header and improve LCP -->
+    <link rel="preload" as="image" href="../../assets/image/PRC_Logo.png" imagesrcset="../../assets/image/PRC_Logo.png 1x" imagesizes="65px">
+    <!-- Bootstrap 5.3 CSS (non-blocking preload pattern) -->
+    <link id="bootstrap-css" rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.loaded='1'">
+    <noscript><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"></noscript>
+    <!-- FontAwesome for Icons (non-blocking preload pattern) -->
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"></noscript>
     <style>
 /* General Body Styling */
 body {
@@ -1025,7 +1044,54 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         box-shadow: 0 2px 4px rgba(13, 110, 253, 0.4);
     }
 
+    /* Reduce rendering cost on large sections */
+    .table-responsive, #requestTable { content-visibility: auto; contain-intrinsic-size: 800px 1200px; }
+
+    /* Hide heavy sections until ready to avoid staggered row paints */
+    .progressive-hide { visibility: hidden; }
+    /* Lightweight skeleton for request table */
+    .skeleton-list { margin: 8px 0 16px 0; }
+    .skeleton-row {
+        height: 52px;
+        margin: 8px 0;
+        border-radius: 6px;
+        background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 37%, #f3f4f6 63%);
+        background-size: 400% 100%;
+        animation: shimmer 1.2s ease-in-out infinite;
+    }
+    @keyframes shimmer {
+        0% { background-position: 100% 0; }
+        100% { background-position: -100% 0; }
+    }
+
     </style>
+    <script>
+    (function() {
+        function reveal() {
+            var sk = document.getElementById('skeletonRequests');
+            if (sk) { sk.style.display = 'none'; }
+            var els = document.querySelectorAll('.progressive-hide');
+            for (var i = 0; i < els.length; i++) {
+                els[i].style.visibility = 'visible';
+                els[i].classList.remove('progressive-hide');
+            }
+        }
+        function onReady() {
+            var css = document.getElementById('bootstrap-css');
+            if (css && !css.dataset.loaded) {
+                css.addEventListener('load', reveal, { once: true });
+                setTimeout(reveal, 600); // tighter fallback to reduce LCP on slow links
+            } else {
+                reveal();
+            }
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', onReady);
+        } else {
+            onReady();
+        }
+    })();
+    </script>
 </head>
 <body>
     <!-- Move modals to top level, right after body tag -->
@@ -1154,7 +1220,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             <nav class="col-md-3 col-lg-2 d-md-block inventory-sidebar">
                 <div class="sidebar-main-content">
                     <div class="d-flex align-items-center ps-1 mb-3 mt-2">
-                        <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" style="width: 65px; height: 65px; object-fit: contain;">
+                        <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" width="65" height="65" style="width: 65px; height: 65px; object-fit: contain;" fetchpriority="high" decoding="async">
                         <span class="text-primary ms-1" style="font-size: 1.5rem; font-weight: 600;">Dashboard</span>
                     </div>
                     <ul class="nav flex-column">
@@ -1255,7 +1321,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         ?>
                     </div>
                 <?php else: ?>
-                <div class="table-responsive">
+                <!-- Skeleton placeholder shown until CSS+table reveal -->
+                <div id="skeletonRequests" class="skeleton-list">
+                    <div class="skeleton-row"></div>
+                    <div class="skeleton-row"></div>
+                    <div class="skeleton-row"></div>
+                    <div class="skeleton-row"></div>
+                    <div class="skeleton-row"></div>
+                </div>
+                <div class="table-responsive progressive-hide">
                     <table class="table table-striped table-hover" id="requestTable">
                         <thead class="table-dark">
                             <tr>

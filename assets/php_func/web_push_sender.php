@@ -288,4 +288,3 @@ class WebPushSender {
         return hash('sha256', $sharedSecret . $auth, true);
     }
 }
-?>

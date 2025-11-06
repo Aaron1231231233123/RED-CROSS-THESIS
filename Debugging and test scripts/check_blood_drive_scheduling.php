@@ -2,12 +2,18 @@
 /**
  * Comprehensive Blood Drive Scheduling System Diagnostic Script
  * This script performs a deep scan of the blood drive scheduling system
- * Run this in your browser: http://localhost/RED-CROSS-THESIS/check_blood_drive_scheduling.php
+ * Run this in your browser: http://localhost/RED-CROSS-THESIS/Debugging and test scripts/check_blood_drive_scheduling.php
  */
 
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 ini_set('max_execution_time', 300);
+
+// Get the base directory (one level up from this script)
+$baseDir = dirname(__DIR__);
+if (strpos($baseDir, 'Debugging and test scripts') !== false) {
+    $baseDir = dirname($baseDir);
+}
 
 echo "<!DOCTYPE html><html><head><meta charset='UTF-8'>";
 echo "<title>Blood Drive Scheduling System - Deep Diagnostic</title>";
@@ -86,15 +92,15 @@ echo "<div class='container'>";
 echo "<h2>1. File System & Dependencies Check</h2>";
 
 $requiredFiles = [
-    'public/api/broadcast-blood-drive.php' => 'Main API endpoint',
-    'assets/php_func/email_sender.php' => 'Email notification handler',
-    'assets/php_func/web_push_sender.php' => 'Push notification handler',
-    'assets/php_func/vapid_config.php' => 'VAPID keys configuration',
-    'assets/conn/db_conn.php' => 'Database connection',
-    'public/Dashboards/module/optimized_functions.php' => 'Supabase helper functions',
-    'public/Dashboards/dashboard-Inventory-System.php' => 'Frontend dashboard',
-    'create_blood_drive_table.sql' => 'Database schema',
-    'create_notification_logs_table.sql' => 'Notification logs schema'
+    $baseDir . '/public/api/broadcast-blood-drive.php' => 'Main API endpoint',
+    $baseDir . '/assets/php_func/email_sender.php' => 'Email notification handler',
+    $baseDir . '/assets/php_func/web_push_sender.php' => 'Push notification handler',
+    $baseDir . '/assets/php_func/vapid_config.php' => 'VAPID keys configuration',
+    $baseDir . '/assets/conn/db_conn.php' => 'Database connection',
+    $baseDir . '/public/Dashboards/module/optimized_functions.php' => 'Supabase helper functions',
+    $baseDir . '/public/Dashboards/dashboard-Inventory-System.php' => 'Frontend dashboard',
+    __DIR__ . '/Sqls/create_blood_drive_table.sql' => 'Database schema',
+    __DIR__ . '/Sqls/create_notification_logs_table.sql' => 'Notification logs schema'
 ];
 
 foreach ($requiredFiles as $file => $description) {
@@ -120,9 +126,9 @@ echo "<div class='container'>";
 echo "<h2>2. PHP Syntax & Code Quality Analysis</h2>";
 
 $phpFiles = [
-    'public/api/broadcast-blood-drive.php',
-    'assets/php_func/email_sender.php',
-    'assets/php_func/web_push_sender.php'
+    $baseDir . '/public/api/broadcast-blood-drive.php',
+    $baseDir . '/assets/php_func/email_sender.php',
+    $baseDir . '/assets/php_func/web_push_sender.php'
 ];
 
 foreach ($phpFiles as $file) {
@@ -165,8 +171,8 @@ echo "<div class='container'>";
 echo "<h2>3. Database Connection & Schema Validation</h2>";
 
 // Load database connection
-if (file_exists('assets/conn/db_conn.php')) {
-    require_once 'assets/conn/db_conn.php';
+if (file_exists($baseDir . '/assets/conn/db_conn.php')) {
+    require_once $baseDir . '/assets/conn/db_conn.php';
     
     // Check if constants are defined
     $hasSupabaseUrl = defined('SUPABASE_URL');
@@ -183,8 +189,8 @@ if (file_exists('assets/conn/db_conn.php')) {
     // Test database connectivity
     if ($hasSupabaseUrl && $hasApiKey) {
         // Load supabaseRequest function
-        if (file_exists('public/Dashboards/module/optimized_functions.php')) {
-            require_once 'public/Dashboards/module/optimized_functions.php';
+        if (file_exists($baseDir . '/public/Dashboards/module/optimized_functions.php')) {
+            require_once $baseDir . '/public/Dashboards/module/optimized_functions.php';
             
             // Test connection by querying a simple endpoint
             try {
@@ -214,8 +220,9 @@ if (file_exists('assets/conn/db_conn.php')) {
     }
     
     // Check SQL schema files
-    if (file_exists('create_blood_drive_table.sql')) {
-        $sqlContent = file_get_contents('create_blood_drive_table.sql');
+    $sqlFile = __DIR__ . '/Sqls/create_blood_drive_table.sql';
+    if (file_exists($sqlFile)) {
+        $sqlContent = file_get_contents($sqlFile);
         $requiredColumns = ['id', 'location', 'latitude', 'longitude', 'drive_date', 'drive_time', 'radius_km', 'status'];
         
         foreach ($requiredColumns as $column) {
@@ -244,7 +251,7 @@ echo "</div>";
 echo "<div class='container'>";
 echo "<h2>4. API Endpoint Deep Analysis</h2>";
 
-$apiFile = 'public/api/broadcast-blood-drive.php';
+$apiFile = $baseDir . '/public/api/broadcast-blood-drive.php';
 if (file_exists($apiFile)) {
     $apiContent = file_get_contents($apiFile);
     
@@ -331,7 +338,7 @@ echo "</div>";
 echo "<div class='container'>";
 echo "<h2>5. Frontend Integration Check</h2>";
 
-$dashboardFile = 'public/Dashboards/dashboard-Inventory-System.php';
+$dashboardFile = $baseDir . '/public/Dashboards/dashboard-Inventory-System.php';
 if (file_exists($dashboardFile)) {
     $dashboardContent = file_get_contents($dashboardFile);
     
@@ -371,8 +378,8 @@ echo "<div class='container'>";
 echo "<h2>6. Class & Method Validation</h2>";
 
 // Check EmailSender
-if (file_exists('assets/php_func/email_sender.php')) {
-    require_once 'assets/php_func/email_sender.php';
+if (file_exists($baseDir . '/assets/php_func/email_sender.php')) {
+    require_once $baseDir . '/assets/php_func/email_sender.php';
     
     $emailSenderExists = class_exists('EmailSender');
     addTest("EmailSender Class", $emailSenderExists ? 'pass' : 'fail', 
@@ -390,8 +397,8 @@ if (file_exists('assets/php_func/email_sender.php')) {
 }
 
 // Check WebPushSender
-if (file_exists('assets/php_func/web_push_sender.php')) {
-    require_once 'assets/php_func/web_push_sender.php';
+if (file_exists($baseDir . '/assets/php_func/web_push_sender.php')) {
+    require_once $baseDir . '/assets/php_func/web_push_sender.php';
     
     $webPushExists = class_exists('WebPushSender');
     addTest("WebPushSender Class", $webPushExists ? 'pass' : 'fail', 
@@ -508,13 +515,25 @@ echo "<table>";
 echo "<tr><th>Category</th><th>Total</th><th>Passed</th><th>Failed</th><th>Warnings</th><th>Info</th></tr>";
 
 $categories = [];
+// Map status values to array keys
+$statusMap = [
+    'pass' => 'passed',
+    'fail' => 'failed',
+    'warning' => 'warnings',
+    'info' => 'info'
+];
+
 foreach ($results['tests'] as $test) {
     $cat = $test['category'];
     if (!isset($categories[$cat])) {
         $categories[$cat] = ['total' => 0, 'passed' => 0, 'failed' => 0, 'warnings' => 0, 'info' => 0];
     }
     $categories[$cat]['total']++;
-    $categories[$cat][$test['status']]++;
+    // Map status to correct array key
+    $statusKey = $statusMap[$test['status']] ?? 'info';
+    if (isset($categories[$cat][$statusKey])) {
+        $categories[$cat][$statusKey]++;
+    }
 }
 
 foreach ($categories as $cat => $stats) {

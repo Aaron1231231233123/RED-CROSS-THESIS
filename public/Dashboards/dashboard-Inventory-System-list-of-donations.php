@@ -773,6 +773,10 @@ function getCacheStats() {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard</title>
+    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <!-- Immediate script to prevent loading text flash on hard refresh -->
     <script>
         // Run immediately - this executes as soon as the script tag is parsed
@@ -811,10 +815,12 @@ function getCacheStats() {
             // Do not run on window load nor on an interval; this was hiding dynamic content
         })();
     </script>
-    <!-- Bootstrap 5.3 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- FontAwesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Bootstrap 5.3 CSS (non-blocking preload pattern) -->
+    <link id="bootstrap-css" rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.loaded='1'">
+    <noscript><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"></noscript>
+    <!-- FontAwesome for Icons (non-blocking preload pattern) -->
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"></noscript>
     <!-- Enhanced Modal Styles -->
     <link href="../../assets/css/medical-history-approval-modals.css" rel="stylesheet">
     <link href="../../assets/css/defer-donor-modal.css" rel="stylesheet">
@@ -828,6 +834,37 @@ function getCacheStats() {
     <link href="../../assets/css/dashboard-inventory-admin-forms.css" rel="stylesheet">
     <link href="../../assets/css/dashboard-inventory-admin-print.css" rel="stylesheet">
     <link href="../../assets/css/dashboard-inventory-admin-donor-details.css" rel="stylesheet">
+    <style>
+        /* Reduce work on first paint by skipping below-the-fold rendering */
+        .table-responsive, #donationsTable { content-visibility: auto; contain-intrinsic-size: 800px 1200px; }
+        /* Hide heavy sections until ready to avoid staggered row paints */
+        .progressive-hide { visibility: hidden; }
+    </style>
+    <script>
+    (function() {
+        function reveal() {
+            var els = document.querySelectorAll('.progressive-hide');
+            for (var i = 0; i < els.length; i++) {
+                els[i].style.visibility = 'visible';
+                els[i].classList.remove('progressive-hide');
+            }
+        }
+        function onReady() {
+            var css = document.getElementById('bootstrap-css');
+            if (css && !css.dataset.loaded) {
+                css.addEventListener('load', reveal, { once: true });
+                setTimeout(reveal, 1500);
+            } else {
+                reveal();
+            }
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', onReady);
+        } else {
+            onReady();
+        }
+    })();
+    </script>
 </head>
 <body>
     <!-- Confirmation Modal -->
@@ -876,7 +913,7 @@ function getCacheStats() {
             <nav class="col-md-3 col-lg-2 d-md-block dashboard-home-sidebar">
                 <div class="sidebar-main-content">
                     <div class="d-flex align-items-center ps-1 mb-3 mt-2">
-                        <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" style="width: 65px; height: 65px; object-fit: contain;">
+                        <img src="../../assets/image/PRC_Logo.png" alt="Red Cross Logo" width="65" height="65" style="width: 65px; height: 65px; object-fit: contain;" fetchpriority="high" decoding="async">
                         <span class="text-primary ms-1" style="font-size: 1.5rem; font-weight: 600;">Dashboard</span>
                     </div>
                     <ul class="nav flex-column">
@@ -1039,7 +1076,7 @@ function getCacheStats() {
                 <hr class="mt-0 mb-3 border-2 border-secondary opacity-50 mb-2">
                         <!-- Donor Management Table -->
                         <?php if (!empty($donations)): ?>
-                        <div class="table-responsive">
+                        <div class="table-responsive progressive-hide">
                             <table class="table table-striped table-hover" id="donationsTable">
                                 <thead class="table-dark">
                                     <tr>
