@@ -1505,7 +1505,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 loadingModal.show();
                 
                 setTimeout(() => {
-                    window.location.href = '../../src/views/forms/donor-form-modal.php';
+                    // Pass current page as source parameter for proper redirect back
+                    const currentPage = encodeURIComponent(window.location.pathname + window.location.search);
+                    window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + currentPage;
                 }, 1500);
             };
             
@@ -1648,5 +1650,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             }
         });
     </script>
+
+    <?php
+    // NOTE: Mobile credentials modal is NOT shown on dashboards
+    // It should ONLY appear on the declaration form when registering a new donor
+    ?>
 </body>
 </html>

@@ -3,19 +3,30 @@
 // This file contains optimized functions that can be used across multiple modules
 
 // OPTIMIZATION: Enhanced function to make API requests to Supabase with retry mechanism
+// For backend operations (POST/PATCH/DELETE), uses service role key to bypass RLS
+// For read operations (GET), uses anon key by default
 function supabaseRequest($endpoint, $method = 'GET', $data = null) {
     $url = SUPABASE_URL . "/rest/v1/" . $endpoint;
 
+    // Use service role key for write operations (POST/PATCH/DELETE) to bypass RLS
+    // Use anon key for read operations (GET) by default
+    $useServiceRole = in_array(strtoupper($method), ['POST', 'PATCH', 'PUT', 'DELETE']);
+    $apiKey = $useServiceRole && defined('SUPABASE_SERVICE_KEY') ? SUPABASE_SERVICE_KEY : SUPABASE_API_KEY;
+
     $headers = [
         "Content-Type: application/json",
-        "apikey: " . SUPABASE_API_KEY,
-        "Authorization: Bearer " . SUPABASE_API_KEY,
+        "apikey: " . $apiKey,
+        "Authorization: Bearer " . $apiKey,
         "Prefer: return=representation"
     ];
 
     // OPTIMIZATION FOR SLOW INTERNET: Enhanced timeout and retry settings
     $maxRetries = 3;
     $retryDelay = 2; // seconds
+    
+    $lastHttpCode = 0;
+    $lastError = '';
+    $lastResponse = '';
     
     for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
         $ch = curl_init($url);
@@ -36,7 +47,13 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
         if ($method !== 'GET') {
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
             if ($data !== null) {
-                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+                $jsonData = json_encode($data);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
+                // Log for debugging
+                if ($attempt == 1) {
+                    error_log("Supabase POST request to: $url");
+                    error_log("POST data: $jsonData");
+                }
             }
         }
 
@@ -44,8 +61,15 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
+        $curlErrno = curl_errno($ch);
         curl_close($ch);
         
+        // Store for final error message
+        $lastHttpCode = $httpCode;
+        $lastError = $error;
+        $lastResponse = $response;
+        
+        // Check if request was successful
         if ($response !== false && $httpCode >= 200 && $httpCode < 300) {
             $decoded = json_decode($response, true);
             return [
@@ -56,18 +80,42 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
         
         // If this is not the last attempt, retry
         if ($attempt < $maxRetries) {
-            error_log("API attempt $attempt failed for $endpoint. HTTP Code: $httpCode. Error: $error. Retrying in $retryDelay seconds...");
+            $errorMsg = $error ?: ($httpCode ? "HTTP $httpCode" : "Unknown error");
+            if ($response !== false) {
+                $errorMsg .= " - Response: " . substr($response, 0, 200);
+            }
+            error_log("API attempt $attempt failed for $endpoint. HTTP Code: $httpCode. cURL Error: $error (errno: $curlErrno). Retrying in $retryDelay seconds...");
             sleep($retryDelay);
             $retryDelay *= 2; // Exponential backoff
         }
     }
     
-    // All attempts failed
-    error_log("All API attempts failed for $endpoint. HTTP Code: $httpCode. Error: $error");
+    // All attempts failed - provide detailed error information
+    $finalError = '';
+    if ($lastError) {
+        $finalError = "cURL Error: $lastError";
+    } elseif ($lastHttpCode > 0) {
+        $finalError = "HTTP Error $lastHttpCode";
+        if ($lastResponse) {
+            $decodedResponse = json_decode($lastResponse, true);
+            if ($decodedResponse && isset($decodedResponse['message'])) {
+                $finalError .= " - " . $decodedResponse['message'];
+            } elseif ($decodedResponse && isset($decodedResponse['error'])) {
+                $finalError .= " - " . $decodedResponse['error'];
+            } else {
+                $finalError .= " - " . substr($lastResponse, 0, 200);
+            }
+        }
+    } else {
+        $finalError = "Connection failed - no response from server";
+    }
+    
+    error_log("All API attempts failed for $endpoint. HTTP Code: $lastHttpCode. Error: $lastError. Response: " . substr($lastResponse, 0, 500));
+    
     return [
-        'code' => $httpCode,
+        'code' => $lastHttpCode ?: 0,
         'data' => null,
-        'error' => "Connection error after $maxRetries attempts: $error"
+        'error' => $finalError
     ];
 }
 

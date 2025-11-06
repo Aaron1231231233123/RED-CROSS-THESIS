@@ -2356,11 +2356,16 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
             scheduleBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
             
             try {
+                // Increase timeout for large donor lists
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+                
                 const response = await fetch('/RED-CROSS-THESIS/public/api/broadcast-blood-drive.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
+                    signal: controller.signal,
                     body: JSON.stringify({
                         location: location,
                         drive_date: date,
@@ -2373,7 +2378,24 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     })
                 });
                 
-                const result = await response.json();
+                clearTimeout(timeoutId);
+                
+                // Check if response is OK
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                // Get response text first to check if it's valid JSON
+                const responseText = await response.text();
+                let result;
+                
+                try {
+                    result = JSON.parse(responseText);
+                } catch (jsonError) {
+                    console.error('Invalid JSON response:', responseText);
+                    throw new Error('Invalid JSON response from server. Response: ' + responseText.substring(0, 200));
+                }
                 
                 if (result.success) {
                     // Show success message
@@ -2421,28 +2443,48 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
         
         // Function to show success notification
         function showNotificationSuccess(result) {
+            const summary = result.summary || {};
             const successDiv = document.createElement('div');
             successDiv.className = 'alert alert-success alert-dismissible fade show';
-            successDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 400px;';
+            successDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 450px; max-width: 600px;';
             successDiv.innerHTML = `
-                <h6><i class="fas fa-check-circle"></i> Blood Drive Notifications Sent!</h6>
-                <p class="mb-1"><strong>Location:</strong> ${result.results ? 'Multiple locations' : 'Selected location'}</p>
-                <p class="mb-1"><strong>Donors Found:</strong> ${result.total_donors_found || 0}</p>
-                <p class="mb-1"><strong>Notifications Sent:</strong> ${result.results?.sent || 0}</p>
-                <p class="mb-1"><strong>Failed:</strong> ${result.results?.failed || 0}</p>
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <h6><i class="fas fa-check-circle"></i> Blood Drive Scheduled & Notifications Sent!</h6>
+                <hr style="margin: 10px 0;">
+                <div style="font-size: 14px;">
+                    <p class="mb-2"><strong>📊 Summary:</strong></p>
+                    <div style="background: rgba(255,255,255,0.2); padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+                        <p class="mb-1"><strong>📍 Total Donors Found:</strong> ${summary.total_donors_found || 0}</p>
+                        <p class="mb-1"><strong>🔔 Push Subscriptions:</strong> ${summary.push_subscriptions || 0}</p>
+                        <p class="mb-1"><strong>✅ Push Sent:</strong> ${summary.push_sent || 0}</p>
+                        <p class="mb-1"><strong>📧 Email Sent:</strong> ${summary.email_sent || 0}</p>
+                        <p class="mb-1"><strong>📨 Total Notified:</strong> ${summary.total_notified || 0}</p>
+                    </div>
+                    ${summary.push_failed > 0 || summary.email_failed > 0 ? `
+                        <p class="mb-1 text-warning"><strong>⚠️ Failed:</strong> Push: ${summary.push_failed || 0} | Email: ${summary.email_failed || 0}</p>
+                    ` : ''}
+                    ${summary.total_skipped > 0 ? `
+                        <p class="mb-1 text-info"><strong>⏭️ Skipped:</strong> ${summary.total_skipped || 0}</p>
+                    ` : ''}
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             `;
             
             document.body.appendChild(successDiv);
             
-            // Auto-remove after 10 seconds
+            // Auto-remove after 15 seconds (longer for more info)
             setTimeout(() => {
                 if (successDiv.parentNode) {
                     successDiv.parentNode.removeChild(successDiv);
                 }
-            }, 10000);
+            }, 15000);
         }
     });
     </script>
+
+    <?php
+    // NOTE: Mobile credentials modal is NOT shown on dashboards
+    // It should ONLY appear on the declaration form when registering a new donor
+    // Credentials are displayed there for context during registration
+    ?>
 </body>
 </html>

@@ -337,6 +337,24 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
             font-size: 0.8rem;
             margin-left: 0.5rem;
         }
+        
+        .register-donor-btn {
+            background-color: #b22222;
+            border-color: #b22222;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            font-weight: 500;
+            transition: all 0.2s ease-in-out;
+            margin-left: auto;
+        }
+        .register-donor-btn:hover {
+            background-color: #8b0000;
+            border-color: #8b0000;
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
 
         /* Sidebar Styles */
         .sidebar {
@@ -544,6 +562,9 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
         <!-- Header -->
         <div class="dashboard-home-header">
             <h4 class="header-title">Physician Dashboard <span class="header-date"><?php echo date('l, M d, Y'); ?></span></h4>
+            <button class="btn register-donor-btn" onclick="showConfirmationModal()">
+                <i class="fas fa-plus me-2"></i>Register Donor
+            </button>
         </div>
 
         <div class="row g-0">
@@ -1282,5 +1303,73 @@ $donor_history = array_slice($donor_history, $offset, $records_per_page);
             }
         });
     </script>
+
+    <!-- Initialize donor registration modals -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'), {
+                backdrop: true,
+                keyboard: true
+            });
+            const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
+                backdrop: false,
+                keyboard: false
+            });
+
+            // Function to show confirmation modal
+            window.showConfirmationModal = function() {
+                confirmationModal.show();
+            };
+
+            // Function to handle form submission
+            window.proceedToDonorForm = function() {
+                confirmationModal.hide();
+                loadingModal.show();
+                
+                setTimeout(() => {
+                    // Pass current page as source parameter for proper redirect back
+                    const currentPage = encodeURIComponent(window.location.pathname + window.location.search);
+                    window.location.href = '../../../src/views/forms/donor-form-modal.php?source=' + currentPage;
+                }, 1500);
+            };
+        });
+    </script>
+
+    <!-- Confirmation Modal -->
+    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title" id="confirmationModalLabel">Confirm Action</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to proceed to the donor form?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="proceedToDonorForm()">Proceed</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Modal -->
+    <div class="modal" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="false" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="background: transparent; border: none; box-shadow: none;">
+                <div class="modal-body text-center">
+                    <div class="spinner-border text-danger" style="width: 3rem; height: 3rem;" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <?php
+    // NOTE: Mobile credentials modal is NOT shown on dashboards
+    // It should ONLY appear on the declaration form when registering a new donor
+    ?>
 </body>
 </html>

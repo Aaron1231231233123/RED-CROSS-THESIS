@@ -3,21 +3,84 @@
 session_start();
 require_once '../../../assets/conn/db_conn.php';
 
+// Get user staff role for role-based redirects (for staff users)
+$user_staff_roles = '';
+if (isset($_SESSION['user_id']) && isset($_SESSION['role_id']) && $_SESSION['role_id'] == 3) {
+    $user_id = $_SESSION['user_id'];
+    $url = SUPABASE_URL . "/rest/v1/user_roles?select=user_staff_roles&user_id=eq." . urlencode($user_id);
+    
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY,
+        'Content-Type: application/json',
+        'Prefer: return=minimal'
+    ));
+    
+    $response = curl_exec($ch);
+    curl_close($ch);
+    
+    if ($response) {
+        $data = json_decode($response, true);
+        if (!empty($data) && isset($data[0]['user_staff_roles'])) {
+            $user_staff_roles = strtolower(trim($data[0]['user_staff_roles']));
+        }
+    }
+}
+
+// Determine the correct dashboard based on user staff role
+function getDashboardByRole($role) {
+    switch($role) {
+        case 'reviewer':
+            return '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-medical-history-submissions.php';
+        case 'interviewer':
+            return '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-donor-submission.php';
+        case 'physician':
+            return '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-physical-submission.php';
+        case 'phlebotomist':
+            return '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-blood-collection-submission.php';
+        default:
+            return '/RED-CROSS-THESIS/public/Dashboards/dashboard-Inventory-System.php'; // Admin fallback
+    }
+}
+
 // Store the referrer URL to use it for the return button
 $referrer = '';
 
-// Prioritize session-stored referrer over HTTP_REFERER
-if (isset($_SESSION['declaration_form_referrer'])) {
-    $referrer = $_SESSION['declaration_form_referrer'];
-} elseif (isset($_SESSION['donor_form_referrer'])) {
-    $referrer = $_SESSION['donor_form_referrer'];
+// For staff users (role_id 3), use role-based redirect
+if (isset($_SESSION['role_id']) && $_SESSION['role_id'] == 3 && !empty($user_staff_roles)) {
+    $referrer = getDashboardByRole($user_staff_roles);
     $_SESSION['declaration_form_referrer'] = $referrer;
-} elseif (isset($_SERVER['HTTP_REFERER']) && stripos($_SERVER['HTTP_REFERER'], 'dashboard') !== false) {
-    $referrer = $_SERVER['HTTP_REFERER'];
-    $_SESSION['declaration_form_referrer'] = $referrer;
+    error_log("Declaration form - Staff user detected, using role-based redirect: " . $referrer);
+} elseif (isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1) {
+    // For admin users (role_id 1), use admin dashboard
+    // Prioritize session-stored referrer, but default to admin dashboard
+    if (isset($_SESSION['declaration_form_referrer']) && stripos($_SESSION['declaration_form_referrer'], 'dashboard') !== false) {
+        $referrer = $_SESSION['declaration_form_referrer'];
+    } elseif (isset($_SESSION['donor_form_referrer']) && stripos($_SESSION['donor_form_referrer'], 'dashboard') !== false) {
+        $referrer = $_SESSION['donor_form_referrer'];
+        $_SESSION['declaration_form_referrer'] = $referrer;
+    } elseif (isset($_SERVER['HTTP_REFERER']) && stripos($_SERVER['HTTP_REFERER'], 'dashboard') !== false) {
+        $referrer = $_SERVER['HTTP_REFERER'];
+        $_SESSION['declaration_form_referrer'] = $referrer;
+    } else {
+        // Default admin dashboard
+        $referrer = '/RED-CROSS-THESIS/public/Dashboards/dashboard-Inventory-System.php';
+        $_SESSION['declaration_form_referrer'] = $referrer;
+    }
+    error_log("Declaration form - Admin user detected, using redirect: " . $referrer);
 } else {
-    $referrer = '../../public/Dashboards/dashboard-Inventory-System.php';
-    $_SESSION['declaration_form_referrer'] = $referrer;
+    // Fallback for other roles
+    if (isset($_SESSION['declaration_form_referrer'])) {
+        $referrer = $_SESSION['declaration_form_referrer'];
+    } elseif (isset($_SESSION['donor_form_referrer'])) {
+        $referrer = $_SESSION['donor_form_referrer'];
+        $_SESSION['declaration_form_referrer'] = $referrer;
+    } else {
+        $referrer = '/RED-CROSS-THESIS/public/Dashboards/dashboard-Inventory-System.php';
+        $_SESSION['declaration_form_referrer'] = $referrer;
+    }
 }
 
 // Log all potential donor_id sources for debugging
@@ -242,6 +305,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['print_declaration']))
     error_log("Declaration form - Donor registration completed for: " . $_SESSION['donor_registered_name'] . " (ID: " . $donor_id . ")");
     
     // Check if mobile account was generated and add credentials to cookies
+    // IMPORTANT: Reset the "shown" flag when new credentials are created
     if (isset($_SESSION['mobile_account_generated']) && $_SESSION['mobile_account_generated']) {
         $expiry = time() + 60*5; // 5 minutes
         setcookie('mobile_account_generated', 'true', $expiry, '/');
@@ -249,6 +313,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['print_declaration']))
             setcookie('mobile_email', $_SESSION['mobile_credentials']['email'], $expiry, '/');
             setcookie('mobile_password', $_SESSION['mobile_credentials']['password'], $expiry, '/');
         }
+        
+        // Reset the "shown" flag for new credentials
+        unset($_SESSION['mobile_credentials_shown']);
+        $shownExpiry = time() - 3600; // Delete any existing "shown" cookie
+        setcookie('mobile_credentials_shown', '', $shownExpiry, '/');
+        
         error_log("Declaration form - Mobile credentials added to cookies");
         
         // Set flag to show credentials modal instead of redirecting immediately
@@ -265,17 +335,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['print_declaration']))
     $_SESSION['post_registration_redirect'] = $redirect_url;
     
     // Clear any previous registration data from session to avoid conflicts
+    // BUT keep donor_id for the redirect (needed for show_credentials parameter)
     unset($_SESSION['donor_form_data']);
     unset($_SESSION['donor_form_timestamp']);
-    unset($_SESSION['donor_id']);
+    // Keep donor_id until after redirect
+    // unset($_SESSION['donor_id']); // Keep this for now
     unset($_SESSION['medical_history_id']);
     unset($_SESSION['screening_id']);
     
     
-    // If mobile credentials are available, show modal instead of redirecting
+    // If mobile credentials are available, show modal on declaration form first
+    // Then user can proceed to dashboard where it will also be available
     if (isset($_SESSION['mobile_account_generated']) && $_SESSION['mobile_account_generated']) {
         // Redirect to self to show the credentials modal
-        header('Location: declaration-form-modal.php?show_credentials=true');
+        header('Location: declaration-form-modal.php?show_credentials=true&donor_id=' . $donor_id);
         exit();
     } else {
         // Redirect back to the dashboard immediately
@@ -416,12 +489,60 @@ $today = date('F d, Y');
 </head>
 <body>
     <?php 
-    // Include mobile credentials modal if needed
-    if ((isset($_GET['show_credentials']) && $_GET['show_credentials'] === 'true' && 
-         isset($_SESSION['mobile_account_generated']) && $_SESSION['mobile_account_generated']) ||
-        (isset($_SESSION['show_credentials_modal']) && $_SESSION['show_credentials_modal'])) {
-        include '../modals/mobile-credentials-modal.php';
+    // Include mobile credentials modal on declaration form ONLY
+    // This modal should ONLY appear on the declaration form when registering a new donor
+    // Check for session variables OR cookies (for refresh scenarios)
+    $hasSessionCredentials = isset($_SESSION['mobile_account_generated']) && $_SESSION['mobile_account_generated'];
+    $hasCookieCredentials = isset($_COOKIE['mobile_account_generated']) && $_COOKIE['mobile_account_generated'] === 'true';
+    $showCredentialsModal = isset($_SESSION['show_credentials_modal']) && $_SESSION['show_credentials_modal'];
+    $hasShowCredentialsParam = isset($_GET['show_credentials']) && $_GET['show_credentials'] === 'true';
+    
+    // Check if credentials have already been shown/acknowledged
+    // Only check this flag - if not set, modal can show (even on refresh)
+    $credentialsAlreadyShown = isset($_SESSION['mobile_credentials_shown']) && $_SESSION['mobile_credentials_shown'] === true;
+    $credentialsShownInCookie = isset($_COOKIE['mobile_credentials_shown']) && $_COOKIE['mobile_credentials_shown'] === 'true';
+    
+    // Show modal on declaration form if credentials exist
+    // On declaration form, we ALWAYS show it if credentials exist (even on refresh)
+    // This is the context where staff/admin need to see the credentials during registration
+    // The "shown" flag is only used to prevent showing on dashboards, not on declaration form
+    $shouldShowModal = false;
+    
+    // Debug logging - check what we have
+    error_log("Declaration form - Credentials check: hasSession=" . ($hasSessionCredentials ? 'true' : 'false') . 
+              ", hasCookie=" . ($hasCookieCredentials ? 'true' : 'false') . 
+              ", showModal=" . ($showCredentialsModal ? 'true' : 'false') . 
+              ", hasParam=" . ($hasShowCredentialsParam ? 'true' : 'false'));
+    
+    // Also log cookie values for debugging
+    if (isset($_COOKIE['mobile_account_generated'])) {
+        error_log("Declaration form - Cookie mobile_account_generated=" . $_COOKIE['mobile_account_generated']);
     }
+    if (isset($_COOKIE['mobile_email'])) {
+        error_log("Declaration form - Cookie mobile_email exists");
+    }
+    if (isset($_COOKIE['mobile_password'])) {
+        error_log("Declaration form - Cookie mobile_password exists");
+    }
+    
+    // Check if credentials exist (from session or cookies)
+    // FORCE show on declaration form if ANY credential indicator exists
+    if ($hasSessionCredentials || $hasCookieCredentials || $showCredentialsModal || $hasShowCredentialsParam) {
+        // On declaration form, show modal if credentials exist
+        // Don't check "shown" flag here - declaration form should always show it if credentials exist
+        $shouldShowModal = true;
+        error_log("Declaration form - Modal will be included");
+    } else {
+        error_log("Declaration form - Modal will NOT be included (no credentials found)");
+        error_log("Declaration form - All cookies: " . print_r($_COOKIE, true));
+        error_log("Declaration form - Session mobile_account_generated: " . (isset($_SESSION['mobile_account_generated']) ? 'set' : 'not set'));
+    }
+    
+    // ALWAYS include the modal file - let it decide internally if it should show
+    // This ensures the modal HTML is always in the page, even if credentials don't exist
+    error_log("Declaration form - Including mobile credentials modal...");
+    include '../modals/mobile-credentials-modal.php';
+    error_log("Declaration form - Mobile credentials modal included");
     ?>
     
     <div class="declaration-container">

@@ -22,6 +22,9 @@ if (!$donor_id) {
     exit();
 }
 
+// Check if this is view-only mode (for approved donors)
+$view_only = isset($_GET['view_only']) && $_GET['view_only'] == '1';
+
 // Set user role for admin context
 $user_role = 'admin';
 
@@ -630,6 +633,7 @@ if ($http_code === 200) {
         <button class="next-button" id="modalNextButton">
             Next <i class="fas fa-arrow-right ms-1"></i>
         </button>
+        <?php if (!$view_only): ?>
         <button class="btn btn-success" id="modalSubmitButton" style="display: none; margin-left: 10px;">
             <i class="fas fa-check me-2"></i>Submit Medical History
         </button>
@@ -639,6 +643,9 @@ if ($http_code === 200) {
         <button class="btn btn-success" id="modalApproveButton" style="display: none; margin-left: 10px;">
             <i class="fas fa-check-circle me-2"></i>Approve Medical History
         </button>
+        <?php else: ?>
+        <!-- View-only mode: Navigation buttons remain, action buttons hidden by JavaScript -->
+        <?php endif; ?>
     </div>
 </div>
 
@@ -1136,10 +1143,30 @@ setTimeout(() => {
             // Buttons
             if (prevButton) prevButton.style.display = currentStep === 1 ? 'none' : 'inline-block';
             if (nextButton) {
+                // Check if view-only mode is active
+                const isViewOnly = window.medicalHistoryViewOnly === true || 
+                                 (typeof window.mhApplyViewOnlyMode !== 'undefined' && 
+                                  document.getElementById('modalSubmitButton') && 
+                                  document.getElementById('modalSubmitButton').style.display === 'none');
+                
                 if (currentStep === totalSteps) {
-                    nextButton.innerHTML = '<i class="fas fa-check me-1"></i>Submit';
+                    if (isViewOnly) {
+                        // In view-only mode, show "Close" button instead of "Submit"
+                        nextButton.innerHTML = '<i class="fas fa-times me-1"></i>Close';
+                    } else {
+                        nextButton.innerHTML = '<i class="fas fa-check me-1"></i>Submit';
+                    }
                 } else {
                     nextButton.innerHTML = 'Next <i class="fas fa-arrow-right ms-1"></i>';
+                }
+            }
+            
+            // Hide submit button in view-only mode on last step
+            const submitButton = document.getElementById('modalSubmitButton');
+            if (submitButton && currentStep === totalSteps) {
+                const isViewOnly = window.medicalHistoryViewOnly === true;
+                if (isViewOnly) {
+                    submitButton.style.display = 'none';
                 }
             }
 
@@ -1163,20 +1190,40 @@ setTimeout(() => {
         if (nextButton) {
             nextButton.addEventListener('click', function(e){
                 e.preventDefault();
+                
+                // Check if view-only mode is active
+                const isViewOnly = window.medicalHistoryViewOnly === true;
+                
                 if (currentStep < totalSteps) {
                     if (!validateCurrentStep()) return;
                     currentStep++;
                     updateStepDisplay();
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 } else {
-                    // Final step – dispatch submit event (admin flow will be handled in form submit handler)
-                    console.log('Final step reached - dispatching submit event');
-                    try {
-                        const evt = new Event('submit', { bubbles: true, cancelable: true });
-                        form && form.dispatchEvent(evt);
-                        console.log('Submit event dispatched successfully');
-                    } catch (err) {
-                        console.error('Error dispatching submit event:', err);
+                    // Final step
+                    if (isViewOnly) {
+                        // In view-only mode, close the modal instead of submitting (like screening summary)
+                        console.log('View-only mode: Closing medical history modal');
+                        if (typeof closeMedicalHistoryModal === 'function') {
+                            closeMedicalHistoryModal();
+                        } else {
+                            // Fallback: simple close
+                            const modal = document.getElementById('medicalHistoryModal');
+                            if (modal) {
+                                modal.classList.remove('show');
+                                modal.style.display = 'none';
+                            }
+                        }
+                    } else {
+                        // Normal mode: dispatch submit event
+                        console.log('Final step reached - dispatching submit event');
+                        try {
+                            const evt = new Event('submit', { bubbles: true, cancelable: true });
+                            form && form.dispatchEvent(evt);
+                            console.log('Submit event dispatched successfully');
+                        } catch (err) {
+                            console.error('Error dispatching submit event:', err);
+                        }
                     }
                 }
             });
@@ -1645,6 +1692,86 @@ function mhInitializeAdminFlow() {
     mhInitializeApproveModal();
 }
 
+// Apply view-only mode for approved donors (make all fields read-only but keep navigation)
+window.mhApplyViewOnlyMode = function() {
+    console.log('Applying view-only mode to medical history form');
+    
+    // Set view-only flag globally
+    window.medicalHistoryViewOnly = true;
+    
+    // Hide only action buttons (submit, approve, decline), but keep navigation buttons
+    const prevButton = document.getElementById('modalPrevButton');
+    const nextButton = document.getElementById('modalNextButton');
+    const submitButton = document.getElementById('modalSubmitButton');
+    const declineButton = document.getElementById('modalDeclineButton');
+    const approveButton = document.getElementById('modalApproveButton');
+    
+    // Keep navigation buttons visible for view-only mode
+    // They will be shown/hidden by the normal step navigation logic
+    if (submitButton) {
+        submitButton.style.display = 'none';
+        submitButton.style.visibility = 'hidden';
+    }
+    if (declineButton) {
+        declineButton.style.display = 'none';
+        declineButton.style.visibility = 'hidden';
+    }
+    if (approveButton) {
+        approveButton.style.display = 'none';
+        approveButton.style.visibility = 'hidden';
+    }
+    
+    // Force update step display to show "Close" instead of "Submit" if on last step
+    if (typeof updateStepDisplay === 'function') {
+        setTimeout(() => {
+            try {
+                // Try to trigger updateStepDisplay if it's accessible
+                const nextBtn = document.getElementById('modalNextButton');
+                if (nextBtn && nextBtn.textContent.includes('Submit')) {
+                    nextBtn.innerHTML = '<i class="fas fa-times me-1"></i>Close';
+                }
+            } catch(e) {
+                console.warn('Could not update button text:', e);
+            }
+        }, 100);
+    }
+    
+    // Make all form inputs read-only (but keep navigation functional)
+    const form = document.getElementById('modalMedicalHistoryForm');
+    if (form) {
+        // Get all text inputs, selects, and textareas - use readonly for better visual feedback
+        const textInputs = form.querySelectorAll('input[type="text"], input[type="number"], input[type="date"], textarea, select');
+        textInputs.forEach(input => {
+            // Skip hidden inputs and buttons
+            if (input.type !== 'hidden' && input.type !== 'button' && input.type !== 'submit') {
+                input.setAttribute('readonly', 'readonly');
+                input.disabled = true;
+                input.style.cursor = 'not-allowed';
+                input.style.backgroundColor = '#f8f9fa';
+            }
+        });
+        
+        // Handle radio buttons and checkboxes separately - use disabled
+        const radios = form.querySelectorAll('input[type="radio"]');
+        const checkboxes = form.querySelectorAll('input[type="checkbox"]');
+        [...radios, ...checkboxes].forEach(input => {
+            input.disabled = true;
+            input.style.cursor = 'not-allowed';
+            // Add visual indicator with opacity
+            const label = input.closest('label') || (input.nextElementSibling && input.nextElementSibling.tagName === 'LABEL' ? input.nextElementSibling : null);
+            if (label) {
+                label.style.opacity = '0.7';
+                label.style.cursor = 'not-allowed';
+            }
+        });
+    }
+    
+    // Keep step navigation - don't show all steps at once
+    // Let the normal step navigation work, just with read-only fields
+    
+    console.log('View-only mode applied successfully - navigation enabled');
+};
+
 // Initialize decline modal functionality
 function mhInitializeDeclineModal() {
     const declineReason = document.getElementById('declineReason');
@@ -1877,11 +2004,29 @@ setTimeout(mhInitializeAdminFlow, 200);
 // Also try to initialize admin flow when the modal content is loaded
 document.addEventListener('DOMContentLoaded', function() {
     setTimeout(mhInitializeAdminFlow, 500);
+    
+    // Check if view-only mode should be applied
+    <?php if ($view_only): ?>
+    setTimeout(function() {
+        if (typeof window.mhApplyViewOnlyMode === 'function') {
+            window.mhApplyViewOnlyMode();
+        }
+    }, 800);
+    <?php endif; ?>
 });
 
 // Force admin flow initialization for admin context
 if (typeof window !== 'undefined' && window.location && window.location.href.includes('dashboard-Inventory-System-list-of-donations')) {
     setTimeout(mhInitializeAdminFlow, 1000);
+    
+    // Check if view-only mode should be applied
+    <?php if ($view_only): ?>
+    setTimeout(function() {
+        if (typeof window.mhApplyViewOnlyMode === 'function') {
+            window.mhApplyViewOnlyMode();
+        }
+    }, 1500);
+    <?php endif; ?>
 }
 
 // Note: needs_review management is now handled through the form submission process

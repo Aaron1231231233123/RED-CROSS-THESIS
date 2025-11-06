@@ -2372,5 +2372,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         }
     });
     </script>
+
+    <?php
+    // NOTE: Mobile credentials modal is NOT shown on dashboards
+    // It should ONLY appear on the declaration form when registering a new donor
+    ?>
 </body>
 </html>

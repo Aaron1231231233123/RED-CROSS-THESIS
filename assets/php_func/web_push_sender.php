@@ -19,40 +19,84 @@ class WebPushSender {
     
     /**
      * Send push notification to a subscription
+     * Uses proper Web Push encryption with VAPID authentication
      */
     public function sendNotification($subscription, $payload) {
-        $endpoint = $subscription['endpoint'];
-        
-        // For testing purposes, we'll send a simple HTTP request
-        // In production, you'd need proper Web Push encryption
-        $ch = curl_init();
-        
-        $headers = [
-            'Content-Type: application/json',
-            'TTL: 86400'
-        ];
-        
-        curl_setopt_array($ch, [
-            CURLOPT_URL => $endpoint,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => $payload,
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_SSL_VERIFYPEER => false, // For testing
-            CURLOPT_TIMEOUT => 10
-        ]);
-        
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $error = curl_error($ch);
-        curl_close($ch);
-        
-        return [
-            'success' => $httpCode >= 200 && $httpCode < 300,
-            'http_code' => $httpCode,
-            'response' => $response,
-            'error' => $error
-        ];
+        try {
+            // Validate subscription
+            if (!isset($subscription['endpoint']) || empty($subscription['endpoint'])) {
+                return [
+                    'success' => false,
+                    'http_code' => 0,
+                    'response' => null,
+                    'error' => 'Missing endpoint in subscription'
+                ];
+            }
+            
+            $endpoint = $subscription['endpoint'];
+            
+            // Extract keys from subscription
+            $keys = $subscription['keys'] ?? null;
+            if (!$keys || !isset($keys['p256dh']) || !isset($keys['auth'])) {
+                return [
+                    'success' => false,
+                    'http_code' => 0,
+                    'response' => null,
+                    'error' => 'Missing encryption keys (p256dh or auth) in subscription'
+                ];
+            }
+            
+            $p256dh = $keys['p256dh'];
+            $auth = $keys['auth'];
+            
+            // Validate keys are not empty
+            if (empty($p256dh) || empty($auth)) {
+                return [
+                    'success' => false,
+                    'http_code' => 0,
+                    'response' => null,
+                    'error' => 'Empty encryption keys in subscription'
+                ];
+            }
+            
+            // Extract audience from endpoint (e.g., https://fcm.googleapis.com/fcm/send/...)
+            $audience = parse_url($endpoint, PHP_URL_SCHEME) . '://' . parse_url($endpoint, PHP_URL_HOST);
+            if (empty($audience) || $audience === '://') {
+                // Fallback for FCM
+                if (strpos($endpoint, 'fcm.googleapis.com') !== false) {
+                    $audience = 'https://fcm.googleapis.com';
+                } else {
+                    $audience = 'https://' . parse_url($endpoint, PHP_URL_HOST);
+                }
+            }
+            
+            // Generate VAPID JWT token
+            $jwt = $this->generateVapidJWT($audience);
+            
+            // Encrypt payload
+            $encryptedPayload = $this->encryptPayload($payload, $p256dh, $auth);
+            
+            if ($encryptedPayload === false) {
+                return [
+                    'success' => false,
+                    'http_code' => 0,
+                    'response' => null,
+                    'error' => 'Failed to encrypt payload'
+                ];
+            }
+            
+            // Send encrypted payload with VAPID authentication
+            return $this->sendHttpRequest($endpoint, $encryptedPayload, $jwt);
+            
+        } catch (Exception $e) {
+            error_log("WebPushSender error: " . $e->getMessage());
+            return [
+                'success' => false,
+                'http_code' => 0,
+                'response' => null,
+                'error' => 'Exception: ' . $e->getMessage()
+            ];
+        }
     }
     
     /**
@@ -84,37 +128,73 @@ class WebPushSender {
     
     /**
      * Encrypt payload using ECDH
+     * Note: This is a simplified implementation. For production, consider using minishlink/web-push library
      */
     private function encryptPayload($payload, $p256dh, $auth) {
-        // Convert base64url to binary
-        $userPublicKey = $this->base64urlDecode($p256dh);
-        $userAuth = $this->base64urlDecode($auth);
-        
-        // Generate ephemeral key pair
-        $ephemeralKey = openssl_pkey_new([
-            'digest_alg' => 'sha256',
-            'private_key_bits' => 256,
-            'private_key_type' => OPENSSL_KEYTYPE_EC,
-            'curve_name' => 'prime256v1'
-        ]);
-        
-        $ephemeralDetails = openssl_pkey_get_details($ephemeralKey);
-        $ephemeralPublic = $ephemeralDetails['ec']['x'] . $ephemeralDetails['ec']['y'];
-        
-        // Derive shared secret
-        $sharedSecret = $this->deriveSharedSecret($ephemeralKey, $userPublicKey);
-        
-        // Generate encryption key
-        $encryptionKey = $this->generateEncryptionKey($sharedSecret, $userAuth);
-        
-        // Encrypt payload
-        $iv = random_bytes(16);
-        $encrypted = openssl_encrypt($payload, 'aes-128-gcm', $encryptionKey, OPENSSL_RAW_DATA, $iv, $tag);
-        
-        // Combine ephemeral public key + IV + tag + encrypted data
-        $result = $ephemeralPublic . $iv . $tag . $encrypted;
-        
-        return base64_encode($result);
+        try {
+            // Convert base64url to binary
+            $userPublicKey = $this->base64urlDecode($p256dh);
+            $userAuth = $this->base64urlDecode($auth);
+            
+            if ($userPublicKey === false || $userAuth === false) {
+                error_log("Failed to decode p256dh or auth keys");
+                return false;
+            }
+            
+            // Generate ephemeral key pair
+            $ephemeralKey = openssl_pkey_new([
+                'digest_alg' => 'sha256',
+                'private_key_bits' => 256,
+                'private_key_type' => OPENSSL_KEYTYPE_EC,
+                'curve_name' => 'prime256v1'
+            ]);
+            
+            if (!$ephemeralKey) {
+                error_log("Failed to generate ephemeral key: " . openssl_error_string());
+                return false;
+            }
+            
+            $ephemeralDetails = openssl_pkey_get_details($ephemeralKey);
+            if (!$ephemeralDetails || !isset($ephemeralDetails['ec'])) {
+                error_log("Failed to get ephemeral key details");
+                return false;
+            }
+            
+            $ephemeralPublic = $ephemeralDetails['ec']['x'] . $ephemeralDetails['ec']['y'];
+            
+            // Derive shared secret
+            $sharedSecret = $this->deriveSharedSecret($ephemeralKey, $userPublicKey);
+            if (!$sharedSecret) {
+                error_log("Failed to derive shared secret");
+                return false;
+            }
+            
+            // Generate encryption key
+            $encryptionKey = $this->generateEncryptionKey($sharedSecret, $userAuth);
+            if (!$encryptionKey) {
+                error_log("Failed to generate encryption key");
+                return false;
+            }
+            
+            // Encrypt payload
+            $iv = random_bytes(16);
+            $tag = '';
+            $encrypted = openssl_encrypt($payload, 'aes-128-gcm', $encryptionKey, OPENSSL_RAW_DATA, $iv, $tag);
+            
+            if ($encrypted === false) {
+                error_log("Failed to encrypt payload: " . openssl_error_string());
+                return false;
+            }
+            
+            // Combine ephemeral public key + IV + tag + encrypted data
+            $result = $ephemeralPublic . $iv . $tag . $encrypted;
+            
+            return base64_encode($result);
+            
+        } catch (Exception $e) {
+            error_log("Encrypt payload exception: " . $e->getMessage());
+            return false;
+        }
     }
     
     /**
@@ -123,8 +203,13 @@ class WebPushSender {
     private function sendHttpRequest($endpoint, $payload, $jwt) {
         $ch = curl_init();
         
+        // Decode payload if it's base64 encoded
+        $payloadData = is_string($payload) && base64_decode($payload, true) !== false 
+            ? base64_decode($payload) 
+            : $payload;
+        
         $headers = [
-            'Authorization: Bearer ' . $jwt,
+            'Authorization: vapid t=' . $jwt . ', k=' . $this->vapidPublicKey,
             'Content-Type: application/octet-stream',
             'Content-Encoding: aes128gcm',
             'TTL: 86400'
@@ -133,23 +218,34 @@ class WebPushSender {
         curl_setopt_array($ch, [
             CURLOPT_URL => $endpoint,
             CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => base64_decode($payload),
+            CURLOPT_POSTFIELDS => $payloadData,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_TIMEOUT => 30
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_VERBOSE => false
         ]);
         
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
+        $curlInfo = curl_getinfo($ch);
         curl_close($ch);
+        
+        // Log detailed error information for debugging
+        if ($httpCode < 200 || $httpCode >= 300) {
+            error_log("Web Push failed - HTTP Code: $httpCode, Endpoint: $endpoint");
+            error_log("Response: " . substr($response, 0, 200));
+            if ($error) {
+                error_log("cURL Error: $error");
+            }
+        }
         
         return [
             'success' => $httpCode >= 200 && $httpCode < 300,
             'http_code' => $httpCode,
             'response' => $response,
-            'error' => $error
+            'error' => $error ?: ($httpCode >= 400 ? "HTTP $httpCode: " . substr($response, 0, 100) : null)
         ];
     }
     

@@ -11,15 +11,114 @@ if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
 
-// Check if mobile credentials are available
-$showCredentials = isset($_SESSION['mobile_account_generated']) && $_SESSION['mobile_account_generated'];
-$email = $_SESSION['mobile_credentials']['email'] ?? '';
-$password = $_SESSION['mobile_credentials']['password'] ?? '';
-$donorName = $_SESSION['donor_registered_name'] ?? 'Donor';
+// Debug: Log that modal file was included
+error_log("Mobile Credentials Modal - File included/loaded");
+
+// Check if mobile credentials are available (from session or cookies)
+$hasSessionCredentials = isset($_SESSION['mobile_account_generated']) && $_SESSION['mobile_account_generated'];
+$hasCookieCredentials = isset($_COOKIE['mobile_account_generated']) && $_COOKIE['mobile_account_generated'] === 'true';
+
+// Check if credentials have already been acknowledged/shown
+$credentialsAlreadyShown = isset($_SESSION['mobile_credentials_shown']) && $_SESSION['mobile_credentials_shown'] === true;
+$credentialsShownInCookie = isset($_COOKIE['mobile_credentials_shown']) && $_COOKIE['mobile_credentials_shown'] === 'true';
+
+// Determine if we're on the declaration form (credentials should always show there)
+// Check both PHP_SELF and REQUEST_URI to catch all cases
+$currentScript = $_SERVER['PHP_SELF'] ?? '';
+$currentUri = $_SERVER['REQUEST_URI'] ?? '';
+$isDeclarationForm = (strpos($currentScript, 'declaration-form-modal.php') !== false) || 
+                     (strpos($currentUri, 'declaration-form-modal.php') !== false);
+
+// Debug logging
+error_log("Mobile Credentials Modal - isDeclarationForm=" . ($isDeclarationForm ? 'true' : 'false') . 
+          ", hasSession=" . ($hasSessionCredentials ? 'true' : 'false') . 
+          ", hasCookie=" . ($hasCookieCredentials ? 'true' : 'false') . 
+          ", script=" . $currentScript . 
+          ", uri=" . $currentUri);
+
+// On declaration form, always show if credentials exist (ignore "shown" flag)
+// On other pages (dashboards), only show if credentials exist AND haven't been shown yet
+if ($isDeclarationForm) {
+    $showCredentials = $hasSessionCredentials || $hasCookieCredentials;
+    error_log("Mobile Credentials Modal - Declaration form: showCredentials=" . ($showCredentials ? 'true' : 'false'));
+} else {
+    $showCredentials = ($hasSessionCredentials || $hasCookieCredentials) && !$credentialsAlreadyShown && !$credentialsShownInCookie;
+    error_log("Mobile Credentials Modal - Other page: showCredentials=" . ($showCredentials ? 'true' : 'false'));
+}
+
+// NOTE: Do NOT set the "shown" flag here - it will be set when the modal is actually displayed
+// This allows the modal to show on refresh until the user actually sees and closes it
+
+// Get credentials from session first, then fall back to cookies
+// If on declaration form and no credentials in session/cookies, try to get from database
+$email = '';
+$password = '';
+
+if ($hasSessionCredentials && isset($_SESSION['mobile_credentials'])) {
+    $email = $_SESSION['mobile_credentials']['email'] ?? '';
+    $password = $_SESSION['mobile_credentials']['password'] ?? '';
+} elseif ($hasCookieCredentials) {
+    $email = $_COOKIE['mobile_email'] ?? '';
+    $password = $_COOKIE['mobile_password'] ?? '';
+} elseif ($isDeclarationForm && isset($_SESSION['donor_id'])) {
+    // On declaration form, try to retrieve credentials from database if not in session/cookies
+    // This allows showing credentials when viewing an existing donor's declaration form
+    try {
+        require_once '../../../assets/conn/db_conn.php';
+        $donor_id = $_SESSION['donor_id'];
+        
+        // Retrieve donor data to get email and check if mobile account exists
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/donor_form?donor_id=eq.' . $donor_id . '&select=email,surname,birthdate');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY
+        ]);
+        
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($http_code === 200) {
+            $donorData = json_decode($response, true);
+            if (is_array($donorData) && !empty($donorData) && isset($donorData[0])) {
+                $donorInfo = $donorData[0];
+                $email = $donorInfo['email'] ?? '';
+                
+                // If email exists, regenerate password using the same algorithm (surname + birth year)
+                if (!empty($email) && !empty($donorInfo['surname']) && !empty($donorInfo['birthdate'])) {
+                    // Regenerate password using same format as mobile-account-generator
+                    $surname = $donorInfo['surname'];
+                    $birth_year = date('Y', strtotime($donorInfo['birthdate']));
+                    $clean_surname = preg_replace('/[^a-zA-Z]/', '', $surname);
+                    $clean_surname = ucfirst(strtolower($clean_surname));
+                    $password = $clean_surname . $birth_year;
+                    
+                    // Found credentials - set flags so modal will show
+                    $hasSessionCredentials = true;
+                    $hasCookieCredentials = true;
+                    $showCredentials = true;
+                    error_log("Mobile Credentials Modal - Retrieved and regenerated credentials from database for donor_id: " . $donor_id);
+                }
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Mobile Credentials Modal - Error retrieving credentials from database: " . $e->getMessage());
+    }
+}
+
+$donorName = $_SESSION['donor_registered_name'] ?? $_COOKIE['donor_name'] ?? 'Donor';
+
+// Debug: Log what we have
+error_log("Mobile Credentials Modal - Final check: showCredentials=" . ($showCredentials ? 'true' : 'false') . 
+          ", email=" . (!empty($email) ? 'set' : 'empty') . 
+          ", password=" . (!empty($password) ? 'set' : 'empty') . 
+          ", donorName=" . $donorName);
 ?>
 
-<!-- Mobile Credentials Modal -->
-<div class="modal" id="mobileCredentialsModal" tabindex="-1" aria-labelledby="mobileCredentialsModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+<!-- Mobile Credentials Modal - Always render HTML, show/hide based on credentials -->
+<!-- DEBUG: showCredentials=<?php echo $showCredentials ? 'true' : 'false'; ?>, hasSession=<?php echo $hasSessionCredentials ? 'true' : 'false'; ?>, hasCookie=<?php echo $hasCookieCredentials ? 'true' : 'false'; ?> -->
+<div class="modal" id="mobileCredentialsModal" tabindex="-1" aria-labelledby="mobileCredentialsModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" style="<?php echo $showCredentials ? '' : 'display: none;'; ?>">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-success text-white">
@@ -86,7 +185,7 @@ $donorName = $_SESSION['donor_registered_name'] ?? 'Donor';
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-danger" data-bs-dismiss="modal">
+                <button type="button" class="btn btn-danger" data-bs-dismiss="modal" onclick="clearCredentialsOnClose()">
                     <i class="fas fa-times me-2"></i>
                     Close
                 </button>
@@ -271,7 +370,7 @@ window.addEventListener('load', function() {
     }, 500);
 });
 
-// Remove backdrop immediately when modal is hidden
+// Remove backdrop immediately when modal is hidden and clear credentials
 const modalElement = document.getElementById('mobileCredentialsModal');
 if (modalElement) {
     modalElement.addEventListener('hidden.bs.modal', function() {
@@ -283,6 +382,25 @@ if (modalElement) {
         document.body.classList.remove('modal-open');
         document.body.style.overflow = '';
         document.body.style.paddingRight = '';
+        
+        // Mark as shown when modal is hidden (user closed it)
+        // This prevents it from showing again on refresh
+        const apiPath = window.location.pathname.includes('/Dashboards/') 
+            ? '../api/clear-mobile-credentials.php' 
+            : '../../api/clear-mobile-credentials.php';
+        
+        // Mark as shown (but don't clear credentials yet - user might want to see them again)
+        fetch(apiPath, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ action: 'mark_as_shown' })
+        }).then(() => {
+            console.log('[Mobile Credentials] Credentials marked as shown after modal close');
+        }).catch((error) => {
+            console.error('[Mobile Credentials] Error marking as shown:', error);
+        });
         
         console.log('[Mobile Credentials] Backdrop removed instantly');
     });
@@ -342,16 +460,79 @@ function togglePasswordVisibility() {
 // Function to go back to dashboard
 function goBackToDashboard() {
     // Get the redirect URL from PHP session - use the same referrer system as declaration form
+    // Also handle role-based redirects for staff users
     const redirectUrl = '<?php 
         $redirect_url = '';
-        if (isset($_SESSION['declaration_form_referrer'])) {
-            $redirect_url = $_SESSION['declaration_form_referrer'];
-        } elseif (isset($_SESSION['donor_form_referrer'])) {
-            $redirect_url = $_SESSION['donor_form_referrer'];
-        } elseif (isset($_SESSION['post_registration_redirect'])) {
-            $redirect_url = $_SESSION['post_registration_redirect'];
+        
+        // Get user staff role for role-based redirects (for staff users)
+        $user_staff_roles = '';
+        if (isset($_SESSION['user_id']) && isset($_SESSION['role_id']) && $_SESSION['role_id'] == 3) {
+            $user_id = $_SESSION['user_id'];
+            $url = SUPABASE_URL . "/rest/v1/user_roles?select=user_staff_roles&user_id=eq." . urlencode($user_id);
+            
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json',
+                'Prefer: return=minimal'
+            ));
+            
+            $response = curl_exec($ch);
+            curl_close($ch);
+            
+            if ($response) {
+                $data = json_decode($response, true);
+                if (!empty($data) && isset($data[0]['user_staff_roles'])) {
+                    $user_staff_roles = strtolower(trim($data[0]['user_staff_roles']));
+                }
+            }
+        }
+        
+        // For staff users, use role-based redirect
+        if (isset($_SESSION['role_id']) && $_SESSION['role_id'] == 3 && !empty($user_staff_roles)) {
+            switch($user_staff_roles) {
+                case 'reviewer':
+                    $redirect_url = '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-medical-history-submissions.php';
+                    break;
+                case 'interviewer':
+                    $redirect_url = '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-donor-submission.php';
+                    break;
+                case 'physician':
+                    $redirect_url = '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-physical-submission.php';
+                    break;
+                case 'phlebotomist':
+                    $redirect_url = '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-blood-collection-submission.php';
+                    break;
+                default:
+                    $redirect_url = '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-donor-submission.php';
+                    break;
+            }
+        } elseif (isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1) {
+            // For admin users (role_id 1), use admin dashboard
+            // Prioritize session referrer, but default to admin dashboard
+            if (isset($_SESSION['declaration_form_referrer']) && stripos($_SESSION['declaration_form_referrer'], 'dashboard') !== false) {
+                $redirect_url = $_SESSION['declaration_form_referrer'];
+            } elseif (isset($_SESSION['donor_form_referrer']) && stripos($_SESSION['donor_form_referrer'], 'dashboard') !== false) {
+                $redirect_url = $_SESSION['donor_form_referrer'];
+            } elseif (isset($_SESSION['post_registration_redirect']) && stripos($_SESSION['post_registration_redirect'], 'dashboard') !== false) {
+                $redirect_url = $_SESSION['post_registration_redirect'];
+            } else {
+                // Default admin dashboard
+                $redirect_url = '/RED-CROSS-THESIS/public/Dashboards/dashboard-Inventory-System.php';
+            }
         } else {
-            $redirect_url = '/RED-CROSS-THESIS/public/Dashboards/dashboard-Inventory-System.php';
+            // Fallback for other roles
+            if (isset($_SESSION['declaration_form_referrer'])) {
+                $redirect_url = $_SESSION['declaration_form_referrer'];
+            } elseif (isset($_SESSION['donor_form_referrer'])) {
+                $redirect_url = $_SESSION['donor_form_referrer'];
+            } elseif (isset($_SESSION['post_registration_redirect'])) {
+                $redirect_url = $_SESSION['post_registration_redirect'];
+            } else {
+                $redirect_url = '/RED-CROSS-THESIS/public/Dashboards/dashboard-Inventory-System.php';
+            }
         }
         echo $redirect_url;
     ?>';
@@ -359,26 +540,120 @@ function goBackToDashboard() {
     // Add success parameter
     const dashboardUrl = redirectUrl + (redirectUrl.includes('?') ? '&' : '?') + 'donor_registered=true';
     
-    // Clear mobile credentials from session
-    fetch('../../api/clear-mobile-credentials.php', {
+    // Determine API path based on current location
+    const apiPath = window.location.pathname.includes('/Dashboards/') 
+        ? '../api/clear-mobile-credentials.php' 
+        : '../../api/clear-mobile-credentials.php';
+    
+    // IMPORTANT: Mark as shown AND clear credentials before redirecting
+    // This ensures modal won't show on dashboard
+    fetch(apiPath, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'clear_credentials' })
+        body: JSON.stringify({ action: 'mark_as_shown' })
     }).then(() => {
+        // Now clear all credentials
+        return fetch(apiPath, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ action: 'clear_credentials' })
+        });
+    }).then(() => {
+        console.log('[Mobile Credentials] Credentials marked as shown and cleared, redirecting to dashboard');
         window.location.href = dashboardUrl;
-    }).catch(() => {
+    }).catch((error) => {
+        console.error('[Mobile Credentials] Error clearing credentials:', error);
         // Fallback redirect even if clearing fails
         window.location.href = dashboardUrl;
     });
 }
 
+// Function to clear credentials when modal is closed
+function clearCredentialsOnClose() {
+    // Use absolute path that works from both dashboard and modal contexts
+    const apiPath = window.location.pathname.includes('/Dashboards/') 
+        ? '../api/clear-mobile-credentials.php' 
+        : '../../api/clear-mobile-credentials.php';
+    
+    // Mark as shown first, then clear credentials
+    // This prevents modal from showing on dashboards
+    fetch(apiPath, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'mark_as_shown' })
+    }).then(() => {
+        // Now clear credentials
+        return fetch(apiPath, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ action: 'clear_credentials' })
+        });
+    }).then(() => {
+        console.log('[Mobile Credentials] Credentials marked as shown and cleared on close');
+    }).catch((error) => {
+        console.error('[Mobile Credentials] Error:', error);
+    });
+}
+
 // Show modal when page loads if credentials are available
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('[Mobile Credentials] DOMContentLoaded - Checking for modal...');
+    const modalElement = document.getElementById('mobileCredentialsModal');
+    
+    if (!modalElement) {
+        console.error('[Mobile Credentials] Modal element NOT found in DOM!');
+        return;
+    }
+    
+    console.log('[Mobile Credentials] Modal element found');
+    
     <?php if ($showCredentials): ?>
-    const modal = new bootstrap.Modal(document.getElementById('mobileCredentialsModal'));
-    modal.show();
+    console.log('[Mobile Credentials] Credentials exist - showing modal');
+    console.log('[Mobile Credentials] hasSession=', <?php echo $hasSessionCredentials ? 'true' : 'false'; ?>);
+    console.log('[Mobile Credentials] hasCookie=', <?php echo $hasCookieCredentials ? 'true' : 'false'; ?>);
+    console.log('[Mobile Credentials] email=', '<?php echo !empty($email) ? 'set' : 'empty'; ?>');
+    console.log('[Mobile Credentials] password=', '<?php echo !empty($password) ? 'set' : 'empty'; ?>');
+    
+    try {
+        const modal = new bootstrap.Modal(modalElement, {
+            backdrop: 'static',
+            keyboard: false
+        });
+        
+        // Show the modal
+        modal.show();
+        console.log('[Mobile Credentials] Modal.show() called successfully');
+        
+        // Verify modal is actually shown
+        setTimeout(function() {
+            if (modalElement.classList.contains('show')) {
+                console.log('[Mobile Credentials] Modal is now visible');
+            } else {
+                console.error('[Mobile Credentials] Modal.show() was called but modal is not visible!');
+            }
+        }, 500);
+    } catch (error) {
+        console.error('[Mobile Credentials] Error showing modal:', error);
+    }
+    
+    // NOTE: Do NOT mark as shown when modal is displayed
+    // Only mark as shown when user closes the modal (handled in hidden.bs.modal event)
+    // This allows the modal to show on refresh until the user actually closes it
+    <?php else: ?>
+    console.log('[Mobile Credentials] Modal will NOT be shown - showCredentials is false');
+    console.log('[Mobile Credentials] hasSessionCredentials:', <?php echo $hasSessionCredentials ? 'true' : 'false'; ?>);
+    console.log('[Mobile Credentials] hasCookieCredentials:', <?php echo $hasCookieCredentials ? 'true' : 'false'; ?>);
+    console.log('[Mobile Credentials] isDeclarationForm:', <?php echo $isDeclarationForm ? 'true' : 'false'; ?>);
+    console.log('[Mobile Credentials] credentialsAlreadyShown:', <?php echo $credentialsAlreadyShown ? 'true' : 'false'; ?>);
+    console.log('[Mobile Credentials] credentialsShownInCookie:', <?php echo $credentialsShownInCookie ? 'true' : 'false'; ?>);
     <?php endif; ?>
 });
 </script>

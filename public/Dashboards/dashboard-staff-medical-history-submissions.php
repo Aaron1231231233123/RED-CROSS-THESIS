@@ -5708,5 +5708,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
     <script src="../../assets/js/donor_eligibility_alert.js"></script>
     <!-- Load physical examination assessment script -->
     <script src="../../assets/js/assess_physical_exam_medical_history.js"></script>
+
+    <?php
+    // NOTE: Mobile credentials modal is NOT shown on dashboards
+    // It should ONLY appear on the declaration form when registering a new donor
+    // Credentials are displayed there for context during registration
+    ?>
 </body>
 </html>

@@ -3088,5 +3088,10 @@ foreach ($display_records as $index => $record) {
             };
         });
     </script>
+
+    <?php
+    // NOTE: Mobile credentials modal is NOT shown on dashboards
+    // It should ONLY appear on the declaration form when registering a new donor
+    ?>
 </body>
 </html>

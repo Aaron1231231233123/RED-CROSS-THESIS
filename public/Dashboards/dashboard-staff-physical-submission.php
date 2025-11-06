@@ -6231,6 +6231,11 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             } catch(_) {}
         })();
     </script>
+
+    <?php
+    // NOTE: Mobile credentials modal is NOT shown on dashboards
+    // It should ONLY appear on the declaration form when registering a new donor
+    ?>
 </body>
 </html>
 <script>

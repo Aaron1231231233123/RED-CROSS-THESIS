@@ -33,11 +33,15 @@ ALTER TABLE blood_drive_notifications ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Service role can do everything (for backend operations)
 CREATE POLICY "Service role full access to blood_drive_notifications" ON blood_drive_notifications
-    FOR ALL USING (current_user = 'service_role');
+    FOR ALL USING (current_setting('request.jwt.claims', true)::json->>'role' = 'service_role' OR current_user = 'service_role');
+
+-- Policy: Allow inserts from API (using anon/service role key)
+CREATE POLICY "Allow inserts to blood_drive_notifications" ON blood_drive_notifications
+    FOR INSERT WITH CHECK (true);
 
 -- Policy: Authenticated users can view blood drives
-CREATE POLICY "Authenticated users can view blood drives" ON blood_drive_notifications
-    FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Authenticated users can view blood_drive_notifications" ON blood_drive_notifications
+    FOR SELECT USING (true);
 
 -- Add comments for documentation
 COMMENT ON TABLE blood_drive_notifications IS 'Stores scheduled blood drive notifications';

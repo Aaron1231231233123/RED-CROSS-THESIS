@@ -4469,6 +4469,111 @@ function getCacheStats() {
                 });
             }
         };
+        // View medical history for approved donors (view-only mode)
+        window.viewMedicalHistory = function(donorId) {
+            console.log('=== VIEWING MEDICAL HISTORY (VIEW-ONLY) ===');
+            console.log('Donor ID:', donorId);
+            
+            // First, check if donor is approved
+            fetch(`../../assets/php_func/comprehensive_donor_details_api.php?donor_id=${encodeURIComponent(donorId)}`)
+                .then(response => response.json())
+                .then(donorData => {
+                    if (donorData.error) {
+                        console.error('Error fetching donor data:', donorData.error);
+                        alert('Error loading donor details. Please try again.');
+                        return;
+                    }
+                    
+                    // Check if donor is approved
+                    const eligibility = donorData.eligibility || {};
+                    const eligibilityStatus = String(eligibility.status || '').toLowerCase();
+                    const medicalHistory = donorData.medical_history || {};
+                    const medicalApproval = String(medicalHistory.medical_approval || '').toLowerCase();
+                    const isApproved = eligibilityStatus === 'approved' || eligibilityStatus === 'eligible' || 
+                                     medicalApproval === 'approved';
+                    
+                    console.log('Donor approval status:', { eligibilityStatus, medicalApproval, isApproved });
+                    
+                    // Set view-only flag for approved donors
+                    window.medicalHistoryViewOnly = isApproved;
+                    
+                    // Open the medical history modal with view-only parameter
+                    // Use Bootstrap Modal like the screening summary does
+                    const modalEl = document.getElementById('medicalHistoryModal');
+                    const modalContent = document.getElementById('medicalHistoryModalContent');
+                    
+                    if (!modalEl || !modalContent) {
+                        console.error('Medical history modal elements not found');
+                        alert('Medical history modal not found. Please refresh the page.');
+                        return;
+                    }
+                    
+                    // Show loading spinner
+                    modalContent.innerHTML = '<div class="d-flex justify-content-center my-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+                    
+                    // Show the modal simply (like screening summary does)
+                    // Clear any previous styles
+                    modalEl.removeAttribute('style');
+                    modalEl.style.display = 'flex';
+                    modalEl.classList.add('show');
+                    
+                    // Fetch the admin medical history content with view-only parameter
+                    fetch(`../../src/views/forms/medical-history-modal-content-admin.php?donor_id=${encodeURIComponent(donorId)}&view_only=${isApproved ? '1' : '0'}`)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(`HTTP error! status: ${response.status}`);
+                            }
+                            return response.text();
+                        })
+                        .then(html => {
+                            // Update modal content
+                            if (modalContent) {
+                                modalContent.innerHTML = html;
+                                
+                                // Execute any script tags in the loaded content
+                                const scripts = modalContent.querySelectorAll('script');
+                                scripts.forEach((script) => {
+                                    try {
+                                        const newScript = document.createElement('script');
+                                        newScript.textContent = script.textContent;
+                                        newScript.type = script.type || 'text/javascript';
+                                        document.head.appendChild(newScript);
+                                        newScript.remove();
+                                    } catch (e) {
+                                        console.warn('Error executing script:', e);
+                                    }
+                                });
+                                
+                                // After loading, ensure view-only mode is applied
+                                if (isApproved) {
+                                    setTimeout(() => {
+                                        if (typeof window.mhApplyViewOnlyMode === 'function') {
+                                            window.mhApplyViewOnlyMode();
+                                        }
+                                    }, 100);
+                                }
+                                
+                                // Call the admin generator
+                                if (typeof window.generateAdminMedicalHistoryQuestions === 'function') {
+                                    setTimeout(() => {
+                                        window.generateAdminMedicalHistoryQuestions();
+                                    }, 200);
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error loading medical history content:', error);
+                            if (modalContent) {
+                                modalContent.innerHTML = '<div class="alert alert-danger">Error loading medical history. Please try again.</div>';
+                            }
+                        });
+                })
+                .catch(error => {
+                    console.error('Error fetching donor details:', error);
+                    alert('Error loading donor details. Please try again.');
+                });
+        };
+        
         window.editInitialScreening = function(donorId) {
             console.log('Editing initial screening for donor:', donorId);
             // Store the donor ID for the workflow
@@ -4854,19 +4959,8 @@ function getCacheStats() {
                         modalElement.setAttribute('aria-hidden', 'true');
                         modalElement.removeAttribute('aria-modal');
                         
-                        // Use comprehensive backdrop cleanup
-                        if (typeof window.removeAllBackdrops === 'function') {
-                            window.removeAllBackdrops();
-                        } else {
-                            // Fallback cleanup
-                            const backdrop = document.querySelector('.modal-backdrop');
-                            if (backdrop) {
-                                backdrop.remove();
-                            }
-                            document.body.classList.remove('modal-open');
-                            document.body.style.overflow = '';
-                            document.body.style.paddingRight = '';
-                        }
+                        // Simple cleanup (like screening summary)
+                        // Bootstrap will handle backdrop cleanup automatically
                         
                         console.log('Force close completed with comprehensive cleanup');
                     }
@@ -7272,6 +7366,10 @@ function getCacheStats() {
             }
         })();
     </script>
+
+    <?php
+    // NOTE: Mobile credentials modal is NOT shown on dashboards
+    // It should ONLY appear on the declaration form when registering a new donor
+    ?>
 </body>
-</html>
 </html>
