@@ -1029,6 +1029,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
     <script src="../../assets/js/account_interviewer_feedback_modal.js"></script>
     <script src="../../assets/js/account_interviewer_error_modal.js"></script>
     <script src="../../assets/js/screening_form_modal.js"></script>
+    <script src="../../assets/js/filter-loading-modal.js"></script>
     <script src="../../assets/js/search_func/search_account_medical_history.js"></script>
     <script src="../../assets/js/search_func/filter_search_account_medical_history.js"></script>
     <style>

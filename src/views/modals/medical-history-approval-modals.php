@@ -62,10 +62,11 @@
                             <i class="fas fa-list-ul me-2 text-primary"></i>Deferral Type *
                         </label>
                         <select class="form-select" id="restrictionType" name="restriction_type" required>
-                            <option value="permanent" selected>Permanently Deferred</option>
+                            <option value="" selected disabled style="color:#6c757d;">Please select deferral type</option>
                             <option value="temporary">Temporarily Deferred</option>
+                            <option value="permanent">Permanently Deferred</option>
                         </select>
-                        <div class="form-text" id="deferralTypeHelp">The donor will be permanently deferred from donation.</div>
+                        <div class="form-text" id="deferralTypeHelp">Please select a deferral type.</div>
                     </div>
                     
                     <!-- Duration Selection (only for Temporary Deferral) -->
@@ -564,18 +565,15 @@
 </div>
 
 <!-- Medical History Declined Success Modal (After Successful Submission) -->
-<div class="modal fade" id="medicalHistoryDeclinedSuccessModal" tabindex="-1" aria-labelledby="medicalHistoryDeclinedSuccessModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" style="z-index: 10080 !important;">
+<div class="modal fade" id="medicalHistoryDeclinedSuccessModal" tabindex="-1" aria-labelledby="medicalHistoryDeclinedSuccessModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" style="z-index: 10120 !important;">
     <div class="modal-dialog modal-dialog-centered" style="z-index: 10081 !important;">
         <div class="modal-content" style="border-radius: 15px; border: none; z-index: 10082 !important;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
-                <h5 class="modal-title" id="medicalHistoryDeclinedSuccessModalLabel">
-                    <i class="fas fa-check-circle me-2"></i>
-                    Medical History Declined Successfully
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="display: none;"></button>
+            <div class="modal-header" style="background: #b22222; color: white; border-radius: 15px 15px 0 0;">
+                <h5 class="modal-title" id="medicalHistoryDeclinedSuccessModalLabel">Medical History Declined Successfully</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body py-4">
-                <p class="mb-0" style="font-size: 1.1rem;">Medical History Declined Successfully</p>
+                <p class="mb-0" style="font-size: 1.05rem;">Medical History Declined Successfully</p>
             </div>
             <div class="modal-footer border-0" style="display: none;">
             </div>

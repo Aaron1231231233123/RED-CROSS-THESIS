@@ -5,6 +5,11 @@ document.addEventListener('DOMContentLoaded', function(){
     const tbody = document.getElementById('donorTableBody');
     if (!tbody) return;
 
+    // Ensure loading modal is available
+    if (typeof FilterLoadingModal === 'undefined') {
+        console.warn('FilterLoadingModal not loaded. Loading modal functionality may not work.');
+    }
+
     // Build UI dynamically (a simple checklist bar above the table)
     const container = document.querySelector('.search-container');
     if (!container) return;
@@ -78,6 +83,12 @@ document.addEventListener('DOMContentLoaded', function(){
 
         const searchInput = document.getElementById('searchInput');
         const payload = { donor_type, status, via, q: searchInput ? (searchInput.value || '').trim() : '' };
+        
+        // Show loading modal
+        if (typeof FilterLoadingModal !== 'undefined') {
+            FilterLoadingModal.show();
+        }
+
         fetch('../api/search_func/filter_search_account_medical_history.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -90,7 +101,13 @@ document.addEventListener('DOMContentLoaded', function(){
                 tbody.innerHTML = res.html;
             }
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => {
+            // Hide loading modal when done
+            if (typeof FilterLoadingModal !== 'undefined') {
+                FilterLoadingModal.hide();
+            }
+        });
     }
 });
 

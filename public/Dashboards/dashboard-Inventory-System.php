@@ -1504,17 +1504,6 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                 <div id="map" class="bg-light rounded-3" style="height: 677px; width: 100%; max-width: 100%; margin: 0 auto; border: 1px solid #eee;"></div>
                             </div>
                             <div class="col-md-3 dashboard-gis-sidebar">
-                                <div class="card mb-3">
-                                    <div class="card-header bg-light d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#summaryCollapse">
-                                        <h6 class="card-title mb-0">Summary</h6>
-                                        <i class="fas fa-chevron-down"></i>
-                                    </div>
-                                    <div id="summaryCollapse" class="collapse show">
-                                        <div class="card-body">
-                                            <div class="summary-item" id="totalDonors">Total Donors: 0</div>
-                                        </div>
-                                    </div>
-                                </div>
                                 <div class="card mb-3" >
                                     <div class="card-header bg-light d-flex justify-content-between align-items-center" style="cursor: pointer; " data-bs-toggle="collapse" data-bs-target="#locationsCollapse">
                                         <h6 class="card-title mb-0">Top Donor Locations</h6>
@@ -1566,7 +1555,7 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                         
                         /* Existing styles */
                         .location-list {
-                            max-height: 144px;
+                            max-height: 280px;
                             overflow-y: auto;
                             scrollbar-width: thin;
                             scrollbar-color: #dc3545 #f8f9fa;
@@ -1666,6 +1655,69 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                         });
                     }
 
+                    // Haversine distance calculation (km)
+                    function haversineKm(lat1, lon1, lat2, lon2) {
+                        const R = 6371; // Earth radius in km
+                        const dLat = (lat2 - lat1) * Math.PI / 180;
+                        const dLon = (lon2 - lon1) * Math.PI / 180;
+                        const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+                        return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                    }
+
+                    // Comprehensive coordinate validation - ensure coordinates are on land
+                    function sanitizeCoordinates(coords, address) {
+                        if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') return null;
+                        
+                        // Comprehensive water area detection (matches server-side)
+                        const waterAreas = [
+                            {minLat: 10.55, maxLat: 10.75, minLng: 122.50, maxLng: 122.70}, // Guimaras Strait
+                            {minLat: 10.45, maxLat: 10.70, minLng: 122.70, maxLng: 122.95}, // Iloilo Strait
+                            {minLat: 10.20, maxLat: 10.65, minLng: 121.80, maxLng: 122.30}, // Panay Gulf
+                            {minLat: 11.20, maxLat: 11.50, minLng: 122.50, maxLng: 123.20}, // Visayan Sea
+                            {minLat: 9.80, maxLat: 10.30, minLng: 122.50, maxLng: 123.20}, // Sulu Sea
+                        ];
+                        
+                        // Check if in water
+                        let inWater = false;
+                        for (const area of waterAreas) {
+                            if (coords.lat >= area.minLat && coords.lat <= area.maxLat &&
+                                coords.lng >= area.minLng && coords.lng <= area.maxLng) {
+                                inWater = true;
+                                break;
+                            }
+                        }
+                        
+                        // Check distance from nearest city (must be within 20km)
+                        let minDist = Infinity;
+                        let nearestCity = null;
+                        for (const [city, c] of Object.entries(locationCoordinates)) {
+                            const d = haversineKm(coords.lat, coords.lng, c.lat, c.lng);
+                            if (d < minDist) {
+                                minDist = d;
+                                nearestCity = { city, ...c };
+                            }
+                        }
+                        
+                        // If in water OR too far from any city (>20km), snap to city from address
+                        if (inWater || minDist > 20) {
+                            if (address) {
+                                // Try to find city from address first
+                                for (const [city, c] of Object.entries(locationCoordinates)) {
+                                    if (address.toLowerCase().includes(city.toLowerCase())) {
+                                        return { lat: c.lat, lng: c.lng, display_name: `${city}, Iloilo, Philippines`, source: 'snapped' };
+                                    }
+                                }
+                            }
+                            // Otherwise snap to nearest city
+                            if (nearestCity) {
+                                return { lat: nearestCity.lat, lng: nearestCity.lng, display_name: `${nearestCity.city}, Philippines (snapped)`, source: 'snapped' };
+                            }
+                        }
+                        
+                        // Coordinates are valid - return as is
+                        return coords;
+                    }
+
                     // Function to initialize map (called when user scrolls to map section)
                     function initializeMap() {
                         if (mapInitialized) return;
@@ -1692,7 +1744,6 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     const bloodTypeFilter = document.getElementById('bloodTypeFilter');
 
                     // Summary fields
-                    const totalDonorsEl = document.getElementById('totalDonors');
                     const locationListEl = document.getElementById('locationList');
                     
                     // Coordinate usage counters
@@ -1704,29 +1755,34 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     let cityDonorCounts = {};
                     let heatmapData = [];
                     
-                    // PERFORMANCE OPTIMIZATION: Load GIS data via AJAX after page loads
-                    console.log('🚀 Loading GIS data in background...');
-                    fetch('/RED-CROSS-THESIS/public/api/load-gis-data-dashboard.php')
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                cityDonorCounts = data.cityDonorCounts || {};
-                                heatmapData = data.heatmapData || [];
-                                console.log('✅ GIS data loaded:', data.totalDonorCount, 'donors');
-                                
-                                // Update summary immediately
-                                totalDonorsEl.textContent = 'Total Donors: ' + data.totalDonorCount;
-                                updateTopDonorLocations();
-                                
-                                // If map is already initialized, update it
-                                if (mapInitialized && map) {
-                                    processAddresses();
+                    // Function to load GIS data with blood type filter
+                    function loadGISData(bloodType = 'all') {
+                        console.log('🚀 Loading GIS data in background...', bloodType !== 'all' ? `(filter: ${bloodType})` : '');
+                        const url = '/RED-CROSS-THESIS/public/api/load-gis-data-dashboard.php?blood_type=' + encodeURIComponent(bloodType);
+                        fetch(url)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    cityDonorCounts = data.cityDonorCounts || {};
+                                    heatmapData = data.heatmapData || [];
+                                    console.log('✅ GIS data loaded:', data.totalDonorCount, 'donors');
+                                    
+                                    // Update top donor locations
+                                    updateTopDonorLocations();
+                                    
+                                    // If map is already initialized, update it
+                                    if (mapInitialized && map) {
+                                        processAddresses();
+                                    }
                                 }
-                            }
-                        })
-                        .catch(error => {
-                            console.log('⚠️ GIS data loading failed (will show empty map):', error);
-                        });
+                            })
+                            .catch(error => {
+                                console.log('⚠️ GIS data loading failed (will show empty map):', error);
+                            });
+                    }
+                    
+                    // Load initial GIS data
+                    loadGISData('all');
                     
                     // Debug logging
                     console.log('Initial City Donor Counts:', cityDonorCounts);
@@ -1783,13 +1839,14 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                      async function getCoordinates(location) {
                          // First priority: Use coordinates from database (PostGIS)
                          if (location.latitude && location.longitude && location.has_coordinates) {
-                             return {
+                             const raw = {
                                  lat: parseFloat(location.latitude),
                                  lng: parseFloat(location.longitude),
                                  display_name: location.address,
                                  source: 'database',
                                  accuracy: 'high'
                              };
+                             return sanitizeCoordinates(raw, location.address);
                          }
                          
                          // Second priority: Try to extract city name from address for predefined coordinates
@@ -1798,19 +1855,20 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                          // Check if we have pre-defined coordinates for this location
                          for (const [city, coords] of Object.entries(locationCoordinates)) {
                              if (address.includes(city.toLowerCase())) {
-                                 return {
+                                 return sanitizeCoordinates({
                                      lat: coords.lat,
                                      lng: coords.lng,
                                      display_name: `${city}, Iloilo, Philippines`,
                                      source: 'predefined',
                                      accuracy: 'medium'
-                                 };
+                                 }, location.address);
                              }
                          }
 
                          // Last resort: Use geocoding as fallback (only for addresses without coordinates)
                          console.log(`⚠️ No coordinates found for: ${location.address}, using geocoding fallback`);
-                         return await geocodeAddress(location);
+                         const geocoded = await geocodeAddress(location);
+                         return sanitizeCoordinates(geocoded, location.address);
                      }
 
                      // OPTIMIZED: Function to geocode address using server-side endpoint (no CORS issues)
@@ -1892,10 +1950,12 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                          loadingDiv.innerHTML = '<div class="text-center p-3"><i class="fas fa-spinner fa-spin"></i> Loading map data...<br><small>Auto-geocoding missing coordinates...</small></div>';
                          document.getElementById('map').appendChild(loadingDiv);
 
-                         // SPATIAL SORTING: Sort locations by Hilbert curve for better clustering
-                         const sortedLocations = [...heatmapData];
-                         let geocodedCount = 0;
-                         let cachedCount = 0;
+                        // SPATIAL SORTING: Sort locations by Hilbert curve for better clustering
+                        const sortedLocations = [...heatmapData];
+                        console.log(`📍 Processing ${sortedLocations.length} locations for heatmap...`);
+                        let geocodedCount = 0;
+                        let cachedCount = 0;
+                        let skippedCount = 0;
 
                          for (let i = 0; i < totalLocations; i += batchSize) {
                              const batch = sortedLocations.slice(i, i + batchSize);
@@ -1939,6 +1999,9 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                          coords: coords,
                                          location: location
                                      };
+                                 } else {
+                                     skippedCount++;
+                                     console.log(`⚠️ No coordinates found for: ${location.address}, using geocoding fallback`);
                                  }
                                  return null;
                              });
@@ -1997,6 +2060,8 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                          const sortedPoints = spatialSort(points.map(p => ({ lat: p[0], lng: p[1], intensity: p[2] })));
                          const finalPoints = sortedPoints.map(p => [p.lat, p.lng, p.intensity]);
 
+                         console.log(`📊 Heatmap stats: ${points.length} points, ${databaseCount} from DB, ${predefinedCount} predefined, ${geocodedCount} geocoded, ${skippedCount} skipped`);
+                         
                          if (finalPoints.length > 0) {
                              heatLayer = L.heatLayer(finalPoints, {
                                  radius: 40,
@@ -2010,6 +2075,9 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                      0.8: 'red'
                                  }
                              }).addTo(map);
+                             console.log(`✅ Heatmap created with ${finalPoints.length} points`);
+                         } else {
+                             console.log(`⚠️ No valid points for heatmap - all coordinates may have been filtered out`);
                          }
                          
                          // Show completion message
@@ -2061,9 +2129,6 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     }
 
                     function updateDisplay() {
-                        // Update total count
-                        totalDonorsEl.textContent = 'Total Donors: <?php echo $totalDonorCount; ?>';
-                        
                         // Update Top Donor Locations (independent of filters)
                         updateTopDonorLocations();
                         
@@ -2071,8 +2136,13 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                         processAddresses();
                     }
 
-                    // Add event listeners - these only affect the heatmap
-                    bloodTypeFilter.addEventListener('change', processAddresses);
+                    // Add event listeners - reload GIS data when blood type filter changes
+                    bloodTypeFilter.addEventListener('change', function() {
+                        const selectedBloodType = this.value;
+                        console.log('🩸 Blood type filter changed to:', selectedBloodType);
+                        // Reload GIS data with the selected blood type filter
+                        loadGISData(selectedBloodType);
+                    });
 
                     // PERFORMANCE FIX: Lazy load map when user scrolls to it
                     const mapElement = document.getElementById('map');
@@ -2094,8 +2164,7 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                         mapObserver.observe(mapElement);
                     }
 
-                    // Initialize summary data (without map)
-                    totalDonorsEl.textContent = 'Total Donors: <?php echo $totalDonorCount; ?>';
+                    // Initialize top donor locations (without map)
                     updateTopDonorLocations();
                     
                     // PERFORMANCE FIX: Disabled automatic background geocoding on page load

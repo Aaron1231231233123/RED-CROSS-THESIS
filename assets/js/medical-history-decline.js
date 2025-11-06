@@ -432,24 +432,35 @@ function showMedicalHistoryDeclinedSuccessModal() {
         keyboard: false
     });
     
-    // Set very high z-index to appear above everything
-    successEl.style.zIndex = '10080';
+    // Set very high z-index to appear above everything (above confirm/decline)
+    successEl.style.zIndex = '10120';
     const dlg = successEl.querySelector('.modal-dialog');
-    if (dlg) dlg.style.zIndex = '10081';
+    if (dlg) dlg.style.zIndex = '10121';
     const content = successEl.querySelector('.modal-content');
-    if (content) content.style.zIndex = '10082';
+    if (content) content.style.zIndex = '10122';
     
     // Ensure backdrop is behind this modal
     setTimeout(() => {
         const backdrops = document.querySelectorAll('.modal-backdrop');
         backdrops.forEach(backdrop => {
-            backdrop.style.zIndex = '10079';
+            backdrop.style.zIndex = '10119';
         });
     }, 10);
     
     try {
         m.show();
     } catch (_) {}
+    
+    // If user clicks the header X, reload immediately
+    try {
+        const closeBtn = successEl.querySelector('.btn-close');
+        if (closeBtn && !closeBtn.__mhBound) {
+            closeBtn.__mhBound = true;
+            closeBtn.addEventListener('click', () => {
+                window.location.reload();
+            }, { once: true });
+        }
+    } catch(_) {}
     
     // Auto-reload after 2 seconds (no button needed)
     setTimeout(() => {

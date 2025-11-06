@@ -93,10 +93,10 @@ function initializeScreeningDeferModal() {
     // Validation elements
     const disapprovalReasonSelect = document.getElementById('disapprovalReason');
     
-    // Set default values
-    deferralTypeSelect.value = 'Temporary Deferral';
+    // Set default values - start with placeholder selected
+    deferralTypeSelect.value = '';
     durationSelect.value = '2';
-    document.querySelector('.duration-option[data-days="2"]').classList.add('active');
+    document.querySelector('.duration-option[data-days="2"]')?.classList.add('active');
 
     // Update disapproval reason validation
     function updateScreeningDeferValidation() {

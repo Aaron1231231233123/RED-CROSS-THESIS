@@ -437,6 +437,7 @@ foreach ($display_records as $index => $record) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <script src="../../assets/js/blood_collection_modal.js"></script>
     <script src="../../assets/js/phlebotomist_blood_collection_details_modal.js"></script>
+    <script src="../../assets/js/filter-loading-modal.js"></script>
     <script src="../../assets/js/search_func/search_account_blood_collection.js"></script>
     <script src="../../assets/js/search_func/filter_search_account_blood_collection.js"></script>
     <style>

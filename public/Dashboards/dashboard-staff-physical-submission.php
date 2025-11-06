@@ -518,6 +518,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
     <script src="../../assets/js/physical_examination_modal.js?v=<?php echo time(); ?>"></script>
     <script src="../../assets/js/defer_donor_modal.js"></script>
     <script src="../../assets/js/medical-history-decline.js?v=<?php echo time(); ?>"></script>
+    <script src="../../assets/js/filter-loading-modal.js"></script>
     <script src="../../assets/js/search_func/search_accont_physical_exam.js?v=<?php echo time(); ?>"></script>
     <script src="../../assets/js/search_func/filter_search_accont_physical_exam.js?v=<?php echo time(); ?>"></script>
     

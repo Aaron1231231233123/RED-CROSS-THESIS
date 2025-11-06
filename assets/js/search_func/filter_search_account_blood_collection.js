@@ -7,6 +7,11 @@ document.addEventListener('DOMContentLoaded', function(){
     const input = document.getElementById('searchInput');
     if (!tbody) return;
 
+    // Ensure loading modal is available
+    if (typeof FilterLoadingModal === 'undefined') {
+        console.warn('FilterLoadingModal not loaded. Loading modal functionality may not work.');
+    }
+
     // Build a dropdown filter bar like medical history
     const container = document.querySelector('.search-container');
     if (container) {
@@ -65,6 +70,11 @@ document.addEventListener('DOMContentLoaded', function(){
             return;
         }
 
+        // Show loading modal
+        if (typeof FilterLoadingModal !== 'undefined') {
+            FilterLoadingModal.show();
+        }
+
         fetch('../api/search_func/filter_search_account_blood_collection.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -82,6 +92,12 @@ document.addEventListener('DOMContentLoaded', function(){
         })
         .catch(() => {
             tbody.innerHTML = '<tr><td colspan="7" class="text-danger">Filter error. Please try again.</td></tr>';
+        })
+        .finally(() => {
+            // Hide loading modal when done
+            if (typeof FilterLoadingModal !== 'undefined') {
+                FilterLoadingModal.hide();
+            }
         });
     }
 

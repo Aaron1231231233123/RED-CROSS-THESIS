@@ -5,6 +5,11 @@ document.addEventListener('DOMContentLoaded', function(){
     const tbody = document.getElementById('screeningTableBody');
     if (!tbody) return;
 
+    // Ensure loading modal is available
+    if (typeof FilterLoadingModal === 'undefined') {
+        console.warn('FilterLoadingModal not loaded. Loading modal functionality may not work.');
+    }
+
     const container = document.querySelector('.search-container');
     if (!container) return;
 
@@ -73,6 +78,11 @@ document.addEventListener('DOMContentLoaded', function(){
         const qInput = document.getElementById('searchInput');
         const q = qInput ? (qInput.value || '').trim() : '';
 
+        // Show loading modal
+        if (typeof FilterLoadingModal !== 'undefined') {
+            FilterLoadingModal.show();
+        }
+
         // Use XHR to avoid global fetch spinner side-effects
         const xhr = new XMLHttpRequest();
         // Use absolute URL to avoid any relative path inconsistencies across dashboards
@@ -90,10 +100,20 @@ document.addEventListener('DOMContentLoaded', function(){
                 tbody.innerHTML = '<tr><td colspan="8" class="text-muted">' + msg + '</td></tr>';
             }
             rebindRowHandlers();
+            
+            // Hide loading modal when done
+            if (typeof FilterLoadingModal !== 'undefined') {
+                FilterLoadingModal.hide();
+            }
         };
         xhr.onerror = function(){
             tbody.innerHTML = '<tr><td colspan="8" class="text-danger">Search error. Please try again.</td></tr>';
             rebindRowHandlers();
+            
+            // Hide loading modal on error
+            if (typeof FilterLoadingModal !== 'undefined') {
+                FilterLoadingModal.hide();
+            }
         };
         xhr.send(JSON.stringify({ donor_type, status, q }));
     }

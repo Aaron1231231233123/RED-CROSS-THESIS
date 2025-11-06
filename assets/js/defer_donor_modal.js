@@ -726,8 +726,8 @@ function configureDeferModalForSource(source) {
     if (source === 'physical') {
         // Physical examination mode - show both permanent and temporary options
         permanentOption.style.display = 'block';
-        deferralTypeSelect.value = 'Temporary Deferral';
-        deferralTypeHelp.textContent = 'Select deferral type based on examination findings';
+        deferralTypeSelect.value = '';
+        deferralTypeHelp.textContent = 'Please select a deferral type.';
         
         // Show physical examination reasons, hide screening reasons
         screeningReasons.forEach(option => option.style.display = 'none');
@@ -739,8 +739,8 @@ function configureDeferModalForSource(source) {
     } else {
         // Initial screening mode - only temporary deferral, no duration needed
         permanentOption.style.display = 'none';
-        deferralTypeSelect.value = 'Temporary Deferral';
-        deferralTypeHelp.textContent = 'Temporary deferral is pre-selected for initial screening';
+        deferralTypeSelect.value = '';
+        deferralTypeHelp.textContent = 'Please select a deferral type.';
         
         // Show screening reasons, hide physical examination reasons
         screeningReasons.forEach(option => option.style.display = 'block');

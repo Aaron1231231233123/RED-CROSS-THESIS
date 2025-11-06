@@ -270,6 +270,11 @@
     padding: 12px 16px;
 }
 
+/* Neutral placeholder style for deferral type dropdown */
+#deferralTypeSelect option[value=""] {
+    color: #6c757d;
+}
+
 .modal-body .form-control:focus, .modal-body .form-select:focus {
     border-color: #dc3545;
     box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);

@@ -13,9 +13,12 @@ if (!isset($_SESSION['user_id'])) {
 
 include_once '../../assets/conn/db_conn.php';
 
+// Get blood type filter from query parameter
+$bloodTypeFilter = $_GET['blood_type'] ?? 'all';
+
 // Try to get optimized GIS data from PostGIS endpoint
 try {
-    $apiPath = 'http://' . $_SERVER['HTTP_HOST'] . '/RED-CROSS-THESIS/public/api/optimized-gis-data.php?t=' . time();
+    $apiPath = 'http://' . $_SERVER['HTTP_HOST'] . '/RED-CROSS-THESIS/public/api/optimized-gis-data.php?t=' . time() . '&blood_type=' . urlencode($bloodTypeFilter);
     $ctx = stream_context_create(['http' => ['timeout' => 3.0]]);
     $gisDataResponse = @file_get_contents($apiPath, false, $ctx);
     

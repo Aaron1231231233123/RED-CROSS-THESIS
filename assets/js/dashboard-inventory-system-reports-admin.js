@@ -1227,9 +1227,17 @@
                     font-weight: bold; 
                 }
                 @media print { 
-                    body { background: white; margin: 0; padding: 20px; }
-                    .container { box-shadow: none; }
-                    .section { page-break-inside: avoid; }
+                    body { background: white; margin: 0; padding: 10px; }
+                    .container { box-shadow: none; padding: 15px; max-width: 100%; }
+                    .header { padding-bottom: 10px; margin-bottom: 15px; page-break-after: avoid; }
+                    .header h1 { font-size: 2em; margin: 0; }
+                    .header h2 { font-size: 1.2em; margin: 8px 0; }
+                    .header p { font-size: 0.9em; margin: 5px 0; }
+                    .section { margin: 20px 0; page-break-inside: avoid; }
+                    .section:first-of-type { margin-top: 10px; page-break-before: auto; }
+                    .kpi-section { margin: 15px 0; padding: 10px 0; }
+                    .table { margin: 15px 0; font-size: 11px; }
+                    .table th, .table td { padding: 8px; }
                 }
             </style>
         </head>
@@ -1289,40 +1297,103 @@
         }
     }
 
-    // Get filtered data for report
+    // Get filtered data for report (unifies historical + forecast and recomputes KPIs)
     function getFilteredReportData(exportMonth, exportBloodType) {
         try {
             console.log('Filtering data with:', { exportMonth, exportBloodType });
             console.log('Available data:', { kpiData, forecastData, monthlyData });
-            
-            let data = {
-                kpis: kpiData || {},
-                forecastData: forecastData || [],
+
+            // Helper to format a YYYY-MM-01 key to "Month YYYY"
+            const toMonthLabel = (isoLike) => {
+                if (!isoLike) return '';
+                const d = new Date(isoLike);
+                if (isNaN(d.getTime())) return '';
+                return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            };
+
+            const selectedLabel = exportMonth?.split(' (')[0] || 'All Months';
+
+            // 1) Build historical rows from monthlyData
+            const unified = [];
+            try {
+                (currentMonths || []).forEach((monthKey) => {
+                    const monthName = toMonthLabel(monthKey);
+                    const supply = (monthlyData?.supply || {})[monthKey] || {};
+                    const demand = (monthlyData?.demand || {})[monthKey] || {};
+                    ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].forEach((bt) => {
+                        const s = supply[bt] || 0;
+                        const d = demand[bt] || 0;
+                        if (s > 0 || d > 0) {
+                            const bal = s - d;
+                            unified.push({
+                                blood_type: bt,
+                                forecasted_demand: d,
+                                forecasted_supply: s,
+                                projected_balance: bal,
+                                status: bal < 0 ? 'critical' : bal < 5 ? 'low' : 'surplus',
+                                month: monthName,
+                                forecast_month: null
+                            });
+                        }
+                    });
+                });
+            } catch (e) {
+                console.warn('Historical build failed:', e);
+            }
+
+            // 2) Append forecast rows with normalized month label
+            try {
+                (forecastData || []).forEach((it) => {
+                    const label = toMonthLabel(it.forecast_month);
+                    unified.push({
+                        ...it,
+                        month: label || it.month || undefined
+                    });
+                });
+            } catch (e) {
+                console.warn('Forecast build failed:', e);
+            }
+
+            // 3) Apply filters
+            let filtered = unified;
+            if (exportMonth !== 'All Months') {
+                filtered = filtered.filter((it) => {
+                    // Compare to normalized label for both historical and forecast
+                    const labelA = it.month || toMonthLabel(it.forecast_month);
+                    return labelA === selectedLabel;
+                });
+            }
+            if (exportBloodType !== 'all') {
+                filtered = filtered.filter((it) => it.blood_type === exportBloodType);
+            }
+
+            // 4) Recompute KPIs over the filtered set
+            let totalDemand = 0, totalSupply = 0;
+            const critical = new Set();
+            filtered.forEach((it) => {
+                totalDemand += it.forecasted_demand || 0;
+                totalSupply += it.forecasted_supply || 0;
+                const bal = (it.projected_balance != null) ? it.projected_balance : (it.forecasted_supply || 0) - (it.forecasted_demand || 0);
+                if (bal < 0) critical.add(it.blood_type);
+            });
+
+            const recomputedKpis = {
+                total_forecasted_demand: totalDemand,
+                total_forecasted_supply: totalSupply,
+                projected_balance: totalSupply - totalDemand,
+                critical_blood_types: Array.from(critical),
+                critical_types_list: Array.from(critical)
+            };
+
+            const result = {
+                kpis: recomputedKpis,
+                forecastData: filtered,
                 monthlySupply: monthlyData?.supply || {},
                 monthlyDemand: monthlyData?.demand || {}
             };
 
-        // Filter by month if not "All Months"
-        if (exportMonth !== 'All Months') {
-            // Filter logic based on month selection
-            data.forecastData = data.forecastData.filter(item => {
-                if (exportMonth.includes('R Studio Forecast')) {
-                    return item.forecast_month && item.forecast_month.includes(exportMonth.split(' (')[0]);
-                } else if (exportMonth.includes('Historical Data')) {
-                    return item.month && item.month.includes(exportMonth.split(' (')[0]);
-                }
-                return true;
-            });
-        }
-
-        // Filter by blood type if not "all"
-        if (exportBloodType !== 'all') {
-            data.forecastData = data.forecastData.filter(item => item.blood_type === exportBloodType);
-        }
-
-            console.log('Filtered data result:', data);
-            return data;
-            
+            console.log('Filtered unified result:', result);
+            return result;
         } catch (error) {
             console.error('Error in getFilteredReportData:', error);
             return {
@@ -1597,7 +1668,6 @@
             
             return `
                 <div class="section">
-                    <h3>Executive Summary</h3>
                     <div class="kpi-section">
                         <div class="kpi-item">
                             <span class="kpi-value">${totalDemand}</span>
@@ -1869,16 +1939,9 @@
                             <span class="stat-value">${forecastMetrics.demandTrend || 'N/A'}</span>
                             <span class="stat-label">Demand Trend</span>
                         </div>
-                        <div class="stat-item">
-                            <span class="stat-value">ARIMA</span>
-                            <span class="stat-label">Model Type</span>
-                        </div>
                     </div>
                     
                     <h4>Forecast Summary</h4>
-                    <div class="insight">
-                        <strong>Model Used:</strong> Advanced time series analysis using historical blood bank data and current patient demand patterns
-                    </div>
                     <div class="insight">
                         <strong>Forecast Horizon:</strong> 6 months ahead
                     </div>

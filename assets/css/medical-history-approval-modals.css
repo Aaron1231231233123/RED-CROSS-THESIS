@@ -41,18 +41,18 @@
     z-index: 10102 !important;
 }
 
-/* Ensure success modal appears on top of everything */
+/* Ensure success modal appears on top of everything (above confirm/decline) */
 #medicalHistoryDeclinedSuccessModal {
-    z-index: 10080 !important;
+    z-index: 10120 !important;
     position: fixed !important;
 }
 
 #medicalHistoryDeclinedSuccessModal .modal-dialog {
-    z-index: 10081 !important;
+    z-index: 10121 !important;
 }
 
 #medicalHistoryDeclinedSuccessModal .modal-content {
-    z-index: 10082 !important;
+    z-index: 10122 !important;
 }
 
 
@@ -224,6 +224,11 @@ body.modal-open:has(#donorProfileModal) {
 #medicalHistoryDeclineModal #restrictionType {
     background: #ffffff;
     border: 2px solid #e9ecef;
+}
+
+/* Placeholder style for the deferral type select */
+#medicalHistoryDeclineModal #restrictionType option[value=""] {
+    color: #6c757d;
 }
 
 #medicalHistoryDeclineModal #restrictionType:focus {

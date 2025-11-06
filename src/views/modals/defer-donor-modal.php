@@ -32,14 +32,11 @@
                             <i class="fas fa-list-ul me-2 text-primary"></i>Deferral Type *
                         </label>
                         <select class="form-select" id="deferralTypeSelect" name="deferral_type" required>
-                            <option value="Temporary Deferral" selected>
-                                <i class="fas fa-clock me-2"></i>Temporary Deferral - Donor can donate after specified period
-                            </option>
-                            <option value="Permanent Deferral" id="permanentOption" style="display: none;">
-                                <i class="fas fa-ban me-2"></i>Permanent Deferral - Donor permanently ineligible
-                            </option>
+                            <option value="" disabled selected style="color:#6c757d;">Please select deferral type</option>
+                            <option value="Temporary Deferral">Temporary Deferral</option>
+                            <option value="Permanent Deferral" id="permanentOption" style="display: none;">Permanent Deferral</option>
                         </select>
-                        <div class="form-text" id="deferralTypeHelp">Temporary deferral is pre-selected for initial screening</div>
+                        <div class="form-text" id="deferralTypeHelp">Please select a deferral type.</div>
                     </div>
 
                     <!-- Duration Selection (only for Temporary Deferral) -->
