@@ -521,6 +521,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
     <script src="../../assets/js/filter-loading-modal.js"></script>
     <script src="../../assets/js/search_func/search_accont_physical_exam.js?v=<?php echo time(); ?>"></script>
     <script src="../../assets/js/search_func/filter_search_accont_physical_exam.js?v=<?php echo time(); ?>"></script>
+    <script src="../../assets/js/search_func/sort_accont_physical_exam.js?v=<?php echo time(); ?>"></script>
     
     <style>
         :root {
@@ -1802,6 +1803,33 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             font-size: 0.95rem;
         }
 
+        .sortable .sort-trigger {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            background: none;
+            border: none;
+            color: inherit;
+            font: inherit;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .sortable .sort-trigger:focus-visible {
+            outline: 2px solid rgba(255,255,255,0.8);
+            outline-offset: 2px;
+        }
+
+        .sort-icon {
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.75);
+        }
+
+        th[data-sort-field][aria-sort="ascending"] .sort-icon,
+        th[data-sort-field][aria-sort="descending"] .sort-icon {
+            color: #ffffff;
+        }
+
         .dashboard-staff-tables tbody tr:nth-child(odd) {
             background-color: #f8f9fa;
         }
@@ -2187,17 +2215,44 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         <table class="dashboard-staff-tables table-hover">
                             <thead>
                                 <tr>
-                                    <th>No.</th>
-                                    <th>Date</th>
-                                    <th>SURNAME</th>
-                                    <th>First Name</th>
+                                    <th class="sortable" data-sort-field="no" aria-sort="none">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by No.">
+                                            No.<i class="fas fa-sort sort-icon"></i>
+                                        </button>
+                                    </th>
+                                    <th class="sortable" data-sort-field="date" aria-sort="none">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by Date">
+                                            Date<i class="fas fa-sort sort-icon"></i>
+                                        </button>
+                                    </th>
+                                    <th class="sortable" data-sort-field="surname" aria-sort="none">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by Surname">
+                                            SURNAME<i class="fas fa-sort sort-icon"></i>
+                                        </button>
+                                    </th>
+                                    <th class="sortable" data-sort-field="first_name" aria-sort="none">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by First Name">
+                                            First Name<i class="fas fa-sort sort-icon"></i>
+                                        </button>
+                                    </th>
+                                    <th class="sortable" data-sort-field="physician" aria-sort="none">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by Physician">
+                                            Physician<i class="fas fa-sort sort-icon"></i>
+                                        </button>
+                                    </th>
                                     <th>Donor Type</th>
                                     <th>Status</th>
-                                    <th>Physician</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
-                            <tbody id="screeningTableBody">
+                            <tbody id="screeningTableBody"
+                                   data-current-page="<?php echo $current_page; ?>"
+                                   data-records-per-page="<?php echo $records_per_page; ?>"
+                                   data-total-pages="<?php echo $total_pages; ?>"
+                                   data-sort-column=""
+                                   data-sort-direction="default"
+                                   data-status-filter="<?php echo htmlspecialchars($status_filter, ENT_QUOTES); ?>"
+                                   data-status-param="<?php echo isset($_GET['status']) ? '&status=' . urlencode($_GET['status']) : ''; ?>">
                                 <?php 
                                 if (!empty($records)) {
                                     $counter = ($current_page - 1) * $records_per_page + 1; // Initialize counter with pagination
@@ -2356,6 +2411,20 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                             <td><?php echo htmlspecialchars($firstName); ?></td>
                                             <td>
                                                 <?php 
+                                                // Physician column: show physical_examination.physician or Pending for screenings
+                                                $physician_name = 'Pending';
+                                                if ($record['type'] === 'physical_exam' && isset($record['physical_exam'])) {
+                                                    if (!empty($record['physical_exam']['physician'])) {
+                                                        $physician_name = $record['physical_exam']['physician'];
+                                                    } else {
+                                                        $physician_name = (strtolower($status) === 'pending') ? 'Pending' : 'N/A';
+                                                    }
+                                                }
+                                                echo htmlspecialchars($physician_name);
+                                                ?>
+                                            </td>
+                                            <td>
+                                                <?php 
                                                 // Donor type text only (no stage label), colored
                                                 $donor_type = isset($record['donor_type']) ? $record['donor_type'] : 'New';
                                                 $type_text = $donor_type; // Only show donor type, no stage label
@@ -2379,20 +2448,6 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                                 }
                                                 ?>
                                                 <span class="badge <?php echo $badge_class; ?>"><?php echo htmlspecialchars($status); ?></span>
-                                            </td>
-                                            <td>
-                                                <?php 
-                                                // Physician column: show physical_examination.physician or Pending for screenings
-                                                $physician_name = 'Pending';
-                                                if ($record['type'] === 'physical_exam' && isset($record['physical_exam'])) {
-                                                    if (!empty($record['physical_exam']['physician'])) {
-                                                        $physician_name = $record['physical_exam']['physician'];
-                                                    } else {
-                                                        $physician_name = (strtolower($status) === 'pending') ? 'Pending' : 'N/A';
-                                                    }
-                                                }
-                                                echo htmlspecialchars($physician_name);
-                                                ?>
                                             </td>
                                             <td>
                                                 <?php 
@@ -2430,7 +2485,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                 <?php 
                                     }
                                 } else {
-                                    echo '<tr><td colspan="7" class="text-center">No records found for the selected filter</td></tr>';
+                                    echo '<tr><td colspan="8" class="text-center">No records found for the selected filter</td></tr>';
                                 }
                                 ?>
                             </tbody>
@@ -2443,7 +2498,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                 <ul class="pagination justify-content-center">
                                     <!-- Previous button -->
                                     <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
+                                        <a class="page-link" href="?page=<?php echo max(1, $current_page - 1); ?><?php echo isset($_GET['status']) ? '&status='.urlencode($_GET['status']) : ''; ?>" data-page="<?php echo max(1, $current_page - 1); ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
                                             Previous
                                         </a>
                                     </li>
@@ -2456,7 +2511,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                     // Always show first page
                                     if ($start_page > 1): ?>
                                         <li class="page-item">
-                                            <a class="page-link" href="?page=1<?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>">1</a>
+                                            <a class="page-link" href="?page=1<?php echo isset($_GET['status']) ? '&status='.urlencode($_GET['status']) : ''; ?>" data-page="1">1</a>
                                         </li>
                                         <?php if ($start_page > 2): ?>
                                             <li class="page-item disabled">
@@ -2468,7 +2523,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                     <!-- Page numbers around current page -->
                                     <?php for($i = $start_page; $i <= $end_page; $i++): ?>
                                         <li class="page-item <?php echo $current_page == $i ? 'active' : ''; ?>">
-                                            <a class="page-link" href="?page=<?php echo $i; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>"><?php echo $i; ?></a>
+                                            <a class="page-link" href="?page=<?php echo $i; ?><?php echo isset($_GET['status']) ? '&status='.urlencode($_GET['status']) : ''; ?>" data-page="<?php echo $i; ?>"><?php echo $i; ?></a>
                                         </li>
                                     <?php endfor; ?>
                                     
@@ -2480,13 +2535,13 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                             </li>
                                         <?php endif; ?>
                                         <li class="page-item">
-                                            <a class="page-link" href="?page=<?php echo $total_pages; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>"><?php echo $total_pages; ?></a>
+                                            <a class="page-link" href="?page=<?php echo $total_pages; ?><?php echo isset($_GET['status']) ? '&status='.urlencode($_GET['status']) : ''; ?>" data-page="<?php echo $total_pages; ?>"><?php echo $total_pages; ?></a>
                                         </li>
                                     <?php endif; ?>
                                     
                                     <!-- Next button -->
                                     <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
+                                        <a class="page-link" href="?page=<?php echo min($total_pages, $current_page + 1); ?><?php echo isset($_GET['status']) ? '&status='.urlencode($_GET['status']) : ''; ?>" data-page="<?php echo min($total_pages, $current_page + 1); ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
                                             Next
                                         </a>
                                     </li>

@@ -440,6 +440,7 @@ foreach ($display_records as $index => $record) {
     <script src="../../assets/js/filter-loading-modal.js"></script>
     <script src="../../assets/js/search_func/search_account_blood_collection.js"></script>
     <script src="../../assets/js/search_func/filter_search_account_blood_collection.js"></script>
+    <script src="../../assets/js/search_func/sort_account_blood_collection.js"></script>
     <style>
         :root {
             --bg-color: #f5f5f5;
@@ -656,6 +657,33 @@ foreach ($display_records as $index => $record) {
             font-weight: 600;
             font-size: 0.95rem;
             border-bottom: 0;
+        }
+
+        .sortable .sort-trigger {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            background: none;
+            border: none;
+            color: inherit;
+            font: inherit;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .sortable .sort-trigger:focus-visible {
+            outline: 2px solid rgba(255,255,255,0.8);
+            outline-offset: 2px;
+        }
+
+        .sort-icon {
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.75);
+        }
+
+        th[data-sort-field][aria-sort="ascending"] .sort-icon,
+        th[data-sort-field][aria-sort="descending"] .sort-icon {
+            color: #ffffff;
         }
 
         .dashboard-staff-tables tbody td {
@@ -1961,16 +1989,43 @@ foreach ($display_records as $index => $record) {
                         <table class="dashboard-staff-tables table-hover">
                             <thead>
                                 <tr>
-                                    <th>No.</th>
-                                    <th>Donor ID</th>
-                                    <th>Surname</th>
-                                    <th>First Name</th>
+                                    <th class="sortable" data-sort-field="no" aria-sort="none">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by No.">
+                                            No.<i class="fas fa-sort sort-icon"></i>
+                                        </button>
+                                    </th>
+                                    <th class="sortable" data-sort-field="donor_id" aria-sort="none">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by Donor ID">
+                                            Donor ID<i class="fas fa-sort sort-icon"></i>
+                                        </button>
+                                    </th>
+                                    <th class="sortable" data-sort-field="surname" aria-sort="none">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by Surname">
+                                            Surname<i class="fas fa-sort sort-icon"></i>
+                                        </button>
+                                    </th>
+                                    <th class="sortable" data-sort-field="first_name" aria-sort="none">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by First Name">
+                                            First Name<i class="fas fa-sort sort-icon"></i>
+                                        </button>
+                                    </th>
+                                    <th class="sortable" data-sort-field="phlebotomist" aria-sort="none">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by Phlebotomist">
+                                            Phlebotomist<i class="fas fa-sort sort-icon"></i>
+                                        </button>
+                                    </th>
                                     <th>Collection Status</th>
-                                    <th>Phlebotomist</th>
                                     <th style="text-align: center;">Action</th>
                                 </tr>
                             </thead>
-                            <tbody id="bloodCollectionTableBody">
+                            <tbody id="bloodCollectionTableBody"
+                                   data-current-page="<?php echo $current_page; ?>"
+                                   data-records-per-page="<?php echo $records_per_page; ?>"
+                                   data-total-pages="<?php echo $total_pages; ?>"
+                                   data-sort-column=""
+                                   data-sort-direction="default"
+                                   data-status-filter="<?php echo htmlspecialchars($status_filter, ENT_QUOTES); ?>"
+                                   data-status-param="<?php echo isset($_GET['status']) ? '&status=' . urlencode($_GET['status']) : ''; ?>">
                                 <?php
                                 
                                 // Use unified records data
@@ -2124,8 +2179,8 @@ foreach ($display_records as $index => $record) {
                                             <td>" . htmlspecialchars($display_number) . "</td>
                                             <td>{$surname}</td>
                                             <td>{$first_name}</td>
-                                            <td>{$collection_status}</td>
                                             <td>{$phlebotomist}</td>
+                                            <td>{$collection_status}</td>
                                             <td style=\"text-align: center;\">
                                                 {$action_buttons}
                                             </td>
@@ -2146,7 +2201,7 @@ foreach ($display_records as $index => $record) {
                                 <ul class="pagination justify-content-center">
                                     <!-- Previous button -->
                                     <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
+                                        <a class="page-link" href="?page=<?php echo max(1, $current_page - 1); ?><?php echo isset($_GET['status']) ? '&status=' . urlencode($_GET['status']) : ''; ?>" data-page="<?php echo max(1, $current_page - 1); ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
                                             Previous
                                         </a>
                                     </li>
@@ -2159,7 +2214,7 @@ foreach ($display_records as $index => $record) {
                                     // Always show first page
                                     if ($start_page > 1): ?>
                                         <li class="page-item">
-                                            <a class="page-link" href="?page=1<?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>">1</a>
+                                            <a class="page-link" href="?page=1<?php echo isset($_GET['status']) ? '&status=' . urlencode($_GET['status']) : ''; ?>" data-page="1">1</a>
                                         </li>
                                         <?php if ($start_page > 2): ?>
                                             <li class="page-item disabled">
@@ -2171,7 +2226,7 @@ foreach ($display_records as $index => $record) {
                                     <!-- Page numbers around current page -->
                                     <?php for($i = $start_page; $i <= $end_page; $i++): ?>
                                         <li class="page-item <?php echo $current_page == $i ? 'active' : ''; ?>">
-                                            <a class="page-link" href="?page=<?php echo $i; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>"><?php echo $i; ?></a>
+                                            <a class="page-link" href="?page=<?php echo $i; ?><?php echo isset($_GET['status']) ? '&status=' . urlencode($_GET['status']) : ''; ?>" data-page="<?php echo $i; ?>"><?php echo $i; ?></a>
                                         </li>
                                     <?php endfor; ?>
                                     
@@ -2183,13 +2238,13 @@ foreach ($display_records as $index => $record) {
                                             </li>
                                         <?php endif; ?>
                                         <li class="page-item">
-                                            <a class="page-link" href="?page=<?php echo $total_pages; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>"><?php echo $total_pages; ?></a>
+                                            <a class="page-link" href="?page=<?php echo $total_pages; ?><?php echo isset($_GET['status']) ? '&status=' . urlencode($_GET['status']) : ''; ?>" data-page="<?php echo $total_pages; ?>"><?php echo $total_pages; ?></a>
                                         </li>
                                     <?php endif; ?>
                                     
                                     <!-- Next button -->
                                     <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
+                                        <a class="page-link" href="?page=<?php echo min($total_pages, $current_page + 1); ?><?php echo isset($_GET['status']) ? '&status=' . urlencode($_GET['status']) : ''; ?>" data-page="<?php echo min($total_pages, $current_page + 1); ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
                                             Next
                                         </a>
                                     </li>
@@ -3079,11 +3134,36 @@ foreach ($display_records as $index => $record) {
             const originalFetch = window.fetch;
             window.fetch = function(...args) {
                 const url = args[0];
-                if (typeof url === 'string' && url.includes('blood_collection') && !url.includes('phlebotomist_blood_collection_details')) {
+                let shouldShow = false;
+                if (typeof url === 'string') {
+                    const strUrl = url;
+                    const isBloodCollectionEndpoint = strUrl.includes('blood_collection')
+                        && !strUrl.includes('sort_account_blood_collection')
+                        && !strUrl.includes('search_account_blood_collection')
+                        && !strUrl.includes('filter_search_account_blood_collection')
+                        && !strUrl.includes('phlebotomist_blood_collection_details');
+                    if (isBloodCollectionEndpoint) {
+                        shouldShow = true;
+                    }
+                }
+                if (!shouldShow && url instanceof Request) {
+                    const reqUrl = url.url || '';
+                    const isBloodCollectionEndpoint = reqUrl.includes('blood_collection')
+                        && !reqUrl.includes('sort_account_blood_collection')
+                        && !reqUrl.includes('search_account_blood_collection')
+                        && !reqUrl.includes('filter_search_account_blood_collection')
+                        && !reqUrl.includes('phlebotomist_blood_collection_details');
+                    if (isBloodCollectionEndpoint) {
+                        shouldShow = true;
+                    }
+                }
+                if (shouldShow) {
                     showProcessingModal('Processing blood collection...');
                 }
                 return originalFetch.apply(this, args).finally(() => {
-                    setTimeout(hideProcessingModal, 500); // Small delay for user feedback
+                    if (shouldShow) {
+                        setTimeout(hideProcessingModal, 500);
+                    }
                 });
             };
         });

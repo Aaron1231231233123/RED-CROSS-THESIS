@@ -180,15 +180,33 @@ function processGISResults($results, $bloodTypeFilter = 'all') {
     // Function to clean and standardize address
     function standardizeAddress($address) {
         $municipalities = [
-            // Iloilo (complete core set)
-            'Iloilo City','Oton','Pavia','Leganes','Santa Barbara','San Miguel','Cabatuan','Maasin','Janiuay','Pototan','Dumangas','Zarraga','New Lucena','Alimodian','Leon','Tubungan','Mina','Barotac Nuevo','Barotac Viejo','Bingawan','Calinog','Carles','Concepcion','Dingle','Dueñas','Estancia','Guimbal','Igbaras','Javier','Lambunao','Miagao','Pavia','Passi','San Dionisio','San Enrique','San Joaquin','San Rafael','Sara','Tigbauan','Ajuy','Balasan','Banate','Anilao','Lemery','Batad','San Miguel',
-            // Guimaras
-            'Jordan','Buenavista','Nueva Valencia','San Lorenzo','Sibunag',
-            // Negros Occidental (nearby to east for map coverage)
-            'Bacolod','Talisay','Silay','Bago','La Carlota','Valladolid'
+            'Ajuy','Alimodian','Anilao','Banate','Barotac Nuevo','Barotac Viejo','Batad','Bingawan','Cabatuan','Calinog',
+            'Carles','Concepcion','Dingle','Dueñas','Dumangas','Estancia','Guimbal','Igbaras','Janiuay','Lambunao',
+            'Leganes','Leon','Maasin','Mina','Miagao','New Lucena','Oton','Passi','Pavia','Pototan','San Dionisio',
+            'San Enrique','San Joaquin','San Miguel','Santa Barbara','Sara','Tigbauan','Tubungan','Zarraga'
         ];
 
         $address = trim($address);
+        
+        // Remove duplicate or empty segments
+        $segments = preg_split('/,/', $address);
+        $normalizedSegments = [];
+        $seen = [];
+        foreach ($segments as $segment) {
+            $segment = trim($segment);
+            if ($segment === '') {
+                continue;
+            }
+            $normalized = strtolower(preg_replace('/\s+/', ' ', $segment));
+            if (in_array($normalized, $seen, true)) {
+                continue;
+            }
+            $seen[] = $normalized;
+            $normalizedSegments[] = $segment;
+        }
+        if (!empty($normalizedSegments)) {
+            $address = implode(', ', $normalizedSegments);
+        }
         
         // Normalize common abbreviations
         $address = preg_replace('/\bBrgy\.?\s*/i', 'Barangay ', $address);
@@ -217,7 +235,14 @@ function processGISResults($results, $bloodTypeFilter = 'all') {
         }
 
         // Ensure province is present
-        if (stripos($address, 'Iloilo') === false && stripos($address, 'Guimaras') === false && stripos($address, 'Negros') === false) {
+        if (
+            stripos($address, 'Iloilo') === false &&
+            stripos($address, 'Guimaras') === false &&
+            stripos($address, 'Negros') === false &&
+            stripos($address, 'Aklan') === false &&
+            stripos($address, 'Capiz') === false &&
+            stripos($address, 'Antique') === false
+        ) {
             // Try to determine province from municipality
             $province = 'Iloilo'; // default
             foreach ($foundMunicipalities as $muni) {
@@ -226,6 +251,15 @@ function processGISResults($results, $bloodTypeFilter = 'all') {
                     break;
                 } elseif (in_array($muni, ['Bacolod', 'Talisay', 'Silay', 'Bago', 'La Carlota', 'Valladolid'])) {
                     $province = 'Negros Occidental';
+                    break;
+                } elseif (in_array($muni, ['New Washington', 'Kalibo', 'Numancia', 'Batan', 'Altavas'])) {
+                    $province = 'Aklan';
+                    break;
+                } elseif (in_array($muni, ['Roxas City', 'Maayon', 'Dumarao', 'Ivisan', 'Pilar'])) {
+                    $province = 'Capiz';
+                    break;
+                } elseif (in_array($muni, ['San Jose de Buenavista', 'Hamtic', 'Patnongon', 'Culasi', 'Sibalom'])) {
+                    $province = 'Antique';
                     break;
                 }
             }
@@ -245,58 +279,87 @@ function processGISResults($results, $bloodTypeFilter = 'all') {
     
     // Municipality reference coordinates (rough centroids) for validation/snapping
     $municipalityCenters = [
-        'Iloilo City' => [10.7202, 122.5621],
-        'Oton' => [10.6933, 122.4733],
-        'Pavia' => [10.7750, 122.5444],
-        'Leganes' => [10.7833, 122.5833],
-        'Santa Barbara' => [10.8167, 122.5333],
-        'San Miguel' => [10.7833, 122.4667],
-        'Cabatuan' => [10.8833, 122.4833],
-        'Maasin' => [10.8833, 122.4333],
-        'Janiuay' => [10.9500, 122.5000],
-        'Pototan' => [10.9500, 122.6333],
-        'Dumangas' => [10.8333, 122.7167],
-        'Zarraga' => [10.8167, 122.6000],
-        'New Lucena' => [10.8833, 122.6000],
+        'Ajuy' => [11.1710, 123.0150],
         'Alimodian' => [10.8167, 122.4333],
-        'Leon' => [10.7833, 122.3833],
-        'Tubungan' => [10.7833, 122.3333],
-        'Mina' => [10.9333, 122.5833],
+        'Anilao' => [11.0006, 122.7214],
+        'Banate' => [11.0033, 122.8071],
         'Barotac Nuevo' => [10.9000, 122.7000],
         'Barotac Viejo' => [11.0500, 122.8500],
+        'Batad' => [11.2873, 123.0455],
         'Bingawan' => [11.2333, 122.5667],
+        'Cabatuan' => [10.8833, 122.4833],
         'Calinog' => [11.1167, 122.5000],
         'Carles' => [11.5667, 123.1333],
         'Concepcion' => [11.2167, 123.1167],
         'Dingle' => [11.0000, 122.6667],
         'Dueñas' => [11.0667, 122.6167],
+        'Dumangas' => [10.8333, 122.7167],
         'Estancia' => [11.4500, 123.1500],
         'Guimbal' => [10.6667, 122.3167],
         'Igbaras' => [10.7167, 122.2667],
-        'Javier' => [11.0833, 122.5667],
+        'Janiuay' => [10.9500, 122.5000],
         'Lambunao' => [11.0500, 122.4667],
+        'Leganes' => [10.7833, 122.5833],
+        'Leon' => [10.7833, 122.3833],
+        'Maasin' => [10.8833, 122.4333],
+        'Mina' => [10.9333, 122.5833],
         'Miagao' => [10.6333, 122.2333],
+        'New Lucena' => [10.8833, 122.6000],
+        'Oton' => [10.6933, 122.4733],
         'Passi' => [11.1167, 122.6333],
+        'Pavia' => [10.7750, 122.5444],
+        'Pototan' => [10.9500, 122.6333],
         'San Dionisio' => [11.2667, 123.0833],
         'San Enrique' => [11.1000, 122.6667],
-        'San Joaquin' => [10.5833, 122.1333],
-        'San Rafael' => [11.1833, 122.8333],
+        'San Joaquin' => [10.5920, 122.0950],
+        'San Miguel' => [10.7833, 122.4667],
+        'Santa Barbara' => [10.8167, 122.5333],
         'Sara' => [11.2500, 123.0167],
         'Tigbauan' => [10.6833, 122.3667],
-        // Guimaras
-        'Jordan' => [10.6581, 122.5969],
-        'Buenavista' => [10.6736, 122.6137],
-        'Nueva Valencia' => [10.5343, 122.5935],
-        'San Lorenzo' => [10.6108, 122.7027],
-        'Sibunag' => [10.5157, 122.6911],
-        // Negros Occidental east of Guimaras Strait
-        'Bacolod' => [10.6765, 122.9509],
-        'Talisay' => [10.7363, 122.9672],
-        'Silay' => [10.7938, 122.9780],
-        'Bago' => [10.5336, 122.8410],
-        'La Carlota' => [10.4244, 122.9199],
-        'Valladolid' => [10.4598, 122.8374]
+        'Tubungan' => [10.7833, 122.3333],
+        'Zarraga' => [10.8167, 122.6000]
     ];
+
+    $allowedIloiloCities = array_keys($municipalityCenters);
+    $allowedCityLookup = array_fill_keys($allowedIloiloCities, true);
+
+    $normalizeCityToken = function($text) {
+        if ($text === null) {
+            return '';
+        }
+        $token = iconv('UTF-8', 'ASCII//TRANSLIT', $text);
+        $token = strtolower($token);
+        $token = preg_replace('/[^a-z0-9\s]/', ' ', $token);
+        $token = preg_replace('/\s+/', ' ', $token);
+        return trim($token);
+    };
+
+    $cityAliasMap = [];
+    foreach ($allowedIloiloCities as $cityName) {
+        $cityAliasMap[$normalizeCityToken($cityName)] = $cityName;
+    }
+    $aliasPairs = [
+        ['passi city', 'Passi'],
+        ['city of passi', 'Passi'],
+        ['municipality of passi', 'Passi'],
+        ['municipality of san miguel', 'San Miguel'],
+        ['san miguel iloilo', 'San Miguel'],
+        ['municipality of oton', 'Oton'],
+        ['municipality of sara', 'Sara'],
+        ['municipality of banate', 'Banate'],
+        ['municipality of anilao', 'Anilao']
+    ];
+    foreach ($aliasPairs as [$alias, $canonical]) {
+        $cityAliasMap[$normalizeCityToken($alias)] = $canonical;
+    }
+
+    $normalizeCityName = function($rawName) use ($normalizeCityToken, $cityAliasMap) {
+        if ($rawName === null) {
+            return null;
+        }
+        $token = $normalizeCityToken($rawName);
+        return $cityAliasMap[$token] ?? null;
+    };
     
     $deg2rad = function($deg){ return $deg * M_PI / 180; };
     $distanceKm = function($lat1,$lon1,$lat2,$lon2) use ($deg2rad){
@@ -310,27 +373,44 @@ function processGISResults($results, $bloodTypeFilter = 'all') {
     
     // COMPREHENSIVE water area detection - cover ALL water bodies (straits, gulfs, open sea)
     $waterAreas = [
-        // Guimaras Strait (between Panay and Guimaras) - expanded coverage
-        ['minLat' => 10.55, 'maxLat' => 10.75, 'minLng' => 122.50, 'maxLng' => 122.70],
-        // Iloilo Strait (between Guimaras and Negros) - expanded coverage
-        ['minLat' => 10.45, 'maxLat' => 10.70, 'minLng' => 122.70, 'maxLng' => 122.95],
-        // Panay Gulf (west of Panay) - deep water areas
-        ['minLat' => 10.20, 'maxLat' => 10.65, 'minLng' => 121.80, 'maxLng' => 122.30],
-        // Visayan Sea (north of Panay)
-        ['minLat' => 11.20, 'maxLat' => 11.50, 'minLng' => 122.50, 'maxLng' => 123.20],
-        // Sulu Sea (south of Negros)
-        ['minLat' => 9.80, 'maxLat' => 10.30, 'minLng' => 122.50, 'maxLng' => 123.20],
+        // Guimaras Strait (between Panay and Guimaras) - slightly relaxed near the coast
+        ['minLat' => 10.52, 'maxLat' => 10.76, 'minLng' => 122.52, 'maxLng' => 122.74],
+        // Iloilo Strait (between Guimaras and Negros Occidental)
+        ['minLat' => 10.44, 'maxLat' => 10.73, 'minLng' => 122.72, 'maxLng' => 123.03],
+        // Panay Gulf (south of Iloilo/Antique coastline)
+        ['minLat' => 10.24, 'maxLat' => 10.68, 'minLng' => 121.54, 'maxLng' => 121.92],
+        // Panay Gulf (north of Antique coastline)
+        ['minLat' => 10.69, 'maxLat' => 11.31, 'minLng' => 121.54, 'maxLng' => 121.92],
+        // Visayan Sea (north of Panay Island)
+        ['minLat' => 11.02, 'maxLat' => 11.58, 'minLng' => 122.24, 'maxLng' => 123.31],
+        // Sulu Sea (south of Negros Occidental)
+        ['minLat' => 9.74, 'maxLat' => 10.36, 'minLng' => 122.44, 'maxLng' => 123.16],
     ];
+    $coastalGraceKm = 0.60;
+    $waterDistanceThresholdKm = 0.45;
     
-    $isInWater = function($lat,$lng) use ($waterAreas){
+    $isInWater = function($lat,$lng) use ($waterAreas, $municipalityCenters, $distanceKm, $coastalGraceKm, $waterDistanceThresholdKm){
         if ($lat === null || $lng === null) return false;
+        $nearestDist = PHP_FLOAT_MAX;
+        foreach ($municipalityCenters as $coords) {
+            $d = $distanceKm($lat, $lng, $coords[0], $coords[1]);
+            if ($d < $nearestDist) {
+                $nearestDist = $d;
+            }
+        }
         foreach ($waterAreas as $area) {
             if ($lat >= $area['minLat'] && $lat <= $area['maxLat'] &&
                 $lng >= $area['minLng'] && $lng <= $area['maxLng']) {
+                if ($nearestDist <= $coastalGraceKm) {
+                    return false;
+                }
                 return true;
             }
         }
-        return false;
+        if ($nearestDist === PHP_FLOAT_MAX) {
+            return false;
+        }
+        return $nearestDist > $waterDistanceThresholdKm;
     };
     
     // STRICT validation: reject if in water OR too far from any known municipality center (>20km)
@@ -346,142 +426,322 @@ function processGISResults($results, $bloodTypeFilter = 'all') {
         }
         return $best <= 20; // Stricter: 20km instead of 30km
     };
-    
-    foreach ($results as $donor) {
-        // Get the address (office first, then permanent)
-        $address = !empty($donor['office_address']) ? $donor['office_address'] : $donor['permanent_address'];
-        
-        // For Top Donors: Resolve city name robustly
-        $resolvedCity = null;
-        foreach (array_keys($municipalityCenters) as $cityName) {
-            if (stripos($address, $cityName) !== false) {
-                $resolvedCity = $cityName;
-                break;
+
+    $biasCoordinateInland = function($lat, $lng, $cityHint = null) use ($municipalityCenters, $distanceKm) {
+        $targetCity = null;
+        if (!empty($cityHint) && isset($municipalityCenters[$cityHint])) {
+            $targetCity = $cityHint;
+        }
+        if ($targetCity === null) {
+            $best = PHP_FLOAT_MAX;
+            foreach ($municipalityCenters as $name => $coords) {
+                $d = $distanceKm($lat, $lng, $coords[0], $coords[1]);
+                if ($d < $best) {
+                    $best = $d;
+                    $targetCity = $name;
+                }
             }
         }
-        // If still not found and we have coordinates, snap to nearest municipality center
-        // Try permanent coordinates first, then office coordinates
+        if ($targetCity === null || !isset($municipalityCenters[$targetCity])) {
+            return [$lat, $lng];
+        }
+        $cityCoords = $municipalityCenters[$targetCity];
+        $adjustedLat = $lat;
+        $adjustedLng = $lng;
+
+        $westCoastCities = [
+            'San Joaquin', 'Miagao', 'Guimbal', 'Tigbauan'
+        ];
+        $northCoastCities = [
+            'Leganes', 'Zarraga', 'Dumangas', 'Barotac Nuevo', 'Barotac Viejo'
+        ];
+
+        $isWestCoast = in_array($targetCity, $westCoastCities, true);
+        $westPrimaryBoost = $targetCity === 'San Joaquin' ? 0.032 : 0.026;
+        $westSecondaryBoost = $targetCity === 'San Joaquin' ? 0.028 : 0.018;
+        $westMinLngBoost = $targetCity === 'San Joaquin' ? 0.035 : 0.020;
+        $westLatBoost = $targetCity === 'San Joaquin' ? 0.012 : 0.006;
+        $westLatFloorBoost = $targetCity === 'San Joaquin' ? 0.012 : 0.004;
+
+        if ($cityCoords[1] <= 122.05 && $adjustedLng <= $cityCoords[1]) {
+            $adjustedLng = max($adjustedLng, $cityCoords[1] + $westPrimaryBoost);
+            $adjustedLat = $adjustedLat + 0.004;
+        }
+
+        if ($isWestCoast && $adjustedLng <= $cityCoords[1] - 0.004) {
+            $adjustedLng = max($adjustedLng, $cityCoords[1] + $westPrimaryBoost);
+            $adjustedLat = $adjustedLat + $westLatBoost;
+        }
+        if ($cityCoords[1] >= 122.75 && $adjustedLng >= $cityCoords[1]) {
+            $adjustedLng = $cityCoords[1] - 0.012;
+        }
+        if ($cityCoords[0] >= 11.25 && $adjustedLat >= $cityCoords[0]) {
+            $adjustedLat = $cityCoords[0] - 0.012;
+        }
+        if ($cityCoords[0] <= 10.55 && $adjustedLat <= $cityCoords[0]) {
+            $adjustedLat = $cityCoords[0] + 0.012;
+        }
+
+        if (in_array($targetCity, $northCoastCities, true) && $adjustedLat >= $cityCoords[0]) {
+            $adjustedLat = $cityCoords[0] - 0.008;
+        }
+
+        if ($isWestCoast && $adjustedLng <= $cityCoords[1]) {
+            $adjustedLng = max($adjustedLng, $cityCoords[1] + $westSecondaryBoost);
+            $adjustedLat = max($adjustedLat, $cityCoords[0] + 0.002);
+        }
+
+        if ($isWestCoast) {
+            $minSafeLng = $cityCoords[1] + $westMinLngBoost;
+            if ($adjustedLng < $minSafeLng) {
+                $adjustedLng = $minSafeLng;
+            }
+            $minSafeLat = $cityCoords[0] + $westLatFloorBoost;
+            if ($adjustedLat < $minSafeLat) {
+                $adjustedLat = $minSafeLat;
+            }
+        }
+
+        return [$adjustedLat, $adjustedLng];
+    };
+
+    $driveCoordinateTowardsLand = function($lat, $lng, $cityHint = null) use ($municipalityCenters, $isInWater, $distanceKm, $biasCoordinateInland) {
+        $targets = [];
+        if ($cityHint && isset($municipalityCenters[$cityHint])) {
+            $targets[] = ['lat' => $municipalityCenters[$cityHint][0], 'lng' => $municipalityCenters[$cityHint][1]];
+        }
+        $best = PHP_FLOAT_MAX;
+        $nearest = null;
+        foreach ($municipalityCenters as $coords) {
+            $d = $distanceKm($lat, $lng, $coords[0], $coords[1]);
+            if ($d < $best) {
+                $best = $d;
+                $nearest = ['lat' => $coords[0], 'lng' => $coords[1]];
+            }
+        }
+        if ($nearest) {
+            $isDifferent = empty($targets) || $targets[0]['lat'] !== $nearest['lat'] || $targets[0]['lng'] !== $nearest['lng'];
+            if ($isDifferent) {
+                $targets[] = $nearest;
+            }
+        }
+
+        $factors = [0.35, 0.55, 0.7, 0.85, 1.0];
+        foreach ($targets as $target) {
+            foreach ($factors as $factor) {
+                $candidateLat = $lat + ($target['lat'] - $lat) * $factor;
+                $candidateLng = $lng + ($target['lng'] - $lng) * $factor;
+                if (!$isInWater($candidateLat, $candidateLng)) {
+                    [$biasedLat, $biasedLng] = $biasCoordinateInland($candidateLat, $candidateLng, $cityHint);
+                    if (!$isInWater($biasedLat, $biasedLng)) {
+                        return [$biasedLat, $biasedLng];
+                    }
+                    return [$candidateLat, $candidateLng];
+                }
+            }
+        }
+
+        $offsets = [
+            ['dLat' => 0.0, 'dLng' => 0.01],
+            ['dLat' => 0.006, 'dLng' => 0.012],
+            ['dLat' => -0.006, 'dLng' => 0.012],
+            ['dLat' => 0.0, 'dLng' => 0.018],
+        ];
+        foreach ($offsets as $offset) {
+            $candidateLat = $lat + $offset['dLat'];
+            $candidateLng = $lng + $offset['dLng'];
+            if (!$isInWater($candidateLat, $candidateLng)) {
+                [$biasedLat, $biasedLng] = $biasCoordinateInland($candidateLat, $candidateLng, $cityHint);
+                if (!$isInWater($biasedLat, $biasedLng)) {
+                    return [$biasedLat, $biasedLng];
+                }
+                return [$candidateLat, $candidateLng];
+            }
+        }
+        return null;
+    };
+    
+    $diagnostics = [];
+    foreach ($results as $donor) {
+        $address = !empty($donor['office_address']) ? $donor['office_address'] : ($donor['permanent_address'] ?? null);
+        $resolvedCity = null;
+
+        if (!empty($address)) {
+            $addressToken = $normalizeCityToken($address);
+            foreach ($cityAliasMap as $token => $canonicalCity) {
+                if (strpos($addressToken, $token) !== false) {
+                    $resolvedCity = $canonicalCity;
+                    break;
+                }
+            }
+        }
+
         $snapLat = !empty($donor['permanent_latitude']) ? $donor['permanent_latitude'] : (!empty($donor['office_latitude']) ? $donor['office_latitude'] : null);
         $snapLng = !empty($donor['permanent_longitude']) ? $donor['permanent_longitude'] : (!empty($donor['office_longitude']) ? $donor['office_longitude'] : null);
-        
+
         if (!$resolvedCity && $snapLat !== null && $snapLng !== null) {
             $minDist = PHP_FLOAT_MAX;
             $nearest = null;
             foreach ($municipalityCenters as $name => $coords) {
                 $d = $distanceKm($snapLat, $snapLng, $coords[0], $coords[1]);
-                if ($d < $minDist) { $minDist = $d; $nearest = $name; }
-            }
-            // Only snap if within a reasonable radius (~35km)
-            if ($nearest !== null && $minDist <= 35) { $resolvedCity = $nearest; }
-        }
-        // Fallback: last segment before province if present
-        if (!$resolvedCity && preg_match('/,\s*([^,]+)\s*,\s*(iloilo|guimaras|negros)/i', $address, $m)) {
-            $resolvedCity = trim($m[1]);
-        }
-        if (!$resolvedCity) { $resolvedCity = 'Iloilo City'; } // conservative default in mainland
-        if (!isset($cityDonorCounts[$resolvedCity])) { $cityDonorCounts[$resolvedCity] = 0; }
-        $cityDonorCounts[$resolvedCity]++;
-        
-        // For Heatmap: Use permanent address first, then office address if permanent is empty
-        $heatmapAddress = !empty($donor['permanent_address']) ? $donor['permanent_address'] : (!empty($donor['office_address']) ? $donor['office_address'] : null);
-        
-        if (!empty($heatmapAddress)) {
-            $standardizedAddress = standardizeAddress($heatmapAddress);
-            // Use permanent coordinates if available, otherwise try office coordinates
-            $heatmapLat = !empty($donor['permanent_latitude']) ? $donor['permanent_latitude'] : (!empty($donor['office_latitude']) ? $donor['office_latitude'] : null);
-            $heatmapLng = !empty($donor['permanent_longitude']) ? $donor['permanent_longitude'] : (!empty($donor['office_longitude']) ? $donor['office_longitude'] : null);
-            
-            // Validate coordinates. ALWAYS ensure we have valid land-based coordinates
-            // If invalid/offshore OR missing, use resolved city center coordinates
-            $hasValidCoords = false;
-            if (!empty($heatmapLat) && !empty($heatmapLng)) {
-                if ($isValidCoordinate($heatmapLat, $heatmapLng)) {
-                    $hasValidCoords = true;
-                } else {
-                    // Invalid coordinates - snap to resolved city center
-                    if ($resolvedCity && isset($municipalityCenters[$resolvedCity])) {
-                        $heatmapLat = $municipalityCenters[$resolvedCity][0];
-                        $heatmapLng = $municipalityCenters[$resolvedCity][1];
-                        $hasValidCoords = true;
-                    }
+                if ($d < $minDist) {
+                    $minDist = $d;
+                    $nearest = $name;
                 }
             }
-            
-            // If still no valid coordinates (missing or invalid), use resolved city center
-            if (!$hasValidCoords && $resolvedCity && isset($municipalityCenters[$resolvedCity])) {
-                $heatmapLat = $municipalityCenters[$resolvedCity][0];
-                $heatmapLng = $municipalityCenters[$resolvedCity][1];
+            if ($nearest !== null && $minDist <= 25) {
+                $resolvedCity = $nearest;
+            }
+        }
+
+        if (!$resolvedCity && !empty($address) && stripos($address, 'iloilo') !== false) {
+            $resolvedCity = null;
+        }
+
+        if (!$resolvedCity) {
+            if ($snapLat !== null && $snapLng !== null) {
+                $minDist = PHP_FLOAT_MAX;
+                $nearest = null;
+                foreach ($municipalityCenters as $name => $coords) {
+                    $d = $distanceKm($snapLat, $snapLng, $coords[0], $coords[1]);
+                    if ($d < $minDist) {
+                        $minDist = $d;
+                        $nearest = $name;
+                    }
+                }
+                if ($nearest !== null && $minDist <= 25) {
+                    $resolvedCity = $nearest;
+                }
+            }
+        }
+
+        if (!$resolvedCity || !isset($allowedCityLookup[$resolvedCity])) {
+            continue;
+        }
+
+        $heatmapAddress = !empty($donor['permanent_address']) ? $donor['permanent_address'] : ($donor['office_address'] ?? null);
+        if (empty($heatmapAddress)) {
+            continue;
+        }
+
+        $standardizedAddress = standardizeAddress($heatmapAddress);
+        $heatmapLat = !empty($donor['permanent_latitude']) ? $donor['permanent_latitude'] : (!empty($donor['office_latitude']) ? $donor['office_latitude'] : null);
+        $heatmapLng = !empty($donor['permanent_longitude']) ? $donor['permanent_longitude'] : (!empty($donor['office_longitude']) ? $donor['office_longitude'] : null);
+
+        $coordinateSource = 'original';
+        $hasValidCoords = false;
+
+        if ($heatmapLat !== null && $heatmapLng !== null) {
+            if (!$isValidCoordinate($heatmapLat, $heatmapLng)) {
+                $nudged = $driveCoordinateTowardsLand($heatmapLat, $heatmapLng, $resolvedCity);
+                if ($nudged) {
+                    [$heatmapLat, $heatmapLng] = $nudged;
+                }
+            }
+            [$heatmapLat, $heatmapLng] = $biasCoordinateInland($heatmapLat, $heatmapLng, $resolvedCity);
+            if ($isValidCoordinate($heatmapLat, $heatmapLng)) {
                 $hasValidCoords = true;
             }
-            
-            // Always include in heatmapData - addresses without coordinates will be geocoded client-side
-            $heatmapData[] = [
-                'donor_id' => $donor['donor_id'],
-                'original_address' => $heatmapAddress,
-                'address' => $standardizedAddress,
-                'latitude' => $heatmapLat,
-                'longitude' => $heatmapLng,
-                'location_source' => $donor['location_source'],
-                'has_coordinates' => $hasValidCoords,
-                'blood_type' => $donor['blood_type'] ?? null
-            ];
         }
-    }
-    
-    // Sort cities by donor count
-    arsort($cityDonorCounts);
-    
-    // FINAL VALIDATION PASS: Ensure NO coordinates are in water or invalid
-    // This is a safety net to catch any that slipped through
-    foreach ($heatmapData as &$donor) {
-        if ($donor['has_coordinates'] && !empty($donor['latitude']) && !empty($donor['longitude'])) {
-            $lat = $donor['latitude'];
-            $lng = $donor['longitude'];
-            
-            // Double-check: if in water or invalid, snap to nearest city from address
-            if (!$isValidCoordinate($lat, $lng)) {
-                // Extract city from address
-                $addressLower = strtolower($donor['address']);
-                $snapped = false;
-                
-                // Try to find city from address
-                foreach ($municipalityCenters as $city => $coords) {
-                    if (stripos($addressLower, strtolower($city)) !== false) {
-                        $donor['latitude'] = $coords[0];
-                        $donor['longitude'] = $coords[1];
-                        $snapped = true;
-                        break;
-                    }
-                }
-                
-                // If no city found in address, snap to nearest city center
-                if (!$snapped) {
-                    $minDist = PHP_FLOAT_MAX;
-                    $nearestCoords = null;
-                    foreach ($municipalityCenters as $coords) {
-                        $d = $distanceKm($lat, $lng, $coords[0], $coords[1]);
-                        if ($d < $minDist) {
-                            $minDist = $d;
-                            $nearestCoords = $coords;
-                        }
-                    }
-                    if ($nearestCoords) {
-                        $donor['latitude'] = $nearestCoords[0];
-                        $donor['longitude'] = $nearestCoords[1];
-                    }
+
+        if (!$hasValidCoords) {
+            $candidateLat = $municipalityCenters[$resolvedCity][0];
+            $candidateLng = $municipalityCenters[$resolvedCity][1];
+            if (!$isValidCoordinate($candidateLat, $candidateLng)) {
+                $nudged = $driveCoordinateTowardsLand($candidateLat, $candidateLng, $resolvedCity);
+                if ($nudged) {
+                    [$candidateLat, $candidateLng] = $nudged;
                 }
             }
+            [$candidateLat, $candidateLng] = $biasCoordinateInland($candidateLat, $candidateLng, $resolvedCity);
+            if ($isValidCoordinate($candidateLat, $candidateLng)) {
+                $heatmapLat = $candidateLat;
+                $heatmapLng = $candidateLng;
+                $coordinateSource = 'snapped';
+                $hasValidCoords = true;
+            }
         }
-    }
-    unset($donor); // Break reference
-    
-    // Count donors with coordinates
-    $donorsWithCoords = 0;
-    foreach ($heatmapData as $donor) {
-        if ($donor['has_coordinates']) {
-            $donorsWithCoords++;
+
+        if (!$hasValidCoords) {
+            continue;
         }
+
+        if (!$isValidCoordinate($heatmapLat, $heatmapLng)) {
+            $nudged = $driveCoordinateTowardsLand($heatmapLat, $heatmapLng, $resolvedCity);
+            if (!$nudged) {
+                continue;
+            }
+            [$heatmapLat, $heatmapLng] = $nudged;
+            [$heatmapLat, $heatmapLng] = $biasCoordinateInland($heatmapLat, $heatmapLng, $resolvedCity);
+            if (!$isValidCoordinate($heatmapLat, $heatmapLng)) {
+                continue;
+            }
+        }
+
+        $distanceToCentroid = isset($municipalityCenters[$resolvedCity])
+            ? $distanceKm($heatmapLat, $heatmapLng, $municipalityCenters[$resolvedCity][0], $municipalityCenters[$resolvedCity][1])
+            : null;
+        $finalWaterCheck = $isInWater($heatmapLat, $heatmapLng);
+
+        if (($distanceToCentroid !== null && $distanceToCentroid > 12) || $finalWaterCheck) {
+            $fallbackLat = $municipalityCenters[$resolvedCity][0];
+            $fallbackLng = $municipalityCenters[$resolvedCity][1];
+            [$fallbackLat, $fallbackLng] = $biasCoordinateInland($fallbackLat, $fallbackLng, $resolvedCity);
+            $nudgedFallback = $driveCoordinateTowardsLand($fallbackLat, $fallbackLng, $resolvedCity);
+            if ($nudgedFallback) {
+                [$fallbackLat, $fallbackLng] = $nudgedFallback;
+            }
+            if ($isInWater($fallbackLat, $fallbackLng)) {
+                continue;
+            }
+            $heatmapLat = $fallbackLat;
+            $heatmapLng = $fallbackLng;
+            $coordinateSource = 'snapped';
+            $distanceToCentroid = isset($municipalityCenters[$resolvedCity])
+                ? $distanceKm($heatmapLat, $heatmapLng, $municipalityCenters[$resolvedCity][0], $municipalityCenters[$resolvedCity][1])
+                : null;
+            $finalWaterCheck = $isInWater($heatmapLat, $heatmapLng);
+        }
+
+        $latBeforeBias = $heatmapLat;
+        $lngBeforeBias = $heatmapLng;
+        $HeatmapIsInWater = $finalWaterCheck ? 'yes' : 'no';
+
+        $distanceToCity = $distanceToCentroid;
+        $isInWaterFinal = $finalWaterCheck;
+
+        $heatmapData[] = [
+            'donor_id' => $donor['donor_id'],
+            'original_address' => $heatmapAddress,
+            'address' => $standardizedAddress,
+            'latitude' => $heatmapLat,
+            'longitude' => $heatmapLng,
+            'location_source' => $donor['location_source'],
+            'has_coordinates' => true,
+            'coordinate_source' => $coordinateSource,
+            'fallback_latitude' => null,
+            'fallback_longitude' => null,
+            'blood_type' => $donor['blood_type'] ?? null,
+            'city' => $resolvedCity
+        ];
+
+        $cityDonorCounts[$resolvedCity] = ($cityDonorCounts[$resolvedCity] ?? 0) + 1;
+
+        $diagnostics[] = [
+            'donor_id' => $donor['donor_id'],
+            'resolved_city' => $resolvedCity,
+            'coordinate_source' => $coordinateSource,
+            'distance_to_city_km' => $distanceToCity,
+            'in_water' => $isInWaterFinal,
+            'address' => $heatmapAddress,
+            'latitude' => $heatmapLat,
+            'longitude' => $heatmapLng
+        ];
     }
+
+    arsort($cityDonorCounts);
+
+    $donorsWithCoords = count($heatmapData);
     
     return [
         'totalDonorCount' => $totalDonorCount,
@@ -489,7 +749,8 @@ function processGISResults($results, $bloodTypeFilter = 'all') {
         'heatmapData' => $heatmapData,
         'postgis_available' => !empty($results) && !empty($results[0]['permanent_latitude']),
         'donorsWithCoordinates' => $donorsWithCoords,
-        'coordinateCoverage' => $totalDonorCount > 0 ? round(($donorsWithCoords / $totalDonorCount) * 100, 1) : 0
+        'coordinateCoverage' => $totalDonorCount > 0 ? round(($donorsWithCoords / $totalDonorCount) * 100, 1) : 0,
+        'diagnostics' => $diagnostics
     ];
 }
 

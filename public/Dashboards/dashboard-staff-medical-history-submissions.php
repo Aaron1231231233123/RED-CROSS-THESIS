@@ -1032,6 +1032,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
     <script src="../../assets/js/filter-loading-modal.js"></script>
     <script src="../../assets/js/search_func/search_account_medical_history.js"></script>
     <script src="../../assets/js/search_func/filter_search_account_medical_history.js"></script>
+    <script src="../../assets/js/search_func/sort_account_medical_history.js"></script>
     <style>
         :root {
             --bg-color: #f5f5f5;
@@ -1242,6 +1243,33 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             font-weight: 600;
             font-size: 0.95rem;
             border-bottom: 0;
+        }
+
+        .sortable .sort-trigger {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            background: none;
+            border: none;
+            color: inherit;
+            font: inherit;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .sortable .sort-trigger:focus-visible {
+            outline: 2px solid rgba(255,255,255,0.8);
+            outline-offset: 2px;
+        }
+
+        .sort-icon {
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.75);
+        }
+
+        th[data-sort-field][aria-sort="ascending"] .sort-icon,
+        th[data-sort-field][aria-sort="descending"] .sort-icon {
+            color: #ffffff;
         }
 
         .dashboard-staff-tables tbody td {
@@ -2409,18 +2437,43 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         <table class="table dashboard-staff-tables table-hover">
                             <thead>
                                 <tr>
-                                    <th class="text-center">No.</th>
-                                    <th class="text-center">Date</th>
-                                    <th class="text-center">Surname</th>
-                                    <th class="text-center">First Name</th>
-                                    <th class="text-center">Interviewer</th>
+                                    <th class="text-center sortable" data-sort-field="no">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by No.">
+                                            No.<i class="fas fa-sort sort-icon"></i>
+                                        </button>
+                                    </th>
+                                    <th class="text-center sortable" data-sort-field="date">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by Date">
+                                            Date<i class="fas fa-sort sort-icon"></i>
+                                        </button>
+                                    </th>
+                                    <th class="text-center sortable" data-sort-field="surname">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by Surname">
+                                            Surname<i class="fas fa-sort sort-icon"></i>
+                                        </button>
+                                    </th>
+                                    <th class="text-center sortable" data-sort-field="first_name">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by First Name">
+                                            First Name<i class="fas fa-sort sort-icon"></i>
+                                        </button>
+                                    </th>
+                                    <th class="text-center sortable" data-sort-field="interviewer">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by Interviewer">
+                                            Interviewer<i class="fas fa-sort sort-icon"></i>
+                                        </button>
+                                    </th>
                                     <th class="text-center">Donor Type</th>
                                     <th class="text-center">Status</th>
                                     <th class="text-center">Registered via</th>
                                     <th class="text-center">View</th>
                                 </tr>
                             </thead>
-                            <tbody id="donorTableBody">
+                            <tbody id="donorTableBody"
+                                   data-current-page="<?php echo $current_page; ?>"
+                                   data-records-per-page="<?php echo $records_per_page; ?>"
+                                   data-total-pages="<?php echo $total_pages; ?>"
+                                   data-sort-column=""
+                                   data-sort-direction="default">
                                 <?php if($donor_history && is_array($donor_history)): ?>
                                     <?php foreach($donor_history as $index => $entry): ?>
                                         <?php
@@ -2489,7 +2542,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                 <ul class="pagination justify-content-center">
                                     <!-- Previous button -->
                                     <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
+                                        <a class="page-link" href="?page=<?php echo max(1, $current_page - 1); ?>" data-page="<?php echo max(1, $current_page - 1); ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
                                             Previous
                                         </a>
                                     </li>
@@ -2502,7 +2555,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                     // Always show first page
                                     if ($start_page > 1): ?>
                                         <li class="page-item">
-                                            <a class="page-link" href="?page=1">1</a>
+                                            <a class="page-link" href="?page=1" data-page="1">1</a>
                                         </li>
                                         <?php if ($start_page > 2): ?>
                                             <li class="page-item disabled">
@@ -2514,7 +2567,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                     <!-- Page numbers around current page -->
                                     <?php for($i = $start_page; $i <= $end_page; $i++): ?>
                                         <li class="page-item <?php echo $current_page == $i ? 'active' : ''; ?>">
-                                            <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                            <a class="page-link" href="?page=<?php echo $i; ?>" data-page="<?php echo $i; ?>"><?php echo $i; ?></a>
                                         </li>
                                     <?php endfor; ?>
                                     
@@ -2526,13 +2579,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                             </li>
                                         <?php endif; ?>
                                         <li class="page-item">
-                                            <a class="page-link" href="?page=<?php echo $total_pages; ?>"><?php echo $total_pages; ?></a>
+                                            <a class="page-link" href="?page=<?php echo $total_pages; ?>" data-page="<?php echo $total_pages; ?>"><?php echo $total_pages; ?></a>
                                         </li>
                                     <?php endif; ?>
                                     
                                     <!-- Next button -->
                                     <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
+                                        <a class="page-link" href="?page=<?php echo min($total_pages, $current_page + 1); ?>" data-page="<?php echo min($total_pages, $current_page + 1); ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
                                             Next
                                         </a>
                                     </li>

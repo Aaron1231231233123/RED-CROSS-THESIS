@@ -31,7 +31,7 @@ function fpe_match_status($status, $needs_review, $allowed){
     return in_array($canon, $norm, true);
 }
 
-function fpe_build_filtered_rows($filters, $limit = 150, $q = ''){
+function fpe_build_filtered_rows($filters, $limit = 150, $q = '', $sortOptions = null, $statusFilter = 'all'){
     $donorTypes = isset($filters['donor_type']) && is_array($filters['donor_type']) ? $filters['donor_type'] : [];
     $statuses = isset($filters['status']) && is_array($filters['status']) ? $filters['status'] : [];
     // No Needs Review flag in filters
@@ -83,14 +83,88 @@ function fpe_build_filtered_rows($filters, $limit = 150, $q = ''){
         $out[] = $row;
         if (count($out) >= $limit) break;
     }
-    // Keep table numbering consistent (No. column)
-    $i = 1;
-    // Apply limit AFTER filtering to ensure filters are effective across the full dataset
-    if (count($out) > $limit) {
-        $out = array_slice($out, 0, $limit);
+    $rows = array_values($out);
+
+    $statusFilter = strtolower(trim((string)$statusFilter));
+    if ($statusFilter !== '' && $statusFilter !== 'all') {
+        $today = date('Y-m-d');
+        $rows = array_values(array_filter($rows, function($row) use ($statusFilter, $today){
+            $statusLower = strtolower($row['status'] ?? '');
+            $needsReview = !empty($row['needs_review']);
+            switch ($statusFilter) {
+                case 'pending':
+                    return $needsReview || $statusLower === 'pending';
+                case 'active':
+                    return $statusLower === 'accepted';
+                case 'today':
+                    $ts = isset($row['date']) ? strtotime($row['date']) : 0;
+                    return $ts ? date('Y-m-d', $ts) === $today : false;
+                case 'new':
+                    return isset($row['donor_type']) && $row['donor_type'] === 'New';
+                case 'returning':
+                    return isset($row['donor_type']) && $row['donor_type'] === 'Returning';
+                default:
+                    return true;
+            }
+        }));
     }
-    foreach ($out as &$r) { $r['no'] = $i++; }
-    return $out;
+
+    if ($sortOptions && is_array($sortOptions) && isset($sortOptions['column'], $sortOptions['direction'])) {
+        $column = strtolower($sortOptions['column']);
+        $direction = strtolower($sortOptions['direction']) === 'desc' ? 'desc' : 'asc';
+        $allowedColumns = ['no','date','surname','first_name','physician'];
+        if (in_array($column, $allowedColumns, true)) {
+            usort($rows, function($a, $b) use ($column, $direction){
+                switch ($column) {
+                    case 'date':
+                        $aVal = isset($a['date']) ? strtotime($a['date']) : 0;
+                        $bVal = isset($b['date']) ? strtotime($b['date']) : 0;
+                        $cmp = $aVal <=> $bVal;
+                        break;
+                    case 'surname':
+                    case 'first_name':
+                        $aVal = strtolower($a[$column] ?? '');
+                        $bVal = strtolower($b[$column] ?? '');
+                        $cmp = strcmp($aVal, $bVal);
+                        break;
+                    case 'physician':
+                        $normalize = function($v){
+                            $s = strtolower(trim((string)$v));
+                            if (in_array($s, ['pending','n/a','na',''], true)) {
+                                $s = '';
+                            }
+                            return $s;
+                        };
+                        $aVal = $normalize($a['physician'] ?? '');
+                        $bVal = $normalize($b['physician'] ?? '');
+                        $cmp = strcmp($aVal, $bVal);
+                        break;
+                    case 'no':
+                    default:
+                        $aVal = (int)($a['no'] ?? 0);
+                        $bVal = (int)($b['no'] ?? 0);
+                        $cmp = $aVal <=> $bVal;
+                        break;
+                }
+                if ($cmp === 0) {
+                    $aDid = isset($a['payload']['donor_form_id']) ? (int)$a['payload']['donor_form_id'] : 0;
+                    $bDid = isset($b['payload']['donor_form_id']) ? (int)$b['payload']['donor_form_id'] : 0;
+                    $cmp = $aDid <=> $bDid;
+                }
+                return $direction === 'asc' ? $cmp : -$cmp;
+            });
+        }
+    }
+
+    if ($limit > 0 && count($rows) > $limit) {
+        $rows = array_slice($rows, 0, $limit);
+    }
+
+    $i = 1;
+    foreach ($rows as &$r) { $r['no'] = $i++; }
+    unset($r);
+
+    return $rows;
 }
 
 ?>

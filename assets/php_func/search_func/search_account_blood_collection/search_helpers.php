@@ -120,12 +120,15 @@ if (!defined('SABC_HELPERS_INCLUDED')) {
             $bc = $collectionsByExam[$examId];
 
             $needsReview = sabc_to_bool($bc['needs_review'] ?? false);
+            $statusBucket = 'not started';
             $statusHtml = '<span class="badge bg-secondary">Not Started</span>';
             if (!$needsReview) {
                 if (array_key_exists('is_successful', $bc)) {
                     if ($bc['is_successful'] === true) {
+                        $statusBucket = 'completed';
                         $statusHtml = '<span class="badge bg-success">Completed</span>';
                     } elseif ($bc['is_successful'] === false) {
+                        $statusBucket = 'failed';
                         $statusHtml = '<span class="badge bg-danger">Failed</span>';
                     }
                 }
@@ -154,6 +157,8 @@ if (!defined('SABC_HELPERS_INCLUDED')) {
                 'status_html' => $statusHtml,
                 'phlebotomist' => isset($bc['phlebotomist']) && $bc['phlebotomist'] !== '' ? (string)$bc['phlebotomist'] : 'Assigned',
                 'needs_review' => $needsReview,
+                'status_bucket' => $statusBucket,
+                'created_at' => $bc['created_at'] ?? null,
                 'payload' => $payload
             ];
         }

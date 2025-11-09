@@ -36,9 +36,9 @@ if (!empty($rows)) {
             <td><?php echo htmlspecialchars($dateStr); ?></td>
             <td><?php echo htmlspecialchars(strtoupper($entry['surname'])); ?></td>
             <td><?php echo htmlspecialchars($entry['first_name']); ?></td>
+            <td><?php echo htmlspecialchars($entry['physician']); ?></td>
             <td><span class="<?php echo ($entry['donor_type']==='Returning') ? 'type-returning' : 'type-new'; ?>"><?php echo htmlspecialchars($entry['donor_type']); ?></span></td>
             <td><span class="badge <?php echo $badge; ?>"><?php echo htmlspecialchars($entry['status']); ?></span></td>
-            <td><?php echo htmlspecialchars($entry['physician']); ?></td>
             <td>
                 <?php if ($isEditable): ?>
                     <button type="button" class="btn btn-warning btn-sm edit-btn" data-screening='<?php echo $payload; ?>' title="Edit Physical Examination"><i class="fas fa-edit"></i></button>

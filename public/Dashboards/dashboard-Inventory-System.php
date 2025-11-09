@@ -1501,6 +1501,10 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                         </div>
                         <div class="row">
                             <div class="col-md-9">
+                                <div id="mapBoundaryAlert" class="alert alert-warning d-none py-2 px-3 mb-3" role="alert" style="font-size: 0.95rem;">
+                                    <i class="fas fa-triangle-exclamation me-2"></i>
+                                    <span><strong id="mapBoundaryAlertCount">0</strong> donor location(s) were excluded because they fall outside the supported GIS boundary.</span>
+                                </div>
                                 <div id="map" class="bg-light rounded-3" style="height: 677px; width: 100%; max-width: 100%; margin: 0 auto; border: 1px solid #eee;"></div>
                             </div>
                             <div class="col-md-3 dashboard-gis-sidebar">
@@ -1618,6 +1622,362 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     let mapInitialized = false;
                     let map = null;
                     
+                    function isCityAllowed(city) {
+                        if (!city) return false;
+                        const normalized = normalizeCityName(city);
+                        return normalized ? allowedIloiloCities.has(normalized) : false;
+                    }
+
+                    function inferCityFromAddress(address) {
+                        if (!address || typeof address !== 'string') {
+                            return null;
+                        }
+                        const normalized = normalizeCityToken(address);
+                        for (const [token, canonical] of Object.entries(cityAliasMap)) {
+                            if (normalized.includes(token)) {
+                                return canonical;
+                            }
+                        }
+                        return null;
+                    }
+                    
+                    function getCityForItem(item) {
+                        if (!item) return null;
+                        if (item.city) {
+                            const normalizedCity = normalizeCityName(item.city);
+                            if (normalizedCity) {
+                                item.city = normalizedCity;
+                                return normalizedCity;
+                            }
+                        }
+                        const inferred = inferCityFromAddress(item.address || item.original_address || '');
+                        if (inferred) {
+                            item.city = inferred;
+                            return inferred;
+                        }
+                        item.city = null;
+                        return null;
+                    }
+                    // --- GIS Boundary Configuration (client-side guardrail) ---
+                    const allowedHeatmapBounds = [
+                        L.latLngBounds([9.3000, 121.3000], [12.0000, 123.8000])
+                    ];
+                    
+                    const restrictedWaterZones = [
+                        // Guimaras Strait (between Panay and Guimaras) - slightly relaxed near the coast
+                        { minLat: 10.52, maxLat: 10.76, minLng: 122.52, maxLng: 122.74 },
+                        // Iloilo Strait (between Guimaras and Negros Occidental)
+                        { minLat: 10.44, maxLat: 10.73, minLng: 122.72, maxLng: 123.03 },
+                        // Panay Gulf - southern corridor (west of Iloilo/Antique)
+                        { minLat: 10.24, maxLat: 10.68, minLng: 121.54, maxLng: 121.92 },
+                        // Panay Gulf - northern Antique coastline
+                        { minLat: 10.69, maxLat: 11.31, minLng: 121.54, maxLng: 121.92 },
+                        // Visayan Sea (north of Panay)
+                        { minLat: 11.02, maxLat: 11.58, minLng: 122.24, maxLng: 123.31 },
+                        // Sulu Sea (south of Negros Occidental)
+                        { minLat: 9.74, maxLat: 10.36, minLng: 122.44, maxLng: 123.16 }
+                    ];
+                    const WATER_DISTANCE_THRESHOLD_KM = 0.45;
+                    const COASTAL_GRACE_KM = 0.60;
+                    
+                    const locationCoordinates = {
+                        'Ajuy': { lat: 11.1710, lng: 123.0150 },
+                        'Alimodian': { lat: 10.8167, lng: 122.4333 },
+                        'Anilao': { lat: 11.0006, lng: 122.7214 },
+                        'Banate': { lat: 11.0033, lng: 122.8071 },
+                        'Barotac Nuevo': { lat: 10.9000, lng: 122.7000 },
+                        'Barotac Viejo': { lat: 11.0500, lng: 122.8500 },
+                        'Batad': { lat: 11.2873, lng: 123.0455 },
+                        'Bingawan': { lat: 11.2333, lng: 122.5667 },
+                        'Cabatuan': { lat: 10.8833, lng: 122.4833 },
+                        'Calinog': { lat: 11.1167, lng: 122.5000 },
+                        'Carles': { lat: 11.5667, lng: 123.1333 },
+                        'Concepcion': { lat: 11.2167, lng: 123.1167 },
+                        'Dingle': { lat: 11.0000, lng: 122.6667 },
+                        'Dueñas': { lat: 11.0667, lng: 122.6167 },
+                        'Dumangas': { lat: 10.8333, lng: 122.7167 },
+                        'Estancia': { lat: 11.4500, lng: 123.1500 },
+                        'Guimbal': { lat: 10.6667, lng: 122.3167 },
+                        'Igbaras': { lat: 10.7167, lng: 122.2667 },
+                        'Janiuay': { lat: 10.9500, lng: 122.5000 },
+                        'Lambunao': { lat: 11.0500, lng: 122.4667 },
+                        'Leganes': { lat: 10.7833, lng: 122.5833 },
+                        'Leon': { lat: 10.7833, lng: 122.3833 },
+                        'Maasin': { lat: 10.8833, lng: 122.4333 },
+                        'Mina': { lat: 10.9333, lng: 122.5833 },
+                        'Miagao': { lat: 10.6333, lng: 122.2333 },
+                        'New Lucena': { lat: 10.8833, lng: 122.6000 },
+                        'Oton': { lat: 10.6933, lng: 122.4733 },
+                        'Passi': { lat: 11.1167, lng: 122.6333 },
+                        'Pavia': { lat: 10.7750, lng: 122.5444 },
+                        'Pototan': { lat: 10.9500, lng: 122.6333 },
+                        'San Dionisio': { lat: 11.2667, lng: 123.0833 },
+                        'San Enrique': { lat: 11.1000, lng: 122.6667 },
+                        'San Joaquin': { lat: 10.5920, lng: 122.0950 },
+                        'San Miguel': { lat: 10.7833, lng: 122.4667 },
+                        'Santa Barbara': { lat: 10.8167, lng: 122.5333 },
+                        'Sara': { lat: 11.2500, lng: 123.0167 },
+                        'Tigbauan': { lat: 10.6833, lng: 122.3667 },
+                        'Tubungan': { lat: 10.7833, lng: 122.3333 },
+                        'Zarraga': { lat: 10.8167, lng: 122.6000 }
+                    };
+
+                    function normalizeCityToken(text) {
+                        if (!text) return '';
+                        return text
+                            .toString()
+                            .normalize('NFD')
+                            .replace(/[\u0300-\u036f]/g, '')
+                            .toLowerCase()
+                            .replace(/[^a-z0-9\s]/g, ' ')
+                            .replace(/\s+/g, ' ')
+                            .trim();
+                    }
+
+                    const cityAliasMap = {};
+                    Object.keys(locationCoordinates).forEach(city => {
+                        cityAliasMap[normalizeCityToken(city)] = city;
+                    });
+                    [
+                        ['Passi City', 'Passi'],
+                        ['City of Passi', 'Passi'],
+                        ['Municipality of Passi', 'Passi'],
+                        ['Municipality of San Miguel', 'San Miguel'],
+                        ['San Miguel Iloilo', 'San Miguel'],
+                        ['Municipality of Oton', 'Oton'],
+                        ['San Enrique Iloilo', 'San Enrique']
+                    ].forEach(([alias, canonical]) => {
+                        cityAliasMap[normalizeCityToken(alias)] = canonical;
+                    });
+
+                    function normalizeCityName(rawName) {
+                        if (!rawName) return null;
+                        const token = normalizeCityToken(rawName);
+                        return cityAliasMap[token] || null;
+                    }
+
+                    const allowedIloiloCities = new Set(Object.keys(locationCoordinates));
+                    const westCoastCities = new Set(['San Joaquin', 'Miagao', 'Guimbal', 'Tigbauan']);
+                    const northCoastCities = new Set(['Leganes', 'Zarraga', 'Dumangas', 'Barotac Nuevo', 'Barotac Viejo']);
+                    
+                    // Approximate outline of Iloilo City mainland (for stricter checks)
+                    const strictCityPolygons = [
+                        [
+                            [10.7765, 122.4712],
+                            [10.7588, 122.4546],
+                            [10.7256, 122.4578],
+                            [10.6984, 122.4744],
+                            [10.6763, 122.4865],
+                            [10.6569, 122.5063],
+                            [10.6467, 122.5254],
+                            [10.6429, 122.5452],
+                            [10.6451, 122.5667],
+                            [10.6549, 122.5845],
+                            [10.6691, 122.5978],
+                            [10.6885, 122.6091],
+                            [10.7077, 122.6181],
+                            [10.7324, 122.6129],
+                            [10.7528, 122.6028],
+                            [10.7705, 122.5920],
+                            [10.7886, 122.5774],
+                            [10.8021, 122.5585],
+                            [10.8078, 122.5383],
+                            [10.8052, 122.5172],
+                            [10.7943, 122.4975],
+                            [10.7819, 122.4818],
+                            [10.7765, 122.4712]
+                        ]
+                    ];
+                    
+                    const allowedProvinceKeywords = [
+                        'iloilo',
+                        'iloilo city',
+                        'iloilo province',
+                        'province of iloilo',
+                        'western visayas',
+                        'region vi'
+                    ];
+                    
+                    function hashString(str) {
+                        let hash = 0;
+                        if (!str) return hash;
+                        for (let i = 0; i < str.length; i++) {
+                            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                            hash |= 0;
+                        }
+                        return Math.abs(hash);
+                    }
+                    
+                    function jitterCoordinate(lat, lng, key, maxMeters = 300, minMeters = 40) {
+                        const seed = hashString(key);
+                        const angle = ((seed % 360) * Math.PI) / 180;
+                        const distanceMeters = minMeters + (seed % (maxMeters - minMeters));
+                        const offsetLat = (distanceMeters * Math.cos(angle)) / 111320;
+                        const offsetLng = (distanceMeters * Math.sin(angle)) / (111320 * Math.cos(lat * Math.PI / 180));
+                        return {
+                            lat: lat + offsetLat,
+                            lng: lng + offsetLng
+                        };
+                    }
+                    
+                    function maybeApplyJitter(lat, lng, result, existingCheck = true) {
+                        const source = result.coords.source || 'unknown';
+                        const accuracy = result.coords.accuracy || 'medium';
+                        if (source === 'database' || accuracy === 'high') {
+                            return { lat, lng };
+                        }
+                        const key = String(result.location?.donor_id ?? result.location?.address ?? result.coords.display_name ?? `${lat},${lng}`);
+                        const jittered = jitterCoordinate(lat, lng, key);
+                        const cityHint = result.location ? getCityForItem(result.location) : null;
+                        if (!existingCheck) {
+                            const safeDirect = ensureLandCoordinate(jittered.lat, jittered.lng, cityHint);
+                            if (safeDirect) {
+                                return safeDirect;
+                            }
+                            const safeOriginal = ensureLandCoordinate(lat, lng, cityHint);
+                            return safeOriginal || { lat, lng };
+                        }
+                        if (isWithinAllowedGISArea(jittered.lat, jittered.lng) && !isPointInWater(jittered.lat, jittered.lng)) {
+                            const safeJittered = ensureLandCoordinate(jittered.lat, jittered.lng, cityHint);
+                            if (safeJittered) {
+                                return safeJittered;
+                            }
+                        }
+                        const safeFallback = ensureLandCoordinate(lat, lng, cityHint);
+                        return safeFallback || { lat, lng };
+                    }
+
+                    function spreadDuplicatePoints(points) {
+                        const groups = new Map();
+                        points.forEach((point, index) => {
+                            const baseLat = typeof point.baseLat === 'number' ? point.baseLat : point.lat;
+                            const baseLng = typeof point.baseLng === 'number' ? point.baseLng : point.lng;
+                            point.baseLat = baseLat;
+                            point.baseLng = baseLng;
+                            const baseKey = `${Number(baseLat).toFixed(6)},${Number(baseLng).toFixed(6)}`;
+                            if (!groups.has(baseKey)) {
+                                groups.set(baseKey, []);
+                            }
+                            groups.get(baseKey).push({ point, index });
+                        });
+
+                        groups.forEach((entries, baseKey) => {
+                            if (entries.length <= 1) {
+                                return;
+                            }
+                            console.log(`🌐 Detected ${entries.length} duplicate coordinate(s) at ${baseKey} – applying micro-jitter to separate markers.`);
+                            entries.forEach(({ point }, offset) => {
+                                const seedKey = `${point.location?.donor_id || baseKey}:${offset}`;
+                                const jittered = jitterCoordinate(point.baseLat, point.baseLng, seedKey, 120, 30);
+                                const cityHint = getCityForItem(point.location);
+                                const safe = ensureLandCoordinate(jittered.lat, jittered.lng, cityHint);
+                                point.lat = safe ? safe.lat : jittered.lat;
+                                point.lng = safe ? safe.lng : jittered.lng;
+                            });
+                        });
+                    }
+                    
+                    function cleanAddressString(address) {
+                        if (!address || typeof address !== 'string') {
+                            return '';
+                        }
+                        const segments = address
+                            .split(',')
+                            .map(seg => seg.trim())
+                            .filter(Boolean);
+                        const seen = new Set();
+                        const cleaned = [];
+                        segments.forEach(seg => {
+                            const normalized = seg.toLowerCase().replace(/\s+/g, ' ');
+                            if (seen.has(normalized)) {
+                                return;
+                            }
+                            seen.add(normalized);
+                            cleaned.push(seg);
+                        });
+                        return cleaned.join(', ');
+                    }
+                    
+                    function isPointInWater(lat, lng) {
+                        if (lat === null || lng === null || Number.isNaN(lat) || Number.isNaN(lng)) {
+                            return false;
+                        }
+                        const centroidEntries = (typeof locationCoordinates !== 'undefined' && locationCoordinates)
+                            ? Object.values(locationCoordinates)
+                            : [];
+                        let nearestDist = Infinity;
+                        centroidEntries.forEach(c => {
+                            const d = haversineKm(lat, lng, c.lat, c.lng);
+                            if (d < nearestDist) {
+                                nearestDist = d;
+                            }
+                        });
+                        const inRestrictedZone = restrictedWaterZones.some(zone =>
+                            lat >= zone.minLat && lat <= zone.maxLat &&
+                            lng >= zone.minLng && lng <= zone.maxLng
+                        );
+                        if (inRestrictedZone) {
+                            if (nearestDist <= COASTAL_GRACE_KM) {
+                                return false;
+                            }
+                            return true;
+                        }
+                        // Treat as water when beyond the safety threshold from any municipality centroid
+                        return nearestDist > WATER_DISTANCE_THRESHOLD_KM;
+                    }
+                    
+                    function isPointInPolygon(lat, lng, polygon) {
+                        let inside = false;
+                        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                            const xi = polygon[i][1];
+                            const yi = polygon[i][0];
+                            const xj = polygon[j][1];
+                            const yj = polygon[j][0];
+                            const intersect = ((yi > lat) !== (yj > lat)) &&
+                                (lng < ((xj - xi) * (lat - yi)) / ((yj - yi) || Number.EPSILON) + xi);
+                            if (intersect) inside = !inside;
+                        }
+                        return inside;
+                    }
+                    
+                    function isAddressAllowed(address) {
+                        if (!address || typeof address !== 'string') {
+                            return true; // allow if unknown, other checks will guard
+                        }
+                        const normalized = cleanAddressString(address).toLowerCase();
+                        return allowedProvinceKeywords.some(keyword => normalized.includes(keyword));
+                    }
+                    
+                    function isWithinAllowedGISArea(lat, lng) {
+                        if (lat === null || lng === null || Number.isNaN(lat) || Number.isNaN(lng)) {
+                            return false;
+                        }
+                        if (isPointInWater(lat, lng)) {
+                            return false;
+                        }
+                        const point = L.latLng(lat, lng);
+                        const insideBounds = allowedHeatmapBounds.some(bounds => bounds.contains(point));
+                        if (!insideBounds) {
+                            return false;
+                        }
+                        if (strictCityPolygons.length === 0) {
+                            return true;
+                        }
+                        // Allow either inside strict polygon OR within 35km of any known municipality centroid
+                        if (strictCityPolygons.some(polygon => isPointInPolygon(lat, lng, polygon))) {
+                            return true;
+                        }
+                        const centroidEntries = (typeof locationCoordinates !== 'undefined' && locationCoordinates)
+                            ? Object.values(locationCoordinates)
+                            : [];
+                        for (const coords of centroidEntries) {
+                            if (haversineKm(lat, lng, coords.lat, coords.lng) <= 35) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                    
                     // HILBERT CURVE SPATIAL SORTING ALGORITHM
                     function hilbertCurve(lat, lng, order = 16) {
                         // Normalize coordinates to [0, 1] range
@@ -1664,58 +2024,264 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                         return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
                     }
 
+                    function findNearestMunicipality(lat, lng) {
+                        let nearest = null;
+                        let minDist = Infinity;
+                        for (const [city, coords] of Object.entries(locationCoordinates)) {
+                            const dist = haversineKm(lat, lng, coords.lat, coords.lng);
+                            if (dist < minDist) {
+                                minDist = dist;
+                                nearest = { city, lat: coords.lat, lng: coords.lng, distance: dist };
+                            }
+                        }
+                        return nearest;
+                    }
+
+                    function nudgeCoordinateTowardsLand(lat, lng, cityHint = null) {
+                        const targets = [];
+                        if (cityHint && locationCoordinates[cityHint]) {
+                            targets.push({ city: cityHint, lat: locationCoordinates[cityHint].lat, lng: locationCoordinates[cityHint].lng });
+                        }
+                        const nearest = findNearestMunicipality(lat, lng);
+                        if (nearest && (!targets.length || targets[0].city !== nearest.city)) {
+                            targets.push(nearest);
+                        }
+
+                        const factors = [0.35, 0.55, 0.7, 0.85, 1.0];
+                        for (const target of targets) {
+                            for (const factor of factors) {
+                                const candidateLat = lat + (target.lat - lat) * factor;
+                                const candidateLng = lng + (target.lng - lng) * factor;
+                                if (isWithinAllowedGISArea(candidateLat, candidateLng) && !isPointInWater(candidateLat, candidateLng)) {
+                                    const biased = applyCoastalInlandBias(candidateLat, candidateLng, cityHint || target.city);
+                                    if (!isPointInWater(biased.lat, biased.lng)) {
+                                        return { lat: biased.lat, lng: biased.lng, city: target.city };
+                                    }
+                                    return { lat: candidateLat, lng: candidateLng, city: target.city };
+                                }
+                            }
+                        }
+
+                        const offsets = [
+                            { dLat: 0, dLng: 0.01 },
+                            { dLat: 0.006, dLng: 0.012 },
+                            { dLat: -0.006, dLng: 0.012 },
+                            { dLat: 0, dLng: 0.018 }
+                        ];
+                        for (const offset of offsets) {
+                            const candidateLat = lat + offset.dLat;
+                            const candidateLng = lng + offset.dLng;
+                            if (isWithinAllowedGISArea(candidateLat, candidateLng) && !isPointInWater(candidateLat, candidateLng)) {
+                                const biased = applyCoastalInlandBias(candidateLat, candidateLng, cityHint || nearest?.city || null);
+                                if (!isPointInWater(biased.lat, biased.lng)) {
+                                    return { lat: biased.lat, lng: biased.lng, city: cityHint || nearest?.city || null };
+                                }
+                                return { lat: candidateLat, lng: candidateLng, city: cityHint || nearest?.city || null };
+                            }
+                        }
+                        return null;
+                    }
+
+                    function applyCoastalInlandBias(lat, lng, cityHint = null) {
+                        let targetCity = null;
+                        if (cityHint && locationCoordinates[cityHint]) {
+                            targetCity = cityHint;
+                        }
+                        if (!targetCity) {
+                            const nearest = findNearestMunicipality(lat, lng);
+                            if (nearest && nearest.city && locationCoordinates[nearest.city]) {
+                                targetCity = nearest.city;
+                            }
+                        }
+                        if (!targetCity || !locationCoordinates[targetCity]) {
+                            return { lat, lng };
+                        }
+
+                        const cityCoords = locationCoordinates[targetCity];
+                        let adjustedLat = lat;
+                        let adjustedLng = lng;
+
+                        // Western Panay / Antique coastline - push eastward inland
+                        const isWestCoast = westCoastCities.has(targetCity);
+                        const westPrimaryBoost = targetCity === 'San Joaquin' ? 0.032 : 0.026;
+                        const westSecondaryBoost = targetCity === 'San Joaquin' ? 0.028 : 0.018;
+                        const westMinLngBoost = targetCity === 'San Joaquin' ? 0.035 : 0.020;
+                        const westLatBoost = targetCity === 'San Joaquin' ? 0.012 : 0.006;
+                        const westLatFloorBoost = targetCity === 'San Joaquin' ? 0.012 : 0.004;
+
+                        if (cityCoords.lng <= 122.05 && adjustedLng <= cityCoords.lng) {
+                            adjustedLng = Math.max(adjustedLng, cityCoords.lng + westPrimaryBoost);
+                            adjustedLat = adjustedLat + 0.004;
+                        }
+
+                        if (isWestCoast && adjustedLng <= cityCoords.lng - 0.004) {
+                            adjustedLng = Math.max(adjustedLng, cityCoords.lng + westPrimaryBoost);
+                            adjustedLat = adjustedLat + westLatBoost;
+                        }
+
+                        // Eastern Iloilo / Guimaras coastline - push westward inland
+                        if (cityCoords.lng >= 122.75 && adjustedLng >= cityCoords.lng) {
+                            adjustedLng = cityCoords.lng - 0.012;
+                        }
+
+                        // Northern Aklan coastline - push southward inland
+                        if (cityCoords.lat >= 11.25 && adjustedLat >= cityCoords.lat) {
+                            adjustedLat = cityCoords.lat - 0.012;
+                        }
+
+                        // Southern Guimaras / Iloilo coastline - push northward inland
+                        if (cityCoords.lat <= 10.55 && adjustedLat <= cityCoords.lat) {
+                            adjustedLat = cityCoords.lat + 0.012;
+                        }
+
+                        if (northCoastCities.has(targetCity) && adjustedLat >= cityCoords.lat) {
+                            adjustedLat = cityCoords.lat - 0.008;
+                        }
+
+                        if (isWestCoast && adjustedLng <= cityCoords.lng) {
+                            adjustedLng = Math.max(adjustedLng, cityCoords.lng + westSecondaryBoost);
+                            adjustedLat = Math.max(adjustedLat, cityCoords.lat + 0.002);
+                        }
+
+                        if (isWestCoast) {
+                            const minSafeLng = cityCoords.lng + westMinLngBoost;
+                            if (adjustedLng < minSafeLng) {
+                                adjustedLng = minSafeLng;
+                            }
+                            const minSafeLat = cityCoords.lat + westLatFloorBoost;
+                            if (adjustedLat < minSafeLat) {
+                                adjustedLat = minSafeLat;
+                            }
+                        }
+
+                        return { lat: adjustedLat, lng: adjustedLng };
+                    }
+
+                    function ensureLandCoordinate(lat, lng, cityHint = null) {
+                        let candidateLat = lat;
+                        let candidateLng = lng;
+
+                        if (isPointInWater(candidateLat, candidateLng)) {
+                            const adjusted = nudgeCoordinateTowardsLand(candidateLat, candidateLng, cityHint);
+                            if (!adjusted) {
+                                return null;
+                            }
+                            candidateLat = adjusted.lat;
+                            candidateLng = adjusted.lng;
+                        }
+
+                        const biased = applyCoastalInlandBias(candidateLat, candidateLng, cityHint);
+                        if (!isPointInWater(biased.lat, biased.lng)) {
+                            candidateLat = biased.lat;
+                            candidateLng = biased.lng;
+                        }
+
+                        if (isPointInWater(candidateLat, candidateLng)) {
+                            const retry = nudgeCoordinateTowardsLand(candidateLat, candidateLng, cityHint);
+                            if (retry && !isPointInWater(retry.lat, retry.lng)) {
+                                candidateLat = retry.lat;
+                                candidateLng = retry.lng;
+                            } else if (retry) {
+                                const retryBiased = applyCoastalInlandBias(retry.lat, retry.lng, cityHint);
+                                if (!isPointInWater(retryBiased.lat, retryBiased.lng)) {
+                                    candidateLat = retryBiased.lat;
+                                    candidateLng = retryBiased.lng;
+                                } else {
+                                    return null;
+                                }
+                            } else {
+                                return null;
+                            }
+                        }
+
+                        return { lat: candidateLat, lng: candidateLng };
+                    }
+
                     // Comprehensive coordinate validation - ensure coordinates are on land
                     function sanitizeCoordinates(coords, address) {
                         if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') return null;
                         
-                        // Comprehensive water area detection (matches server-side)
-                        const waterAreas = [
-                            {minLat: 10.55, maxLat: 10.75, minLng: 122.50, maxLng: 122.70}, // Guimaras Strait
-                            {minLat: 10.45, maxLat: 10.70, minLng: 122.70, maxLng: 122.95}, // Iloilo Strait
-                            {minLat: 10.20, maxLat: 10.65, minLng: 121.80, maxLng: 122.30}, // Panay Gulf
-                            {minLat: 11.20, maxLat: 11.50, minLng: 122.50, maxLng: 123.20}, // Visayan Sea
-                            {minLat: 9.80, maxLat: 10.30, minLng: 122.50, maxLng: 123.20}, // Sulu Sea
-                        ];
-                        
-                        // Check if in water
-                        let inWater = false;
-                        for (const area of waterAreas) {
-                            if (coords.lat >= area.minLat && coords.lat <= area.maxLat &&
-                                coords.lng >= area.minLng && coords.lng <= area.maxLng) {
-                                inWater = true;
-                                break;
+                        const normalizedAddress = (address || '').toLowerCase();
+                        if (!coords.accuracy) {
+                            if (coords.source === 'database') {
+                                coords.accuracy = 'high';
+                            } else if (coords.source === 'geocoded') {
+                                coords.accuracy = 'medium';
+                            } else if (coords.source === 'predefined') {
+                                coords.accuracy = 'medium';
+                            } else if (coords.source === 'snapped' || coords.source === 'fallback') {
+                                coords.accuracy = 'low';
+                            } else {
+                                coords.accuracy = 'medium';
                             }
                         }
                         
-                        // Check distance from nearest city (must be within 20km)
-                        let minDist = Infinity;
-                        let nearestCity = null;
-                        for (const [city, c] of Object.entries(locationCoordinates)) {
-                            const d = haversineKm(coords.lat, coords.lng, c.lat, c.lng);
-                            if (d < minDist) {
-                                minDist = d;
-                                nearestCity = { city, ...c };
+                        const nearest = findNearestMunicipality(coords.lat, coords.lng);
+                        const nearestDist = nearest ? nearest.distance : Infinity;
+                        const cityHint = nearest?.city || null;
+                        const isOffshore = isPointInWater(coords.lat, coords.lng);
+                        
+                        if (!isOffshore && nearestDist <= 20) {
+                            const safeOriginal = ensureLandCoordinate(coords.lat, coords.lng, cityHint);
+                            if (safeOriginal) {
+                                coords.lat = safeOriginal.lat;
+                                coords.lng = safeOriginal.lng;
+                                return coords;
                             }
                         }
                         
-                        // If in water OR too far from any city (>20km), snap to city from address
-                        if (inWater || minDist > 20) {
-                            if (address) {
-                                // Try to find city from address first
+                        const attemptSnap = () => {
+                            const candidates = [];
+                            const seenCities = new Set();
+                            
+                            if (normalizedAddress) {
                                 for (const [city, c] of Object.entries(locationCoordinates)) {
-                                    if (address.toLowerCase().includes(city.toLowerCase())) {
-                                        return { lat: c.lat, lng: c.lng, display_name: `${city}, Iloilo, Philippines`, source: 'snapped' };
+                                    if (normalizedAddress.includes(city.toLowerCase())) {
+                                        if (!seenCities.has(city)) {
+                                            candidates.push({ city, lat: c.lat, lng: c.lng });
+                                            seenCities.add(city);
+                                        }
                                     }
                                 }
                             }
-                            // Otherwise snap to nearest city
-                            if (nearestCity) {
-                                return { lat: nearestCity.lat, lng: nearestCity.lng, display_name: `${nearestCity.city}, Philippines (snapped)`, source: 'snapped' };
+                            
+                            if (nearest && !seenCities.has(nearest.city)) {
+                                candidates.push({ city: nearest.city, lat: nearest.lat, lng: nearest.lng });
+                                seenCities.add(nearest.city);
                             }
+                            
+                            for (const candidate of candidates) {
+                                const safe = ensureLandCoordinate(candidate.lat, candidate.lng, candidate.city);
+                                if (safe) {
+                                    return {
+                                        lat: safe.lat,
+                                        lng: safe.lng,
+                                        display_name: `${candidate.city}, Philippines`,
+                                        source: 'snapped',
+                                        accuracy: 'low',
+                                        snappedCity: candidate.city
+                                    };
+                                }
+                            }
+                            return null;
+                        };
+                        
+                        const snapped = attemptSnap();
+                        if (snapped) {
+                            return snapped;
                         }
                         
-                        // Coordinates are valid - return as is
-                        return coords;
+                        const nudged = nudgeCoordinateTowardsLand(coords.lat, coords.lng, cityHint);
+                        if (nudged) {
+                            coords.lat = nudged.lat;
+                            coords.lng = nudged.lng;
+                            coords.source = coords.source || 'nudged';
+                            coords.accuracy = 'low';
+                            return coords;
+                        }
+                        
+                        // No reliable land coordinate -> discard
+                        return null;
                     }
 
                     // Function to initialize map (called when user scrolls to map section)
@@ -1745,11 +2311,15 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
 
                     // Summary fields
                     const locationListEl = document.getElementById('locationList');
+                    const mapBoundaryAlert = document.getElementById('mapBoundaryAlert');
+                    const mapBoundaryAlertCount = document.getElementById('mapBoundaryAlertCount');
                     
                     // Coordinate usage counters
                     let databaseCount = 0;
                     let predefinedCount = 0;
                     let geocodedCount = 0;
+                    let flaggedOutsidePoints = [];
+                    let currentCityFilter = 'all';
 
                     // Separate data for Top Donors and Heatmap
                     let cityDonorCounts = {};
@@ -1757,15 +2327,47 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     
                     // Function to load GIS data with blood type filter
                     function loadGISData(bloodType = 'all') {
-                        console.log('🚀 Loading GIS data in background...', bloodType !== 'all' ? `(filter: ${bloodType})` : '');
+                        console.log('🚀 Loading GIS data in background...', bloodType !== 'all' ? `(blood filter: ${bloodType})` : '');
+                        flaggedOutsidePoints = [];
                         const url = '/RED-CROSS-THESIS/public/api/load-gis-data-dashboard.php?blood_type=' + encodeURIComponent(bloodType);
                         fetch(url)
                             .then(response => response.json())
                             .then(data => {
                                 if (data.success) {
-                                    cityDonorCounts = data.cityDonorCounts || {};
-                                    heatmapData = data.heatmapData || [];
-                                    console.log('✅ GIS data loaded:', data.totalDonorCount, 'donors');
+                                    const rawCounts = data.cityDonorCounts || {};
+                                    const filteredCounts = {};
+                                    Object.entries(rawCounts).forEach(([city, count]) => {
+                                        const normalizedCity = normalizeCityName(city);
+                                        if (normalizedCity && allowedIloiloCities.has(normalizedCity)) {
+                                            filteredCounts[normalizedCity] = (filteredCounts[normalizedCity] || 0) + count;
+                                        }
+                                    });
+                                    cityDonorCounts = filteredCounts;
+
+                                    const filteredHeatmap = [];
+                                    (data.heatmapData || []).forEach(item => {
+                                        if (!item) {
+                                            return;
+                                        }
+                                        const providedCity = normalizeCityName(item.city);
+                                        if (providedCity) {
+                                            item.city = providedCity;
+                                        }
+                                        const cityName = item.city ? item.city : getCityForItem(item);
+                                        if (!cityName || !allowedIloiloCities.has(cityName)) {
+                                            return;
+                                        }
+                                        filteredHeatmap.push({ ...item, city: cityName });
+                                    });
+                                    heatmapData = filteredHeatmap;
+
+                                    console.log('✅ GIS data loaded (Iloilo district):', heatmapData.length, 'donors in allowed area');
+                                    if (currentCityFilter !== 'all') {
+                                        const availableCities = Object.keys(cityDonorCounts).map(c => c.toLowerCase());
+                                        if (!availableCities.includes(currentCityFilter.toLowerCase())) {
+                                            currentCityFilter = 'all';
+                                        }
+                                    }
                                     
                                     // Update top donor locations
                                     updateTopDonorLocations();
@@ -1789,68 +2391,24 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     console.log('Initial Heatmap Data:', heatmapData);
                     console.log('Initial Total Donor Count:', <?php echo $totalDonorCount; ?>);
 
-                                         // OPTIMIZED: Pre-defined coordinates for common Iloilo locations
-                     const locationCoordinates = {
-                         'Iloilo City': { lat: 10.7202, lng: 122.5621 },
-                         'Oton': { lat: 10.6933, lng: 122.4733 },
-                         'Pavia': { lat: 10.7750, lng: 122.5444 },
-                         'Leganes': { lat: 10.7833, lng: 122.5833 },
-                         'Santa Barbara': { lat: 10.8167, lng: 122.5333 },
-                         'San Miguel': { lat: 10.7833, lng: 122.4667 },
-                         'Cabatuan': { lat: 10.8833, lng: 122.4833 },
-                         'Maasin': { lat: 10.8833, lng: 122.4333 },
-                         'Janiuay': { lat: 10.9500, lng: 122.5000 },
-                         'Pototan': { lat: 10.9500, lng: 122.6333 },
-                         'Dumangas': { lat: 10.8333, lng: 122.7167 },
-                         'Zarraga': { lat: 10.8167, lng: 122.6000 },
-                         'New Lucena': { lat: 10.8833, lng: 122.6000 },
-                         'Alimodian': { lat: 10.8167, lng: 122.4333 },
-                         'Leon': { lat: 10.7833, lng: 122.3833 },
-                         'Tubungan': { lat: 10.7833, lng: 122.3333 },
-                         'Passi': { lat: 11.1167, lng: 122.6333 },
-                         'Lemery': { lat: 11.2167, lng: 122.9167 },
-                         'Roxas': { lat: 11.1833, lng: 122.8833 },
-                         'Mina': { lat: 10.9333, lng: 122.5833 },
-                         'Barotac Nuevo': { lat: 10.9000, lng: 122.7000 },
-                         'Barotac Viejo': { lat: 11.0500, lng: 122.8500 },
-                         'Bingawan': { lat: 11.2333, lng: 122.5667 },
-                         'Calinog': { lat: 11.1167, lng: 122.5000 },
-                         'Carles': { lat: 11.5667, lng: 123.1333 },
-                         'Concepcion': { lat: 11.2167, lng: 123.1167 },
-                         'Dingle': { lat: 11.0000, lng: 122.6667 },
-                         'Dueñas': { lat: 11.0667, lng: 122.6167 },
-                         'Estancia': { lat: 11.4500, lng: 123.1500 },
-                         'Guimbal': { lat: 10.6667, lng: 122.3167 },
-                         'Igbaras': { lat: 10.7167, lng: 122.2667 },
-                         'Javier': { lat: 11.0833, lng: 122.5667 },
-                         'Lambunao': { lat: 11.0500, lng: 122.4667 },
-                         'Miagao': { lat: 10.6333, lng: 122.2333 },
-                         'Pilar': { lat: 11.4833, lng: 123.0000 },
-                         'San Dionisio': { lat: 11.2667, lng: 123.0833 },
-                         'San Enrique': { lat: 11.1000, lng: 122.6667 },
-                         'San Joaquin': { lat: 10.5833, lng: 122.1333 },
-                         'San Rafael': { lat: 11.1833, lng: 122.8333 },
-                         'Santa Rita': { lat: 11.4500, lng: 122.9833 },
-                         'Sara': { lat: 11.2500, lng: 123.0167 },
-                         'Tigbauan': { lat: 10.6833, lng: 122.3667 }
-                     };
-
                      // OPTIMIZED: Function to get coordinates with database priority
                      async function getCoordinates(location) {
+                         const sourceAddress = cleanAddressString(location.address || location.original_address || '');
+                         
                          // First priority: Use coordinates from database (PostGIS)
                          if (location.latitude && location.longitude && location.has_coordinates) {
                              const raw = {
                                  lat: parseFloat(location.latitude),
                                  lng: parseFloat(location.longitude),
-                                 display_name: location.address,
+                                 display_name: sourceAddress || location.address,
                                  source: 'database',
                                  accuracy: 'high'
                              };
-                             return sanitizeCoordinates(raw, location.address);
+                             return sanitizeCoordinates(raw, sourceAddress);
                          }
                          
                          // Second priority: Try to extract city name from address for predefined coordinates
-                         const address = location.address.toLowerCase();
+                         const address = sourceAddress.toLowerCase();
                          
                          // Check if we have pre-defined coordinates for this location
                          for (const [city, coords] of Object.entries(locationCoordinates)) {
@@ -1858,28 +2416,49 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                  return sanitizeCoordinates({
                                      lat: coords.lat,
                                      lng: coords.lng,
-                                     display_name: `${city}, Iloilo, Philippines`,
+                                     display_name: `${city}, Philippines`,
                                      source: 'predefined',
                                      accuracy: 'medium'
-                                 }, location.address);
+                                 }, sourceAddress);
                              }
                          }
 
                          // Last resort: Use geocoding as fallback (only for addresses without coordinates)
-                         console.log(`⚠️ No coordinates found for: ${location.address}, using geocoding fallback`);
-                         const geocoded = await geocodeAddress(location);
-                         return sanitizeCoordinates(geocoded, location.address);
+                         console.log(`⚠️ No coordinates found for: ${sourceAddress || location.address}, using geocoding fallback`);
+                         const geocoded = await geocodeAddress({ ...location, address: sourceAddress || location.address });
+                         return sanitizeCoordinates(geocoded, sourceAddress);
                      }
 
                      // OPTIMIZED: Function to geocode address using server-side endpoint (no CORS issues)
                      async function geocodeAddress(location) {
-                         const addresses = [
-                             location.address,
-                             // Try without specific landmarks
-                             location.address.replace(/,([^,]*Hospital[^,]*),/, ','),
+                         const primaryAddress = cleanAddressString(location.address || location.original_address || '');
+                         const addresses = [];
+                         
+                         if (primaryAddress) {
+                             addresses.push(primaryAddress);
+                             
+                             // Try without specific landmarks (e.g., hospital names)
+                             const withoutHospital = primaryAddress.replace(/,([^,]*Hospital[^,]*),/i, ',');
+                             if (withoutHospital && withoutHospital !== primaryAddress) {
+                                 addresses.push(cleanAddressString(withoutHospital));
+                             }
+                             
                              // Try just the municipality and province
-                             location.address.split(',').slice(-3).join(',')
-                         ];
+                             const tail = primaryAddress
+                                 .split(',')
+                                 .map(seg => seg.trim())
+                                 .filter(Boolean)
+                                 .slice(-3)
+                                 .join(', ');
+                             if (tail && tail !== primaryAddress) {
+                                 addresses.push(cleanAddressString(tail));
+                             }
+                         }
+                         
+                         // Always ensure we have at least an empty string to avoid errors
+                         if (addresses.length === 0) {
+                             addresses.push('');
+                         }
 
                          for (const address of addresses) {
                              try {
@@ -1924,12 +2503,18 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                      const coordinateCache = new Map();
                      let geocodingInProgress = false;
                      
-                     async function processAddresses() {
+                    async function processAddresses() {
                          // PERFORMANCE FIX: Don't process if map isn't initialized yet
                          if (!mapInitialized || !map) {
                              console.log('⚠️ Map not initialized yet, skipping address processing');
                              return;
                          }
+                        
+                        // Reset counters for this render
+                        databaseCount = 0;
+                        predefinedCount = 0;
+                        geocodedCount = 0;
+                        const localFlagged = [];
                          
                          // Initialize markers layer if not exists
                          if (!markers) {
@@ -1941,9 +2526,15 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                              map.removeLayer(heatLayer);
                          }
 
-                         const points = [];
-                         const batchSize = 25; // PERFORMANCE FIX: Increased from 10 to 25 for faster processing
-                         const totalLocations = heatmapData.length;
+                        const points = [];
+                        const batchSize = 25; // PERFORMANCE FIX: Increased from 10 to 25 for faster processing
+                        const activeData = currentCityFilter === 'all'
+                            ? heatmapData
+                            : heatmapData.filter(item => {
+                                const cityName = getCityForItem(item);
+                                return isCityAllowed(cityName) && cityName.toLowerCase() === currentCityFilter.toLowerCase();
+                            });
+                        const totalLocations = activeData.length;
                          
                          // Show loading indicator with geocoding status
                          const loadingDiv = document.createElement('div');
@@ -1951,9 +2542,8 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                          document.getElementById('map').appendChild(loadingDiv);
 
                         // SPATIAL SORTING: Sort locations by Hilbert curve for better clustering
-                        const sortedLocations = [...heatmapData];
-                        console.log(`📍 Processing ${sortedLocations.length} locations for heatmap...`);
-                        let geocodedCount = 0;
+                        const sortedLocations = [...activeData];
+                        console.log(`📍 Processing ${sortedLocations.length} locations for heatmap...`, currentCityFilter !== 'all' ? `(city filter: ${currentCityFilter})` : '');
                         let cachedCount = 0;
                         let skippedCount = 0;
 
@@ -1962,20 +2552,67 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                              
                              // Process batch with automatic geocoding
                              const batchPromises = batch.map(async (location) => {
+                                 const rawAddress = (location.original_address || location.address || '').trim();
+                                 const cleanedAddress = cleanAddressString(rawAddress);
+                                 const originalAddress = cleanedAddress || rawAddress;
+                                 const cacheKey = originalAddress.toLowerCase();
+                                 const addressAllowed = isAddressAllowed(originalAddress);
+                                 const locationWithAddress = { ...location, address: originalAddress };
+                                 
+                                 const rejectLocation = (reason, coords = null, source = 'validation') => {
+                                     skippedCount++;
+                                     localFlagged.push({
+                                         donorId: location.donor_id,
+                                         address: originalAddress,
+                                         reason,
+                                         coords,
+                                         source
+                                     });
+                                     console.warn(`⛔ GIS boundary filter skipped donor ${location.donor_id || ''}: ${reason}`, {
+                                         address: originalAddress,
+                                         coords
+                                     });
+                                     return null;
+                                 };
+                                 
+                                 if (!addressAllowed) {
+                                     console.warn(`🌐 Address outside primary region, attempting fallback geocoding: ${originalAddress}`);
+                                 }
+                                 
                                  // Check cache first
-                                 const cacheKey = location.address.toLowerCase();
                                  if (coordinateCache.has(cacheKey)) {
+                                     const cachedCoords = coordinateCache.get(cacheKey);
+                                     if (!cachedCoords || !isWithinAllowedGISArea(cachedCoords.lat, cachedCoords.lng)) {
+                                         return rejectLocation('outside-allowed-area', cachedCoords, 'cache');
+                                     }
                                      cachedCount++;
                                      return {
-                                         coords: coordinateCache.get(cacheKey),
+                                         coords: cachedCoords,
                                          location: location
                                      };
                                  }
                                  
-                                 const coords = await getCoordinates(location);
+                                 let coords = await getCoordinates(locationWithAddress);
+                                 if (!coords && (locationWithAddress.fallback_latitude || locationWithAddress.fallback_longitude || locationWithAddress.fallbackLatitude || locationWithAddress.fallbackLongitude)) {
+                                     const fallbackLat = locationWithAddress.fallback_latitude ?? locationWithAddress.fallbackLatitude;
+                                     const fallbackLng = locationWithAddress.fallback_longitude ?? locationWithAddress.fallbackLongitude;
+                                     if (typeof fallbackLat === 'number' && typeof fallbackLng === 'number') {
+                                         coords = {
+                                             lat: fallbackLat,
+                                             lng: fallbackLng,
+                                             display_name: (locationWithAddress.city ? `${locationWithAddress.city}, Philippines` : (originalAddress || 'Fallback Location')),
+                                             source: 'fallback',
+                                             accuracy: 'low'
+                                         };
+                                     }
+                                 }
                                  if (coords) {
-                                     // Cache the result
+                                     // Cache the result for subsequent batches
                                      coordinateCache.set(cacheKey, coords);
+                                     
+                                     if (!isWithinAllowedGISArea(coords.lat, coords.lng)) {
+                                         return rejectLocation('outside-allowed-area', coords, coords.source || 'unknown');
+                                     }
                                      
                                      // If this was a new geocoding (not from database), store it
                                      if (coords.source === 'geocoded' || coords.source === 'predefined') {
@@ -2000,18 +2637,27 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                          location: location
                                      };
                                  } else {
-                                     skippedCount++;
-                                     console.log(`⚠️ No coordinates found for: ${location.address}, using geocoding fallback`);
+                                     return rejectLocation('no-valid-coordinate', null, 'geocode');
                                  }
-                                 return null;
                              });
 
                              const batchResults = await Promise.all(batchPromises);
                              
                              // Add results to points array and count coordinate sources
-                             batchResults.forEach(result => {
+                            batchResults.forEach(result => {
                                  if (result) {
-                                     points.push([result.coords.lat, result.coords.lng, 0.8]);
+                                    const cityHint = getCityForItem(result.location);
+                                    const jitteredCoords = maybeApplyJitter(result.coords.lat, result.coords.lng, { coords: result.coords, location: result.location });
+                                    const safeCoords = ensureLandCoordinate(jitteredCoords.lat, jitteredCoords.lng, cityHint);
+                                     points.push({
+                                        lat: safeCoords.lat,
+                                        lng: safeCoords.lng,
+                                        baseLat: result.coords.lat,
+                                        baseLng: result.coords.lng,
+                                         intensity: 0.8,
+                                         location: result.location,
+                                         coordsSource: result.coords.source
+                                     });
                                      
                                      // Count coordinate sources
                                      if (result.coords.source === 'database') {
@@ -2023,7 +2669,7 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                      }
                                      
                                      // Add marker with popup
-                                     const marker = L.marker([result.coords.lat, result.coords.lng])
+                                     const marker = L.marker([jitteredCoords.lat, jitteredCoords.lng])
                                          .bindPopup(`
                                              <strong>Original Address:</strong><br>
                                              ${result.location.original_address}<br><br>
@@ -2056,11 +2702,40 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                              loadingDiv.parentNode.removeChild(loadingDiv);
                          }
 
-                         // SPATIAL SORTING: Sort points by Hilbert curve before creating heatmap
-                         const sortedPoints = spatialSort(points.map(p => ({ lat: p[0], lng: p[1], intensity: p[2] })));
-                         const finalPoints = sortedPoints.map(p => [p.lat, p.lng, p.intensity]);
+                        // Apply duplicate spreading to avoid stacked hotspots
+                        spreadDuplicatePoints(points);
 
-                         console.log(`📊 Heatmap stats: ${points.length} points, ${databaseCount} from DB, ${predefinedCount} predefined, ${geocodedCount} geocoded, ${skippedCount} skipped`);
+                        // SPATIAL SORTING: Sort points by Hilbert curve before creating heatmap
+                        const sortedPoints = spatialSort(points.map(p => ({ ...p })));
+                        const waterFiltered = [];
+                        const filteredPoints = sortedPoints.filter(p => {
+                            if (isPointInWater(p.lat, p.lng)) {
+                                waterFiltered.push(p);
+                                localFlagged.push({
+                                    donorId: p.location?.donor_id ?? null,
+                                    address: p.location?.original_address || p.location?.address || 'Unknown address',
+                                    reason: 'water-filter',
+                                    coords: { lat: p.lat, lng: p.lng },
+                                    source: p.coordsSource || 'post-filter'
+                                });
+                                return false;
+                            }
+                            return true;
+                        });
+                        const finalPoints = filteredPoints.map(p => [p.lat, p.lng, p.intensity]);
+                        skippedCount += waterFiltered.length;
+
+                        flaggedOutsidePoints = localFlagged;
+                        if (mapBoundaryAlert && mapBoundaryAlertCount) {
+                            if (flaggedOutsidePoints.length > 0) {
+                                mapBoundaryAlertCount.textContent = flaggedOutsidePoints.length;
+                                mapBoundaryAlert.classList.remove('d-none');
+                            } else {
+                                mapBoundaryAlert.classList.add('d-none');
+                            }
+                        }
+
+                        console.log(`📊 Heatmap stats: ${points.length} points, ${databaseCount} from DB, ${predefinedCount} predefined, ${geocodedCount} geocoded, ${skippedCount} skipped, ${flaggedOutsidePoints.length} filtered outside bounds`);
                          
                          if (finalPoints.length > 0) {
                              heatLayer = L.heatLayer(finalPoints, {
@@ -2076,9 +2751,12 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                  }
                              }).addTo(map);
                              console.log(`✅ Heatmap created with ${finalPoints.length} points`);
-                         } else {
-                             console.log(`⚠️ No valid points for heatmap - all coordinates may have been filtered out`);
-                         }
+                        } else {
+                            console.log(`⚠️ No valid points for heatmap - all coordinates may have been filtered out`);
+                            if (mapBoundaryAlert && !mapBoundaryAlert.classList.contains('d-none')) {
+                                mapBoundaryAlert.classList.remove('d-none');
+                            }
+                        }
                          
                          // Show completion message
                          if (geocodedCount > 0) {
@@ -2089,42 +2767,59 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     function updateTopDonorLocations() {
                         // Update Top Donors list - this is independent of filters
                         locationListEl.innerHTML = '';
-                        if (Object.keys(cityDonorCounts).length === 0) {
+                        const allowedCities = Object.entries(cityDonorCounts)
+                            .filter(([city, count]) => isCityAllowed(city) && count > 0);
+                        
+                        if (allowedCities.length === 0) {
                             locationListEl.innerHTML = '<li class="p-2">No locations found</li>';
                         } else {
-                            // Separate identified and unidentified locations
-                            const identifiedLocations = [];
-                            const unidentifiedLocations = [];
-
-                            Object.entries(cityDonorCounts)
+                            const allLi = document.createElement('li');
+                            allLi.className = 'p-2 mb-2 border-bottom';
+                            allLi.dataset.city = 'all';
+                            allLi.innerHTML = `
+                                <div class="d-flex justify-content-start align-items-center">
+                                    <strong>All Locations</strong>
+                                </div>`;
+                            locationListEl.appendChild(allLi);
+                            
+                            allowedCities
                                 .sort((a, b) => b[1] - a[1])
                                 .forEach(([city, count]) => {
                                     const li = document.createElement('li');
                                     li.className = 'p-2 mb-2 border-bottom';
+                                    li.dataset.city = city;
                                     li.innerHTML = `
                                         <div class="d-flex justify-content-between align-items-center">
                                             <strong>${city}</strong>
                                             <span class="badge bg-danger">${count}</span>
                                         </div>`;
-                                    
-                                    // Check if location is identified (has a known city name)
-                                    if (city.toLowerCase() === 'unidentified location') {
-                                        unidentifiedLocations.push(li);
-                                    } else {
-                                        identifiedLocations.push(li);
-                                    }
+                                    locationListEl.appendChild(li);
                                 });
-
-                            // First add all identified locations
-                            identifiedLocations.forEach(li => locationListEl.appendChild(li));
-
-                            // Then add unidentified locations if any exist
-                            if (unidentifiedLocations.length > 0) {
-                                unidentifiedLocations.forEach(li => locationListEl.appendChild(li));
+                            
+                            // Highlight current filter if present
+                            const toHighlight = Array.from(locationListEl.querySelectorAll('li')).find(li => {
+                                const city = (li.dataset.city || '').toLowerCase();
+                                if (currentCityFilter === 'all') {
+                                    return city === 'all';
+                                }
+                                return city === currentCityFilter.toLowerCase();
+                            });
+                            if (toHighlight) {
+                                toHighlight.classList.add('bg-light', 'fw-bold');
                             }
                             
                             // Attach click event listeners to the newly created location items
                             attachLocationClickListeners();
+
+                            const selectedLocationInput = document.getElementById('selectedLocation');
+                            if (selectedLocationInput) {
+                                if (currentCityFilter === 'all') {
+                                    selectedLocationInput.value = '';
+                                } else {
+                                    selectedLocationInput.value = currentCityFilter;
+                                }
+                            }
+                            checkEnableButtons();
                         }
                     }
 
@@ -2222,7 +2917,9 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                         Array.from(locationListEl.querySelectorAll('li')).forEach(li => {
                             li.style.cursor = 'pointer';
                             li.addEventListener('click', function() {
-                                console.log('Location clicked:', this.querySelector('strong').textContent);
+                                const clickedCity = (this.dataset.city || '').trim();
+                                const displayName = this.querySelector('strong') ? this.querySelector('strong').textContent : clickedCity;
+                                console.log('Location clicked:', displayName || 'Unknown');
                                 
                                 // Remove highlight from all
                                 Array.from(locationListEl.querySelectorAll('li')).forEach(l => l.classList.remove('bg-light', 'fw-bold'));
@@ -2230,12 +2927,22 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                 // Highlight selected
                                 this.classList.add('bg-light', 'fw-bold');
                                 
-                                // Set location input
-                                selectedLocationInput.value = this.querySelector('strong').textContent;
-                                console.log('Selected location set to:', selectedLocationInput.value);
+                                if (clickedCity === 'all') {
+                                    currentCityFilter = 'all';
+                                    selectedLocationInput.value = '';
+                                } else {
+                                    currentCityFilter = displayName;
+                                    selectedLocationInput.value = displayName;
+                                }
+                                console.log('Selected location set to:', selectedLocationInput.value || 'All Locations');
                                 
                                 // Enable buttons if date and time are set
                                 checkEnableButtons();
+
+                                // Update heatmap based on selected city filter
+                                if (mapInitialized) {
+                                    processAddresses();
+                                }
                             });
                         });
                     }
@@ -2356,16 +3063,11 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
             scheduleBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
             
             try {
-                // Increase timeout for large donor lists
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
-                
                 const response = await fetch('/RED-CROSS-THESIS/public/api/broadcast-blood-drive.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    signal: controller.signal,
                     body: JSON.stringify({
                         location: location,
                         drive_date: date,
@@ -2378,24 +3080,7 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     })
                 });
                 
-                clearTimeout(timeoutId);
-                
-                // Check if response is OK
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${errorText}`);
-                }
-                
-                // Get response text first to check if it's valid JSON
-                const responseText = await response.text();
-                let result;
-                
-                try {
-                    result = JSON.parse(responseText);
-                } catch (jsonError) {
-                    console.error('Invalid JSON response:', responseText);
-                    throw new Error('Invalid JSON response from server. Response: ' + responseText.substring(0, 200));
-                }
+                const result = await response.json();
                 
                 if (result.success) {
                     // Show success message
@@ -2443,48 +3128,30 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
         
         // Function to show success notification
         function showNotificationSuccess(result) {
-            const summary = result.summary || {};
             const successDiv = document.createElement('div');
             successDiv.className = 'alert alert-success alert-dismissible fade show';
-            successDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 450px; max-width: 600px;';
+            successDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 400px;';
             successDiv.innerHTML = `
-                <h6><i class="fas fa-check-circle"></i> Blood Drive Scheduled & Notifications Sent!</h6>
-                <hr style="margin: 10px 0;">
-                <div style="font-size: 14px;">
-                    <p class="mb-2"><strong>📊 Summary:</strong></p>
-                    <div style="background: rgba(255,255,255,0.2); padding: 10px; border-radius: 4px; margin-bottom: 10px;">
-                        <p class="mb-1"><strong>📍 Total Donors Found:</strong> ${summary.total_donors_found || 0}</p>
-                        <p class="mb-1"><strong>🔔 Push Subscriptions:</strong> ${summary.push_subscriptions || 0}</p>
-                        <p class="mb-1"><strong>✅ Push Sent:</strong> ${summary.push_sent || 0}</p>
-                        <p class="mb-1"><strong>📧 Email Sent:</strong> ${summary.email_sent || 0}</p>
-                        <p class="mb-1"><strong>📨 Total Notified:</strong> ${summary.total_notified || 0}</p>
-                    </div>
-                    ${summary.push_failed > 0 || summary.email_failed > 0 ? `
-                        <p class="mb-1 text-warning"><strong>⚠️ Failed:</strong> Push: ${summary.push_failed || 0} | Email: ${summary.email_failed || 0}</p>
-                    ` : ''}
-                    ${summary.total_skipped > 0 ? `
-                        <p class="mb-1 text-info"><strong>⏭️ Skipped:</strong> ${summary.total_skipped || 0}</p>
-                    ` : ''}
-                </div>
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                <h6><i class="fas fa-check-circle"></i> Blood Drive Notifications Sent!</h6>
+                <p class="mb-1"><strong>Location:</strong> ${result.results ? 'Multiple locations' : 'Selected location'}</p>
+                <p class="mb-1"><strong>Donors Found:</strong> ${result.total_donors_found || 0}</p>
+                <p class="mb-1"><strong>Notifications Sent:</strong> ${result.results?.sent || 0}</p>
+                <p class="mb-1"><strong>Failed:</strong> ${result.results?.failed || 0}</p>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             `;
             
             document.body.appendChild(successDiv);
             
-            // Auto-remove after 15 seconds (longer for more info)
+            // Auto-remove after 10 seconds
             setTimeout(() => {
                 if (successDiv.parentNode) {
                     successDiv.parentNode.removeChild(successDiv);
                 }
-            }, 15000);
+            }, 10000);
         }
     });
     </script>
-
-    <?php
-    // NOTE: Mobile credentials modal is NOT shown on dashboards
-    // It should ONLY appear on the declaration form when registering a new donor
-    // Credentials are displayed there for context during registration
-    ?>
+</body>
+</html>
 </body>
 </html>
