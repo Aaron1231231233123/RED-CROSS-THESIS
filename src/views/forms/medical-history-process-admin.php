@@ -252,14 +252,27 @@ try {
     curl_close($ch);
 
     if ($http_code >= 200 && $http_code < 300) {
+        // Reset screening, PE, and blood collection when MH is updated for existing donor
+        // This preserves approved historical data but resets current cycle records
+        require_once '../../../assets/php_func/reset_donor_workflow_on_mh_update.php';
+        $reset_results = resetDonorWorkflowOnMHUpdate($donor_id);
+        
+        error_log("Workflow reset results for donor_id $donor_id: " . json_encode($reset_results));
+        
         // Store the screening data in session for declaration form
         $_SESSION['transferred_screening_data'] = $screening_data_for_session;
         $_SESSION['medical_history_processed'] = true;
         
+        $reset_message = '';
+        if ($reset_results['screening_reset'] || $reset_results['physical_exam_reset'] || $reset_results['blood_collection_reset']) {
+            $reset_message = ' Workflow records reset.';
+        }
+        
         echo json_encode([
             'success' => true,
-            'message' => 'Medical history processed successfully',
-            'action' => $action
+            'message' => 'Medical history processed successfully' . $reset_message,
+            'action' => $action,
+            'reset_results' => $reset_results
         ]);
     } else {
         throw new Exception("Failed to update medical history. HTTP code: " . $http_code . ". Response: " . $response);
