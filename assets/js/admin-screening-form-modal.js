@@ -233,6 +233,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (specificGravityInput) {
             specificGravityInput.addEventListener('input', function() {
                 validateAdminSpecificGravity(this.value);
+                // Recompute button state in real-time on step 2
+                updateAdminButtons();
+            });
+        }
+
+        // Also recompute Next button state when weight changes
+        if (bodyWeightInput) {
+            bodyWeightInput.addEventListener('input', function() {
+                updateAdminButtons();
             });
         }
     }
@@ -331,10 +340,35 @@ document.addEventListener('DOMContentLoaded', function() {
         if (currentStep < totalSteps) {
             if (nextButton) nextButton.style.display = 'inline-block';
             if (submitButton) submitButton.style.display = 'none';
+
+            // On step 2, disable Next when criteria not met (deferrable)
+            if (nextButton && currentStep === 2) {
+                const allowNext = isAdminStep2Eligible();
+                nextButton.disabled = !allowNext;
+            } else if (nextButton) {
+                nextButton.disabled = false;
+            }
         } else {
             if (nextButton) nextButton.style.display = 'none';
             if (submitButton) submitButton.style.display = 'inline-block';
         }
+    }
+
+    function isAdminStep2Eligible() {
+        const bodyWeightInput = document.getElementById('adminBodyWeightInput');
+        const specificGravityInput = document.getElementById('adminSpecificGravityInput');
+        const bloodTypeSelect = document.querySelector('select[name="blood-type"]');
+
+        if (!bodyWeightInput || !specificGravityInput || !bloodTypeSelect) return false;
+
+        const weight = parseFloat(bodyWeightInput.value);
+        const gravity = parseFloat(specificGravityInput.value);
+        const hasAll = bodyWeightInput.value.trim() !== '' && specificGravityInput.value.trim() !== '' && !!bloodTypeSelect.value;
+        if (!hasAll) return false;
+
+        const weightOk = weight >= 50;
+        const gravityOk = gravity >= 12.5 && gravity <= 18.0;
+        return weightOk && gravityOk;
     }
 
     function validateAdminCurrentStep() {
@@ -835,7 +869,8 @@ function openAdminScreeningModal(donorData) {
         // Reset progress
         const progressFill = adminScreeningModal.querySelector('.admin-screening-progress-fill');
         if (progressFill) {
-            progressFill.style.width = '20%';
+                // Align with step calculation ((step-1)/(totalSteps-1))*100 at step=1 should be 0%
+                progressFill.style.width = '0%';
         }
         
         // Reset step indicators

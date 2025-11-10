@@ -1076,20 +1076,49 @@ function getCacheStats() {
                 <hr class="mt-0 mb-3 border-2 border-secondary opacity-50 mb-2">
                         <!-- Donor Management Table -->
                         <?php if (!empty($donations)): ?>
+						<style>
+							.sortable .sort-trigger { display: inline-flex; align-items: center; gap: .35rem; background: none; border: none; color: inherit; padding: 0; font: inherit; cursor: pointer; }
+							.sort-icon { font-size: .75rem; opacity: .8; }
+							th[aria-sort="ascending"] .sort-icon, th[aria-sort="descending"] .sort-icon { opacity: 1; }
+						</style>
                         <div class="table-responsive progressive-hide">
                             <table class="table table-striped table-hover" id="donationsTable">
                                 <thead class="table-dark">
                                     <tr>
-                                        <th>Donor Number</th>
-                                        <th>Surname</th>
-                                        <th>First Name</th>
-                                        <th>Donor Type</th>
-                                        <th>Registered Via</th>
-                                        <th>Status</th>
+										<th class="sortable" data-sort-field="donor_id" aria-sort="none">
+											<button type="button" class="sort-trigger" aria-label="Sort by Donor Number">
+												Donor Number<i class="fas fa-sort sort-icon"></i>
+											</button>
+										</th>
+										<th class="sortable" data-sort-field="surname" aria-sort="none">
+											<button type="button" class="sort-trigger" aria-label="Sort by Surname">
+												Surname<i class="fas fa-sort sort-icon"></i>
+											</button>
+										</th>
+										<th class="sortable" data-sort-field="first_name" aria-sort="none">
+											<button type="button" class="sort-trigger" aria-label="Sort by First Name">
+												First Name<i class="fas fa-sort sort-icon"></i>
+											</button>
+										</th>
+										<th class="sortable" data-sort-field="donor_type" aria-sort="none">
+											<button type="button" class="sort-trigger" aria-label="Sort by Donor Type">
+												Donor Type<i class="fas fa-sort sort-icon"></i>
+											</button>
+										</th>
+										<th class="sortable" data-sort-field="registered_via" aria-sort="none">
+											<button type="button" class="sort-trigger" aria-label="Sort by Registered Via">
+												Registered Via<i class="fas fa-sort sort-icon"></i>
+											</button>
+										</th>
+										<th class="sortable" data-sort-field="status" aria-sort="none">
+											<button type="button" class="sort-trigger" aria-label="Sort by Status">
+												Status<i class="fas fa-sort sort-icon"></i>
+											</button>
+										</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+								<tbody id="donationsTableBody">
                                     <?php foreach ($currentPageDonations as $donation): ?>
                                     <tr class="donor-row" data-donor-id="<?php echo htmlspecialchars($donation['donor_id'] ?? ''); ?>" data-eligibility-id="<?php echo htmlspecialchars($donation['eligibility_id'] ?? ''); ?>">
                                         <td><?php echo htmlspecialchars($donation['donor_id'] ?? ''); ?></td>
@@ -1420,6 +1449,65 @@ function getCacheStats() {
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
+						<script>
+						(function(){
+							const table = document.getElementById('donationsTable');
+							const tbody = document.getElementById('donationsTableBody');
+							if (!table || !tbody) return;
+							
+							const headers = table.querySelectorAll('thead th.sortable');
+							
+							headers.forEach((th, index) => {
+								const trigger = th.querySelector('.sort-trigger');
+								if (!trigger) return;
+								
+								trigger.addEventListener('click', () => {
+									const current = th.getAttribute('aria-sort') || 'none';
+									const next = current === 'none' ? 'ascending' : current === 'ascending' ? 'descending' : 'none';
+									
+									headers.forEach(h => {
+										if (h !== th) {
+											h.setAttribute('aria-sort', 'none');
+											const ic = h.querySelector('.sort-icon');
+											if (ic) ic.className = 'fas fa-sort sort-icon';
+										}
+									});
+									
+									th.setAttribute('aria-sort', next);
+									const icon = trigger.querySelector('.sort-icon');
+									if (icon) {
+										icon.className = 'fas ' + (next === 'ascending' ? 'fa-sort-up' : next === 'descending' ? 'fa-sort-down' : 'fa-sort') + ' sort-icon';
+									}
+									
+									const rows = Array.from(tbody.querySelectorAll('tr'));
+									if (next === 'none') {
+										return; // keep current order
+									}
+									
+									const field = th.getAttribute('data-sort-field') || '';
+									const type = (field === 'donor_id') ? 'number' : 'text';
+									
+									rows.sort((rowA, rowB) => {
+										let a = rowA.cells[index]?.textContent.trim() || '';
+										let b = rowB.cells[index]?.textContent.trim() || '';
+										
+										if (type === 'number') {
+											const na = parseInt(a, 10) || 0;
+											const nb = parseInt(b, 10) || 0;
+											return next === 'ascending' ? (na - nb) : (nb - na);
+										}
+										a = a.toLowerCase();
+										b = b.toLowerCase();
+										return next === 'ascending' ? a.localeCompare(b) : b.localeCompare(a);
+									});
+									
+									const frag = document.createDocumentFragment();
+									rows.forEach(r => frag.appendChild(r));
+									tbody.appendChild(frag);
+								});
+							});
+						})();
+						</script>
                         </div>
                         <?php if ($status === 'all' && (isset($_GET['perf_mode']) && $_GET['perf_mode'] === 'on')): ?>
                         <div id="allCursorNav" class="d-flex align-items-center gap-2 mb-3">

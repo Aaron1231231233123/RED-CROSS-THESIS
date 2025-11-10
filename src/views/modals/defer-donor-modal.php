@@ -28,14 +28,23 @@
 
                     <!-- Deferral Type Selection -->
                     <div class="mb-4">
-                        <label for="deferralTypeSelect" class="form-label fw-semibold">
+                        <label class="form-label fw-semibold">
                             <i class="fas fa-list-ul me-2 text-primary"></i>Deferral Type *
                         </label>
-                        <select class="form-select" id="deferralTypeSelect" name="deferral_type" required>
-                            <option value="" disabled selected style="color:#6c757d;">Please select deferral type</option>
-                            <option value="Temporary Deferral">Temporary Deferral</option>
-                            <option value="Permanent Deferral" id="permanentOption" style="display: none;">Permanent Deferral</option>
-                        </select>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="deferral_type_radio" id="deferralTypeTemporary" value="Temporary Deferral">
+                                <label class="form-check-label" for="deferralTypeTemporary">
+                                    Temporary Deferral
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="deferral_type_radio" id="deferralTypePermanent" value="Permanent Deferral">
+                                <label class="form-check-label" for="deferralTypePermanent">
+                                    Permanent Deferral
+                                </label>
+                            </div>
+                        </div>
                         <div class="form-text" id="deferralTypeHelp">Please select a deferral type.</div>
                     </div>
 

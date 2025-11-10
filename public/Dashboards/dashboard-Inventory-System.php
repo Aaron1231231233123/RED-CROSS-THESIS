@@ -1346,9 +1346,9 @@ h6 {
                     <div class="mb-5">
                         <h5 class="mb-4" style="font-weight: 600;">Available Blood per Unit</h5>
                         <div class="row g-4">
-                            <!-- Blood Type Cards -->
+                            <!-- Blood Type Cards (retain home dashboard UI; add danger icon) -->
                             <?php
-                            // Uniform calculation with Bloodbank page: count 1 per valid unit
+                            // Calculate per-type counts using the same logic as Bloodbank
                             $bloodTypeCounts = array_reduce($bloodInventory, function($carry, $bag) {
                                 if ($bag['status'] == 'Valid' && isset($carry[$bag['blood_type']])) {
                                     $carry[$bag['blood_type']] += 1; // Each unit = 1 bag
@@ -1358,10 +1358,21 @@ h6 {
                                 'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
                                 'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
                             ]);
+                            // Threshold for low availability indicator
+                            $lowThreshold = 25;
+                            // Inline helper to render a small danger icon when low
+                            function renderDangerIconHome($count, $threshold) {
+                                if ($count <= $threshold) {
+                                    return '<span class="text-danger" title="Low availability" style="position:absolute; top:8px; right:10px;"><i class="fas fa-exclamation-triangle"></i></span>';
+                                }
+                                return '';
+                            }
                             ?>
                             
+                            <!-- Row 1: O+, A+, B+, AB+ (retain original order/UI) -->
                             <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-o-pos">
+                                <div class="card inventory-system-blood-card blood-type-o-pos" style="position: relative;">
+                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['O+'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type O+</h5>
                                         <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['O+']; ?></p>
@@ -1369,7 +1380,8 @@ h6 {
                                 </div>
                             </div>
                             <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-a-pos">
+                                <div class="card inventory-system-blood-card blood-type-a-pos" style="position: relative;">
+                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['A+'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type A+</h5>
                                         <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['A+']; ?></p>
@@ -1377,7 +1389,8 @@ h6 {
                                 </div>
                             </div>
                             <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-b-pos">
+                                <div class="card inventory-system-blood-card blood-type-b-pos" style="position: relative;">
+                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['B+'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type B+</h5>
                                         <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['B+']; ?></p>
@@ -1385,7 +1398,8 @@ h6 {
                                 </div>
                             </div>
                             <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-ab-pos">
+                                <div class="card inventory-system-blood-card blood-type-ab-pos" style="position: relative;">
+                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['AB+'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type AB+</h5>
                                         <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['AB+']; ?></p>
@@ -1393,9 +1407,10 @@ h6 {
                                 </div>
                             </div>
                             
-                            <!-- Second row: O-, A-, B-, AB- -->
+                            <!-- Row 2: O-, A-, B-, AB- -->
                             <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-o-neg">
+                                <div class="card inventory-system-blood-card blood-type-o-neg" style="position: relative;">
+                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['O-'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type O-</h5>
                                         <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['O-']; ?></p>
@@ -1403,7 +1418,8 @@ h6 {
                                 </div>
                             </div>
                             <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-a-neg">
+                                <div class="card inventory-system-blood-card blood-type-a-neg" style="position: relative;">
+                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['A-'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type A-</h5>
                                         <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['A-']; ?></p>
@@ -1411,7 +1427,8 @@ h6 {
                                 </div>
                             </div>
                             <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-b-neg">
+                                <div class="card inventory-system-blood-card blood-type-b-neg" style="position: relative;">
+                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['B-'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type B-</h5>
                                         <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['B-']; ?></p>
@@ -1419,7 +1436,8 @@ h6 {
                                 </div>
                             </div>
                             <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-ab-neg">
+                                <div class="card inventory-system-blood-card blood-type-ab-neg" style="position: relative;">
+                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['AB-'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type AB-</h5>
                                         <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['AB-']; ?></p>

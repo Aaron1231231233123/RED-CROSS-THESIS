@@ -235,7 +235,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     <thead>
                                         <tr>
                                             <th style="background-color: #b22222; color: white; font-weight: 700;">No.</th>
-                                            <th style="background-color: #b22222; color: white; font-weight: 700;">User ID</th>
                                             <th style="background-color: #b22222; color: white; font-weight: 700;">Name</th>
                                             <th style="background-color: #b22222; color: white; font-weight: 700;">Email</th>
                                             <th style="background-color: #b22222; color: white; font-weight: 700;">Role</th>
@@ -246,13 +245,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     <tbody>
                                         <?php if (empty($users)): ?>
                                         <tr>
-                                            <td colspan="7" class="text-center">No users found. Connect to your users table to populate.</td>
+                                            <td colspan="6" class="text-center">No users found. Connect to your users table to populate.</td>
                                         </tr>
                                         <?php else: ?>
                                         <?php foreach ($users as $index => $u): ?>
                                         <tr>
                                             <td><?php echo $index + 1; ?></td>
-                                            <td><?php echo htmlspecialchars($u['id'] ?? ''); ?></td>
                                             <td><?php echo htmlspecialchars($u['name'] ?? ''); ?></td>
                                             <td><?php echo htmlspecialchars($u['email'] ?? ''); ?></td>
                                             <td><?php echo htmlspecialchars($u['role'] ?? ''); ?></td>
