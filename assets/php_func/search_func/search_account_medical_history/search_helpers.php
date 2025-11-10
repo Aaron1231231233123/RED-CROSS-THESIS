@@ -162,13 +162,16 @@ function shm_search_medical_history_rows($query, $limit = 50) {
         if ($physical_info) $stage = 'physical_examination'; elseif ($screening_info) $stage = 'screening_form';
         $donor_type = isset($eligibility_by_donor[$did]) ? 'Returning' : 'New';
 
+        $physician = ($medical_info['interviewer'] ?? null) ?: ($interviewer_by_donor[$did] ?? 'N/A');
+
         $rows[] = [
             'no' => $counter++,
             'date' => ($medical_info['updated_at'] ?? $screening_info['created_at'] ?? $donor_info['submitted_at'] ?? date('Y-m-d H:i:s')),
             'surname' => $donor_info['surname'] ?? 'N/A',
             'first_name' => $donor_info['first_name'] ?? 'N/A',
             'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
-            'interviewer' => ($medical_info['interviewer'] ?? null) ?: ($interviewer_by_donor[$did] ?? 'N/A'),
+            'physician' => $physician,
+            'interviewer' => $physician,
             'donor_type' => $donor_type,
             'status' => $status,
             'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',

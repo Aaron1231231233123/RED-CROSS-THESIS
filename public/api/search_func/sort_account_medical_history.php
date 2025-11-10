@@ -23,7 +23,7 @@ if (!is_array($payload)) {
     $payload = [];
 }
 
-$allowedColumns = ['no', 'date', 'surname', 'first_name', 'interviewer'];
+$allowedColumns = ['no', 'date', 'surname', 'first_name', 'physician'];
 $allowedDirections = ['asc', 'desc', 'default'];
 
 $column = isset($payload['column']) ? strtolower(trim($payload['column'])) : '';
@@ -70,7 +70,9 @@ $requested_page = isset($payload['page']) ? (int)$payload['page'] : 1;
 if ($requested_page < 1) $requested_page = 1;
 
 // Increase limit to capture dashboard-sized dataset while respecting pagination
-$rows = fsh_build_filtered_rows($filters, 5000, $query, $sortOptions);
+$status_filter = isset($payload['status_filter']) ? trim($payload['status_filter']) : 'all';
+
+$rows = fsh_build_filtered_rows($filters, 5000, $query, $sortOptions, $status_filter);
 
 // Ensure unique donor-stage combinations, matching dashboard behavior
 $seenKeys = [];
@@ -123,7 +125,7 @@ if (!empty($displayRows)) {
             </td>
             <td class="text-center"><?php echo htmlspecialchars($entry['surname']); ?></td>
             <td class="text-center"><?php echo htmlspecialchars($entry['first_name']); ?></td>
-            <td class="text-center"><?php echo htmlspecialchars($entry['interviewer']); ?></td>
+            <td class="text-center"><?php echo htmlspecialchars($entry['physician'] ?? $entry['interviewer'] ?? 'N/A'); ?></td>
             <td class="text-center">
                 <span class="<?php echo stripos($entry['donor_type'], 'returning') === 0 ? 'type-returning' : 'type-new'; ?>">
                     <?php echo htmlspecialchars($entry['donor_type']); ?>
@@ -176,7 +178,8 @@ echo json_encode([
     'current_page' => $requested_page,
     'records_per_page' => $records_per_page,
     'total_pages' => $total_pages,
-    'total_records' => $total_records
+    'total_records' => $total_records,
+    'status_filter' => $status_filter
 ]);
 exit;
 

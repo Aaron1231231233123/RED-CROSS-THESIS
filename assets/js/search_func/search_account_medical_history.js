@@ -49,6 +49,10 @@ document.addEventListener('DOMContentLoaded', function(){
         if (!q) {
             if (loading) loading.style.display = 'none';
             tbody.innerHTML = initialHTML;
+            tbody.dataset.currentPage = tbody.dataset.currentPage || '1';
+            tbody.dataset.recordsPerPage = tbody.dataset.recordsPerPage || '15';
+            tbody.dataset.sortDirection = 'default';
+            tbody.dataset.sortColumn = '';
             return;
         }
         if (loading) loading.style.display = 'block';
@@ -85,6 +89,11 @@ document.addEventListener('DOMContentLoaded', function(){
                 if (loading) loading.style.display = 'none';
                 if (res && res.success && typeof res.html === 'string') {
                     tbody.innerHTML = res.html;
+                    tbody.dataset.currentPage = '1';
+                    tbody.dataset.totalPages = '1';
+                    tbody.dataset.recordsPerPage = String(res.count ?? tbody.dataset.recordsPerPage ?? '15');
+                    tbody.dataset.sortDirection = 'default';
+                    tbody.dataset.sortColumn = '';
                 } else {
                     tbody.innerHTML = '<tr><td colspan="9" class="text-muted">Name can\'t be found</td></tr>';
                 }
@@ -105,6 +114,11 @@ document.addEventListener('DOMContentLoaded', function(){
                 if (loading) loading.style.display = 'none';
                 if (res && res.success && typeof res.html === 'string') {
                     tbody.innerHTML = res.html;
+                    tbody.dataset.currentPage = '1';
+                    tbody.dataset.totalPages = '1';
+                    tbody.dataset.recordsPerPage = String(res.count ?? tbody.dataset.recordsPerPage ?? '15');
+                    tbody.dataset.sortDirection = 'default';
+                    tbody.dataset.sortColumn = '';
                 } else {
                     tbody.innerHTML = '<tr><td colspan="9" class="text-muted">Name can\'t be found</td></tr>';
                 }

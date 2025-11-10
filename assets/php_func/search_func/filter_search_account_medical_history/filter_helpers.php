@@ -28,7 +28,7 @@ function fsh_status_from_eligibility($row) {
 }
 
 // Build dataset like dashboard but filtered by donor_type/status/registered_via
-function fsh_build_filtered_rows($filters, $limit = 150, $query = '') {
+function fsh_build_filtered_rows($filters, $limit = 150, $query = '', $sortOptions = null, $statusFilter = 'all') {
     $wantReturning = isset($filters['donor_type']) && in_array('Returning', $filters['donor_type'], true);
     $wantNew = isset($filters['donor_type']) && in_array('New', $filters['donor_type'], true);
     $wantStatuses = isset($filters['status']) ? array_map('strtolower', $filters['status']) : [];
@@ -142,13 +142,16 @@ function fsh_build_filtered_rows($filters, $limit = 150, $query = '') {
         $stage = 'medical_review';
         if ($pe) $stage = 'physical_examination'; elseif ($sf) $stage = 'screening_form';
 
+        $physician = ($mh['interviewer'] ?? null) ?: ($interviewer_by_donor[$did] ?? 'N/A');
+
         $rows[] = [
             'no' => $counter++,
             'date' => ($mh['updated_at'] ?? $sf['created_at'] ?? $df['submitted_at'] ?? date('Y-m-d H:i:s')),
             'surname' => $df['surname'] ?? 'N/A',
             'first_name' => $df['first_name'] ?? 'N/A',
             'donor_id_number' => $df['prc_donor_number'] ?? 'N/A',
-            'interviewer' => ($mh['interviewer'] ?? null) ?: ($interviewer_by_donor[$did] ?? 'N/A'),
+            'physician' => $physician,
+            'interviewer' => $physician,
             'donor_type' => $donor_type,
             'status' => $status,
             'registered_via' => $via,
@@ -157,6 +160,78 @@ function fsh_build_filtered_rows($filters, $limit = 150, $query = '') {
             'medical_history_id' => $mh['medical_history_id'] ?? null
         ];
     }
+
+    $statusFilter = strtolower(trim((string)$statusFilter));
+    if ($statusFilter !== '' && $statusFilter !== 'all') {
+        $rows = array_values(array_filter($rows, function($row) use ($statusFilter) {
+            $status = strtolower($row['status'] ?? '');
+            switch ($statusFilter) {
+                case 'incoming':
+                    return $status === '-' || $status === '';
+                case 'eligible':
+                    return $status === 'eligible';
+                case 'deferred':
+                    return $status === 'deferred';
+                case 'ineligible':
+                    return $status === 'ineligible';
+                default:
+                    return true;
+            }
+        }));
+    }
+
+    if ($sortOptions && is_array($sortOptions) && isset($sortOptions['column'], $sortOptions['direction'])) {
+        $column = strtolower($sortOptions['column']);
+        $direction = strtolower($sortOptions['direction']);
+        $allowedColumns = ['no', 'date', 'surname', 'first_name', 'physician'];
+        $allowedDirections = ['asc', 'desc'];
+        if (in_array($column, $allowedColumns, true) && in_array($direction, $allowedDirections, true)) {
+            usort($rows, function($a, $b) use ($column, $direction) {
+                switch ($column) {
+                    case 'date':
+                        $aVal = isset($a['date']) ? strtotime($a['date']) : 0;
+                        $bVal = isset($b['date']) ? strtotime($b['date']) : 0;
+                        $cmp = $aVal <=> $bVal;
+                        break;
+                    case 'surname':
+                    case 'first_name':
+                        $aVal = strtolower($a[$column] ?? '');
+                        $bVal = strtolower($b[$column] ?? '');
+                        $cmp = strcmp($aVal, $bVal);
+                        break;
+                    case 'physician':
+                        $normalize = function($value) {
+                            $val = strtolower(trim((string)$value));
+                            return in_array($val, ['n/a', 'na', '-', ''], true) ? '' : $val;
+                        };
+                        $aVal = $normalize($a['physician'] ?? '');
+                        $bVal = $normalize($b['physician'] ?? '');
+                        $cmp = strcmp($aVal, $bVal);
+                        break;
+                    case 'no':
+                    default:
+                        $aVal = isset($a['no']) ? (int)$a['no'] : 0;
+                        $bVal = isset($b['no']) ? (int)$b['no'] : 0;
+                        $cmp = $aVal <=> $bVal;
+                        break;
+                }
+                if ($cmp === 0) {
+                    $cmp = ($a['donor_id'] ?? 0) <=> ($b['donor_id'] ?? 0);
+                }
+                return $direction === 'asc' ? $cmp : -$cmp;
+            });
+        }
+    }
+
+    if ($limit > 0 && count($rows) > $limit) {
+        $rows = array_slice($rows, 0, $limit);
+    }
+
+    $i = 1;
+    foreach ($rows as &$entry) {
+        $entry['no'] = $i++;
+    }
+    unset($entry);
 
     return $rows;
 }

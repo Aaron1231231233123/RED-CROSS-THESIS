@@ -25,6 +25,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!Number.isFinite(currentPage) || currentPage < 1) currentPage = 1;
     let totalPages = parseInt(tbody.dataset.totalPages || '0', 10);
     if (!Number.isFinite(totalPages) || totalPages < 0) totalPages = 0;
+    let statusFilter = (tbody.dataset.statusFilter || 'all').toLowerCase();
+    const statusParam = tbody.dataset.statusParam || '';
 
     const activeSort = {
         column: tbody.dataset.sortColumn || null,
@@ -219,7 +221,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const a = document.createElement('a');
             a.className = 'page-link';
-            a.href = `?page=${page}`;
+            const suffix = statusParam ? `${statusParam}` : '';
+            a.href = `?page=${page}${suffix}`;
             a.dataset.page = String(page);
             a.textContent = label;
             if (disabled) {
@@ -274,6 +277,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
+        statusFilter = (tbody.dataset.statusFilter || statusFilter || 'all').toLowerCase();
         const activeFilters = payload.filters || collectFilters();
         const activeQuery = typeof payload.query === 'string' ? payload.query : '';
 
@@ -283,7 +287,8 @@ document.addEventListener('DOMContentLoaded', function () {
             query: activeQuery,
             filters: activeFilters,
             page: currentPage,
-            per_page: perPage
+            per_page: perPage,
+            status_filter: statusFilter || 'all'
         };
 
         if (loadingIndicator) {
@@ -325,15 +330,22 @@ document.addEventListener('DOMContentLoaded', function () {
                         totalPages = Number.isFinite(parseInt(res.total_pages, 10)) ? parseInt(res.total_pages, 10) : 0;
                         tbody.dataset.totalPages = String(totalPages);
                     }
+                    if (typeof res.status_filter !== 'undefined') {
+                        statusFilter = String(res.status_filter || 'all').toLowerCase();
+                        tbody.dataset.statusFilter = statusFilter;
+                    }
                     tbody.dataset.sortDirection = activeSort.direction || 'default';
                     tbody.dataset.sortColumn = (activeSort.direction && activeSort.direction !== 'default' && activeSort.column) ? activeSort.column : '';
                     rebuildPagination(totalPages, currentPage);
                 } else if (!activeQuery && filtersEmpty(activeFilters) && effectiveDirection === 'default') {
                     tbody.innerHTML = cache.initial;
                     window.__medicalHistoryTableCache.last = cache.initial;
+                    currentPage = parseInt(tbody.dataset.currentPage || '1', 10);
+                    if (!Number.isFinite(currentPage) || currentPage < 1) currentPage = 1;
                     tbody.dataset.currentPage = String(currentPage);
                     tbody.dataset.sortDirection = 'default';
                     tbody.dataset.sortColumn = '';
+                    tbody.dataset.statusFilter = statusFilter || 'all';
                     totalPages = parseInt(tbody.dataset.totalPages || '0', 10);
                     if (!Number.isFinite(totalPages) || totalPages < 0) totalPages = 0;
                     rebuildPagination(totalPages, currentPage);

@@ -670,6 +670,7 @@ foreach ($medical_by_donor as $rev_donor_id => $rev_medical) {
         'surname' => $donor_info['surname'] ?? 'N/A',
         'first_name' => $donor_info['first_name'] ?? 'N/A',
         'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
+        'physician' => $interviewer_by_donor[$rev_donor_id] ?? 'N/A',
         'interviewer' => $interviewer_by_donor[$rev_donor_id] ?? 'N/A',
         'donor_type' => $donor_type_label,
         'status' => $status,
@@ -713,6 +714,7 @@ foreach ($blood_collections as $blood_info) {
         'surname' => $donor_info['surname'] ?? 'N/A',
         'first_name' => $donor_info['first_name'] ?? 'N/A',
         'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
+        'physician' => $interviewer_by_donor[$donor_id] ?? 'N/A',
         'interviewer' => $interviewer_by_donor[$donor_id] ?? 'N/A',
         'donor_type' => $donor_type_label,
         'status' => $status,
@@ -755,6 +757,7 @@ foreach ($physical_exams as $physical_info) {
             'surname' => $donor_info['surname'] ?? 'N/A',
             'first_name' => $donor_info['first_name'] ?? 'N/A',
             'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
+            'physician' => $interviewer_by_donor[$donor_id] ?? 'N/A',
             'interviewer' => $interviewer_by_donor[$donor_id] ?? 'N/A',
             'donor_type' => $donor_type_label,
             'status' => $status,
@@ -796,6 +799,7 @@ foreach ($screening_forms as $screening_info) {
             'surname' => $donor_info['surname'] ?? 'N/A',
             'first_name' => $donor_info['first_name'] ?? 'N/A',
             'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
+            'physician' => $interviewer_by_donor[$donor_id] ?? 'N/A',
             'interviewer' => $interviewer_by_donor[$donor_id] ?? 'N/A',
             'donor_type' => $donor_type_label,
             'status' => $status,
@@ -829,6 +833,7 @@ foreach ($donor_forms as $donor_info) {
             'surname' => $donor_info['surname'] ?? 'N/A',
             'first_name' => $donor_info['first_name'] ?? 'N/A',
             'donor_id_number' => $donor_info['prc_donor_number'] ?? 'N/A',
+            'physician' => $interviewer_by_donor[$donor_id] ?? 'N/A',
             'interviewer' => $interviewer_by_donor[$donor_id] ?? 'N/A',
             'donor_type' => $donor_type_label,
             'registered_via' => ($donor_info['registration_channel'] ?? '') === 'Mobile' ? 'Mobile' : 'System',
@@ -1255,6 +1260,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             font: inherit;
             cursor: pointer;
             padding: 0;
+        }
+
+        th.text-center .sort-trigger {
+            justify-content: center;
         }
 
         .sortable .sort-trigger:focus-visible {
@@ -2437,29 +2446,29 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         <table class="table dashboard-staff-tables table-hover">
                             <thead>
                                 <tr>
-                                    <th class="text-center sortable" data-sort-field="no">
+                                    <th class="text-center sortable" data-sort-field="no" aria-sort="none">
                                         <button type="button" class="sort-trigger" aria-label="Sort by No.">
                                             No.<i class="fas fa-sort sort-icon"></i>
                                         </button>
                                     </th>
-                                    <th class="text-center sortable" data-sort-field="date">
+                                    <th class="text-center sortable" data-sort-field="date" aria-sort="none">
                                         <button type="button" class="sort-trigger" aria-label="Sort by Date">
                                             Date<i class="fas fa-sort sort-icon"></i>
                                         </button>
                                     </th>
-                                    <th class="text-center sortable" data-sort-field="surname">
+                                    <th class="text-center sortable" data-sort-field="surname" aria-sort="none">
                                         <button type="button" class="sort-trigger" aria-label="Sort by Surname">
                                             Surname<i class="fas fa-sort sort-icon"></i>
                                         </button>
                                     </th>
-                                    <th class="text-center sortable" data-sort-field="first_name">
+                                    <th class="text-center sortable" data-sort-field="first_name" aria-sort="none">
                                         <button type="button" class="sort-trigger" aria-label="Sort by First Name">
                                             First Name<i class="fas fa-sort sort-icon"></i>
                                         </button>
                                     </th>
-                                    <th class="text-center sortable" data-sort-field="interviewer">
-                                        <button type="button" class="sort-trigger" aria-label="Sort by Interviewer">
-                                            Interviewer<i class="fas fa-sort sort-icon"></i>
+                                    <th class="text-center sortable" data-sort-field="physician" aria-sort="none">
+                                        <button type="button" class="sort-trigger" aria-label="Sort by Physician">
+                                            Physician<i class="fas fa-sort sort-icon"></i>
                                         </button>
                                     </th>
                                     <th class="text-center">Donor Type</th>
@@ -2473,7 +2482,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                    data-records-per-page="<?php echo $records_per_page; ?>"
                                    data-total-pages="<?php echo $total_pages; ?>"
                                    data-sort-column=""
-                                   data-sort-direction="default">
+                                   data-sort-direction="default"
+                                   data-status-filter="all"
+                                   data-status-param="">
                                 <?php if($donor_history && is_array($donor_history)): ?>
                                     <?php foreach($donor_history as $index => $entry): ?>
                                         <?php
@@ -2497,7 +2508,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
 
                                             <td class="text-center"><?php echo isset($entry['surname']) ? htmlspecialchars($entry['surname']) : ''; ?></td>
                                             <td class="text-center"><?php echo isset($entry['first_name']) ? htmlspecialchars($entry['first_name']) : ''; ?></td>
-                                            <td class="text-center"><?php echo isset($entry['interviewer']) ? htmlspecialchars($entry['interviewer']) : 'N/A'; ?></td>
+                                            <td class="text-center"><?php echo isset($entry['physician']) ? htmlspecialchars($entry['physician']) : (isset($entry['interviewer']) ? htmlspecialchars($entry['interviewer']) : 'N/A'); ?></td>
                                             <td class="text-center"><span class="<?php echo stripos($entry['donor_type'],'returning')===0 ? 'type-returning' : 'type-new'; ?>"><?php echo htmlspecialchars($entry['donor_type']); ?></span></td>
                                             <td class="text-center">
                                                 <span style="display: block; text-align: center; width: 100%;">
@@ -2529,7 +2540,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr>
-                                        <td colspan="8" class="text-center text-muted">No donor records found</td>
+                                        <td colspan="9" class="text-center text-muted">No donor records found</td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>
@@ -2542,7 +2553,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                 <ul class="pagination justify-content-center">
                                     <!-- Previous button -->
                                     <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo max(1, $current_page - 1); ?>" data-page="<?php echo max(1, $current_page - 1); ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
+                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?>" data-page="<?php echo $current_page - 1; ?>" <?php echo $current_page <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
                                             Previous
                                         </a>
                                     </li>
@@ -2585,7 +2596,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                     
                                     <!-- Next button -->
                                     <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo min($total_pages, $current_page + 1); ?>" data-page="<?php echo min($total_pages, $current_page + 1); ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
+                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?>" data-page="<?php echo $current_page + 1; ?>" <?php echo $current_page >= $total_pages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
                                             Next
                                         </a>
                                     </li>

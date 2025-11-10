@@ -99,6 +99,11 @@ document.addEventListener('DOMContentLoaded', function(){
         .then(res => {
             if (res && res.success && typeof res.html === 'string') {
                 tbody.innerHTML = res.html;
+                tbody.dataset.currentPage = '1';
+                tbody.dataset.totalPages = '1';
+                tbody.dataset.recordsPerPage = String(res.count ?? tbody.dataset.recordsPerPage ?? '15');
+                tbody.dataset.sortDirection = 'default';
+                tbody.dataset.sortColumn = '';
             }
         })
         .catch(() => {})

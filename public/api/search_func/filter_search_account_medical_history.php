@@ -31,7 +31,7 @@ if (!empty($rows)) {
             <td><?php try { $date = new DateTime($entry['date']); echo $date->format('F d, Y'); } catch (Exception $e) { echo 'N/A'; } ?></td>
             <td><?php echo htmlspecialchars($entry['surname']); ?></td>
             <td><?php echo htmlspecialchars($entry['first_name']); ?></td>
-            <td><?php echo htmlspecialchars($entry['interviewer']); ?></td>
+            <td><?php echo htmlspecialchars($entry['physician'] ?? $entry['interviewer'] ?? 'N/A'); ?></td>
             <td><span class="<?php echo stripos($entry['donor_type'],'Returning')===0 ? 'type-returning' : 'type-new'; ?>"><?php echo htmlspecialchars($entry['donor_type']); ?></span></td>
             <td><span class="status-text"><?php echo $entry['status'] === '-' ? '-' : '<strong>' . htmlspecialchars($entry['status']) . '</strong>'; ?></span></td>
             <td><span class="badge-tag badge-registered <?php echo strtolower($entry['registered_via'])==='mobile' ? 'badge-mobile' : 'badge-system'; ?>"><?php echo htmlspecialchars($entry['registered_via']); ?></span></td>

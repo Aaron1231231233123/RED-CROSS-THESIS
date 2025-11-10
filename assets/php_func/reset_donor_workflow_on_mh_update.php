@@ -10,7 +10,7 @@
  * @return array Result with success status and messages
  */
 function resetDonorWorkflowOnMHUpdate($donor_id) {
-    require_once '../conn/db_conn.php';
+    require_once __DIR__ . '/../conn/db_conn.php';
     
     $results = [
         'screening_reset' => false,
