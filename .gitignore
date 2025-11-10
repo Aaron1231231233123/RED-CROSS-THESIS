@@ -1,6 +1,7 @@
 # Cache files - generated data that shouldn't be committed
 assets/cache/
 public/cache/
+public/Dashboards/cache/
 
 # Log files
 *.log
