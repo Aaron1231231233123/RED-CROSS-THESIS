@@ -38,9 +38,16 @@ error_log("Mobile Credentials Modal - isDeclarationForm=" . ($isDeclarationForm 
 
 // On declaration form, always show if credentials exist (ignore "shown" flag)
 // On other pages (dashboards), only show if credentials exist AND haven't been shown yet
+// Detect if we are on any dashboard page; never auto-show there (only show when explicitly triggered)
+$isDashboardPage = (strpos($currentScript, '/Dashboards/') !== false) || (strpos($currentUri, '/Dashboards/') !== false);
+
 if ($isDeclarationForm) {
     $showCredentials = $hasSessionCredentials || $hasCookieCredentials;
     error_log("Mobile Credentials Modal - Declaration form: showCredentials=" . ($showCredentials ? 'true' : 'false'));
+} elseif ($isDashboardPage) {
+    // Always render HTML but do NOT auto-open on dashboards; JS can open explicitly when needed
+    $showCredentials = false;
+    error_log("Mobile Credentials Modal - Dashboard page detected: forcing showCredentials=false to avoid auto-popup");
 } else {
     $showCredentials = ($hasSessionCredentials || $hasCookieCredentials) && !$credentialsAlreadyShown && !$credentialsShownInCookie;
     error_log("Mobile Credentials Modal - Other page: showCredentials=" . ($showCredentials ? 'true' : 'false'));
@@ -184,10 +191,14 @@ error_log("Mobile Credentials Modal - Final check: showCredentials=" . ($showCre
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-danger" data-bs-dismiss="modal" onclick="clearCredentialsOnClose()">
-                    <i class="fas fa-times me-2"></i>
-                    Close
+            <div class="modal-footer d-flex justify-content-between align-items-center">
+                <div class="text-muted small">
+                    If the donor is ready for the next step based on the medical history interview,
+                    click and proceed with Initial Screening.
+                </div>
+                <button type="button" class="btn btn-danger" onclick="goBackToDashboard()">
+                    <i class="fas fa-arrow-right me-2"></i>
+                    Initial Screening
                 </button>
             </div>
         </div>
@@ -195,23 +206,6 @@ error_log("Mobile Credentials Modal - Final check: showCredentials=" . ($showCre
 </div>
 
 <style>
-/* Remove backdrop completely and instantly */
-#mobileCredentialsModal {
-    background: none !important;
-}
-
-#mobileCredentialsModal ~ .modal-backdrop,
-.modal-backdrop.show {
-    opacity: 0 !important;
-    transition: none !important;
-    animation: none !important;
-}
-
-/* Force backdrop removal on hide */
-body.modal-open {
-    overflow: auto !important;
-}
-
 .credentials-container {
     background-color: #f8f9fa;
     border: 1px solid #dee2e6;

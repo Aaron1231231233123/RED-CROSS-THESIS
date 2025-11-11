@@ -309,42 +309,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         }
                         
-                        // Update medical_history needs_review to false (staff has completed the medical history interview)
-                        // The physician will review during the physical examination stage
-                        // Note: medical_approval should remain null - not set to 'Not Approved' at this stage
-                        $medical_update_data = [
-                            'donor_id' => $donor_id, // Use donor_id for medical_history table
-                            'needs_review' => false, // Set to false - staff has completed the interview
-                            // medical_approval is intentionally NOT set - should remain null
-                            'updated_at' => date('Y-m-d H:i:s')
-                        ];
-                        
-                        $mh_ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $donor_id);
-                        curl_setopt($mh_ch, CURLOPT_RETURNTRANSFER, true);
-                        curl_setopt($mh_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
-                        curl_setopt($mh_ch, CURLOPT_POSTFIELDS, json_encode($medical_update_data));
-                        curl_setopt($mh_ch, CURLOPT_HTTPHEADER, [
+                        // Check if medical history is already processed
+                        // If medical history is processed and screening is now being processed,
+                        // mark medical history as complete (both are now done)
+                        // Otherwise, keep medical history as pending
+                        $mh_check_ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $donor_id . '&select=needs_review,is_admin&order=created_at.desc&limit=1');
+                        curl_setopt($mh_check_ch, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($mh_check_ch, CURLOPT_HTTPHEADER, [
                             'apikey: ' . SUPABASE_API_KEY,
-                            'Authorization: Bearer ' . SUPABASE_API_KEY,
-                            'Content-Type: application/json',
-                            'Prefer: return=representation'
+                            'Authorization: Bearer ' . SUPABASE_API_KEY
                         ]);
                         
-                        $mh_response = curl_exec($mh_ch);
-                        $mh_http_code = curl_getinfo($mh_ch, CURLINFO_HTTP_CODE);
-                        curl_close($mh_ch);
+                        $mh_check_response = curl_exec($mh_check_ch);
+                        $mh_check_http = curl_getinfo($mh_check_ch, CURLINFO_HTTP_CODE);
+                        curl_close($mh_check_ch);
                         
-                        $log_message = "[" . date('Y-m-d H:i:s') . "] Medical history update - HTTP Code: " . $mh_http_code . "\n";
-                        file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
+                        $medical_history_already_processed = false;
+                        if ($mh_check_http === 200) {
+                            $mh_check_data = json_decode($mh_check_response, true);
+                            if (!empty($mh_check_data)) {
+                                $mh_record = $mh_check_data[0];
+                                // Check if medical history has been processed (has data/questions answered)
+                                // We check if is_admin is set or if needs_review has been explicitly set
+                                $medical_history_already_processed = (
+                                    isset($mh_record['is_admin']) && 
+                                    ($mh_record['is_admin'] === true || $mh_record['is_admin'] === 'true' || $mh_record['is_admin'] === 'True')
+                                ) || (
+                                    isset($mh_record['needs_review']) && 
+                                    $mh_record['needs_review'] === false
+                                );
+                            }
+                        }
                         
-                        $log_message = "[" . date('Y-m-d H:i:s') . "] Medical history update - Response: " . $mh_response . "\n";
-                        file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
-                        
-                        if ($mh_http_code === 200) {
-                            $log_message = "[" . date('Y-m-d H:i:s') . "] Medical history updated successfully - needs_review=false, medical_approval remains null (staff has completed the medical history interview, awaiting physician approval)\n";
+                        // Only update medical history status if it's already been processed
+                        // This means both screening and medical history are now complete
+                        if ($medical_history_already_processed) {
+                            $medical_update_data = [
+                                'donor_id' => $donor_id,
+                                'needs_review' => false, // Both are now complete
+                                'updated_at' => date('Y-m-d H:i:s')
+                            ];
+                            
+                            $mh_ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . $donor_id);
+                            curl_setopt($mh_ch, CURLOPT_RETURNTRANSFER, true);
+                            curl_setopt($mh_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+                            curl_setopt($mh_ch, CURLOPT_POSTFIELDS, json_encode($medical_update_data));
+                            curl_setopt($mh_ch, CURLOPT_HTTPHEADER, [
+                                'apikey: ' . SUPABASE_API_KEY,
+                                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                                'Content-Type: application/json',
+                                'Prefer: return=representation'
+                            ]);
+                            
+                            $mh_response = curl_exec($mh_ch);
+                            $mh_http_code = curl_getinfo($mh_ch, CURLINFO_HTTP_CODE);
+                            curl_close($mh_ch);
+                            
+                            $log_message = "[" . date('Y-m-d H:i:s') . "] Both screening and medical history completed - Medical history status updated to complete\n";
                             file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         } else {
-                            $log_message = "[" . date('Y-m-d H:i:s') . "] Failed to update medical history: " . $mh_response . "\n";
+                            // Medical history not yet processed, keep it as pending
+                            $log_message = "[" . date('Y-m-d H:i:s') . "] Initial screening processed - Medical history status remains pending until medical history is also processed\n";
                             file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
                         }
                         

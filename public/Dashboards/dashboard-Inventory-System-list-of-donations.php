@@ -867,24 +867,8 @@ function getCacheStats() {
     </script>
 </head>
 <body>
-    <!-- Confirmation Modal -->
-    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header bg-dark text-white">
-                    <h5 class="modal-title" id="confirmationModalLabel">Confirm Action</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to proceed to the donor form?</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" onclick="proceedToDonorForm()">Proceed</button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Admin Donor Registration Modal (replaces old confirmation modal) -->
+    <?php include '../../src/views/modals/admin-donor-registration-modal.php'; ?>
     <!-- Loading Modal -->
     <div class="modal" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="false" data-bs-keyboard="false">
         <div class="modal-dialog modal-dialog-centered">
@@ -2223,6 +2207,11 @@ function getCacheStats() {
         
         // OPTIMIZATION: Enhanced pagination with LCP focus
         function handlePaginationClick(event) {
+            // If progressive container is not present, allow normal navigation
+            const contentAreaExists = !!document.getElementById('donationsContent');
+            if (!contentAreaExists) {
+                return; // do not preventDefault; let anchor navigate
+            }
             event.preventDefault();
             
             const link = event.target.closest('a');
@@ -2436,62 +2425,119 @@ function getCacheStats() {
                 });
         }
         
-        // Render donations data
+        // Render donations data into current table and rebuild pagination
         function renderDonationsData(data) {
-            const contentArea = document.getElementById('donationsContent');
-            if (!contentArea) return;
-            
-            // Remove loading class from table body
-            const tableBody = document.querySelector('#donationsTable tbody');
-            if (tableBody) {
-                tableBody.classList.remove('loading');
+            // Update table body rows
+            const tbody = document.getElementById('donationsTableBody') || document.querySelector('#donationsTable tbody');
+            if (tbody) {
+                tbody.classList.remove('loading');
+                const rows = (data.data || []).map(d => {
+                    const donorId = d.donor_id ?? d.id ?? '';
+                    const surname = d.surname ?? d.last_name ?? d.last ?? '';
+                    const firstName = d.first_name ?? d.name ?? d.first ?? '';
+                    const donorType = d.donor_type ?? (d.is_returning ? 'Returning' : 'New');
+                    const regChannelRaw = d.registration_source ?? d.registration_channel ?? '';
+                    const regChannel = regChannelRaw === 'PRC Portal' ? 'PRC System' : (regChannelRaw === 'Mobile' ? 'Mobile System' : (regChannelRaw || 'PRC System'));
+                    const statusText = d.status_text ?? d.status ?? 'Pending (Screening)';
+                    let badgeClass = 'bg-warning';
+                    const s = String(statusText).toLowerCase();
+                    if (s.includes('approved') || s.includes('eligible')) badgeClass = 'bg-success';
+                    else if (s.includes('declined') || s.includes('refused')) badgeClass = 'bg-danger';
+                    else if (s.includes('deferred') || s.includes('ineligible')) badgeClass = 'bg-warning';
+                    else if (s.includes('collection')) badgeClass = 'bg-primary';
+                    else if (s.includes('examination')) badgeClass = 'bg-info';
+                    
+                    const isPending = /pending/i.test(statusText);
+                    const actionBtn = isPending
+                        ? `<button type="button" class="btn btn-warning btn-sm edit-donor" data-donor-id="${escapeHtml(donorId)}" data-eligibility-id="${escapeHtml(d.eligibility_id ?? '')}"><i class="fas fa-edit"></i></button>`
+                        : `<button type="button" class="btn btn-info btn-sm view-donor" data-donor-id="${escapeHtml(donorId)}" data-eligibility-id="${escapeHtml(d.eligibility_id ?? '')}"><i class="fas fa-eye"></i></button>`;
+                    
+                    return `<tr class="donor-row" data-donor-id="${escapeHtml(donorId)}" data-eligibility-id="${escapeHtml(d.eligibility_id ?? '')}">
+                        <td>${escapeHtml(donorId)}</td>
+                        <td>${escapeHtml(surname)}</td>
+                        <td>${escapeHtml(firstName)}</td>
+                        <td><span class="badge ${badgeClass}">${escapeHtml(donorType || '')}</span></td>
+                        <td>${escapeHtml(regChannel)}</td>
+                        <td><span class="badge ${badgeClass}">${escapeHtml(normalizeStatus(statusText))}</span></td>
+                        <td>${actionBtn}</td>
+                    </tr>`;
+                }).join('');
+                tbody.innerHTML = rows || `<tr><td colspan="7" class="text-center">No records found.</td></tr>`;
             }
             
-            // Update pagination info
+            // Update pagination info text if present
             const paginationInfo = document.getElementById('paginationInfo');
-            if (paginationInfo) {
-                paginationInfo.textContent = `Page ${data.pagination.currentPage} of ${data.pagination.totalPages} (${data.pagination.totalItems} total items)`;
+            if (paginationInfo && data.pagination) {
+                const p = data.pagination;
+                paginationInfo.textContent = `Page ${p.currentPage}${p.totalPages ? ` of ${p.totalPages}` : ''} (${p.totalItems ?? '?'} total items)`;
             }
             
-            // Render table
-            let tableHTML = `
-                <div class="table-responsive">
-                    <table class="table table-striped table-hover">
-                        <thead class="table-dark">
-                            <tr>
-                                <th>ID</th>
-                                <th>Name</th>
-                                <th>Blood Type</th>
-                                <th>Status</th>
-                                <th>Date</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            `;
+            // Rebuild pagination controls
+            if (data.pagination && typeof data.pagination.currentPage !== 'undefined') {
+                rebuildPaginationUI(data.pagination, data.status || '<?php echo $status; ?>');
+                // Re-bind listeners after DOM update
+                initializeProgressivePagination();
+            }
             
-            data.data.forEach(donation => {
-                tableHTML += `
-                    <tr>
-                        <td>${donation.id || 'N/A'}</td>
-                        <td>${donation.name || 'N/A'}</td>
-                        <td>${donation.blood_type || 'N/A'}</td>
-                        <td><span class="badge bg-${getStatusColor(donation.status)}">${donation.status || 'N/A'}</span></td>
-                        <td>${donation.date_submitted || donation.rejection_date || 'N/A'}</td>
-                        <td>
-                            <button class="btn btn-sm btn-primary" onclick="viewDonation(${donation.id})">View</button>
-                        </td>
-                    </tr>
-                `;
+            // Re-bind row action buttons
+            document.querySelectorAll('.edit-donor,.view-donor').forEach(btn => {
+                btn.addEventListener('click', function(){
+                    const donorId = this.getAttribute('data-donor-id') || '';
+                    const eligibilityId = this.getAttribute('data-eligibility-id') || '';
+                    if (this.classList.contains('edit-donor')) {
+                        if (window.openDetails) {
+                            openDetails(donorId, eligibilityId);
+                        }
+                    } else {
+                        if (window.openDetails) {
+                            openDetails(donorId, eligibilityId);
+                        }
+                    }
+                });
             });
-            
-            tableHTML += `
-                        </tbody>
-                    </table>
-                </div>
-            `;
-            
-            contentArea.innerHTML = tableHTML;
+        }
+        
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/[&<>"']/g, s => ({
+                '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+            }[s]));
+        }
+        
+        function normalizeStatus(status) {
+            const s = String(status || '').toLowerCase();
+            if (s.includes('approved') || s.includes('eligible')) return 'Approved';
+            if (s.includes('declined') || s.includes('refused')) return 'Declined';
+            if (s.includes('deferred') || s.includes('ineligible')) return 'Deferred';
+            if (s.includes('examination')) return 'Pending (Examination)';
+            if (s.includes('collection')) return 'Pending (Collection)';
+            return 'Pending (Screening)';
+        }
+        
+        function rebuildPaginationUI(pagination, status) {
+            const pagEl = document.querySelector('.pagination');
+            if (!pagEl) return;
+            const totalPages = pagination.totalPages || 0;
+            const current = pagination.currentPage || 1;
+            const makeUrl = (p) => {
+                const base = new URL(window.location.href);
+                base.searchParams.set('status', status || '<?php echo $status; ?>');
+                base.searchParams.set('page', String(p));
+                return base.pathname + '?' + base.searchParams.toString();
+            };
+            let html = '';
+            // Prev
+            html += `<li class="page-item ${current <= 1 ? 'disabled' : ''}"><a class="page-link" href="${escapeHtml(makeUrl(Math.max(1, current-1)))}" aria-label="Previous">Previous</a></li>`;
+            // Pages (limit to window of 5)
+            const start = Math.max(1, current - 2);
+            const end = totalPages ? Math.min(totalPages, current + 2) : current + 2;
+            for (let p = start; p <= end; p++) {
+                html += `<li class="page-item ${p === current ? 'active' : ''}"><a class="page-link" href="${escapeHtml(makeUrl(p))}">${p}</a></li>`;
+            }
+            // Next
+            const nextTarget = totalPages ? Math.min(totalPages, current + 1) : current + 1;
+            html += `<li class="page-item ${totalPages && current >= totalPages ? 'disabled' : ''}"><a class="page-link" href="${escapeHtml(makeUrl(nextTarget))}" aria-label="Next">Next</a></li>`;
+            pagEl.innerHTML = html;
         }
         
         // Get status color for badges
@@ -2667,26 +2713,16 @@ function getCacheStats() {
                 backdrop: false,
                 keyboard: false
             });
-            // Function to show confirmation modal
+            // Function to show admin donor registration modal
             window.showConfirmationModal = function() {
-                const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'), {
-                    backdrop: false,
-                    keyboard: true
-                });
-                confirmationModal.show();
-            };
-            // Function to handle form submission
-            window.proceedToDonorForm = function() {
-                const confirmationModal = bootstrap.Modal.getInstance(document.getElementById('confirmationModal'));
-                const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
-                confirmationModal.hide();
-                loadingModal.show();
-                
-                setTimeout(() => {
-                    // Pass current page as source parameter for proper redirect back
-                    const currentPage = encodeURIComponent(window.location.pathname + window.location.search);
-                    window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + currentPage;
-                }, 1500);
+                // Check if admin registration modal function is available
+                if (typeof window.openAdminDonorRegistrationModal === 'function') {
+                    window.openAdminDonorRegistrationModal();
+                } else {
+                    // Fallback to old behavior if modal not loaded
+                    console.error('Admin donor registration modal not available');
+                    alert('Registration modal is loading. Please try again in a moment.');
+                }
             };
             // Helper to open details using new modal with legacy fallback
             function openDetails(donorId, eligibilityId) {
@@ -3023,6 +3059,8 @@ function getCacheStats() {
     <script src="../../assets/js/physical_examination_modal_admin.js"></script>
      <!-- Admin-specific donor modal script -->
      <script src="../../assets/js/admin-donor-modal.js"></script>
+    <!-- Admin Donor Registration Modal -->
+    <script src="../../assets/js/admin-donor-registration-modal.js"></script>
      <script>
      // Safety shim: ensure makeApiCall exists for modules (physician PE handler uses it)
      if (typeof window.makeApiCall !== 'function') {

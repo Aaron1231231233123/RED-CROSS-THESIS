@@ -403,6 +403,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Prepare the data for insertion
         $medical_history_data = [
             'donor_id' => $_SESSION['donor_id'],
+            // Mark as admin-completed for renewed flow so Interviewer shows Completed + eye
+            'is_admin' => 'True',
             'feels_well' => isset($_POST['q1']) && $_POST['q1'] === 'Yes',
             'feels_well_remarks' => $_POST['q1_remarks'] !== 'None' ? $_POST['q1_remarks'] : null,
             'previously_refused' => isset($_POST['q2']) && $_POST['q2'] === 'Yes',
@@ -520,18 +522,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Store the new medical_history_id in the session
                 $_SESSION['medical_history_id'] = $responseData[0]['medical_history_id'];
                 error_log("Medical history data submitted and saved with ID: " . $_SESSION['medical_history_id']);
-                error_log("Proceeding to declaration form modal with donor_id: " . $_SESSION['donor_id']);
-                $donor_id = $_SESSION['donor_id'];
-                // Store the referrer for use in declaration form's back button
-                if (isset($_SESSION['medical_history_referrer'])) {
-                    $_SESSION['declaration_form_referrer'] = $_SESSION['medical_history_referrer'];
-                    error_log("Medical history - Set declaration_form_referrer from medical_history_referrer: " . $_SESSION['declaration_form_referrer']);
-                } else {
-                    $_SESSION['declaration_form_referrer'] = '../../public/Dashboards/dashboard-Inventory-System.php';
-                    error_log("Medical history - Set declaration_form_referrer to default: " . $_SESSION['declaration_form_referrer']);
-                }
-                // Redirect to declaration form modal with donor_id
-                header('Location: declaration-form-modal.php?donor_id=' . urlencode($donor_id));
+                // Renewed flow: stay on MH page and show Mobile Credentials modal
+                header('Location: medical-history-modal.php?success=1');
                 exit();
             } else {
                 error_log("Failed to extract medical_history_id from response: " . print_r($responseData, true));
@@ -565,6 +557,8 @@ if (isset($_SESSION['error_message'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Medical History Modal</title>
+    <!-- Match declaration page dependencies for consistent modal styling -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script>
         // Store error message in sessionStorage if it exists
         <?php if (!empty($error_message)): ?>
@@ -583,7 +577,7 @@ if (isset($_SESSION['error_message'])) {
             background-color: #f0f0f0;
         }
         
-        .modal {
+        .mh-modal {
             background-color: white;
             border-radius: 8px;
             box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
@@ -593,7 +587,7 @@ if (isset($_SESSION['error_message'])) {
             overflow: hidden;
         }
         
-        .modal-header {
+        .mh-modal-header {
             padding: 10px 15px;
             border-bottom: 1px solid #f0f0f0;
             display: flex;
@@ -605,7 +599,7 @@ if (isset($_SESSION['error_message'])) {
             border-top-right-radius: 8px;
         }
         
-        .modal-title {
+        .mh-modal-title {
             color: #9c0000;
             font-size: 26px;
             font-weight: bold;
@@ -625,7 +619,7 @@ if (isset($_SESSION['error_message'])) {
             top: 12px;
         }
         
-        .modal-body {
+        .mh-modal-body {
             padding: 20px;
             background-color: #fff;
         }
@@ -818,7 +812,7 @@ if (isset($_SESSION['error_message'])) {
             font-size: 14px;
         }
         
-        .modal-footer {
+        .mh-modal-footer {
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -1000,13 +994,13 @@ if (isset($_SESSION['error_message'])) {
     endif; 
     ?>
     
-    <div class="modal">
-        <div class="modal-header">
-            <h2 class="modal-title">Medical History</h2>
+    <div class="mh-modal">
+        <div class="mh-modal-header">
+            <h2 class="mh-modal-title">Medical History</h2>
             <button class="close-button">&times;</button>
         </div>
         
-        <div class="modal-body">
+        <div class="mh-modal-body">
             <div class="step-indicators">
                 <div class="step active" id="step1" data-step="1">1</div>
                 <div class="step-connector active" id="line1-2"></div>
@@ -1973,7 +1967,7 @@ if (isset($_SESSION['error_message'])) {
             <div class="error-message" id="validationError">Please answer all questions before proceeding to the next step.</div>
         </div>
         
-        <div class="modal-footer">
+        <div class="mh-modal-footer">
             <div class="footer-left">
                 <button type="button" class="cancel-button" onclick="confirmCancelRegistration()">
                     <i class="fas fa-times-circle"></i> Cancel Registration
@@ -2567,5 +2561,11 @@ if (isset($_SESSION['error_message'])) {
             });
         }
     </script>
+    <?php
+    // Include mobile credentials modal inside the body so Bootstrap styles apply correctly
+    // This enables the new flow: Personal Data -> MH form -> Account creation modal
+    include '../modals/mobile-credentials-modal.php';
+    ?>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html> 
