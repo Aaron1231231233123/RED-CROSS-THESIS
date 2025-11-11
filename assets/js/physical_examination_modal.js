@@ -655,6 +655,44 @@ class PhysicalExaminationModal {
             if (dlg) dlg.style.zIndex = '20011';
         } catch(_) {}
         modal.show();
+        
+        // Wire the Defer action to open the Defer Donor modal for physical exam
+        try {
+            const btn = document.getElementById('abnormalDeferBtn');
+            if (btn) {
+                btn.onclick = () => {
+                    try { modal.hide(); } catch(_) {}
+                    // Populate defer modal with current donor/screening IDs
+                    const donorId = document.getElementById('physical-donor-id')?.value || '';
+                    const screeningId = document.getElementById('physical-screening-id')?.value || '';
+                    const deferEl = document.getElementById('deferDonorModal');
+                    if (!deferEl) return;
+                    try {
+                        const donorInput = deferEl.querySelector('#defer-donor-id');
+                        const screeningInput = deferEl.querySelector('#defer-screening-id');
+                        if (donorInput) donorInput.value = donorId;
+                        if (screeningInput) screeningInput.value = screeningId;
+                        // Show only Physical Examination reasons and preselect Abnormal Vitals
+                        const reasonSelect = deferEl.querySelector('#disapprovalReason');
+                        if (reasonSelect) {
+                            Array.from(reasonSelect.options).forEach(opt => {
+                                const cl = opt.getAttribute('class') || '';
+                                if (cl.includes('physical-reason')) {
+                                    opt.style.display = '';
+                                } else if (cl.includes('screening-reason')) {
+                                    opt.style.display = 'none';
+                                }
+                            });
+                            const targetText = 'Abnormal Vital Signs (BP/Pulse/Temp)';
+                            const targetOpt = Array.from(reasonSelect.options).find(o => (o.text || o.innerText) === targetText);
+                            if (targetOpt) reasonSelect.value = targetOpt.value;
+                        }
+                    } catch(_) {}
+                    const m2 = bootstrap.Modal.getOrCreateInstance(deferEl, { backdrop: 'static', keyboard: false });
+                    m2.show();
+                };
+            }
+        } catch(_) {}
     }
     
     prevStep() {
@@ -858,19 +896,22 @@ class PhysicalExaminationModal {
     markFieldValid(field) {
         field.classList.remove('is-invalid');
         field.classList.add('is-valid');
-        const feedback = field.parentNode.querySelector('.invalid-feedback');
+        // Prefer placing feedback under the form-group container (not inside flex row)
+        const container = field.closest('.col-md-4') || field.closest('.mb-3') || field.parentNode;
+        const feedback = container.querySelector('.invalid-feedback');
         if (feedback) feedback.remove();
     }
     
     markFieldInvalid(field, message) {
         field.classList.remove('is-valid');
         field.classList.add('is-invalid');
-        
-        let feedback = field.parentNode.querySelector('.invalid-feedback');
+        // Place feedback under the outer form-group to ensure it renders below inputs
+        const container = field.closest('.col-md-4') || field.closest('.mb-3') || field.parentNode;
+        let feedback = container.querySelector('.invalid-feedback');
         if (!feedback) {
             feedback = document.createElement('div');
             feedback.className = 'invalid-feedback';
-            field.parentNode.appendChild(feedback);
+            container.appendChild(feedback);
         }
         feedback.textContent = message;
     }

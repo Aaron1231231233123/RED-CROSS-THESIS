@@ -2668,11 +2668,11 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     <div id="abnormalVitalSignsList" class="mb-3" style="text-align: left; padding: 0 20px;">
                         <!-- Abnormal values will be listed here -->
                     </div>
-                    <p class="text-muted text-center mb-0" style="font-size: 0.9rem;">Please review the values before proceeding to the next step.</p>
+                    <!-- Note removed per request -->
                 </div>
                 <div class="modal-footer border-0 justify-content-center">
-                    <button type="button" class="btn px-4" data-bs-dismiss="modal" style="background-color: #b22222; border-color: #b22222; color: white;">
-                        OK
+                    <button type="button" id="abnormalDeferBtn" class="btn px-4" style="background-color: #b22222; border-color: #b22222; color: white;">
+                        <i class="fas fa-ban me-2"></i>Defer
                     </button>
                 </div>
             </div>
@@ -5336,7 +5336,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                             approveBtn.className = 'btn btn-success';
                             // Button label depends on caller flow: Interviewer vs Physician
                             const isPhysFlow = (window.__openMHForPhysician === true);
-                            const label = isPhysFlow ? 'Proceed to Physical Examination' : 'Approved';
+                            const label = isPhysFlow ? 'Proceed to Physical Examination' : 'Approve';
                             approveBtn.innerHTML = '<i class="fas fa-check me-2"></i>' + label;
                             // Place the Approve button next to Next/Close button in the footer controls
                             if (nextButton && nextButton.parentNode) {

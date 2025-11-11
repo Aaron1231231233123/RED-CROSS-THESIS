@@ -21,10 +21,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         try {
             // Update request status to Approved
+            $approvedBy = 'Admin';
+            if (!empty($_SESSION['user_id'])) {
+                $approvedByName = getAdminName($_SESSION['user_id'], false);
+                if (!empty($approvedByName)) {
+                    $approvedBy = $approvedByName;
+                }
+            }
+
             $update_data = [
                 'status' => 'Approved',
                 'last_updated' => date('Y-m-d H:i:s'),
-                'approved_by' => $_SESSION['user_id'] ?? 'Admin',
+                'approved_by' => $approvedBy,
                 'approved_date' => date('Y-m-d H:i:s')
             ];
             
@@ -90,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $update_data = [
                 'status' => 'Completed',
                 'last_updated' => date('Y-m-d H:i:s'),
-                'handed_over_by' => $_SESSION['user_id'] ?? 'Admin',
+                'handed_over_by' => (!empty($_SESSION['user_id']) ? getAdminName($_SESSION['user_id'], false) : 'Admin'),
                 'handed_over_date' => date('Y-m-d H:i:s')
             ];
             
@@ -119,30 +127,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 include_once __DIR__ . '/module/optimized_functions.php';
 
 // Function to get admin name from user_id
-function getAdminName($user_id) {
+function getAdminName($user_id, $includePrefix = true) {
     try {
         $response = supabaseRequest("users?select=first_name,surname&user_id=eq." . $user_id);
         if ($response['code'] === 200 && !empty($response['data'])) {
             $user = $response['data'][0];
             $first_name = trim($user['first_name'] ?? '');
             $surname = trim($user['surname'] ?? '');
+            $fullName = trim($first_name . ' ' . $surname);
             
-            if (!empty($first_name) && !empty($surname)) {
-                return "Dr. $first_name $surname";
-            } elseif (!empty($first_name)) {
-                return "Dr. $first_name";
-            } elseif (!empty($surname)) {
-                return "Dr. $surname";
+            if (!empty($fullName)) {
+                if ($includePrefix) {
+                    return "Dr. $fullName";
+                }
+                return $fullName;
+            }
+
+            if (!empty($first_name)) {
+                return $includePrefix ? "Dr. $first_name" : $first_name;
+            }
+
+            if (!empty($surname)) {
+                return $includePrefix ? "Dr. $surname" : $surname;
             }
         }
     } catch (Exception $e) {
         error_log("Error getting admin name: " . $e->getMessage());
     }
-    return 'Dr. Admin';
+    return $includePrefix ? 'Dr. Admin' : 'Admin';
 }
 
-// Get current admin name
-$admin_name = getAdminName($_SESSION['user_id'] ?? '');
+// Get current admin name (cache in session to avoid extra API calls each page load)
+if (!empty($_SESSION['user_id'])) {
+    if (empty($_SESSION['admin_full_name'])) {
+        $_SESSION['admin_full_name'] = getAdminName($_SESSION['user_id']);
+    }
+    $admin_name = $_SESSION['admin_full_name'];
+} else {
+    $admin_name = 'Dr. Admin';
+}
 
 // Function to get admin name from handed_over_by user_id
 function getHandedOverByAdminName($handed_over_by) {
@@ -175,6 +198,37 @@ $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
 $page_size = 12;
 $offset = ($page - 1) * $page_size;
 $blood_requests = fetchAllBloodRequests($page_size, $offset);
+
+// Batch fetch handed-over user names to avoid N+1 queries
+$handed_over_name_map = [];
+if (!empty($blood_requests)) {
+    $ids = [];
+    foreach ($blood_requests as $req) {
+        if (!empty($req['handed_over_by'])) {
+            $ids[] = $req['handed_over_by'];
+        }
+    }
+    $ids = array_values(array_unique(array_filter($ids)));
+    if (!empty($ids)) {
+        // Build an "in" filter: in.(id1,id2,...) - ensure values are URL safe
+        $inList = '(' . implode(',', array_map('intval', $ids)) . ')';
+        try {
+            $resp = supabaseRequest("users?select=user_id,first_name,surname&user_id=in.$inList");
+            if (isset($resp['code']) && $resp['code'] === 200 && !empty($resp['data'])) {
+                foreach ($resp['data'] as $u) {
+                    $fname = trim($u['first_name'] ?? '');
+                    $sname = trim($u['surname'] ?? '');
+                    $full = trim($fname . ' ' . $sname);
+                    if (!empty($u['user_id']) && !empty($full)) {
+                        $handed_over_name_map[$u['user_id']] = $full;
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Batch fetch user names failed: " . $e->getMessage());
+        }
+    }
+}
 
 // Handle success/error messages
 $success_message = '';
@@ -351,68 +405,43 @@ function getCompatibleBloodTypes($blood_type, $rh_factor) {
 
 // OPTIMIZATION: Enhanced function to check if a blood request can be fulfilled
 function canFulfillBloodRequest($request_id) {
-    // OPTIMIZATION: Use enhanced API function for request data
-    $requestResponse = supabaseRequest("blood_requests?request_id=eq." . $request_id);
-    
+    // Fetch request basics first
+    $requestResponse = supabaseRequest("blood_requests?select=request_id,patient_blood_type,rh_factor,units_requested&request_id=eq." . $request_id);
     if (!isset($requestResponse['data']) || empty($requestResponse['data'])) {
         return [false, 'Request not found.'];
     }
-    
+
     $request_data = $requestResponse['data'][0];
     $requested_blood_type = $request_data['patient_blood_type'];
     $requested_rh_factor = $request_data['rh_factor'];
-    $units_requested = intval($request_data['units_requested']);
-    $blood_type_full = $requested_blood_type . ($requested_rh_factor === 'Positive' ? '+' : '-');
-    
-    // OPTIMIZATION: Use enhanced querySQL function for blood_bank_units data
-    $bloodBankUnitsData = querySQL(
-        'blood_bank_units',
-        'unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,created_at,updated_at',
-        []
-    );
-    
-    if (isset($bloodBankUnitsData['error'])) {
-        return [false, 'Error checking inventory: ' . $bloodBankUnitsData['error']];
-    }
-    
-    // Get compatible blood types
-    $compatible_types = getCompatibleBloodTypes($requested_blood_type, $requested_rh_factor);
-    
-    // Check available units for each compatible type
+    $units_requested = max(0, intval($request_data['units_requested']));
+
+    // Reuse the already filtered Supabase query builder
+    $units = fetchBloodUnitsForRequest($request_id);
+
+    // Count available by type and total
     $available_units = 0;
     $available_by_type = [];
-    
-    foreach ($bloodBankUnitsData as $item) {
-        if (empty($item['unit_serial_number'])) continue;
-        
-        $item_blood_type = $item['blood_type'];
-        $item_rh = strpos($item_blood_type, '+') !== false ? 'Positive' : 'Negative';
-        $item_type = str_replace(['+', '-'], '', $item_blood_type);
-        
-        // Check if this blood type is compatible
-        foreach ($compatible_types as $compatible) {
-            if ($compatible['type'] === $item_type && $compatible['rh'] === $item_rh) {
-                // Check if not expired and not already handed over
-                $expiration_date = new DateTime($item['expires_at']);
-                $current_status = $item['status'] ?? 'available';
-                
-                if (new DateTime() <= $expiration_date && $current_status !== 'handed_over') {
-                    $available_units++;
-                    if (!isset($available_by_type[$item_blood_type])) {
-                        $available_by_type[$item_blood_type] = 0;
-                    }
-                    $available_by_type[$item_blood_type]++;
-                }
-                break;
+    foreach ($units as $u) {
+        $bt = $u['blood_type'] ?? '';
+        if (!empty($bt)) {
+            if (!isset($available_by_type[$bt])) {
+                $available_by_type[$bt] = 0;
             }
+            $available_by_type[$bt]++;
+        }
+        $available_units++;
+        if ($available_units >= $units_requested) {
+            // Short-circuit once we have enough
+            break;
         }
     }
-    
+
     $can_fulfill = $available_units >= $units_requested;
-    $message = $can_fulfill 
+    $message = $can_fulfill
         ? "Available: $available_units units (Requested: $units_requested)"
         : "Insufficient: $available_units available, $units_requested requested";
-    
+
     return [$can_fulfill, $message, $available_by_type];
 }
 
@@ -1409,7 +1438,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                             '<?php echo htmlspecialchars($request['patient_gender']); ?>',
                                             '<?php echo htmlspecialchars($request['handed_over_by'] ?? ''); ?>',
                                             '<?php echo htmlspecialchars($request['handed_over_date'] ?? ''); ?>',
-                                            '<?php echo htmlspecialchars(getHandedOverByAdminName($request['handed_over_by'] ?? '')); ?>'
+                                                '<?php echo htmlspecialchars(($handed_over_name_map[$request['handed_over_by']] ?? '') ?: ''); ?>'
                                         )"
                                         >
                                         <i class="fas fa-eye"></i>
@@ -1579,7 +1608,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             
                             <!-- Hand Over Button -->
                             <button type="button" class="btn btn-primary" id="handOverButton" style="padding: 10px 20px; font-weight: bold; border-radius: 5px; display: none;">
-                                <i class="fas fa-truck me-2"></i>Handed Over
+                                <i class="fas fa-truck me-2"></i>Hand Over
                                 </button>
                             </div>
                     </div>
@@ -1633,10 +1662,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </p>
                         <div class="mb-3">
                             <label class="form-label fw-bold" style="color: #333;">Reason for Declining</label>
-                            <textarea class="form-control" name="decline_reason" id="declineReasonText" rows="3" 
-                                placeholder="Please provide a reason for declining this request..." 
-                                style="border: 1px solid #ddd; padding: 10px;" required></textarea>
-            </div>
+                            <select class="form-select" name="decline_reason" id="declineReasonText" style="border: 1px solid #ddd; padding: 10px;" required>
+                                <option value="" selected disabled>Select reason</option>
+                                <option value="Low Blood Supply">Low Blood Supply</option>
+                                <option value="Ineligible Requestor">Ineligible Requestor</option>
+                                <option value="Medical Restrictions">Medical Restrictions</option>
+                                <option value="Pending Verification">Pending Verification</option>
+                                <option value="Duplicate Request">Duplicate Request</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="modal-footer" style="padding: 20px 25px; border-top: 1px solid #ddd;">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="padding: 8px 20px; font-weight: bold;">Cancel</button>
@@ -1811,6 +1846,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     <script>
     // Get admin name from PHP
     const adminName = '<?php echo addslashes($admin_name); ?>';
+    const adminNamePlain = '<?php echo addslashes(getAdminName($_SESSION['user_id'] ?? '', false)); ?>';
     
     // Enhanced function to populate the modal fields based on wireframe design
     function loadRequestDetails(request_id, patientName, bloodType, component, rhFactor, unitsNeeded, diagnosis, hospital, physician, priority, status, requestDate, whenNeeded, patientAge, patientGender, handedOverBy, handedOverDate, handedOverByAdminName) {
@@ -2052,7 +2088,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         document.getElementById('handoverTotalUnits').textContent = data.total_units;
         
         // Set handover details
-        document.getElementById('handoverStaffName').textContent = 'Staff Member'; // You can get this from session
+        document.getElementById('handoverStaffName').textContent = adminNamePlain || 'Staff Member';
         document.getElementById('handoverDateTime').textContent = new Date().toLocaleString('en-US', { 
             year: 'numeric', 
             month: 'long', 
@@ -2306,6 +2342,26 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             form.submit();
         });
 
+        // Helper: safe JSON fetch with graceful fallback to text for debugging
+        async function fetchJson(url, options) {
+            const res = await fetch(url, options);
+            const ct = res.headers.get('content-type') || '';
+            if (!res.ok) {
+                const errText = await res.text().catch(() => '');
+                throw new Error(`HTTP ${res.status} ${res.statusText}: ${errText}`);
+            }
+            if (ct.includes('application/json')) {
+                return res.json();
+            }
+            // Try to parse JSON anyway; otherwise return detailed error
+            const text = await res.text();
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                throw new Error(`Expected JSON but received:\n${text.substring(0, 500)}`);
+            }
+        }
+
         // Hand Over button logic
         document.getElementById('handOverButton').addEventListener('click', function() {
             // Get request ID
@@ -2318,8 +2374,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             handoverBtn.disabled = true;
             
             // Fetch blood units for this request
-            fetch(`../../public/api/get-blood-units-for-request.php?request_id=${requestId}`)
-                .then(response => response.json())
+            fetchJson(`../api/get-blood-units-for-request.php?request_id=${encodeURIComponent(requestId)}&t=${Date.now()}`)
                 .then(data => {
                     if (data.success) {
                         // Populate handover modal
@@ -2336,7 +2391,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    alert('Error fetching blood units. Please try again.');
+                    alert('Error fetching blood units:\n' + (error && error.message ? error.message : String(error)));
                 })
                 .finally(() => {
                     // Reset button state
@@ -2357,28 +2412,29 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             confirmBtn.disabled = true;
             
             // First, update the blood units to assign them to this request
-            fetch(`../../public/api/get-blood-units-for-request.php?request_id=${requestId}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success && data.blood_units.length > 0) {
-                        // Update each blood unit with the hospital_request_id
-                        const updatePromises = data.blood_units.map(unit => {
-                            return fetch('../../public/api/update-blood-unit-request.php', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({
-                                    unit_id: unit.unit_id,
-                                    hospital_request_id: requestId
-                                })
-                            });
-                        });
-                        
-                        return Promise.all(updatePromises);
-                    } else {
+            fetchJson(`../api/get-blood-units-for-request.php?request_id=${encodeURIComponent(requestId)}&t=${Date.now()}`)
+                .then(async (data) => {
+                    if (!data.success || !data.blood_units || data.blood_units.length === 0) {
                         throw new Error('No blood units available for handover');
                     }
+
+                    // Update each blood unit (mark as handed over) and ensure success
+                    const updatePromises = data.blood_units.map((unit) =>
+                        fetchJson('../api/update-blood-unit-request.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                unit_id: unit.unit_id
+                            })
+                        })
+                    );
+
+                    const results = await Promise.all(updatePromises);
+                    const failed = results.find(r => !r || r.success !== true);
+                    if (failed) {
+                        throw new Error('Failed to update one or more blood units');
+                    }
+                    return true;
                 })
                 .then(() => {
                     // Now submit the handover form
@@ -2400,7 +2456,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    alert('Error processing handover: ' + error.message);
+                    alert('Error processing handover:\n' + (error && error.message ? error.message : String(error)));
                     // Reset button state
                     confirmBtn.innerHTML = originalText;
                     confirmBtn.disabled = false;

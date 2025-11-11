@@ -741,6 +741,9 @@ th {
                                         data-is-asap="<?php echo isset($request['is_asap']) && ($request['is_asap'] === true || $request['is_asap'] === 'true' || $request['is_asap'] === 1 || $request['is_asap'] === '1') ? 'true' : 'false'; ?>"
                                         data-approved-by="<?php echo htmlspecialchars($request['approved_by'] ?? ''); ?>"
                                         data-approved-date="<?php echo htmlspecialchars($request['approved_date'] ?? ''); ?>"
+                                        data-declined-by="<?php echo htmlspecialchars($request['declined_by'] ?? ''); ?>"
+                                        data-declined-date="<?php echo htmlspecialchars($request['last_updated'] ?? ''); ?>"
+                                        data-decline-reason="<?php echo htmlspecialchars($request['decline_reason'] ?? ''); ?>"
                                         data-handed-over-by="<?php echo htmlspecialchars($request['handed_over_by'] ?? ''); ?>"
                                         data-handed-over-date="<?php echo htmlspecialchars($request['handed_over_date'] ?? ''); ?>"
                                         data-physician-name="<?php echo htmlspecialchars($request['physician_name'] ?? ''); ?>"
@@ -763,6 +766,9 @@ th {
                                         data-is-asap="<?php echo isset($request['is_asap']) && ($request['is_asap'] === true || $request['is_asap'] === 'true' || $request['is_asap'] === 1 || $request['is_asap'] === '1') ? 'true' : 'false'; ?>"
                                         data-approved-by="<?php echo htmlspecialchars($request['approved_by'] ?? ''); ?>"
                                         data-approved-date="<?php echo htmlspecialchars($request['approved_date'] ?? ''); ?>"
+                                        data-declined-by="<?php echo htmlspecialchars($request['declined_by'] ?? ''); ?>"
+                                        data-declined-date="<?php echo htmlspecialchars($request['last_updated'] ?? ''); ?>"
+                                        data-decline-reason="<?php echo htmlspecialchars($request['decline_reason'] ?? ''); ?>"
                                         data-handed-over-by="<?php echo htmlspecialchars($request['handed_over_by'] ?? ''); ?>"
                                         data-handed-over-date="<?php echo htmlspecialchars($request['handed_over_date'] ?? ''); ?>"
                                         data-physician-name="<?php echo htmlspecialchars($request['physician_name'] ?? ''); ?>"
@@ -785,6 +791,9 @@ th {
                                         data-is-asap="<?php echo isset($request['is_asap']) && ($request['is_asap'] === true || $request['is_asap'] === 'true' || $request['is_asap'] === 1 || $request['is_asap'] === '1') ? 'true' : 'false'; ?>"
                                         data-approved-by="<?php echo htmlspecialchars($request['approved_by'] ?? ''); ?>"
                                         data-approved-date="<?php echo htmlspecialchars($request['approved_date'] ?? ''); ?>"
+                                        data-declined-by="<?php echo htmlspecialchars($request['declined_by'] ?? ''); ?>"
+                                        data-declined-date="<?php echo htmlspecialchars($request['last_updated'] ?? ''); ?>"
+                                        data-decline-reason="<?php echo htmlspecialchars($request['decline_reason'] ?? ''); ?>"
                                         data-handed-over-by="<?php echo htmlspecialchars($request['handed_over_by'] ?? ''); ?>"
                                         data-handed-over-date="<?php echo htmlspecialchars($request['handed_over_date'] ?? ''); ?>"
                                         data-physician-name="<?php echo htmlspecialchars($request['physician_name'] ?? ''); ?>"
@@ -808,6 +817,9 @@ th {
                                         data-is-asap="<?php echo isset($request['is_asap']) && ($request['is_asap'] === true || $request['is_asap'] === 'true' || $request['is_asap'] === 1 || $request['is_asap'] === '1') ? 'true' : 'false'; ?>"
                                         data-approved-by="<?php echo htmlspecialchars($request['approved_by'] ?? ''); ?>"
                                         data-approved-date="<?php echo htmlspecialchars($request['approved_date'] ?? ''); ?>"
+                                        data-declined-by="<?php echo htmlspecialchars($request['declined_by'] ?? ''); ?>"
+                                        data-declined-date="<?php echo htmlspecialchars($request['last_updated'] ?? ''); ?>"
+                                        data-decline-reason="<?php echo htmlspecialchars($request['decline_reason'] ?? ''); ?>"
                                         data-handed-over-by="<?php echo htmlspecialchars($request['handed_over_by'] ?? ''); ?>"
                                         data-handed-over-date="<?php echo htmlspecialchars($request['handed_over_date'] ?? ''); ?>"
                                         data-physician-name="<?php echo htmlspecialchars($request['physician_name'] ?? ''); ?>"
@@ -830,6 +842,9 @@ th {
                                         data-is-asap="<?php echo isset($request['is_asap']) && ($request['is_asap'] === true || $request['is_asap'] === 'true' || $request['is_asap'] === 1 || $request['is_asap'] === '1') ? 'true' : 'false'; ?>"
                                         data-approved-by="<?php echo htmlspecialchars($request['approved_by'] ?? ''); ?>"
                                         data-approved-date="<?php echo htmlspecialchars($request['approved_date'] ?? ''); ?>"
+                                        data-declined-by="<?php echo htmlspecialchars($request['declined_by'] ?? ''); ?>"
+                                        data-declined-date="<?php echo htmlspecialchars($request['last_updated'] ?? ''); ?>"
+                                        data-decline-reason="<?php echo htmlspecialchars($request['decline_reason'] ?? ''); ?>"
                                         data-handed-over-by="<?php echo htmlspecialchars($request['handed_over_by'] ?? ''); ?>"
                                         data-handed-over-date="<?php echo htmlspecialchars($request['handed_over_date'] ?? ''); ?>"
                                         data-physician-name="<?php echo htmlspecialchars($request['physician_name'] ?? ''); ?>"
@@ -850,6 +865,9 @@ th {
                                         data-when-needed="<?php echo htmlspecialchars($request['when_needed']); ?>"
                                         data-debug-when-needed="<?php echo htmlspecialchars($request['when_needed'] ?? 'NULL'); ?>"
                                         data-is-asap="<?php echo isset($request['is_asap']) && ($request['is_asap'] === true || $request['is_asap'] === 'true' || $request['is_asap'] === 1 || $request['is_asap'] === '1') ? 'true' : 'false'; ?>"
+                                        data-declined-by="<?php echo htmlspecialchars($request['declined_by'] ?? ''); ?>"
+                                        data-declined-date="<?php echo htmlspecialchars($request['last_updated'] ?? ''); ?>"
+                                        data-decline-reason="<?php echo htmlspecialchars($request['decline_reason'] ?? ''); ?>"
                                         data-status="<?php echo htmlspecialchars($request['status']); ?>">
                                         <i class="fas fa-eye"></i>
                                     </button>
@@ -1113,6 +1131,18 @@ th {
                 <div class="mb-4" id="approvalSection">
                     <label class="form-label fw-bold">Approved by:</label>
                     <input type="text" class="form-control" id="modalApprovedBy" placeholder="(e.g., &quot;Approved by Dr. Reyes - June 18, 2025 at 9:42 AM&quot;)" readonly style="background-color: #f8f9fa;">
+                </div>
+
+                <!-- Decline Section (visible when status is Declined) -->
+                <div class="mb-4" id="declineSection" style="display: none;">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Declined by:</label>
+                        <input type="text" class="form-control" id="modalDeclinedBy" placeholder="(Declined by Staff – Date and time)" readonly style="background-color: #f8f9fa;">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Reason</label>
+                        <textarea class="form-control" id="modalDeclineReason" rows="3" readonly style="background-color: #f8f9fa;"></textarea>
+                    </div>
                 </div>
 
                 <!-- Handover Information (for Printed status) -->
@@ -2018,6 +2048,12 @@ document.addEventListener("DOMContentLoaded", function () {
                         // Approved-like states: show only approval section, hide handover
                         handoverInfo.style.display = 'none';
                         approvalInstructions.style.display = 'block';
+                        if (approvalInstructions) {
+                            approvalInstructions.classList.remove('alert-danger');
+                            if (!approvalInstructions.classList.contains('alert-info')) {
+                                approvalInstructions.classList.add('alert-info');
+                            }
+                        }
                         if (approvalText) {
                             if (currentStatus === 'Printed') {
                                 approvalText.textContent = 'The request has been printed. Please wait while an administrator confirms the receipt and the blood is prepared for delivery to your hospital.';
@@ -2028,16 +2064,63 @@ document.addEventListener("DOMContentLoaded", function () {
                         handoverInstructions.style.display = 'none';
                         if (approvalSection) approvalSection.style.display = 'block';
                         if (approvalSeparator) approvalSeparator.style.display = 'block';
+                        const declineSection = document.getElementById('declineSection');
+                        if (declineSection) declineSection.style.display = 'none';
+                    } else if (currentStatus === 'Declined') {
+                        // Declined: show decline details, hide approval/handover
+                        handoverInfo.style.display = 'none';
+                        handoverInstructions.style.display = 'none';
+                        if (approvalSection) approvalSection.style.display = 'none';
+                        if (approvalSeparator) approvalSeparator.style.display = 'none';
+                        const declineSection = document.getElementById('declineSection');
+                        if (declineSection) declineSection.style.display = 'block';
+                        // Switch info alert to danger and set copy
+                        if (approvalInstructions) {
+                            approvalInstructions.classList.remove('alert-info');
+                            approvalInstructions.classList.add('alert-danger');
+                            if (approvalText) {
+                                approvalText.textContent = "The blood request has been declined. Kindly inform the patient's representative to coordinate with PRC for assistance.";
+                            }
+                            approvalInstructions.style.display = 'block';
+                        }
+                        // Populate decline details from button data attributes
+                        const trigger = document.querySelector(`button.view-btn[data-request-id="${currentRequestId}"], button.print-btn[data-request-id="${currentRequestId}"]`);
+                        const declineReason = trigger ? (trigger.getAttribute('data-decline-reason') || '') : '';
+                        const declinedBy = trigger ? (trigger.getAttribute('data-declined-by') || '') : '';
+                        const declinedDateRaw = trigger ? (trigger.getAttribute('data-declined-date') || '') : '';
+                        let declinedDateText = '';
+                        if (declinedDateRaw) {
+                            const dd = new Date(declinedDateRaw);
+                            if (!isNaN(dd.getTime())) {
+                                declinedDateText = dd.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) + (dd.toLocaleTimeString ? ' at ' + dd.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '');
+                            }
+                        }
+                        const declinedByField = document.getElementById('modalDeclinedBy');
+                        const declineReasonField = document.getElementById('modalDeclineReason');
+                        if (declinedByField) {
+                            declinedByField.value = declinedBy && declinedDateText ? `Declined by ${declinedBy} - ${declinedDateText}` : (declinedBy || (declinedDateText ? `(${declinedDateText})` : ''));
+                        }
+                        if (declineReasonField) {
+                            declineReasonField.value = declineReason;
+                        }
                     } else {
                         // Other statuses: default behavior
                         handoverInfo.style.display = 'none';
                         approvalInstructions.style.display = (currentStatus === 'Pending') ? 'none' : 'block';
+                        if (approvalInstructions) {
+                            approvalInstructions.classList.remove('alert-danger');
+                            if (!approvalInstructions.classList.contains('alert-info')) {
+                                approvalInstructions.classList.add('alert-info');
+                            }
+                        }
                         if (approvalText && approvalInstructions.style.display === 'block') {
                             approvalText.textContent = "The blood request has been approved. Please print the receipt and provide it to the patient's representative for claiming at PRC.";
                         }
                         handoverInstructions.style.display = 'none';
                         if (approvalSection) approvalSection.style.display = (currentStatus === 'Pending') ? 'none' : 'block';
                         if (approvalSeparator) approvalSeparator.style.display = (currentStatus === 'Pending') ? 'none' : 'block';
+                        const declineSection = document.getElementById('declineSection');
+                        if (declineSection) declineSection.style.display = 'none';
                     }
 
                     // Show/hide buttons based on current status

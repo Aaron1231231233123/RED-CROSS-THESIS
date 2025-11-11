@@ -2,6 +2,7 @@
 // API to update blood unit with hospital request ID
 session_start();
 require_once '../../assets/conn/db_conn.php';
+require_once '../Dashboards/module/optimized_functions.php';
 
 // Set headers for JSON response
 header('Content-Type: application/json');
@@ -19,20 +20,19 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['role_id']) || $_SESSION['r
 // Get JSON input
 $input = json_decode(file_get_contents('php://input'), true);
 
-if (!$input || !isset($input['unit_id']) || !isset($input['hospital_request_id'])) {
+if (!$input || !isset($input['unit_id'])) {
     http_response_code(400);
-    echo json_encode(['error' => 'Unit ID and Hospital Request ID are required']);
+    echo json_encode(['error' => 'Unit ID is required']);
     exit;
 }
 
 $unit_id = $input['unit_id'];
-$hospital_request_id = intval($input['hospital_request_id']);
 
 try {
-    // Update the blood unit with the hospital request ID
+    // Update the blood unit to mark as handed over (do not alter hospital_request_id)
     $update_data = [
-        'hospital_request_id' => $hospital_request_id,
         'status' => 'handed_over',
+        'handed_over_at' => date('Y-m-d H:i:s'),
         'updated_at' => date('Y-m-d H:i:s')
     ];
     
@@ -43,7 +43,7 @@ try {
     );
     
     if ($response['code'] >= 200 && $response['code'] < 300) {
-        echo json_encode(['success' => true, 'message' => 'Blood unit updated successfully']);
+        echo json_encode(['success' => true, 'message' => 'Blood unit updated successfully', 'updated' => $response['data']]);
     } else {
         throw new Exception('Failed to update blood unit. HTTP Code: ' . $response['code']);
     }

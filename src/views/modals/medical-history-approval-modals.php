@@ -58,14 +58,19 @@
                     <p class="text-muted mb-4">The donor will be marked as ineligible for donation.</p>
                     
                     <div class="mb-4 text-start">
-                        <label for="restrictionType" class="form-label fw-semibold">
+                        <label class="form-label fw-semibold">
                             <i class="fas fa-list-ul me-2 text-primary"></i>Deferral Type *
                         </label>
-                        <select class="form-select" id="restrictionType" name="restriction_type" required>
-                            <option value="" selected disabled style="color:#6c757d;">Please select deferral type</option>
-                            <option value="temporary">Temporarily Deferred</option>
-                            <option value="permanent">Permanently Deferred</option>
-                        </select>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="restriction_type_mh" id="restrictionTypeTemporaryMH" value="temporary">
+                                <label class="form-check-label" for="restrictionTypeTemporaryMH">Temporarily Deferred</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="restriction_type_mh" id="restrictionTypePermanentMH" value="permanent">
+                                <label class="form-check-label" for="restrictionTypePermanentMH">Permanently Deferred</label>
+                            </div>
+                        </div>
                         <div class="form-text" id="deferralTypeHelp">Please select a deferral type.</div>
                     </div>
                     
@@ -197,7 +202,7 @@
             return;
         }
         
-        const restrictionType = document.getElementById('restrictionType');
+        const restrictionRadios = document.querySelectorAll('input[name="restriction_type_mh"]');
         const durationSection = document.getElementById('mhDurationSection');
         const customDurationSection = document.getElementById('customDurationSection');
         const durationSelect = document.getElementById('mhDeclineDuration');
@@ -207,7 +212,7 @@
         const summaryText = document.getElementById('summaryText');
         const durationOptions = durationSection ? durationSection.querySelectorAll('.duration-option') : [];
         
-        if (!restrictionType || !durationSection) {
+        if ((!restrictionRadios || restrictionRadios.length === 0) || !durationSection) {
             setTimeout(initializeMHDDeclineModal, 100);
             return;
         }
@@ -217,14 +222,18 @@
         console.log('[MH Decline] Initializing modal handlers...');
         
         // Handle deferral type change
+        function getSelectedRestriction() {
+            const r = document.querySelector('input[name="restriction_type_mh"]:checked');
+            return r ? r.value : '';
+        }
+        
         function handleRestrictionTypeChange() {
-            const restrictionTypeEl = document.getElementById('restrictionType');
-            if (!restrictionTypeEl || !durationSection) {
+            if (!durationSection) {
                 console.warn('[MH Decline] Missing elements:', { restrictionType: !!restrictionTypeEl, durationSection: !!durationSection });
                 return;
             }
             
-            const selectedType = restrictionTypeEl.value;
+            const selectedType = getSelectedRestriction();
             console.log('[MH Decline] Restriction type changed to:', selectedType);
             
             if (selectedType === 'temporary') {
@@ -373,16 +382,13 @@
         
         // Remove any existing listeners by using a unique handler function
         // Store handler reference for removal
-        if (restrictionType._mhDeclineHandler) {
-            restrictionType.removeEventListener('change', restrictionType._mhDeclineHandler);
-        }
-        
-        // Create new handler and store reference
-        restrictionType._mhDeclineHandler = handleRestrictionTypeChange;
-        restrictionType.addEventListener('change', handleRestrictionTypeChange);
-        
-        // Also add input event for immediate feedback
-        restrictionType.addEventListener('input', handleRestrictionTypeChange);
+        // Remove old handlers then bind to radios
+        restrictionRadios.forEach(r => {
+            try { r.removeEventListener('change', r._mhDeclineHandler); } catch(_) {}
+            r._mhDeclineHandler = handleRestrictionTypeChange;
+            r.addEventListener('change', handleRestrictionTypeChange);
+            r.addEventListener('input', handleRestrictionTypeChange);
+        });
         
         // Mark as initialized to prevent other scripts from interfering
         if (durationSection) {
@@ -390,7 +396,7 @@
         }
         
         // Initialize based on current value - call directly to ensure it runs
-        const currentValue = restrictionType.value;
+        const currentValue = getSelectedRestriction();
         if (currentValue === 'temporary') {
             // Remove any inline styles that might hide it
             durationSection.removeAttribute('style');
@@ -444,11 +450,15 @@
                 initializeMHDDeclineModal();
                 
                 // Force update UI based on current selection
-                const restrictionType = document.getElementById('restrictionType');
+                const restrictionRadios = document.querySelectorAll('input[name="restriction_type_mh"]');
                 const durationSection = document.getElementById('mhDurationSection');
                 
-                if (restrictionType && durationSection) {
-                    const currentValue = restrictionType.value;
+                if (restrictionRadios && restrictionRadios.length && durationSection) {
+                    const getSelected = () => {
+                        const r = document.querySelector('input[name="restriction_type_mh"]:checked');
+                        return r ? r.value : '';
+                    };
+                    const currentValue = getSelected();
                     
                     // If temporary is selected, show duration section
                     if (currentValue === 'temporary') {
@@ -482,7 +492,7 @@
                     }
                     
                     // Trigger change to update summary
-                    restrictionType.dispatchEvent(new Event('change', { bubbles: true }));
+                    handleRestrictionTypeChange();
                 }
             }, 150);
         }, { once: false }); // Allow multiple times but only one listener

@@ -95,3 +95,4 @@ def get_supabase_service_key():
         _config = get_config()
     return _config.get('SUPABASE_SERVICE_KEY')
 
+

@@ -81,7 +81,8 @@ async function fetchDonorFormData(donorId) {
 
 // Initialize defer modal functionality
 function initializeDeferModal() {
-    const deferralTypeSelect = document.getElementById('deferralTypeSelect');
+    // Support current UI: radio buttons instead of a select
+    const deferralTypeRadios = Array.from(document.querySelectorAll('input[name="deferral_type_radio"]'));
     const durationSection = document.getElementById('durationSection');
     const customDurationSection = document.getElementById('customDurationSection');
     const durationSelect = document.getElementById('deferralDuration');
@@ -93,6 +94,13 @@ function initializeDeferModal() {
     
     // Validation elements
     const disapprovalReasonSelect = document.getElementById('disapprovalReason');
+    const deferralTypeHelp = document.getElementById('deferralTypeHelp');
+
+    // Helper to get currently selected deferral type from radios
+    const getSelectedDeferralType = () => {
+        const checked = deferralTypeRadios.find(r => r.checked);
+        return checked ? checked.value : '';
+    };
 
     // Update disapproval reason validation
     function updateDeferValidation() {
@@ -117,11 +125,11 @@ function initializeDeferModal() {
         if (!disapprovalReasonSelect) return;
         
         const reasonValid = !!disapprovalReasonSelect.value;
-        const deferralTypeValid = deferralTypeSelect.value !== '';
+        const deferralTypeValid = getSelectedDeferralType() !== '';
         
         // For temporary deferral, also check duration
         let durationValid = true;
-        if (deferralTypeSelect.value === 'Temporary Deferral') {
+        if (getSelectedDeferralType() === 'Temporary Deferral') {
             durationValid = durationSelect.value !== '' || customDurationInput.value !== '';
         }
         
@@ -140,9 +148,11 @@ function initializeDeferModal() {
         }
     }
 
-    // Handle deferral type change
-    deferralTypeSelect.addEventListener('change', function() {
-            if (this.value === 'Temporary Deferral') {
+    // Handle deferral type change (radios)
+    deferralTypeRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            const value = getSelectedDeferralType();
+            if (value === 'Temporary Deferral') {
                 durationSection.style.display = 'block';
                 setTimeout(() => {
                     durationSection.classList.add('show');
@@ -165,7 +175,9 @@ function initializeDeferModal() {
                 durationSelect.value = '';
                 customDurationInput.value = '';
             }
+            if (deferralTypeHelp) deferralTypeHelp.textContent = 'Please select a deferral type.';
             updateSummary();
+        });
     });
 
     // Note: Card click handlers removed since we're using dropdown now
@@ -280,7 +292,7 @@ function initializeDeferModal() {
     }
     
     // Update validation when deferral type changes
-    deferralTypeSelect.addEventListener('change', updateDeferSubmitButtonState);
+    deferralTypeRadios.forEach(r => r.addEventListener('change', updateDeferSubmitButtonState));
     
     // Update validation when duration changes
     if (customDurationInput) {
@@ -294,7 +306,10 @@ function initializeDeferModal() {
 
 // Validate defer form
 function validateDeferForm() {
-    const selectedType = document.getElementById('deferralTypeSelect').value;
+    const selectedType = (function(){
+        const r = document.querySelector('input[name="deferral_type_radio"]:checked');
+        return r ? r.value : '';
+    })();
     const durationValue = document.getElementById('deferralDuration').value;
     const customDuration = document.getElementById('customDuration').value;
     const disapprovalReason = document.getElementById('disapprovalReason').value;
@@ -302,7 +317,8 @@ function validateDeferForm() {
     if (!selectedType) {
         showDeferToast('Validation Error', 'Please select a deferral type.', 'error');
         // Scroll to deferral type section
-        document.getElementById('deferralTypeSelect').scrollIntoView({ behavior: 'smooth' });
+        const firstRadio = document.querySelector('input[name="deferral_type_radio"]');
+        if (firstRadio) firstRadio.scrollIntoView({ behavior: 'smooth' });
         return false;
     }
 
@@ -348,7 +364,10 @@ async function submitDeferral() {
     
     const donorId = formData.get('donor_id');
     const screeningId = formData.get('screening_id');
-    const deferralType = document.getElementById('deferralTypeSelect').value;
+    const deferralType = (function(){
+        const r = document.querySelector('input[name="deferral_type_radio"]:checked');
+        return r ? r.value : '';
+    })();
     const disapprovalReason = formData.get('disapproval_reason');
     
     // Convert empty string to null for screening_id
@@ -714,8 +733,10 @@ function openDeferModal(screeningData, source = 'physical') {
 
 // Configure defer modal based on source (physical examination vs initial screening)
 function configureDeferModalForSource(source) {
-    const deferralTypeSelect = document.getElementById('deferralTypeSelect');
-    const permanentOption = document.getElementById('permanentOption');
+    // Radio inputs and their containers
+    const radioTemporary = document.getElementById('deferralTypeTemporary');
+    const radioPermanent = document.getElementById('deferralTypePermanent');
+    const permanentContainer = radioPermanent ? radioPermanent.closest('.form-check') : null;
     const deferralTypeHelp = document.getElementById('deferralTypeHelp');
     const durationSection = document.getElementById('durationSection');
     
@@ -725,8 +746,9 @@ function configureDeferModalForSource(source) {
     
     if (source === 'physical') {
         // Physical examination mode - show both permanent and temporary options
-        permanentOption.style.display = 'block';
-        deferralTypeSelect.value = '';
+        if (permanentContainer) permanentContainer.style.display = 'block';
+        if (radioTemporary) radioTemporary.checked = false;
+        if (radioPermanent) radioPermanent.checked = false;
         deferralTypeHelp.textContent = 'Please select a deferral type.';
         
         // Show physical examination reasons, hide screening reasons
@@ -738,8 +760,9 @@ function configureDeferModalForSource(source) {
         
     } else {
         // Initial screening mode - only temporary deferral, no duration needed
-        permanentOption.style.display = 'none';
-        deferralTypeSelect.value = '';
+        if (permanentContainer) permanentContainer.style.display = 'none';
+        if (radioPermanent) radioPermanent.checked = false;
+        if (radioTemporary) radioTemporary.checked = true;
         deferralTypeHelp.textContent = 'Please select a deferral type.';
         
         // Show screening reasons, hide physical examination reasons

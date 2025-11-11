@@ -2,6 +2,7 @@
 // API to get blood units for a specific request
 session_start();
 require_once '../../assets/conn/db_conn.php';
+require_once '../Dashboards/module/optimized_functions.php';
 
 // Set headers for JSON response
 header('Content-Type: application/json');
@@ -72,26 +73,23 @@ try {
             break;
     }
     
-    // Convert to database format
-    $db_compatible_types = [];
-    foreach ($compatible_types as $type) {
-        $blood_type = substr($type, 0, -1);
-        $rh_factor = substr($type, -1) === '+' ? 'Positive' : 'Negative';
-        $db_compatible_types[] = $blood_type . '|' . $rh_factor;
-    }
-    
-    // Build the query to get available blood units
-    $blood_type_conditions = [];
-    foreach ($db_compatible_types as $type) {
-        list($bt, $rh) = explode('|', $type);
-        $blood_type_conditions[] = "(blood_type.eq.{$bt}&rh_factor.eq.{$rh})";
-    }
-    
-    $blood_type_filter = implode(',', $blood_type_conditions);
-    $endpoint = "blood_bank_units?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,hospital_request_id&or=({$blood_type_filter})&status=eq.Valid&hospital_request_id=is.null&order=collected_at.asc&limit=" . $needed_units;
-    
+    // Build filter using blood_type values directly (e.g., A+, O-)
+    // Encode each value for URL but keep commas/parens in place
+    $encodedTypes = array_map(function($t) { return rawurlencode($t); }, $compatible_types);
+    $inFilter = 'in.(' . implode(',', $encodedTypes) . ')';
+
+    // Only include units collected within the last 45 days (oldest-first within valid window)
+    $threshold = gmdate('Y-m-d\TH:i:s\Z', strtotime('-45 days'));
+
+    $endpoint = "blood_bank_units"
+        . "?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,hospital_request_id"
+        . "&blood_type={$inFilter}"
+        . "&status=eq.Valid&hospital_request_id=is.null"
+        . "&collected_at=gte." . rawurlencode($threshold)
+        . "&order=collected_at.asc&limit={$needed_units}";
+
     $response = supabaseRequest($endpoint);
-    if (isset($response['data'])) {
+    if (isset($response['code']) && $response['code'] >= 200 && $response['code'] < 300 && isset($response['data'])) {
         $blood_units = $response['data'];
         
         // Format the response
@@ -121,7 +119,8 @@ try {
             'total_units' => count($formatted_units)
         ]);
     } else {
-        throw new Exception('Failed to fetch blood units');
+        $detail = isset($response['error']) ? $response['error'] : 'Unknown error';
+        throw new Exception('Failed to fetch blood units: ' . $detail);
     }
     
 } catch (Exception $e) {

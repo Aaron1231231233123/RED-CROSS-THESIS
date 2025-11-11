@@ -12,3 +12,4 @@ print(f"Success: {result.get('success', False)}")
 print(f"Forecast data points: {len(result.get('forecast_data', []))}")
 print(f"KPIs calculated: {len(result.get('kpis', {}))}")
 
+
