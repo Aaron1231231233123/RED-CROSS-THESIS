@@ -448,7 +448,8 @@ $curl_handles = [];
 $queries = [
     'donor_forms' => '/rest/v1/donor_form?select=donor_id,surname,first_name,submitted_at,registration_channel,prc_donor_number&order=submitted_at.desc&limit=5000',
     // include needs_review flag and updated_at to prioritize and display review time
-    'medical_histories' => '/rest/v1/medical_history?select=donor_id,medical_history_id,medical_approval,needs_review,created_at,updated_at&order=created_at.desc&limit=5000',
+    // include is_admin to filter out admin records
+    'medical_histories' => '/rest/v1/medical_history?select=donor_id,medical_history_id,medical_approval,needs_review,created_at,updated_at,is_admin&order=created_at.desc&limit=5000',
     'screening_forms' => '/rest/v1/screening_form?select=screening_id,donor_form_id,interviewer_id,needs_review,created_at&order=created_at.desc&limit=5000',
     'physical_exams' => '/rest/v1/physical_examination?select=donor_id,needs_review,created_at&order=created_at.desc&limit=5000',
     'blood_collections' => '/rest/v1/blood_collection?select=screening_id,start_time&order=start_time.desc&limit=5000',
@@ -554,6 +555,15 @@ $medical_by_donor = array_column($medical_histories, null, 'donor_id');
 $screenings_by_donor = array_column($screening_forms, null, 'donor_form_id');
 $physicals_by_donor = array_column($physical_exams, null, 'donor_id');
 $blood_by_screening = array_column($blood_collections, null, 'screening_id');
+
+// FILTER: Remove donors from $medical_by_donor where is_admin = True
+// This is done AFTER creating the lookup to preserve prioritization logic
+foreach ($medical_by_donor as $donor_id => $medical_record) {
+    $is_admin = $medical_record['is_admin'] ?? false;
+    if ($is_admin === true || $is_admin === 'true' || $is_admin === 1 || $is_admin === '1') {
+        unset($medical_by_donor[$donor_id]);
+    }
+}
 
 // Create interviewer lookup array
 $interviewer_by_donor = [];
@@ -845,7 +855,7 @@ foreach ($donor_forms as $donor_info) {
 }
 
 // Prioritize donors with empty medical_approval OR needs_review=true, then others by oldest first
-usort($donor_history, function($a, $b) use ($medical_by_donor) {
+usort($donor_history, function($a, $b) use ($medical_by_donor, $eligibility_by_donor) {
     // Get medical approval and needs_review status directly from database
     $a_medical_approval = !empty($a['donor_id']) && isset($medical_by_donor[$a['donor_id']]) ? ($medical_by_donor[$a['donor_id']]['medical_approval'] ?? null) : null;
     $b_medical_approval = !empty($b['donor_id']) && isset($medical_by_donor[$b['donor_id']]) ? ($medical_by_donor[$b['donor_id']]['medical_approval'] ?? null) : null;
@@ -853,9 +863,34 @@ usort($donor_history, function($a, $b) use ($medical_by_donor) {
     $a_needs_review = !empty($a['donor_id']) && isset($medical_by_donor[$a['donor_id']]) && ($medical_by_donor[$a['donor_id']]['needs_review'] === true);
     $b_needs_review = !empty($b['donor_id']) && isset($medical_by_donor[$b['donor_id']]) && ($medical_by_donor[$b['donor_id']]['needs_review'] === true);
     
-    // Priority 1: Donors with empty approval OR needs_review=true
-    $a_priority = (empty($a_medical_approval) || $a_needs_review);
-    $b_priority = (empty($b_medical_approval) || $b_needs_review);
+    // Check if donor is NEW (no eligibility record)
+    $a_is_new = !empty($a['donor_id']) && !isset($eligibility_by_donor[$a['donor_id']]);
+    $b_is_new = !empty($b['donor_id']) && !isset($eligibility_by_donor[$b['donor_id']]);
+    
+    // Get stage
+    $a_stage = $a['stage'] ?? '';
+    $b_stage = $b['stage'] ?? '';
+    
+    // Priority 1: Donors with needs_review=true (highest priority)
+    // Priority 2: NEW donors in medical_review stage with empty medical_approval
+    // All others are non-priority
+    
+    $a_priority = false;
+    $b_priority = false;
+    
+    // Check if donor A is priority
+    if ($a_needs_review) {
+        $a_priority = true; // Highest priority: needs_review=true
+    } elseif ($a_is_new && $a_stage === 'medical_review' && empty($a_medical_approval)) {
+        $a_priority = true; // New donor in medical_review with empty approval
+    }
+    
+    // Check if donor B is priority
+    if ($b_needs_review) {
+        $b_priority = true; // Highest priority: needs_review=true
+    } elseif ($b_is_new && $b_stage === 'medical_review' && empty($b_medical_approval)) {
+        $b_priority = true; // New donor in medical_review with empty approval
+    }
     
     if ($a_priority !== $b_priority) return $a_priority ? -1 : 1;
     
@@ -872,6 +907,7 @@ usort($donor_history, function($a, $b) use ($medical_by_donor) {
     if ($a_timestamp === $b_timestamp) return 0;
     return ($a_timestamp < $b_timestamp) ? -1 : 1;
 });
+
 
 // Calculate counts from already processed data
 $new_count = 0;
