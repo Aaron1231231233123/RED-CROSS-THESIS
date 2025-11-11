@@ -49,14 +49,28 @@
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label for="physical-blood-pressure-admin" class="form-label">Blood Pressure *</label>
-                            <input type="text" 
-                                   class="form-control" 
+                            <div class="bp-input-container">
+                                <input type="number" 
+                                       class="form-control bp-input bp-systolic" 
+                                       id="physical-blood-pressure-systolic-admin" 
+                                       name="blood_pressure_systolic" 
+                                       placeholder="Systolic" 
+                                       min="60" 
+                                       max="250" 
+                                       required>
+                                <span class="bp-separator">/</span>
+                                <input type="number" 
+                                       class="form-control bp-input bp-diastolic" 
+                                       id="physical-blood-pressure-diastolic-admin" 
+                                       name="blood_pressure_diastolic" 
+                                       placeholder="Diastolic" 
+                                       min="40" 
+                                       max="150" 
+                                       required>
+                            </div>
+                            <input type="hidden" 
                                    id="physical-blood-pressure-admin" 
-                                   name="blood_pressure" 
-                                   placeholder="e.g., 120/80" 
-                                   pattern="[0-9]{2,3}/[0-9]{2,3}" 
-                                   title="Format: systolic/diastolic e.g. 120/80" 
-                                   required>
+                                   name="blood_pressure">
                         </div>
                         <div class="col-md-4 mb-3">
                             <label for="physical-pulse-rate-admin" class="form-label">Pulse Rate (BPM) *</label>

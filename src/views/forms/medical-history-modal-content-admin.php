@@ -313,6 +313,7 @@ if ($http_code === 200) {
         height: 36px;
         font-size: 14px;
         background-color: #fff;
+        cursor: pointer;
     }
     
     /* Modal Footer */
@@ -928,6 +929,57 @@ window.generateAdminMedicalHistoryQuestions = function() {
             }
         })();
 
+        // Define remarks options based on question type
+        const remarksOptions = {
+            // General Health (q1)
+            1: ["None", "Feeling Unwell", "Fatigue", "Fever", "Other Health Issues"],
+            // Previous Refusal (q2)
+            2: ["None", "Low Hemoglobin", "Medical Condition", "Recent Surgery", "Other Refusal Reason"],
+            // Testing Purpose (q3-4)
+            3: ["None", "HIV Test", "Hepatitis Test", "Other Test Purpose"],
+            4: ["None", "Understood", "Needs More Information"],
+            // Recent Consumption (q5-6)
+            5: ["None", "Beer", "Wine", "Liquor", "Multiple Types"],
+            6: ["None", "Pain Relief", "Fever", "Other Medication Purpose"],
+            // Recent Medical History (q7-8)
+            7: ["None", "Antibiotics", "Vitamins", "Vaccines", "Other Medications"],
+            8: ["None", "Red Cross Donation", "Hospital Donation", "Other Donation Type"],
+            // Zika Related (q9-11)
+            9: ["None", "Local Travel", "International Travel", "Specific Location"],
+            10: ["None", "Direct Contact", "Indirect Contact", "Suspected Case"],
+            11: ["None", "Partner Travel History", "Unknown Exposure", "Other Risk"],
+            // Medical Procedures (q12-16)
+            12: ["None", "Blood Transfusion", "Organ Transplant", "Other Procedure"],
+            13: ["None", "Major Surgery", "Minor Surgery", "Dental Work"],
+            14: ["None", "Tattoo", "Piercing", "Acupuncture", "Blood Exposure"],
+            15: ["None", "High Risk Contact", "Multiple Partners", "Other Risk Factors"],
+            16: ["None", "Unprotected Sex", "Casual Contact", "Other Risk Behavior"],
+            // Medical Conditions (q17-25)
+            17: ["None", "Personal History", "Family Contact", "Other Exposure"],
+            18: ["None", "Short Term", "Long Term", "Other Details"],
+            19: ["None", "UK Stay", "Europe Stay", "Duration of Stay"],
+            20: ["None", "Local Travel", "International Travel", "Duration"],
+            21: ["None", "Recreational", "Medical", "Other Usage"],
+            22: ["None", "Treatment History", "Current Use", "Other Details"],
+            23: ["None", "HIV", "Hepatitis", "Syphilis", "Malaria"],
+            24: ["None", "Past Infection", "Treatment History", "Other Details"],
+            25: ["None", "Current Infection", "Past Treatment", "Other Details"],
+            // Chronic Conditions (q26-32)
+            26: ["None", "Cancer Type", "Blood Disease", "Bleeding Disorder"],
+            27: ["None", "Heart Disease", "Surgery History", "Current Treatment"],
+            28: ["None", "Active TB", "Asthma", "Other Respiratory Issues"],
+            29: ["None", "Kidney Disease", "Thyroid Issue", "Diabetes", "Epilepsy"],
+            30: ["None", "Recent Infection", "Past Infection", "Other Details"],
+            31: ["None", "Condition Type", "Treatment Status", "Other Details"],
+            32: ["None", "Recent Fever", "Rash", "Joint Pain", "Eye Issues"],
+            // Female Specific (q33-37)
+            33: ["None", "Current Pregnancy", "Past Pregnancy", "Other Details"],
+            34: ["None", "Less than 6 months", "6-12 months ago", "More than 1 year ago"],
+            35: ["None", "Less than 3 months ago", "3-6 months ago", "6-12 months ago"],
+            36: ["None", "Currently Breastfeeding", "Recently Stopped", "Other"],
+            37: ["None", "Within last week", "1-2 weeks ago", "2-4 weeks ago", "More than 1 month ago"]
+        };
+
         // Full question set mirroring staff modal
         const questionsByStep = {
             1: [
@@ -1045,8 +1097,13 @@ window.generateAdminMedicalHistoryQuestions = function() {
                 const remarksKey = `q${qNum}_remarks`;
                 const mappedRemarksKey = fieldName ? `${fieldName}_remarks` : remarksKey;
                 const remarksVal = medicalHistoryData[mappedRemarksKey] ? String(medicalHistoryData[mappedRemarksKey]) : (medicalHistoryData[remarksKey] ? String(medicalHistoryData[remarksKey]) : '');
+                const remarksOptionsForQ = remarksOptions[qNum] || ["None"];
+                const remarksSelectOptions = remarksOptionsForQ.map(option => {
+                    const selected = remarksVal === option ? 'selected' : '';
+                    return `<option value="${option}" ${selected}>${option}</option>`;
+                }).join('');
                 const remarks = createCell(
-                    `<input type=\"text\" class=\"remarks-input\" name=\"${remarksKey}\" value=\"${remarksVal.replace(/\"/g,'&quot;')}\">`,
+                    `<select class=\"remarks-input\" name=\"${remarksKey}\">${remarksSelectOptions}</select>`,
                     'remarks-cell'
                 );
 

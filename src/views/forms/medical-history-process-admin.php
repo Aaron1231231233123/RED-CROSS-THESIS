@@ -135,10 +135,41 @@ try {
         $medical_history_data['needs_review'] = false;
         error_log("Processing decline action");
     } elseif ($action === 'admin_complete') {
-        // For 'admin_complete' action, mark review as completed
-        $medical_history_data['needs_review'] = false;
-        $medical_history_data['is_admin'] = 'True';  // Use string 'True' for PostgreSQL boolean
-        error_log("Processing admin_complete action - marking review as Completed and is_admin as True");
+        // For 'admin_complete' action, check if both screening and medical history are done
+        // Only mark as complete if both are processed
+        try {
+            // Check if screening form exists for this donor
+            $screening_ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?donor_form_id=eq.' . $donor_id . '&select=screening_id&order=created_at.desc&limit=1');
+            curl_setopt($screening_ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($screening_ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY
+            ]);
+            
+            $screening_check_response = curl_exec($screening_ch);
+            $screening_check_http = curl_getinfo($screening_ch, CURLINFO_HTTP_CODE);
+            curl_close($screening_ch);
+            
+            $has_screening = false;
+            if ($screening_check_http === 200) {
+                $screening_check_data = json_decode($screening_check_response, true);
+                $has_screening = !empty($screening_check_data) && isset($screening_check_data[0]['screening_id']);
+            }
+            
+            // Only mark as complete if both screening and medical history are processed
+            if ($has_screening) {
+                $medical_history_data['needs_review'] = false;
+                $medical_history_data['is_admin'] = 'True';  // Use string 'True' for PostgreSQL boolean
+                error_log("Processing admin_complete action - Both screening and medical history completed. Marking review as Completed and is_admin as True");
+            } else {
+                // Screening not yet processed, keep as pending
+                error_log("Processing admin_complete action - Medical history processed but screening not yet completed. Keeping status as pending.");
+                // Don't set needs_review to false yet - wait for screening to be processed
+            }
+        } catch (Exception $e) {
+            error_log("Error checking screening status during admin_complete: " . $e->getMessage());
+            // On error, be conservative and don't mark as complete
+        }
     } elseif ($action === 'next') {
         // For 'next' action, maintain consistency with existing approval status
         if ($existing_approval_status === 'Approved') {

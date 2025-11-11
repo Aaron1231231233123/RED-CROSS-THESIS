@@ -359,11 +359,24 @@ window.proceedToAdminDeclarationForm = function(donorId) {
                 printButton.innerHTML = '<i class="fas fa-print"></i> Print Declaration (Admin)';
             }
             
-            // Update the submit button to use admin submit function
+            // Update the submit button to be a close button instead
             const submitButton = document.querySelector('button[onclick="submitDeclarationForm(event)"]');
             if (submitButton) {
-                submitButton.setAttribute('onclick', 'submitAdminDeclarationForm(event)');
-                submitButton.innerHTML = '<i class="fas fa-check-circle"></i> Complete Admin Registration';
+                submitButton.setAttribute('onclick', '');
+                submitButton.setAttribute('data-bs-dismiss', 'modal');
+                submitButton.setAttribute('aria-label', 'Close');
+                submitButton.className = 'modal-btn modal-btn-secondary';
+                submitButton.innerHTML = '<i class="fas fa-times"></i> Close';
+            }
+            
+            // Also update the admin declaration form button if it exists
+            const adminSubmitButton = document.querySelector('button[onclick="submitAdminDeclarationForm(event)"]');
+            if (adminSubmitButton) {
+                adminSubmitButton.setAttribute('onclick', '');
+                adminSubmitButton.setAttribute('data-bs-dismiss', 'modal');
+                adminSubmitButton.setAttribute('aria-label', 'Close');
+                adminSubmitButton.className = 'modal-btn modal-btn-secondary';
+                adminSubmitButton.innerHTML = '<i class="fas fa-times"></i> Close';
             }
             
             // Add admin badge to the declaration header

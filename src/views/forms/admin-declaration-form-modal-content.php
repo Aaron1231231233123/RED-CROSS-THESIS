@@ -503,8 +503,8 @@ $today = date('F d, Y');
         <button type="button" class="modal-btn modal-btn-print" onclick="printAdminDeclaration()">
             <i class="fas fa-print"></i> Print Declaration
         </button>
-        <button type="button" class="modal-btn modal-btn-success" onclick="submitAdminDeclarationForm(event)">
-            <i class="fas fa-check-circle"></i> Complete Registration
+        <button type="button" class="modal-btn modal-btn-secondary" data-bs-dismiss="modal" aria-label="Close">
+            <i class="fas fa-times"></i> Close
         </button>
     </div>
 </div>

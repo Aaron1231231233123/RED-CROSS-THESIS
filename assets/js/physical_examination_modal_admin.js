@@ -40,6 +40,14 @@ class PhysicalExaminationModalAdmin {
             }
         });
         
+        // Blood pressure input changes - combine systolic and diastolic
+        document.addEventListener('input', (e) => {
+            if (e.target.id === 'physical-blood-pressure-systolic-admin' || 
+                e.target.id === 'physical-blood-pressure-diastolic-admin') {
+                this.updateBloodPressure();
+            }
+        });
+        
         // Step indicator clicks - Admin specific
         document.addEventListener('click', (e) => {
             if (e.target.closest('#physicalExaminationModalAdmin .physical-step')) {
@@ -113,6 +121,14 @@ class PhysicalExaminationModalAdmin {
             form.reset();
         }
         
+        // Reset BP inputs specifically
+        const systolicInput = document.getElementById('physical-blood-pressure-systolic-admin');
+        const diastolicInput = document.getElementById('physical-blood-pressure-diastolic-admin');
+        const hiddenBPInput = document.getElementById('physical-blood-pressure-admin');
+        if (systolicInput) systolicInput.value = '';
+        if (diastolicInput) diastolicInput.value = '';
+        if (hiddenBPInput) hiddenBPInput.value = '';
+        
         // Reset step indicators
         this.currentStep = 1;
         this.updateProgressIndicator();
@@ -120,6 +136,30 @@ class PhysicalExaminationModalAdmin {
         
         // Clear summary fields
         this.clearSummaryFields();
+    }
+    
+    parseAndSetBloodPressure(bpValue) {
+        // Parse BP value from "120/80" format and set individual inputs
+        if (!bpValue || typeof bpValue !== 'string') return;
+        
+        const parts = bpValue.split('/');
+        if (parts.length === 2) {
+            const systolic = parts[0].trim();
+            const diastolic = parts[1].trim();
+            
+            const systolicInput = document.getElementById('physical-blood-pressure-systolic-admin');
+            const diastolicInput = document.getElementById('physical-blood-pressure-diastolic-admin');
+            
+            if (systolicInput && systolic) {
+                systolicInput.value = systolic;
+            }
+            if (diastolicInput && diastolic) {
+                diastolicInput.value = diastolic;
+            }
+            
+            // Update the hidden field
+            this.updateBloodPressure();
+        }
     }
     
     clearSummaryFields() {
@@ -246,9 +286,26 @@ class PhysicalExaminationModalAdmin {
             const requiredFields = currentStepEl.querySelectorAll('input[required], select[required], textarea[required]');
             
             for (let field of requiredFields) {
+                // Skip hidden fields
+                if (field.type === 'hidden') continue;
+                
                 if (!field.value.trim()) {
                     field.focus();
                     this.showToast('Please fill in all required fields', 'error');
+                    return false;
+                }
+            }
+            
+            // Special validation for blood pressure in step 1
+            if (this.currentStep === 1) {
+                const systolic = document.getElementById('physical-blood-pressure-systolic-admin')?.value;
+                const diastolic = document.getElementById('physical-blood-pressure-diastolic-admin')?.value;
+                if (!systolic || !diastolic) {
+                    const firstEmpty = !systolic ? 
+                        document.getElementById('physical-blood-pressure-systolic-admin') : 
+                        document.getElementById('physical-blood-pressure-diastolic-admin');
+                    if (firstEmpty) firstEmpty.focus();
+                    this.showToast('Please enter both systolic and diastolic blood pressure values', 'error');
                     return false;
                 }
             }
@@ -257,10 +314,29 @@ class PhysicalExaminationModalAdmin {
         return true;
     }
     
+    updateBloodPressure() {
+        const systolic = document.getElementById('physical-blood-pressure-systolic-admin')?.value || '';
+        const diastolic = document.getElementById('physical-blood-pressure-diastolic-admin')?.value || '';
+        const hiddenField = document.getElementById('physical-blood-pressure-admin');
+        
+        if (systolic && diastolic) {
+            const combinedValue = `${systolic}/${diastolic}`;
+            if (hiddenField) {
+                hiddenField.value = combinedValue;
+            }
+        } else {
+            if (hiddenField) {
+                hiddenField.value = '';
+            }
+        }
+    }
+    
     updateSummary() {
         
         // Update vital signs
-        const bloodPressure = document.getElementById('physical-blood-pressure-admin')?.value || '-';
+        const systolic = document.getElementById('physical-blood-pressure-systolic-admin')?.value || '';
+        const diastolic = document.getElementById('physical-blood-pressure-diastolic-admin')?.value || '';
+        const bloodPressure = (systolic && diastolic) ? `${systolic}/${diastolic}` : '-';
         const pulseRate = document.getElementById('physical-pulse-rate-admin')?.value || '-';
         const bodyTemp = document.getElementById('physical-body-temp-admin')?.value || '-';
         
@@ -286,6 +362,9 @@ class PhysicalExaminationModalAdmin {
             return;
         }
         
+        // Update blood pressure before validation
+        this.updateBloodPressure();
+        
         // Validate all required fields before submission
         const requiredFields = [
             { name: 'blood_pressure', id: 'physical-blood-pressure-admin' },
@@ -302,6 +381,15 @@ class PhysicalExaminationModalAdmin {
             const element = document.getElementById(field.id);
             if (!element || !element.value.trim()) {
                 missingFields.push(field.name);
+            }
+        }
+        
+        // Also check individual BP fields
+        const systolic = document.getElementById('physical-blood-pressure-systolic-admin')?.value;
+        const diastolic = document.getElementById('physical-blood-pressure-diastolic-admin')?.value;
+        if (!systolic || !diastolic) {
+            if (!missingFields.includes('blood_pressure')) {
+                missingFields.push('blood_pressure');
             }
         }
         
@@ -324,6 +412,9 @@ class PhysicalExaminationModalAdmin {
         
         formData.append('donor_id', donorId);
         if (screeningId) formData.append('screening_id', screeningId);
+        
+        // Ensure blood pressure is updated before submission
+        this.updateBloodPressure();
         
         // Get form field values
         const fields = [
