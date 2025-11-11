@@ -1,24 +1,38 @@
 <?php
+// Start output buffering to prevent any accidental output
+ob_start();
+
+// Suppress errors from being displayed (we'll handle them in JSON)
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+
 // Log that the file is being accessed
-file_put_contents('../../../assets/logs/debug.log', "[" . date('Y-m-d H:i:s') . "] admin-declaration-form-process.php accessed\n", FILE_APPEND | LOCK_EX);
+@file_put_contents('../../../assets/logs/debug.log', "[" . date('Y-m-d H:i:s') . "] admin-declaration-form-process.php accessed\n", FILE_APPEND | LOCK_EX);
 
 session_start();
 require_once '../../../assets/conn/db_conn.php';
+
+// Clear any output that might have been generated
+ob_clean();
 
 // Set JSON response headers
 header('Content-Type: application/json');
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
+    ob_clean();
     http_response_code(401);
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+    ob_end_flush();
     exit();
 }
 
 // Check for correct roles (admin role_id 1 or staff role_id 3)
 if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['role_id'] != 3)) {
+    ob_clean();
     http_response_code(401);
     echo json_encode(['success' => false, 'message' => 'Invalid role']);
+    ob_end_flush();
     exit();
 }
 
@@ -26,8 +40,10 @@ if (!isset($_SESSION['role_id']) || ($_SESSION['role_id'] != 1 && $_SESSION['rol
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['debug_log']) && count($_POST) === 1) {
     // Only handle debug log requests if that's the only data
     $log_message = "[" . date('Y-m-d H:i:s') . "] JS DEBUG: " . $_POST['debug_log'] . "\n";
-    file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
+    @file_put_contents('../../../assets/logs/debug.log', $log_message, FILE_APPEND | LOCK_EX);
+    ob_clean();
     echo json_encode(['success' => true]);
+    ob_end_flush();
     exit();
 }
 
@@ -515,6 +531,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 error_log("Admin Declaration Form Process - Cache invalidation error: " . $cache_error->getMessage());
             }
             
+            // Clear any output before sending success response
+            ob_clean();
             echo json_encode([
                 'success' => true, 
                 'message' => 'Admin declaration form completed successfully',
@@ -525,16 +543,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
     } catch (Exception $e) {
+        // Clear any output before sending error response
+        ob_clean();
         error_log("Error in admin declaration form processing: " . $e->getMessage());
+        http_response_code(500);
         echo json_encode([
             'success' => false,
             'message' => $e->getMessage()
         ]);
     }
 } else {
+    // Clear any output before sending error response
+    ob_clean();
     http_response_code(405);
     echo json_encode(['success' => false, 'message' => 'Method not allowed']);
 }
+
+// End output buffering and send response
+ob_end_flush();
 ?>
 
 

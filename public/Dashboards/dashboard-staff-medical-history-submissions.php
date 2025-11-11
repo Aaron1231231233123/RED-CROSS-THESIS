@@ -4914,6 +4914,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                 if (!response.ok) {
                                     throw new Error('Network response was not ok: ' + response.status);
                                 }
+                                // Check if response is actually JSON
+                                const contentType = response.headers.get('content-type');
+                                if (!contentType || !contentType.includes('application/json')) {
+                                    // If not JSON, get text and try to parse error
+                                    return response.text().then(text => {
+                                        console.error('Non-JSON response received:', text);
+                                        throw new Error('Server returned invalid response format. Please check server logs.');
+                                    });
+                                }
                                 return response.json();
                             })
                             .then(data => {
