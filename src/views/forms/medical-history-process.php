@@ -61,8 +61,8 @@ try {
         
         if (!empty($user_data) && is_array($user_data)) {
             $user = $user_data[0];
-            // Format name as "First Name Surname"
-            $interviewer_name = trim($user['first_name'] . ' ' . $user['surname']);
+            // Format name as "First Name Surname - Staff"
+            $interviewer_name = trim($user['first_name'] . ' ' . $user['surname']) . ' - Staff';
         }
     } else {
         // Fallback to direct CURL if unified function not available
@@ -81,8 +81,8 @@ try {
             $user_data = json_decode($response, true);
             if (!empty($user_data)) {
                 $user = $user_data[0];
-                // Format name as "First Name Surname"
-                $interviewer_name = trim($user['first_name'] . ' ' . $user['surname']);
+                // Format name as "First Name Surname - Staff"
+                $interviewer_name = trim($user['first_name'] . ' ' . $user['surname']) . ' - Staff';
             }
         }
     }

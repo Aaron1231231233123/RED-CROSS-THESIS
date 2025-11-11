@@ -81,18 +81,18 @@ function getPhysicianName($user_id) {
                 $surname = trim($user['surname'] ?? '');
                 
                 if (!empty($first_name) && !empty($surname)) {
-                    return "Dr. $first_name $surname";
+                    return "Dr. $first_name $surname - Staff";
                 } elseif (!empty($first_name)) {
-                    return "Dr. $first_name";
+                    return "Dr. $first_name - Staff";
                 } elseif (!empty($surname)) {
-                    return "Dr. $surname";
+                    return "Dr. $surname - Staff";
                 }
             }
         }
     } catch (Exception $e) {
         error_log("Error getting physician name: " . $e->getMessage());
     }
-    return 'Dr. Unknown';
+    return 'Dr. Unknown - Staff';
 }
 
 // Main processing

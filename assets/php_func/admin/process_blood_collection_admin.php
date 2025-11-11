@@ -231,7 +231,7 @@ try {
         $sessionLast  = isset($_SESSION['surname']) ? trim($_SESSION['surname']) : '';
         $full = trim($sessionFirst . ' ' . $sessionLast);
         if ($full !== '') {
-            $phlebotomist = $full;
+            $phlebotomist = $full . ' - Staff';
         } elseif (isset($_SESSION['user_id'])) {
             $uid = $_SESSION['user_id'];
             $u = curl_init(SUPABASE_URL . '/rest/v1/users?select=first_name,surname&user_id=eq.' . urlencode((string)$uid) . '&limit=1');
@@ -249,10 +249,15 @@ try {
                 if (!empty($rows)) {
                     $full = trim(($rows[0]['first_name'] ?? '') . ' ' . ($rows[0]['surname'] ?? ''));
                     if ($full !== '') {
-                        $phlebotomist = $full;
+                        $phlebotomist = $full . ' - Staff';
                     }
                 }
             }
+        }
+    } else {
+        // If phlebotomist is already provided, ensure it has "- Staff" suffix
+        if (strpos($phlebotomist, ' - Staff') === false) {
+            $phlebotomist = $phlebotomist . ' - Staff';
         }
     }
 
