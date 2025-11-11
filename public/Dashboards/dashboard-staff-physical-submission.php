@@ -2653,6 +2653,32 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         </div>
     </div>
 
+    <!-- Abnormal Vital Signs Alert Modal -->
+    <div class="modal fade" id="abnormalVitalSignsModal" tabindex="-1" aria-labelledby="abnormalVitalSignsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 15px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
+                    <h5 class="modal-title" id="abnormalVitalSignsModalLabel">
+                        Abnormal Vital Signs Detected
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-4">
+                    <p class="text-center mb-3" style="font-size: 1rem;">The following vital signs are outside the normal range:</p>
+                    <div id="abnormalVitalSignsList" class="mb-3" style="text-align: left; padding: 0 20px;">
+                        <!-- Abnormal values will be listed here -->
+                    </div>
+                    <p class="text-muted text-center mb-0" style="font-size: 0.9rem;">Please review the values before proceeding to the next step.</p>
+                </div>
+                <div class="modal-footer border-0 justify-content-center">
+                    <button type="button" class="btn px-4" data-bs-dismiss="modal" style="background-color: #b22222; border-color: #b22222; color: white;">
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Donor Profile Modal -->
     <div class="modal fade" id="donorProfileModal" tabindex="-1" aria-labelledby="donorProfileModalLabel" aria-hidden="true" style="z-index: 10060;">
         <div class="modal-dialog modal-xl modal-dialog-centered">

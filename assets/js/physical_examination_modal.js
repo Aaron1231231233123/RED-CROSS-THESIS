@@ -40,6 +40,13 @@ class PhysicalExaminationModal {
             }
         });
         
+        // Input events for blood pressure fields (to combine them)
+        document.addEventListener('input', (e) => {
+            if (e.target.id === 'physical-blood-pressure-systolic' || e.target.id === 'physical-blood-pressure-diastolic') {
+                this.combineBloodPressure();
+            }
+        });
+        
         // Step indicator clicks
         document.addEventListener('click', (e) => {
             if (e.target.closest('.physical-step')) {
@@ -57,6 +64,24 @@ class PhysicalExaminationModal {
                 this.updateOptionCardSelection(e.target);
             }
         });
+    }
+    
+    // Combine systolic and diastolic into single blood_pressure value
+    combineBloodPressure() {
+        const systolic = document.getElementById('physical-blood-pressure-systolic');
+        const diastolic = document.getElementById('physical-blood-pressure-diastolic');
+        const hiddenField = document.getElementById('physical-blood-pressure');
+        
+        if (systolic && diastolic && hiddenField) {
+            const sysVal = systolic.value.trim();
+            const diaVal = diastolic.value.trim();
+            
+            if (sysVal && diaVal) {
+                hiddenField.value = `${sysVal}/${diaVal}`;
+            } else {
+                hiddenField.value = '';
+            }
+        }
     }
     
     // Alias: open() calls openModal() for compatibility
@@ -284,7 +309,17 @@ class PhysicalExaminationModal {
                     const hl = valOf(['heart_and_lungs','heart_lungs']);
                     const bag = valOf(['blood_bag_type','bag_type']);
                     const setVal = (id, value) => { const el = document.getElementById(id); if (el && value !== undefined && value !== null && String(value).length) { el.value = value; el.classList.add('is-valid'); } };
-                    setVal('physical-blood-pressure', bp);
+                    // Split BP into systolic/diastolic if it's in format "sys/dia"
+                    if (bp) {
+                        const bpParts = String(bp).split('/');
+                        if (bpParts.length === 2) {
+                            setVal('physical-blood-pressure-systolic', bpParts[0].trim());
+                            setVal('physical-blood-pressure-diastolic', bpParts[1].trim());
+                            this.combineBloodPressure();
+                        } else {
+                            setVal('physical-blood-pressure', bp);
+                        }
+                    }
                     setVal('physical-pulse-rate', pr);
                     setVal('physical-body-temp', bt);
                     setVal('physical-gen-appearance', ga);
@@ -351,17 +386,24 @@ class PhysicalExaminationModal {
                 }
             };
 
-            setVal('physical-blood-pressure', exam.blood_pressure);
-            setVal('physical-pulse-rate', exam.pulse_rate);
-            setVal('physical-body-temp', exam.body_temp);
+            // Split BP into systolic/diastolic if it's in format "sys/dia"
+            const bpValue = exam.blood_pressure || exam.blood_pressure_value || exam.bp || '';
+            if (bpValue) {
+                const bpParts = String(bpValue).split('/');
+                if (bpParts.length === 2) {
+                    setVal('physical-blood-pressure-systolic', bpParts[0].trim());
+                    setVal('physical-blood-pressure-diastolic', bpParts[1].trim());
+                    this.combineBloodPressure();
+                } else {
+                    setVal('physical-blood-pressure', bpValue);
+                }
+            }
+            setVal('physical-pulse-rate', exam.pulse_rate || exam.pulse || document.getElementById('physical-pulse-rate')?.value);
+            setVal('physical-body-temp', exam.body_temp || exam.temperature || document.getElementById('physical-body-temp')?.value);
             setVal('physical-gen-appearance', exam.gen_appearance);
             setVal('physical-skin', exam.skin);
             setVal('physical-heent', exam.heent);
             setVal('physical-heart-lungs', exam.heart_and_lungs);
-            // Also try to populate vital signs from alternate keys (compat)
-            setVal('physical-blood-pressure', exam.blood_pressure_value || exam.bp || document.getElementById('physical-blood-pressure')?.value);
-            setVal('physical-pulse-rate', exam.pulse || exam.pulse_rate || document.getElementById('physical-pulse-rate')?.value);
-            setVal('physical-body-temp', exam.temperature || exam.body_temp || document.getElementById('physical-body-temp')?.value);
 
             // Blood bag type (robust normalization) — only prefill when terminal
             const st = (exam.remarks || exam.pe_remarks || exam.medical_approval || exam.status || '').toString().trim().toLowerCase();
@@ -517,6 +559,15 @@ class PhysicalExaminationModal {
     
     nextStep() {
         if (this.validateCurrentStep()) {
+            // Check for abnormal vital signs before proceeding
+            if (this.currentStep === 1) {
+                const abnormalSigns = this.checkAbnormalVitalSigns();
+                if (abnormalSigns.length > 0) {
+                    this.showAbnormalVitalSignsModal(abnormalSigns);
+                    return;
+                }
+            }
+            
             if (this.currentStep < this.totalSteps) {
                 this.currentStep++;
                 // Review is now step 3
@@ -527,6 +578,83 @@ class PhysicalExaminationModal {
                 }
             }
         }
+    }
+    
+    // Check if vital signs are within normal ranges
+    checkAbnormalVitalSigns() {
+        const abnormalSigns = [];
+        
+        // Check Blood Pressure
+        const systolic = document.getElementById('physical-blood-pressure-systolic');
+        const diastolic = document.getElementById('physical-blood-pressure-diastolic');
+        if (systolic && diastolic && systolic.value && diastolic.value) {
+            const sys = parseInt(systolic.value);
+            const dia = parseInt(diastolic.value);
+            // Normal BP: Systolic 90-140, Diastolic 60-90
+            if (sys < 90 || sys > 140 || dia < 60 || dia > 90) {
+                abnormalSigns.push({
+                    name: 'Blood Pressure',
+                    value: `${sys}/${dia}`,
+                    normal: '90-140 / 60-90'
+                });
+            }
+        }
+        
+        // Check Pulse Rate
+        const pulseRate = document.getElementById('physical-pulse-rate');
+        if (pulseRate && pulseRate.value) {
+            const pulse = parseInt(pulseRate.value);
+            // Normal Pulse Rate: 60-100 BPM
+            if (pulse < 60 || pulse > 100) {
+                abnormalSigns.push({
+                    name: 'Pulse Rate (BPM)',
+                    value: `${pulse} BPM`,
+                    normal: '60-100 BPM'
+                });
+            }
+        }
+        
+        // Check Body Temperature
+        const bodyTemp = document.getElementById('physical-body-temp');
+        if (bodyTemp && bodyTemp.value) {
+            const temp = parseFloat(bodyTemp.value);
+            // Normal Body Temperature: 36.1-37.2°C
+            if (temp < 36.1 || temp > 37.2) {
+                abnormalSigns.push({
+                    name: 'Body Temperature',
+                    value: `${temp}°C`,
+                    normal: '36.1-37.2°C'
+                });
+            }
+        }
+        
+        return abnormalSigns;
+    }
+    
+    // Show modal for abnormal vital signs
+    showAbnormalVitalSignsModal(abnormalSigns) {
+        const modalEl = document.getElementById('abnormalVitalSignsModal');
+        if (!modalEl) return;
+        
+        // Populate the list of abnormal signs
+        const listEl = document.getElementById('abnormalVitalSignsList');
+        if (listEl) {
+            listEl.innerHTML = abnormalSigns.map(sign => `
+                <div class="mb-2 p-2" style="background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                    <strong>${sign.name}:</strong> ${sign.value} 
+                    <span class="text-muted">(Normal: ${sign.normal})</span>
+                </div>
+            `).join('');
+        }
+        
+        // Show modal - informational only, user must fix values before proceeding
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
+        try {
+            modalEl.style.zIndex = '20010';
+            const dlg = modalEl.querySelector('.modal-dialog');
+            if (dlg) dlg.style.zIndex = '20011';
+        } catch(_) {}
+        modal.show();
     }
     
     prevStep() {
@@ -649,10 +777,17 @@ class PhysicalExaminationModal {
             const requiredFields = currentStepEl.querySelectorAll('input[required], select[required], textarea[required]');
             
             requiredFields.forEach(field => {
+                // Skip hidden fields (like the combined blood_pressure field)
+                if (field.type === 'hidden') return;
                 if (!this.validateField(field)) {
                     isValid = false;
                 }
             });
+            
+            // Ensure blood pressure is combined before validation completes
+            if (this.currentStep === 1) {
+                this.combineBloodPressure();
+            }
             
             // Step 3 removed; no extra validation
         }
@@ -669,15 +804,29 @@ class PhysicalExaminationModal {
             this.markFieldInvalid(field, 'This field is required');
             isValid = false;
         }
-        // Validate blood pressure format
-        else if (field.name === 'blood_pressure' && value) {
-            const bpPattern = /^[0-9]{2,3}\/[0-9]{2,3}$/;
-            if (!bpPattern.test(value)) {
-                this.markFieldInvalid(field, 'Format: systolic/diastolic (e.g., 120/80)');
+        // Validate blood pressure systolic
+        else if (field.id === 'physical-blood-pressure-systolic' && value) {
+            const sys = parseInt(value);
+            if (sys < 70 || sys > 200) {
+                this.markFieldInvalid(field, 'Systolic should be between 70-200');
                 isValid = false;
             } else {
                 this.markFieldValid(field);
             }
+            // Also combine BP when validating
+            this.combineBloodPressure();
+        }
+        // Validate blood pressure diastolic
+        else if (field.id === 'physical-blood-pressure-diastolic' && value) {
+            const dia = parseInt(value);
+            if (dia < 40 || dia > 130) {
+                this.markFieldInvalid(field, 'Diastolic should be between 40-130');
+                isValid = false;
+            } else {
+                this.markFieldValid(field);
+            }
+            // Also combine BP when validating
+            this.combineBloodPressure();
         }
         // Validate pulse rate
         else if (field.name === 'pulse_rate' && value) {
@@ -825,8 +974,15 @@ class PhysicalExaminationModal {
 
     updateSummary() {
         // Update vital signs summary
-        document.getElementById('summary-blood-pressure').textContent = 
-            document.getElementById('physical-blood-pressure').value || 'Not specified';
+        // Combine BP from separate fields if needed
+        this.combineBloodPressure();
+        const bpValue = document.getElementById('physical-blood-pressure')?.value || 
+                       (() => {
+                           const sys = document.getElementById('physical-blood-pressure-systolic')?.value;
+                           const dia = document.getElementById('physical-blood-pressure-diastolic')?.value;
+                           return (sys && dia) ? `${sys}/${dia}` : 'Not specified';
+                       })();
+        document.getElementById('summary-blood-pressure').textContent = bpValue;
         document.getElementById('summary-pulse-rate').textContent = 
             document.getElementById('physical-pulse-rate').value || 'Not specified';
         document.getElementById('summary-body-temp').textContent = 
@@ -932,49 +1088,8 @@ class PhysicalExaminationModal {
             if (result && result.success) {
                 const donorId = (this.screeningData && (this.screeningData.donor_form_id || this.screeningData.donor_id)) || window.__peLastDonorId || null;
                 
-                // Update medical approval status to "Approved" when physical examination is accepted
-                if (donorId) {
-                    console.log('Updating medical approval status for donor:', donorId);
-                    try {
-                        const updateFormData = new FormData();
-                        updateFormData.append('donor_id', donorId);
-                        updateFormData.append('medical_approval', 'Approved');
-                        
-                        console.log('Sending medical approval update request...');
-                        const updateResponse = await fetch('../../public/api/update-medical-approval.php', {
-                            method: 'POST',
-                            body: updateFormData
-                        });
-                        
-                        console.log('Update response status:', updateResponse.status);
-                        if (updateResponse.ok) {
-                            const updateResult = await updateResponse.json();
-                            console.log('Update result:', updateResult);
-                            if (updateResult && updateResult.success) {
-                                // Update in-memory cache so UI doesn't flash Not Approved
-                                try {
-                                    if (typeof window.medicalByDonor === 'object') {
-                                        const key = donorId; const k2 = String(donorId);
-                                        window.medicalByDonor[key] = window.medicalByDonor[key] || {};
-                                        window.medicalByDonor[key].medical_approval = 'Approved';
-                                        window.medicalByDonor[k2] = window.medicalByDonor[k2] || {};
-                                        window.medicalByDonor[k2].medical_approval = 'Approved';
-                                        console.log('Updated medicalByDonor cache for keys:', key, k2);
-                                    }
-                                } catch(_) {}
-                                console.log('Medical approval status updated successfully');
-                            } else {
-                                console.error('Failed to update medical approval status:', updateResult);
-                            }
-                        } else {
-                            console.error('HTTP error updating medical approval status:', updateResponse.status);
-                        }
-                    } catch(error) {
-                        console.error('Failed to update medical approval status:', error);
-                    }
-                } else {
-                    console.error('No donor ID available for medical approval update');
-                }
+                // Note: medical_approval should NOT be updated here - it should only be updated when medical history is approved separately
+                // Physical examination submission should only update physical examination data, not medical history approval status
                 
                 // Show minimalist success modal (no buttons), then redirect
                 await this.showTransientResultModal({

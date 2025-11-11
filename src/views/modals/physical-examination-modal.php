@@ -52,14 +52,28 @@
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label for="physical-blood-pressure" class="form-label">Blood Pressure *</label>
-                            <input type="text" 
-                                   class="form-control" 
+                            <div class="d-flex align-items-center gap-2">
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="physical-blood-pressure-systolic" 
+                                       placeholder="Systolic" 
+                                       min="70" 
+                                       max="200" 
+                                       required
+                                       style="flex: 1;">
+                                <span class="text-muted" style="font-size: 1.2rem; font-weight: bold;">/</span>
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="physical-blood-pressure-diastolic" 
+                                       placeholder="Diastolic" 
+                                       min="40" 
+                                       max="130" 
+                                       required
+                                       style="flex: 1;">
+                            </div>
+                            <input type="hidden" 
                                    id="physical-blood-pressure" 
-                                   name="blood_pressure" 
-                                   placeholder="e.g., 120/80" 
-                                   pattern="[0-9]{2,3}/[0-9]{2,3}" 
-                                   title="Format: systolic/diastolic e.g. 120/80" 
-                                   required>
+                                   name="blood_pressure">
                         </div>
                         <div class="col-md-4 mb-3">
                             <label for="physical-pulse-rate" class="form-label">Pulse Rate (BPM) *</label>
@@ -97,39 +111,51 @@
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="physical-gen-appearance" class="form-label">General Appearance *</label>
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="physical-gen-appearance" 
-                                   name="gen_appearance" 
-                                   placeholder="Enter observation" 
-                                   required>
+                            <select class="form-control" 
+                                    id="physical-gen-appearance" 
+                                    name="gen_appearance" 
+                                    required>
+                                <option value="">Select an option</option>
+                                <option value="Normal">Normal</option>
+                                <option value="With mild abnormalities">With mild abnormalities</option>
+                                <option value="With major abnormalities">With major abnormalities</option>
+                            </select>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="physical-skin" class="form-label">Skin *</label>
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="physical-skin" 
-                                   name="skin" 
-                                   placeholder="Enter observation" 
-                                   required>
+                            <select class="form-control" 
+                                    id="physical-skin" 
+                                    name="skin" 
+                                    required>
+                                <option value="">Select an option</option>
+                                <option value="Normal">Normal</option>
+                                <option value="With mild abnormalities">With mild abnormalities</option>
+                                <option value="With major abnormalities">With major abnormalities</option>
+                            </select>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="physical-heent" class="form-label">HEENT *</label>
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="physical-heent" 
-                                   name="heent" 
-                                   placeholder="Enter observation" 
-                                   required>
+                            <select class="form-control" 
+                                    id="physical-heent" 
+                                    name="heent" 
+                                    required>
+                                <option value="">Select an option</option>
+                                <option value="Normal">Normal</option>
+                                <option value="With mild abnormalities">With mild abnormalities</option>
+                                <option value="With major abnormalities">With major abnormalities</option>
+                            </select>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="physical-heart-lungs" class="form-label">Heart and Lungs *</label>
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="physical-heart-lungs" 
-                                   name="heart_and_lungs" 
-                                   placeholder="Enter observation" 
-                                   required>
+                            <select class="form-control" 
+                                    id="physical-heart-lungs" 
+                                    name="heart_and_lungs" 
+                                    required>
+                                <option value="">Select an option</option>
+                                <option value="Normal">Normal</option>
+                                <option value="With mild abnormalities">With mild abnormalities</option>
+                                <option value="With major abnormalities">With major abnormalities</option>
+                            </select>
                         </div>
                     </div>
                 </div>

@@ -54,9 +54,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
 .chart-card{background:#fff;border:1px solid #eee;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.06)}
 .chart-card h6{font-weight:700;color:#333;margin-bottom:8px}
 /* Equalize chart card heights for all charts */
-.charts-row .chart-card{min-height:260px;display:flex;flex-direction:column}
-.charts-row .chart-card canvas{flex:1 1 auto !important;height:360px !important}
-#pieChart{height:360px !important;max-height:360px !important}
+.charts-row .chart-card{min-height:400px;display:flex;flex-direction:column}
+.charts-row .chart-card canvas{flex:1 1 auto !important}
+#barChart{height:450px !important;max-height:450px !important}
+#pieChart{height:450px !important;max-height:450px !important}
+#lineChart{height:400px !important;max-height:400px !important}
 .pagination .page-link{color:#941022}
 .filters .form-select,.filters .form-control{max-width:280px}
 @media(max-width:768px){.dashboard-home-sidebar{width:0;padding:0;overflow:hidden}.dashboard-home-header{left:0;width:100%}.dashboard-home-main{margin-left:0;padding:10px}}
@@ -113,46 +115,88 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
                     </div>
 
                     <div class="row g-2 mb-2 align-items-stretch">
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
-                                <div class="kpi-label">Total Forecasted Demand</div>
-                                <div class="kpi-value" id="kpiDemand">520</div>
+                                <div class="kpi-label" style="font-size:0.85rem">Total Forecasted Demand</div>
+                                <div class="kpi-value" id="kpiDemand" style="font-size:32px">520</div>
                             </div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
-                                <div class="kpi-label">Total Forecasted Donations</div>
-                                <div class="kpi-value" id="kpiDonations">460</div>
+                                <div class="kpi-label" style="font-size:0.85rem">Total Forecasted Donations</div>
+                                <div class="kpi-value" id="kpiDonations" style="font-size:32px">460</div>
                             </div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
-                                <div class="kpi-label">Projected Balance</div>
-                                <div class="kpi-value" id="kpiBalance">-60</div>
+                                <div class="kpi-label" style="font-size:0.85rem">Projected Balance</div>
+                                <div class="kpi-value" id="kpiBalance" style="font-size:32px">-60</div>
                             </div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
-                                <div class="kpi-label">Critical Blood Types</div>
-                                <div class="kpi-value" id="kpiCritical">O-</div>
+                                <div class="kpi-label" style="font-size:0.85rem">Target Stock Level</div>
+                                <div class="kpi-value" id="kpiTargetStock" style="font-size:32px">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
+                                <div class="kpi-label" style="font-size:0.85rem">Expiring Weekly</div>
+                                <div class="kpi-value" id="kpiExpiringWeekly" style="font-size:32px">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
+                                <div class="kpi-label" style="font-size:0.85rem">Expiring Monthly</div>
+                                <div class="kpi-value" id="kpiExpiringMonthly" style="font-size:32px">-</div>
                             </div>
                         </div>
                     </div>
 
                     <hr class="my-2">
 
-                    <div class="d-flex gap-2 mb-3 filters">
+                    <!-- Line Chart - Moved to top after KPI cards -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-12">
+                            <div class="card chart-card p-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="mb-0">Projected Balance Forecast by Month/Year</h6>
+                                    <select class="form-select form-select-sm" id="chartBloodTypeFilter" style="max-width:150px">
+                                        <option value="all">All Blood Types</option>
+                                        <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
+                                        <option>O+</option><option>O-</option><option>AB+</option><option>AB-</option>
+                                    </select>
+                                </div>
+                                <canvas id="lineChart" height="400"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-2">
+
+                    <div class="d-flex gap-2 mb-3 filters flex-wrap">
                         <select class="form-select form-select-sm" id="monthFilter">
-                            <option>September 2025</option>
-                            <option>October 2025</option>
-                            <option>November 2025</option>
+                            <option>All Months</option>
                         </select>
                         <select class="form-select form-select-sm" id="typeFilter">
                             <option value="all">All Blood Types</option>
                             <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
                             <option>O+</option><option>O-</option><option>AB+</option><option>AB-</option>
                         </select>
-                        <input class="form-control form-control-sm" id="searchInput" placeholder="Search...">
+                        <select class="form-select form-select-sm" id="balanceFilter">
+                            <option value="all">All Balances</option>
+                            <option value="surplus">Surplus Only</option>
+                            <option value="shortage">Shortage Only</option>
+                            <option value="critical">Critical Only</option>
+                        </select>
+                        <select class="form-select form-select-sm" id="yearFilter">
+                            <option value="all">All Years</option>
+                            <option value="2023">2023</option>
+                            <option value="2024">2024</option>
+                            <option value="2025">2025</option>
+                            <option value="2026">2026</option>
+                        </select>
+                        <input class="form-control form-control-sm" id="searchInput" placeholder="Search..." style="max-width:200px">
                     </div>
 
                     <div class="table-responsive">
@@ -185,23 +229,18 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
 
                     <hr class="my-3">
 
+                    <!-- Two Charts - Bar and Pie -->
                     <div class="row g-3 charts-row">
-                        <div class="col-lg-4 col-md-6">
+                        <div class="col-lg-6 col-md-12">
                             <div class="card chart-card p-3">
                                 <h6>Demand vs. Donations</h6>
-                                <canvas id="barChart" height="320"></canvas>
+                                <canvas id="barChart" height="450"></canvas>
                             </div>
                         </div>
-                        <div class="col-lg-4 col-md-6">
-                            <div class="card chart-card p-3">
-                                <h6>Projected Balance</h6>
-                                <canvas id="lineChart" height="320"></canvas>
-                            </div>
-                        </div>
-                        <div class="col-lg-4 col-md-12">
+                        <div class="col-lg-6 col-md-12">
                             <div class="card chart-card p-3">
                                 <h6>Share of Demand</h6>
-                                <canvas id="pieChart" height="320"></canvas>
+                                <canvas id="pieChart" height="450"></canvas>
                             </div>
                         </div>
                     </div>

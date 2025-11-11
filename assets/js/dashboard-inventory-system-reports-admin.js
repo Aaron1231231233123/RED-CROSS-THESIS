@@ -14,10 +14,13 @@
     const pagination = document.getElementById('pagination');
     const monthFilter = document.getElementById('monthFilter');
     const typeFilter = document.getElementById('typeFilter');
+    const balanceFilter = document.getElementById('balanceFilter');
+    const yearFilter = document.getElementById('yearFilter');
+    const chartBloodTypeFilter = document.getElementById('chartBloodTypeFilter');
     const searchInput = document.getElementById('searchInput');
 
-    // API endpoint for forecast data
-    const FORECAST_API_URL = '../api/forecast-reports-api.php';
+    // API endpoint for forecast data (using Python calculator)
+    const FORECAST_API_URL = '../api/forecast-reports-api-python.php';
 
     // Fetch forecast data from API
     async function fetchForecastData() {
@@ -96,7 +99,9 @@
         document.getElementById('kpiDemand').textContent = '...';
         document.getElementById('kpiDonations').textContent = '...';
         document.getElementById('kpiBalance').textContent = '...';
-        document.getElementById('kpiCritical').textContent = '...';
+        document.getElementById('kpiTargetStock').textContent = '...';
+        document.getElementById('kpiExpiringWeekly').textContent = '...';
+        document.getElementById('kpiExpiringMonthly').textContent = '...';
     }
 
     // Hide loading state
@@ -115,7 +120,9 @@
         document.getElementById('kpiDemand').textContent = 'N/A';
         document.getElementById('kpiDonations').textContent = 'N/A';
         document.getElementById('kpiBalance').textContent = 'N/A';
-        document.getElementById('kpiCritical').textContent = 'N/A';
+        document.getElementById('kpiTargetStock').textContent = 'N/A';
+        document.getElementById('kpiExpiringWeekly').textContent = 'N/A';
+        document.getElementById('kpiExpiringMonthly').textContent = 'N/A';
     }
 
     // Update KPI values based on filtered data
@@ -139,7 +146,7 @@
         let totalSupply = 0;
         let criticalTypes = [];
         
-        // Simple approach: if forecast month is selected, use forecast data
+        // Only use forecast data (historical data hidden as per professor's requirement)
         if (selectedMonth.includes('R Studio Forecast')) {
             console.log('Using forecast data for KPIs');
             const monthName = selectedMonth.replace(' (R Studio Forecast)', '');
@@ -160,83 +167,9 @@
                     }
                 }
             });
-        } else if (selectedMonth.includes('Historical Data')) {
-            console.log('Using historical data for KPIs');
-            const monthName = selectedMonth.replace(' (Historical Data)', '');
-            console.log('Looking for month:', monthName);
-            
-            // Try to find the month key by checking all available keys
-            let foundMonthKey = null;
-            Object.keys(monthlyData.supply || {}).forEach(monthKey => {
-                const monthDate = new Date(monthKey);
-                const currentMonthName = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                console.log(`Checking month key ${monthKey} -> "${currentMonthName}" vs looking for "${monthName}"`);
-                
-                if (currentMonthName === monthName) {
-                    foundMonthKey = monthKey;
-                    console.log(`FOUND MATCH! Month key: ${monthKey}`);
-                }
-            });
-            
-            if (foundMonthKey) {
-                console.log(`Processing data for ${monthName} using key: ${foundMonthKey}`);
-                const supplyData = monthlyData.supply[foundMonthKey] || {};
-                const demandData = monthlyData.demand[foundMonthKey] || {};
-                console.log('Supply data for this month:', supplyData);
-                console.log('Demand data for this month:', demandData);
-                
-                const bloodTypes = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
-                bloodTypes.forEach(bloodType => {
-                    const supply = supplyData[bloodType] || 0;
-                    const demand = demandData[bloodType] || 0;
-                    const balance = supply - demand;
-                    
-                    console.log(`${bloodType}: Supply=${supply}, Demand=${demand}, Balance=${balance}`);
-                    
-                    totalDemand += demand;
-                    totalSupply += supply;
-                    
-                    if (balance < 0) {
-                        criticalTypes.push(bloodType);
-                        console.log(`Found critical blood type: ${bloodType} with balance: ${balance} (Supply: ${supply}, Demand: ${demand})`);
-                    }
-                });
-            } else {
-                console.log(`NO MATCH FOUND for month: "${monthName}"`);
-                console.log('Available month keys:', Object.keys(monthlyData.supply || {}));
-                console.log('Sample month conversions:');
-                Object.keys(monthlyData.supply || {}).slice(0, 5).forEach(monthKey => {
-                    const monthDate = new Date(monthKey);
-                    const currentMonthName = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                    console.log(`  ${monthKey} -> "${currentMonthName}"`);
-                });
-            }
         } else if (selectedMonth === 'All Months') {
-            console.log('Using all data for KPIs - aggregating historical + forecast');
-            console.log(`Processing ${currentMonths.length} historical months and ${forecastData.length} forecast records`);
-            
-            // Aggregate all historical data (2023-2025 database data)
-            currentMonths.forEach(monthKey => {
-                const supplyData = monthlyData.supply[monthKey] || {};
-                const demandData = monthlyData.demand[monthKey] || {};
-                
-                const bloodTypes = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
-                bloodTypes.forEach(bloodType => {
-                    const supply = supplyData[bloodType] || 0;
-                    const demand = demandData[bloodType] || 0;
-                    const balance = supply - demand;
-                    
-                    totalDemand += demand;
-                    totalSupply += supply;
-                    
-                    if (balance < 0) {
-                        criticalTypes.push(bloodType);
-                        console.log(`Found critical blood type: ${bloodType} with balance: ${balance} (Supply: ${supply}, Demand: ${demand})`);
-                    }
-                });
-            });
-            
-            // Add all forecast data (December 2025+ predictions)
+            // For "All Months", only aggregate forecast data (historical data hidden)
+            console.log('Using all forecast data for KPIs (historical data hidden)');
             forecastData.forEach(item => {
                 totalDemand += item.forecasted_demand || 0;
                 totalSupply += item.forecasted_supply || 0;
@@ -246,8 +179,6 @@
                     console.log(`Found critical forecast blood type: ${item.blood_type} with balance: ${item.projected_balance}`);
                 }
             });
-            
-            console.log(`All Months aggregation: ${currentMonths.length} Historical + ${forecastData.length} Forecast = Demand: ${totalDemand}, Supply: ${totalSupply}`);
         }
         
         const totalBalance = totalSupply - totalDemand;
@@ -272,11 +203,20 @@
         document.getElementById('kpiDemand').textContent = totalDemand;
         document.getElementById('kpiDonations').textContent = totalSupply;
         
-            const balanceElement = document.getElementById('kpiBalance');
+        const balanceElement = document.getElementById('kpiBalance');
         balanceElement.textContent = totalBalance >= 0 ? `+${totalBalance}` : `${totalBalance}`;
         balanceElement.style.color = totalBalance < 0 ? '#dc3545' : '#28a745';
         
-        document.getElementById('kpiCritical').textContent = mostCritical;
+        // Update new KPIs from API response
+        if (kpiData.target_stock_level !== undefined) {
+            document.getElementById('kpiTargetStock').textContent = Math.round(kpiData.target_stock_level);
+        }
+        if (kpiData.expiring_weekly !== undefined) {
+            document.getElementById('kpiExpiringWeekly').textContent = kpiData.expiring_weekly;
+        }
+        if (kpiData.expiring_monthly !== undefined) {
+            document.getElementById('kpiExpiringMonthly').textContent = kpiData.expiring_monthly;
+        }
         
         console.log(`=== KPI DEBUG END ===`);
         console.log(`FINAL KPIs: Demand: ${totalDemand}, Supply: ${totalSupply}, Balance: ${totalBalance}, Critical: ${mostCritical}`);
@@ -291,17 +231,13 @@
         
         let filteredData = [];
         
-        // If "All Months" is selected, show all data
+        // Only use forecast data (historical data hidden as per professor's requirement)
         if (selectedMonth === 'All Months') {
-            // Combine historical and forecast data
-            filteredData = [...getHistoricalData(), ...getForecastData()];
-        } else {
-            // Filter by specific month
-            if (selectedMonth.includes('Historical Data')) {
-                filteredData = getHistoricalDataForMonth(selectedMonth);
-            } else if (selectedMonth.includes('R Studio Forecast')) {
-                filteredData = getForecastDataForMonth(selectedMonth);
-            }
+            // Show all forecast data
+            filteredData = getForecastData();
+        } else if (selectedMonth.includes('R Studio Forecast')) {
+            // Filter by specific forecast month
+            filteredData = getForecastDataForMonth(selectedMonth);
         }
         
         // Apply blood type filter
@@ -418,7 +354,8 @@
         
         const currentYear = new Date().getFullYear();
         
-        // Add forecast months FIRST (Future predictions) - sorted newest to oldest
+        // Add ONLY forecast months (hide historical months as per professor's requirement)
+        // Sorted newest to oldest
         const sortedForecastMonths = [...forecastMonths].sort((a, b) => new Date(b) - new Date(a));
         sortedForecastMonths.forEach(monthKey => {
             const monthDate = new Date(monthKey);
@@ -430,21 +367,8 @@
             console.log(`Added forecast option: "${option.value}"`);
         });
         
-        // Add historical months LAST (ALL DATABASE DATA 2023-2025) - sorted newest to oldest
-        const sortedHistoricalMonths = [...currentMonths].sort((a, b) => new Date(b) - new Date(a));
-        console.log(`Adding ${sortedHistoricalMonths.length} historical months to filter dropdown`);
-        
-        sortedHistoricalMonths.forEach(monthKey => {
-            const monthDate = new Date(monthKey);
-            const monthName = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-            
-            const option = document.createElement('option');
-            option.value = monthName + ' (Historical Data)';
-            option.textContent = monthName + ' (Historical Data)';
-            monthFilter.appendChild(option);
-        });
-        
-        console.log(`Total filter options added: ${monthFilter.children.length} (1 All Months + ${forecastMonths.length} Forecast + ${sortedHistoricalMonths.length} Historical)`);
+        // Historical months are hidden from dropdown (as per professor's requirement)
+        console.log(`Total filter options added: ${monthFilter.children.length} (1 All Months + ${forecastMonths.length} Forecast - Historical data hidden)`);
     }
 
     function statusFor(balance){
@@ -457,26 +381,38 @@
         const t = typeFilter.value;
         const s = searchInput.value.toLowerCase();
         const m = monthFilter.value;
+        const b = balanceFilter ? balanceFilter.value : 'all';
+        const y = yearFilter ? yearFilter.value : 'all';
         
         // Filter by blood type and search
-        let filteredData = forecastData.filter(r => (
-            (t === 'all' || r.blood_type === t) &&
-            (`${r.blood_type}`.toLowerCase().includes(s))
-        ));
-        
-        // If a specific month is selected, filter by that month
-        if (m && m !== 'All Months') {
-            // This will be handled in renderTable() by showing only that month's data
-            // For now, return all filtered data and let renderTable handle month filtering
-        }
+        let filteredData = forecastData.filter(r => {
+            const matchesType = (t === 'all' || r.blood_type === t);
+            const matchesSearch = (`${r.blood_type}`.toLowerCase().includes(s));
+            
+            // Filter by balance status
+            let matchesBalance = true;
+            if (b !== 'all') {
+                if (b === 'surplus' && r.projected_balance < 0) matchesBalance = false;
+                if (b === 'shortage' && r.projected_balance >= 0) matchesBalance = false;
+                if (b === 'critical' && r.status !== 'critical') matchesBalance = false;
+            }
+            
+            // Filter by year
+            let matchesYear = true;
+            if (y !== 'all' && r.forecast_month) {
+                const itemYear = new Date(r.forecast_month).getFullYear().toString();
+                matchesYear = (itemYear === y);
+            }
+            
+            return matchesType && matchesSearch && matchesBalance && matchesYear;
+        });
         
         return filteredData;
     }
 
     function renderTable(){
-        // Generate all rows first (historical + forecast data)
+        // Generate all rows - ONLY FORECAST DATA (hide historical data)
         const allRows = [];
-        const currentYear = new Date().getFullYear();
         
         // Get selected month filter
         const selectedMonth = monthFilter.value;
@@ -484,54 +420,8 @@
         // Get filtered forecast data for pagination
         const filteredForecastData = filtered();
         
-        // Show historical data (ALL DATABASE DATA 2023-2025)
-        console.log(`Rendering table with ${currentMonths.length} historical months and ${forecastMonths.length} forecast months`);
-        
-        currentMonths.sort().forEach(monthKey => {
-            const monthDate = new Date(monthKey);
-            const monthName = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-            
-            // Skip if month filter is set and this month doesn't match
-            if (selectedMonth && selectedMonth !== 'All Months' && !monthName.includes(selectedMonth.replace(' (Historical Data)', '').replace(' (R Studio Forecast)', ''))) {
-                return;
-            }
-        
-            // Get current data for this month
-            const supplyData = monthlyData.supply[monthKey] || {};
-            const demandData = monthlyData.demand[monthKey] || {};
-            
-            // Show data for each blood type that has data in this month
-            const bloodTypes = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
-            bloodTypes.forEach(bloodType => {
-                const supply = supplyData[bloodType] || 0;
-                const demand = demandData[bloodType] || 0;
-                
-                // Show ACTUAL historical data for this specific month (not forecast data)
-                // This ensures each month shows different data from the CSV file
-                const balance = supply - demand;
-                
-                // Only show rows where there's actual data
-                if (supply > 0 || demand > 0) {
-                    const st = statusFor(balance);
-                    const bal = balance > 0 ? `+${balance}` : `${balance}`;
-                    
-                    allRows.push(`
-                    <tr>
-                        <td>${monthName} <small class="text-muted">(Database Data)</small></td>
-                        <td>${bloodType}</td>
-                        <td>${demand}</td>
-                        <td>${supply}</td>
-                        <td>${bal}</td>
-                        <td><span class="status-badge ${st.cls}"><i class="fa ${st.icon}"></i> ${st.label}</span></td>
-                        <td><button class="action-btn view-btn" data-type="${bloodType}" data-month="${monthName}"><i class="fa fa-eye"></i></button></td>
-                    </tr>`);
-                }
-            });
-        });
-        
-        // Then show forecast data (only if we have forecasts)
-        console.log('Forecast months available:', forecastMonths);
-        console.log('Forecast data available:', filteredForecastData);
+        // Show ONLY forecast data (hide historical data as per professor's requirement)
+        console.log(`Rendering table with ${forecastMonths.length} forecast months (historical data hidden)`);
         
         if (forecastMonths.length > 0 && filteredForecastData.length > 0) {
             forecastMonths.forEach(monthKey => {
@@ -539,7 +429,7 @@
                 const monthName = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
                 
                 // Skip if month filter is set and this month doesn't match
-                if (selectedMonth && selectedMonth !== 'All Months' && !monthName.includes(selectedMonth.replace(' (Historical Data)', '').replace(' (R Studio Forecast)', ''))) {
+                if (selectedMonth && selectedMonth !== 'All Months' && !monthName.includes(selectedMonth.replace(' (R Studio Forecast)', ''))) {
                     return;
                 }
                 
@@ -549,22 +439,22 @@
                 const monthForecastData = filteredForecastData.filter(r => r.forecast_month === monthKey);
                 
                 monthForecastData.forEach(r => {
-                const st = statusFor(r.projected_balance);
-                const bal = r.projected_balance > 0 ? `+${r.projected_balance}` : `${r.projected_balance}`;
+                    const st = statusFor(r.projected_balance);
+                    const bal = r.projected_balance > 0 ? `+${r.projected_balance}` : `${r.projected_balance}`;
                     
                     console.log(`Adding forecast row: ${r.blood_type} - Demand: ${r.forecasted_demand}, Supply: ${r.forecasted_supply}, Balance: ${bal}`);
                 
-                allRows.push(`
-                <tr>
+                    allRows.push(`
+                    <tr>
                         <td>${monthName} <small class="text-muted">(R Studio Forecast)</small></td>
-                    <td>${r.blood_type}</td>
-                    <td>${r.forecasted_demand}</td>
-                    <td>${r.forecasted_supply}</td>
-                    <td>${bal}</td>
-                    <td><span class="status-badge ${st.cls}"><i class="fa ${st.icon}"></i> ${st.label}</span></td>
-                    <td><button class="action-btn view-btn" data-type="${r.blood_type}" data-month="${monthName}"><i class="fa fa-eye"></i></button></td>
-                </tr>`);
-            });
+                        <td>${r.blood_type}</td>
+                        <td>${r.forecasted_demand}</td>
+                        <td>${r.forecasted_supply}</td>
+                        <td>${bal}</td>
+                        <td><span class="status-badge ${st.cls}"><i class="fa ${st.icon}"></i> ${st.label}</span></td>
+                        <td><button class="action-btn view-btn" data-type="${r.blood_type}" data-month="${monthName}"><i class="fa fa-eye"></i></button></td>
+                    </tr>`);
+                });
             });
         }
         
@@ -585,14 +475,86 @@
     }
 
     function renderPagination(pages){
-        let html = '';
-        for(let i=1;i<=pages;i++){
-            html += `<li class="page-item ${i===currentPage?'active':''}"><a class="page-link" href="#">${i}</a></li>`;
+        if (!pagination || pages <= 1) {
+            if (pagination) pagination.innerHTML = '';
+            return;
         }
+        
+        let html = '';
+        
+        // Previous button
+        html += `<li class="page-item ${currentPage <= 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" ${currentPage <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''}>‹</a>
+        </li>`;
+        
+        // Calculate page range to show (show 2 pages on each side of current)
+        const startPage = Math.max(1, currentPage - 2);
+        const endPage = Math.min(pages, currentPage + 2);
+        
+        // Always show first page if not in range
+        if (startPage > 1) {
+            html += `<li class="page-item"><a class="page-link" href="#" data-page="1">1</a></li>`;
+            if (startPage > 2) {
+                html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+            }
+        }
+        
+        // Show pages around current page
+        for(let i = startPage; i <= endPage; i++){
+            html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+                <a class="page-link" href="#" data-page="${i}">${i}</a>
+            </li>`;
+        }
+        
+        // Always show last page if not in range
+        if (endPage < pages) {
+            if (endPage < pages - 1) {
+                html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+            }
+            html += `<li class="page-item"><a class="page-link" href="#" data-page="${pages}">${pages}</a></li>`;
+        }
+        
+        // Next button
+        html += `<li class="page-item ${currentPage >= pages ? 'disabled' : ''}">
+            <a class="page-link" href="#" ${currentPage >= pages ? 'tabindex="-1" aria-disabled="true"' : ''}>›</a>
+        </li>`;
+        
         pagination.innerHTML = html;
-        Array.from(pagination.querySelectorAll('a')).forEach((a, idx)=>{
-            a.addEventListener('click', (e)=>{ e.preventDefault(); currentPage = idx+1; renderTable(); updateKPIs(); });
+        
+        // Add event listeners
+        Array.from(pagination.querySelectorAll('a[data-page]')).forEach((a) => {
+            a.addEventListener('click', (e) => {
+                e.preventDefault();
+                const page = parseInt(a.dataset.page);
+                if (page !== currentPage && page >= 1 && page <= pages) {
+                    currentPage = page;
+                    renderTable();
+                    updateKPIs();
+                }
+            });
         });
+        
+        // Previous/Next button handlers
+        const prevBtn = pagination.querySelector('.page-item:first-child .page-link');
+        const nextBtn = pagination.querySelector('.page-item:last-child .page-link');
+        
+        if (prevBtn && currentPage > 1) {
+            prevBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                currentPage--;
+                renderTable();
+                updateKPIs();
+            });
+        }
+        
+        if (nextBtn && currentPage < pages) {
+            nextBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                currentPage++;
+                renderTable();
+                updateKPIs();
+            });
+        }
     }
 
     function bindRowActions(){
@@ -645,8 +607,149 @@
         modal.show();
     }
 
-    monthFilter.addEventListener('change', ()=>{ currentPage=1; renderTable(); updateKPIs(); });
-    typeFilter.addEventListener('change', ()=>{ currentPage=1; renderTable(); updateKPIs(); });
+    // Update line chart function
+    function updateLineChart() {
+        const selectedBloodType = chartBloodTypeFilter ? chartBloodTypeFilter.value : 'all';
+        
+        // Combine historical and forecast data for timeline
+        const allData = [];
+        
+        // Add historical data
+        Object.keys(monthlyData.supply || {}).forEach(monthKey => {
+            const supplyData = monthlyData.supply[monthKey] || {};
+            const demandData = monthlyData.demand[monthKey] || {};
+            
+            ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].forEach(bt => {
+                if (selectedBloodType === 'all' || bt === selectedBloodType) {
+                    const supply = supplyData[bt] || 0;
+                    const demand = demandData[bt] || 0;
+                    const balance = supply - demand;
+                    
+                    allData.push({
+                        month: monthKey,
+                        blood_type: bt,
+                        balance: balance
+                    });
+                }
+            });
+        });
+        
+        // Add forecast data
+        forecastData.forEach(item => {
+            if (selectedBloodType === 'all' || item.blood_type === selectedBloodType) {
+                allData.push({
+                    month: item.forecast_month,
+                    blood_type: item.blood_type,
+                    balance: item.projected_balance,
+                    isForecast: true
+                });
+            }
+        });
+        
+        // Sort by month
+        allData.sort((a, b) => new Date(a.month) - new Date(b.month));
+        
+        // Group by month and aggregate balances
+        const monthMap = {};
+        allData.forEach(item => {
+            const monthKey = item.month;
+            if (!monthMap[monthKey]) {
+                monthMap[monthKey] = {
+                    month: monthKey,
+                    balance: 0,
+                    isForecast: item.isForecast || false
+                };
+            }
+            monthMap[monthKey].balance += item.balance;
+        });
+        
+        const months = Object.keys(monthMap).sort();
+        const labels = months.map(m => {
+            const date = new Date(m);
+            return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        });
+        const balances = months.map(m => monthMap[m].balance);
+        const isForecast = months.map(m => monthMap[m].isForecast);
+        
+        // Destroy existing chart if it exists
+        if (chartInstances.lineChart) {
+            chartInstances.lineChart.destroy();
+        }
+        
+        chartInstances.lineChart = new Chart(document.getElementById('lineChart'), {
+            type:'line',
+            data:{ 
+                labels: labels, 
+                datasets:[
+                    {
+                        label:'Projected Balance', 
+                        data:balances, 
+                        borderColor:'#0f766e', 
+                        backgroundColor:'#0f766e22', 
+                        tension:.3,
+                        fill: true,
+                        pointBackgroundColor: balances.map((b, i) => {
+                            if (isForecast[i]) return '#ff6b6b';
+                            return b < 0 ? '#dc3545' : '#28a745';
+                        }),
+                        pointBorderColor: balances.map((b, i) => {
+                            if (isForecast[i]) return '#ff6b6b';
+                            return b < 0 ? '#dc3545' : '#28a745';
+                        }),
+                        pointRadius: balances.map((b, i) => isForecast[i] ? 6 : 4),
+                        borderDash: balances.map((b, i) => isForecast[i] ? [5, 5] : [])
+                    }
+                ]
+            },
+            options:{
+                responsive:true, 
+                maintainAspectRatio: false,
+                plugins:{
+                    legend:{display:true, position:'bottom'},
+                    title: {
+                        display: true,
+                        text: selectedBloodType === 'all' 
+                            ? 'Projected Balance Forecast by Month/Year (All Blood Types)'
+                            : `Projected Balance Forecast by Month/Year (${selectedBloodType})`
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const index = context.dataIndex;
+                                const isForecastPoint = isForecast[index];
+                                return `${context.dataset.label}: ${context.parsed.y} ${isForecastPoint ? '(Forecast)' : '(Historical)'}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Month/Year'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Balance (Units)'
+                        },
+                        grid: {
+                            color: function(context) {
+                                return context.tick.value === 0 ? '#000' : '#e0e0e0';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    monthFilter.addEventListener('change', ()=>{ currentPage=1; renderTable(); updateKPIs(); initCharts(); });
+    typeFilter.addEventListener('change', ()=>{ currentPage=1; renderTable(); updateKPIs(); initCharts(); });
+    if (balanceFilter) balanceFilter.addEventListener('change', ()=>{ currentPage=1; renderTable(); updateKPIs(); });
+    if (yearFilter) yearFilter.addEventListener('change', ()=>{ currentPage=1; renderTable(); updateKPIs(); });
+    if (chartBloodTypeFilter) chartBloodTypeFilter.addEventListener('change', ()=>{ updateLineChart(); });
     searchInput.addEventListener('input', ()=>{ currentPage=1; renderTable(); updateKPIs(); });
 
     // Aggregate data by blood type for charts
@@ -742,49 +845,8 @@
             }
         });
 
-        // Line Chart - Projected Balance
-        chartInstances.lineChart = new Chart(document.getElementById('lineChart'), {
-            type:'line',
-            data:{ 
-                labels: bloodTypes, 
-                datasets:[
-                    {
-                        label:'Projected Balance', 
-                        data:balances, 
-                        borderColor:'#0f766e', 
-                        backgroundColor:'#0f766e22', 
-                        tension:.3,
-                        fill: true,
-                        pointBackgroundColor: balances.map(b => b < 0 ? '#dc3545' : '#28a745'),
-                        pointBorderColor: balances.map(b => b < 0 ? '#dc3545' : '#28a745')
-                    }
-                ]
-            },
-            options:{
-                responsive:true, 
-                maintainAspectRatio: false,
-                plugins:{
-                    legend:{display:false},
-                    title: {
-                        display: true,
-                        text: 'Projected Balance by Blood Type'
-                    }
-                },
-                scales: {
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'Balance (Units)'
-                        },
-                        grid: {
-                            color: function(context) {
-                                return context.tick.value === 0 ? '#000' : '#e0e0e0';
-                            }
-                        }
-                    }
-                }
-            }
-        });
+        // Line Chart - Projected Balance by Month/Year
+        updateLineChart();
 
         // Pie Chart - Demand Share
         const totalDemand = demand.reduce((a, b) => a + b, 0);
