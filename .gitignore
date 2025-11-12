@@ -41,3 +41,4 @@ vendor/
 # Backup files
 *.backup
 *.bak
+assets/reports-model/R_TO_PYTHON_TRANSLATION.md

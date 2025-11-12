@@ -44,17 +44,50 @@ if ($step === 1) {
     $donor_id = $donor_id ?: $_SESSION['donor_id'];
     $_SESSION['donor_id'] = $donor_id;
     
-    ob_start();
-    // We'll create a simplified version that loads the admin MH content
-    include '../../src/views/forms/admin-donor-medical-history-content.php';
-    $content = ob_get_clean();
+    // Enable error reporting for debugging (but don't display to user)
+    $old_error_reporting = error_reporting(E_ALL);
+    $old_display_errors = ini_get('display_errors');
+    ini_set('display_errors', 0);
     
-    echo json_encode([
-        'success' => true,
-        'step' => 2,
-        'html' => $content,
-        'donor_id' => $donor_id
-    ]);
+    try {
+        ob_start();
+        // We'll create a simplified version that loads the admin MH content
+        $include_path = __DIR__ . '/../../src/views/forms/admin-donor-medical-history-content.php';
+        if (!file_exists($include_path)) {
+            throw new Exception('Medical history form file not found at: ' . $include_path);
+        }
+        include $include_path;
+        $content = ob_get_clean();
+        
+        // Check if there were any errors in the output
+        if (empty($content) || trim($content) === '') {
+            throw new Exception('Medical history form content is empty');
+        }
+        
+        // Restore error settings
+        error_reporting($old_error_reporting);
+        ini_set('display_errors', $old_display_errors);
+        
+        echo json_encode([
+            'success' => true,
+            'step' => 2,
+            'html' => $content,
+            'donor_id' => $donor_id
+        ]);
+    } catch (Exception $e) {
+        // Restore error settings
+        error_reporting($old_error_reporting);
+        ini_set('display_errors', $old_display_errors);
+        
+        // Log the error
+        error_log('Error loading medical history form: ' . $e->getMessage());
+        
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Failed to load medical history form: ' . $e->getMessage()
+        ]);
+    }
 } else {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Invalid step']);

@@ -160,6 +160,7 @@ try {
                             'email' => $mobileResult['email'],
                             'password' => $mobileResult['password']
                         ];
+                        $_SESSION['mobile_account_generated_time'] = time();
                         $_SESSION['donor_registered_name'] = $formData['first_name'] . ' ' . $formData['surname'];
                     }
                 }
@@ -174,7 +175,7 @@ try {
                 throw new Exception("Failed to create donor record. Invalid response format.");
             }
         } else {
-            throw new Exception("Failed to create donor record. HTTP Code: $httpCode");
+            throw new Exception("Failed to create donor record. HTTP Code: $httpCode. Response: $response");
         }
         
     } elseif ($step === 2) {
@@ -190,17 +191,20 @@ try {
         $user_id = $_SESSION['user_id'];
         $interviewer_name = 'Admin';
         
-        try {
-            require_once '../../assets/php_func/supabase_functions.php';
-            if (function_exists('supabaseRequest')) {
-                $user_data = supabaseRequest("users?user_id=eq.$user_id&select=first_name,surname");
-                if (!empty($user_data) && is_array($user_data)) {
-                    $user = $user_data[0];
-                    $interviewer_name = trim($user['first_name'] . ' ' . $user['surname']);
+        $supabaseFnsPath = realpath(__DIR__ . '/../../assets/php_func/supabase_functions.php');
+        if ($supabaseFnsPath && file_exists($supabaseFnsPath)) {
+            try {
+                require_once $supabaseFnsPath;
+                if (function_exists('supabaseRequest')) {
+                    $user_data = supabaseRequest("users?user_id=eq.$user_id&select=first_name,surname");
+                    if (!empty($user_data) && is_array($user_data)) {
+                        $user = $user_data[0];
+                        $interviewer_name = trim($user['first_name'] . ' ' . $user['surname']);
+                    }
                 }
+            } catch (Exception $e) {
+                error_log("Error fetching user name via supabase_functions.php: " . $e->getMessage());
             }
-        } catch (Exception $e) {
-            error_log("Error fetching user name: " . $e->getMessage());
         }
         
         // Check if medical history record exists
@@ -278,7 +282,10 @@ try {
                 'success' => true,
                 'message' => 'Medical history saved successfully',
                 'donor_id' => $donor_id,
-                'next_step' => 'credentials' // Show credentials modal
+                'next_step' => 'credentials', // Show credentials modal
+                'credentials' => $_SESSION['mobile_credentials'] ?? null,
+                'mobile_account_generated' => $_SESSION['mobile_account_generated'] ?? false,
+                'donor_name' => $_SESSION['donor_registered_name'] ?? null
             ]);
         } else {
             throw new Exception("Failed to save medical history. HTTP Code: $httpCode. Response: $response");

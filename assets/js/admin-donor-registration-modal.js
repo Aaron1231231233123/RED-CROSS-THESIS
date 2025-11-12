@@ -16,6 +16,43 @@
     let currentDonorId = null;
     let modalInstance = null;
 
+    /**
+     * Execute inline scripts from dynamically injected HTML.
+     * Browsers do not automatically run <script> tags added via innerHTML,
+     * so we clone them into the document head in sequence.
+     */
+    function executeInlineScripts(container) {
+        if (!container) return;
+        const scripts = container.querySelectorAll('script');
+        scripts.forEach((script) => {
+            const type = (script.type || '').trim().toLowerCase();
+            // Skip non-executable script types (e.g., application/json templates)
+            if (type && type !== 'text/javascript' && type !== 'application/javascript' && type !== 'module') {
+                return;
+            }
+
+            const newScript = document.createElement('script');
+            if (script.type) {
+                newScript.type = script.type;
+            }
+            if (script.src) {
+                newScript.src = script.src;
+                newScript.async = false;
+            } else {
+                newScript.textContent = script.textContent;
+            }
+
+            // Preserve additional attributes such as data-* if present
+            for (const attr of script.attributes) {
+                if (attr.name === 'type' || attr.name === 'src') continue;
+                newScript.setAttribute(attr.name, attr.value);
+            }
+
+            document.head.appendChild(newScript);
+            document.head.removeChild(newScript);
+        });
+    }
+
     // Initialize modal when DOM is ready
     document.addEventListener('DOMContentLoaded', function() {
         const modalElement = document.getElementById('adminDonorRegistrationModal');
@@ -55,6 +92,7 @@
         // Reset and load step 1
         currentStep = 1;
         currentDonorId = null;
+        window.__adminDonorRegistrationFlow = true;
         loadStep(1);
         modalInstance.show();
     };
@@ -110,6 +148,7 @@
                 if (data.success) {
                     modalBody.innerHTML = data.html;
                     modalFooter.style.display = 'block';
+                    executeInlineScripts(modalBody);
 
                     // Initialize step-specific functionality
                     if (step === 1) {
@@ -118,7 +157,17 @@
                             initializePersonalDataStep();
                         }, 50);
                     } else if (step === 2) {
-                        initializeMedicalHistoryStep();
+                        // Allow inline scripts to register global helpers before initialization
+                        setTimeout(() => {
+                            if (typeof window.generateAdminMedicalHistoryQuestions === 'function') {
+                                try {
+                                    window.generateAdminMedicalHistoryQuestions();
+                                } catch (err) {
+                                    console.error('Error generating medical history questions:', err);
+                                }
+                            }
+                            initializeMedicalHistoryStep();
+                        }, 50);
                     }
                 } else {
                     throw new Error(data.error || 'Failed to load step content');
@@ -645,20 +694,64 @@
             method: 'POST',
             body: formData
         })
-        .then(response => response.json())
+        .then(async (response) => {
+            const rawText = await response.text();
+            let data;
+            try {
+                data = rawText ? JSON.parse(rawText) : {};
+            } catch (parseErr) {
+                console.error('Failed to parse medical history response as JSON:', parseErr, rawText);
+                throw new Error(`Unexpected response (status ${response.status}): ${rawText.substring(0, 300)}`);
+            }
+
+            if (!response.ok || data.success === false) {
+                const message = data?.error || data?.message || `Request failed with status ${response.status}`;
+                throw new Error(message);
+            }
+
+            return data;
+        })
         .then(data => {
             if (data.success) {
+                window.__latestRegisteredDonorId = data.donor_id || null;
+                const credentialsModalEl = document.getElementById('mobileCredentialsModal');
+                if (credentialsModalEl) {
+                    credentialsModalEl.setAttribute('data-donor-id', data.donor_id || '');
+                }
+
+                const hasCreds = data.credentials && data.credentials.email && data.credentials.password;
+                if (hasCreds) {
+                    try {
+                        const emailInput = document.getElementById('mobileEmail');
+                        const passwordInput = document.getElementById('mobilePassword');
+                        if (emailInput && data.credentials.email) {
+                            emailInput.value = data.credentials.email;
+                        }
+                        if (passwordInput && data.credentials.password) {
+                            passwordInput.value = data.credentials.password;
+                        }
+                        const donorNameSpan = document.getElementById('mobileCredentialsDonorName');
+                        if (donorNameSpan) {
+                            donorNameSpan.textContent = data.donor_name || donorNameSpan.textContent;
+                        }
+                    } catch (err) {
+                        console.warn('Unable to populate credentials modal', err);
+                    }
+                } else {
+                    console.warn('Medical history saved but no credentials were returned');
+                }
+
                 // Close registration modal
                 if (modalInstance) {
                     modalInstance.hide();
                 }
 
                 // Show credentials modal
-                setTimeout(() => {
-                    showCredentialsModal();
-                }, 300);
-            } else {
-                throw new Error(data.error || 'Failed to save medical history');
+                if (hasCreds) {
+                    setTimeout(() => {
+                        showCredentialsModal();
+                    }, 300);
+                }
             }
         })
         .catch(error => {
@@ -678,17 +771,27 @@
         // Check if credentials modal exists
         const credentialsModal = document.getElementById('mobileCredentialsModal');
         if (credentialsModal) {
+            credentialsModal.setAttribute('data-donor-id', window.__latestRegisteredDonorId || credentialsModal.getAttribute('data-donor-id') || '');
+            credentialsModal.style.display = '';
+            credentialsModal.setAttribute('data-auto-show', 'true');
             const credentialsModalInstance = new bootstrap.Modal(credentialsModal, {
                 backdrop: 'static',
                 keyboard: false
             });
 
-            // Update the close button to redirect to dashboard
-            credentialsModal.addEventListener('hidden.bs.modal', function() {
+            const handleHidden = () => {
+                if (window.__launchingScreening) {
+                    console.log('[Admin Registration] Credentials modal hidden while launching screening – skip redirect.');
+                    credentialsModal.removeEventListener('hidden.bs.modal', handleHidden);
+                    return;
+                }
+
                 // Redirect to dashboard with success message
                 const currentUrl = window.location.pathname;
                 window.location.href = currentUrl + (currentUrl.includes('?') ? '&' : '?') + 'donor_registered=true';
-            });
+            };
+
+            credentialsModal.addEventListener('hidden.bs.modal', handleHidden, { once: true });
 
             credentialsModalInstance.show();
         } else {
@@ -736,6 +839,7 @@
     function resetModal() {
         currentStep = 1;
         currentDonorId = null;
+        window.__adminDonorRegistrationFlow = false;
         const modalBody = document.getElementById('adminRegistrationModalBody');
         if (modalBody) {
             modalBody.innerHTML = `

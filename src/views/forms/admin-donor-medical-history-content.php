@@ -5,11 +5,16 @@
  * This is a wrapper that includes the existing admin MH content
  */
 
-// Get donor_id from session (set by step 1)
-$donor_id = isset($_SESSION['donor_id']) ? $_SESSION['donor_id'] : null;
+// Start output buffering to catch any errors
+ob_start();
+
+// Get donor_id from session (set by step 1) or from GET parameter
+$donor_id = isset($_SESSION['donor_id']) ? $_SESSION['donor_id'] : (isset($_GET['donor_id']) ? $_GET['donor_id'] : null);
 
 if (!$donor_id) {
+    ob_clean();
     echo '<div class="alert alert-danger">Donor ID not found. Please complete step 1 first.</div>';
+    ob_end_flush();
     exit();
 }
 
@@ -64,11 +69,57 @@ if ($http_code === 200) {
 // Determine if female (for step 6)
 $isFemale = ($donor_sex === 'female');
 
-// Include the existing admin MH content
+// Temporarily set $_GET['donor_id'] so the included file can access it
+// (medical-history-modal-content-admin.php expects $_GET['donor_id'])
+$original_get_donor_id = isset($_GET['donor_id']) ? $_GET['donor_id'] : null;
+$_GET['donor_id'] = $donor_id;
+
+// Define a constant for the base path to help with relative includes
+// This ensures the included file can find the database connection
+if (!defined('BASE_PATH')) {
+    // Calculate base path: from src/views/forms/ to project root
+    define('BASE_PATH', dirname(dirname(dirname(__DIR__))));
+}
+
+// Include the existing admin MH content using absolute path
 // Note: We need to modify the form action to work with our modal flow
+$include_path = __DIR__ . '/medical-history-modal-content-admin.php';
+if (!file_exists($include_path)) {
+    ob_clean();
+    echo '<div class="alert alert-danger">Medical history form file not found at: ' . htmlspecialchars($include_path) . '</div>';
+    ob_end_flush();
+    exit();
+}
+
+// Start a new output buffer for the included content
 ob_start();
-include 'medical-history-modal-content-admin.php';
-$content = ob_get_clean();
+$include_error = false;
+try {
+    include $include_path;
+    $content = ob_get_clean();
+    
+    // Check if content is valid
+    if ($content === false || (is_string($content) && trim($content) === '')) {
+        throw new Exception('Medical history form content is empty or invalid');
+    }
+} catch (Exception $e) {
+    ob_end_clean();
+    $include_error = true;
+    $content = '<div class="alert alert-danger">Error loading medical history form: ' . htmlspecialchars($e->getMessage()) . '</div>';
+    error_log('Error including medical-history-modal-content-admin.php: ' . $e->getMessage());
+} catch (Error $e) {
+    ob_end_clean();
+    $include_error = true;
+    $content = '<div class="alert alert-danger">Fatal error loading medical history form: ' . htmlspecialchars($e->getMessage()) . '</div>';
+    error_log('Fatal error including medical-history-modal-content-admin.php: ' . $e->getMessage());
+}
+
+// Restore original $_GET['donor_id'] if it existed
+if ($original_get_donor_id !== null) {
+    $_GET['donor_id'] = $original_get_donor_id;
+} else {
+    unset($_GET['donor_id']);
+}
 
 // Replace form action to use our API endpoint
 $content = str_replace(

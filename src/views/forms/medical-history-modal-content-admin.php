@@ -10,16 +10,49 @@ ini_set('display_errors', 0);
 error_log("Medical History Modal: Starting for donor_id: " . ($_GET['donor_id'] ?? 'not set'));
 
 // Include database connection
-require_once '../../../assets/conn/db_conn.php';
+// Try multiple paths to handle different include contexts
+$db_conn_paths = [
+    __DIR__ . '/../../../assets/conn/db_conn.php',  // From src/views/forms/
+    dirname(dirname(dirname(__DIR__))) . '/assets/conn/db_conn.php',  // Absolute from project root
+    '../../../assets/conn/db_conn.php'  // Original relative path
+];
+
+$db_conn_loaded = false;
+foreach ($db_conn_paths as $path) {
+    if (file_exists($path)) {
+        require_once $path;
+        $db_conn_loaded = true;
+        break;
+    }
+}
+
+// If database connection constants are not defined, try to load from a known location
+if (!$db_conn_loaded && (!defined('SUPABASE_URL') || !defined('SUPABASE_API_KEY'))) {
+    // Try to find the db_conn.php file by searching up the directory tree
+    $current_dir = __DIR__;
+    for ($i = 0; $i < 5; $i++) {
+        $test_path = $current_dir . str_repeat('/..', $i) . '/assets/conn/db_conn.php';
+        if (file_exists($test_path)) {
+            require_once $test_path;
+            $db_conn_loaded = true;
+            break;
+        }
+    }
+}
 
 // Get donor_id from request
 $donor_id = isset($_GET['donor_id']) ? $_GET['donor_id'] : null;
 
 if (!$donor_id) {
-    ob_clean();
+    // Clear any existing output
+    if (ob_get_level() > 0) {
+        ob_clean();
+    }
     echo '<div class="alert alert-danger">Missing donor_id parameter</div>';
-    ob_end_flush();
-    exit();
+    // Don't flush here - let the parent script handle output buffering
+    // Use return instead of exit() when included from another file
+    // This allows the parent script to handle the error gracefully
+    return;
 }
 
 // Check if this is view-only mode (for approved donors)
@@ -1306,6 +1339,10 @@ setTimeout(() => {
 (function initAdminFormSubmit(){
     function attachFormHandler() {
         try {
+            if (window.__adminDonorRegistrationFlow === true) {
+                console.log('Admin donor registration flow detected - skipping legacy medical history submit handler');
+                return;
+            }
             const form = document.getElementById('modalMedicalHistoryForm');
             console.log('Form element found:', !!form);
             if (!form) {

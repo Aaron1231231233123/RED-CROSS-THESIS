@@ -15,7 +15,15 @@ if (session_status() == PHP_SESSION_NONE) {
 error_log("Mobile Credentials Modal - File included/loaded");
 
 // Check if mobile credentials are available (from session or cookies)
-$hasSessionCredentials = isset($_SESSION['mobile_account_generated']) && $_SESSION['mobile_account_generated'];
+$hasSessionCredentials = false;
+if (isset($_SESSION['mobile_account_generated']) && $_SESSION['mobile_account_generated']) {
+    if (!empty($_SESSION['mobile_credentials']['email']) && !empty($_SESSION['mobile_credentials']['password'])) {
+        $hasSessionCredentials = true;
+    } else {
+        // Stale flag without data; reset it
+        $_SESSION['mobile_account_generated'] = false;
+    }
+}
 $hasCookieCredentials = isset($_COOKIE['mobile_account_generated']) && $_COOKIE['mobile_account_generated'] === 'true';
 
 // Check if credentials have already been acknowledged/shown
@@ -64,10 +72,27 @@ $password = '';
 if ($hasSessionCredentials && isset($_SESSION['mobile_credentials'])) {
     $email = $_SESSION['mobile_credentials']['email'] ?? '';
     $password = $_SESSION['mobile_credentials']['password'] ?? '';
-} elseif ($hasCookieCredentials) {
+    if (empty($email) || empty($password)) {
+        error_log("Mobile Credentials Modal - session credentials empty, resetting flags.");
+        $email = '';
+        $password = '';
+        unset($_SESSION['mobile_credentials']);
+        $_SESSION['mobile_account_generated'] = false;
+        $hasSessionCredentials = false;
+    }
+}
+
+if (!$hasSessionCredentials && $hasCookieCredentials) {
     $email = $_COOKIE['mobile_email'] ?? '';
     $password = $_COOKIE['mobile_password'] ?? '';
-} elseif ($isDeclarationForm && isset($_SESSION['donor_id'])) {
+    if (empty($email) || empty($password)) {
+        $hasCookieCredentials = false;
+        $email = '';
+        $password = '';
+    }
+}
+
+if (!$hasSessionCredentials && !$hasCookieCredentials && $isDeclarationForm && isset($_SESSION['donor_id'])) {
     // On declaration form, try to retrieve credentials from database if not in session/cookies
     // This allows showing credentials when viewing an existing donor's declaration form
     try {
@@ -115,6 +140,13 @@ if ($hasSessionCredentials && isset($_SESSION['mobile_credentials'])) {
 }
 
 $donorName = $_SESSION['donor_registered_name'] ?? $_COOKIE['donor_name'] ?? 'Donor';
+$modalDonorId = isset($_SESSION['donor_id']) ? (string)$_SESSION['donor_id'] : '';
+
+// Final guard: if we still do not have actual credential strings, do not show the modal
+$hasCredentialValues = !empty($email) && !empty($password);
+if (!$hasCredentialValues) {
+    $showCredentials = false;
+}
 
 // Debug: Log what we have
 error_log("Mobile Credentials Modal - Final check: showCredentials=" . ($showCredentials ? 'true' : 'false') . 
@@ -125,7 +157,7 @@ error_log("Mobile Credentials Modal - Final check: showCredentials=" . ($showCre
 
 <!-- Mobile Credentials Modal - Always render HTML, show/hide based on credentials -->
 <!-- DEBUG: showCredentials=<?php echo $showCredentials ? 'true' : 'false'; ?>, hasSession=<?php echo $hasSessionCredentials ? 'true' : 'false'; ?>, hasCookie=<?php echo $hasCookieCredentials ? 'true' : 'false'; ?> -->
-<div class="modal" id="mobileCredentialsModal" tabindex="-1" aria-labelledby="mobileCredentialsModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" style="<?php echo $showCredentials ? '' : 'display: none;'; ?>">
+<div class="modal" id="mobileCredentialsModal" tabindex="-1" aria-labelledby="mobileCredentialsModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" data-auto-show="<?php echo ($showCredentials && $hasCredentialValues) ? 'true' : 'false'; ?>" data-donor-id="<?php echo htmlspecialchars($modalDonorId); ?>" style="<?php echo ($showCredentials && $hasCredentialValues) ? '' : 'display: none;'; ?>">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-success text-white">
@@ -137,7 +169,7 @@ error_log("Mobile Credentials Modal - Final check: showCredentials=" . ($showCre
             <div class="modal-body">
                 <div class="alert alert-success">
                     <i class="fas fa-check-circle me-2"></i>
-                    <strong>Congratulations!</strong> A mobile app account has been automatically created for <?php echo htmlspecialchars($donorName); ?>.
+                    <strong>Congratulations!</strong> A mobile app account has been automatically created for <span id="mobileCredentialsDonorName"><?php echo htmlspecialchars($donorName); ?></span>.
                 </div>
                 
                 <div class="credentials-container">
@@ -196,7 +228,7 @@ error_log("Mobile Credentials Modal - Final check: showCredentials=" . ($showCre
                     If the donor is ready for the next step based on the medical history interview,
                     click and proceed with Initial Screening.
                 </div>
-                <button type="button" class="btn btn-danger" onclick="goBackToDashboard()">
+                <button type="button" class="btn btn-danger" onclick="launchInitialScreening()">
                     <i class="fas fa-arrow-right me-2"></i>
                     Initial Screening
                 </button>
@@ -344,6 +376,7 @@ window.addEventListener('load', function() {
         const modal = document.getElementById('mobileCredentialsModal');
         if (modal) {
             console.log('[Mobile Credentials] Modal element found');
+            const shouldAutoShow = modal.getAttribute('data-auto-show') === 'true';
             // Check if modal should be shown based on the modal's existence and visibility
             const emailValue = document.getElementById('mobileEmail')?.value || '';
             const passwordValue = document.getElementById('mobilePassword')?.value || '';
@@ -351,12 +384,12 @@ window.addEventListener('load', function() {
             console.log('[Mobile Credentials] Email value:', emailValue);
             console.log('[Mobile Credentials] Password value:', passwordValue ? '***' : 'empty');
             
-            if (emailValue && passwordValue) {
+            if (shouldAutoShow && emailValue && passwordValue) {
                 console.log('[Mobile Credentials] Auto-opening modal with credentials');
                 const modalInstance = new bootstrap.Modal(modal);
                 modalInstance.show();
             } else {
-                console.log('[Mobile Credentials] No credentials to display');
+                console.log('[Mobile Credentials] Auto-show disabled or no credentials to display');
             }
         } else {
             console.log('[Mobile Credentials] Modal element not found');
@@ -368,6 +401,13 @@ window.addEventListener('load', function() {
 const modalElement = document.getElementById('mobileCredentialsModal');
 if (modalElement) {
     modalElement.addEventListener('hidden.bs.modal', function() {
+        // Skip cleanup if we're launching screening (it will handle its own cleanup)
+        if (window.__launchingScreening) {
+            console.log('[Mobile Credentials] Skipping cleanup - launching screening modal');
+            window.__launchingScreening = false;
+            return;
+        }
+
         // Remove all modal backdrops immediately
         const backdrops = document.querySelectorAll('.modal-backdrop');
         backdrops.forEach(backdrop => backdrop.remove());
@@ -449,6 +489,125 @@ function togglePasswordVisibility() {
         toggleIcon.classList.remove('fa-eye-slash');
         toggleIcon.classList.add('fa-eye');
     }
+}
+
+function clearMobileCredentials(onComplete) {
+    const apiPath = window.location.pathname.includes('/Dashboards/') 
+        ? '../api/clear-mobile-credentials.php' 
+        : '../../api/clear-mobile-credentials.php';
+
+    fetch(apiPath, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'mark_as_shown' })
+    }).then(() => {
+        return fetch(apiPath, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ action: 'clear_credentials' })
+        });
+    }).then(() => {
+        console.log('[Mobile Credentials] Credentials marked as shown and cleared');
+        if (typeof onComplete === 'function') {
+            onComplete();
+        }
+    }).catch((error) => {
+        console.error('[Mobile Credentials] Error clearing credentials:', error);
+        if (typeof onComplete === 'function') {
+            onComplete();
+        }
+    });
+}
+
+function launchInitialScreening() {
+    const modal = document.getElementById('mobileCredentialsModal');
+    const donorId = modal?.getAttribute('data-donor-id') || window.__latestRegisteredDonorId || '';
+
+    if (!donorId) {
+        console.warn('[Mobile Credentials] No donor_id available for initial screening; redirecting to dashboard instead.');
+        return goBackToDashboard();
+    }
+
+    console.log('[Mobile Credentials] Launching initial screening for donor_id:', donorId);
+
+    // Set flag to prevent credentials modal cleanup from interfering
+    window.__launchingScreening = true;
+
+    // Close credentials modal first
+    if (modal) {
+        const instance = bootstrap.Modal.getInstance(modal);
+        if (instance) {
+            instance.hide();
+        } else {
+            modal.classList.remove('show');
+            modal.style.display = 'none';
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+        }
+    }
+
+    // Clean up all backdrops immediately
+    const backdrops = document.querySelectorAll('.modal-backdrop');
+    backdrops.forEach(backdrop => backdrop.remove());
+
+    // Clear credentials in background (don't wait for it)
+    clearMobileCredentials(() => {
+        console.log('[Mobile Credentials] Credentials cleared');
+    });
+
+    // Wait for modal to fully close and backdrop to be removed before opening screening modal
+    setTimeout(() => {
+        // Double-check backdrop cleanup
+        const remainingBackdrops = document.querySelectorAll('.modal-backdrop');
+        remainingBackdrops.forEach(backdrop => backdrop.remove());
+        
+        // Ensure body classes are clean
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+
+        // Verify screening modal element exists
+        const screeningModal = document.getElementById('adminScreeningFormModal');
+        if (!screeningModal) {
+            console.error('[Mobile Credentials] Screening modal element not found in DOM');
+            window.__launchingScreening = false;
+            alert('Initial screening form is not available. Please refresh the page and try again.');
+            return;
+        }
+
+        if (typeof window.openAdminScreeningModal === 'function') {
+            console.log('[Mobile Credentials] Opening admin screening modal for donor:', donorId);
+            try {
+                window.openAdminScreeningModal({ donor_id: donorId });
+                
+                // Verify modal opened successfully after a short delay
+                setTimeout(() => {
+                    const isOpen = screeningModal.classList.contains('show') || 
+                                   screeningModal.style.display !== 'none';
+                    if (isOpen) {
+                        console.log('[Mobile Credentials] Screening modal opened successfully');
+                    } else {
+                        console.warn('[Mobile Credentials] Screening modal may not have opened properly');
+                    }
+                    // Clear flag after verification
+                    window.__launchingScreening = false;
+                }, 200);
+            } catch (error) {
+                console.error('[Mobile Credentials] Error opening screening modal:', error);
+                window.__launchingScreening = false;
+                alert('Error opening initial screening form. Please try again.');
+            }
+        } else {
+            console.warn('[Mobile Credentials] openAdminScreeningModal not available; redirecting to dashboard.');
+            window.__launchingScreening = false;
+            goBackToDashboard();
+        }
+    }, 400); // Increased delay to ensure proper cleanup
 }
 
 // Function to go back to dashboard
@@ -534,34 +693,7 @@ function goBackToDashboard() {
     // Add success parameter
     const dashboardUrl = redirectUrl + (redirectUrl.includes('?') ? '&' : '?') + 'donor_registered=true';
     
-    // Determine API path based on current location
-    const apiPath = window.location.pathname.includes('/Dashboards/') 
-        ? '../api/clear-mobile-credentials.php' 
-        : '../../api/clear-mobile-credentials.php';
-    
-    // IMPORTANT: Mark as shown AND clear credentials before redirecting
-    // This ensures modal won't show on dashboard
-    fetch(apiPath, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ action: 'mark_as_shown' })
-    }).then(() => {
-        // Now clear all credentials
-        return fetch(apiPath, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ action: 'clear_credentials' })
-        });
-    }).then(() => {
-        console.log('[Mobile Credentials] Credentials marked as shown and cleared, redirecting to dashboard');
-        window.location.href = dashboardUrl;
-    }).catch((error) => {
-        console.error('[Mobile Credentials] Error clearing credentials:', error);
-        // Fallback redirect even if clearing fails
+    clearMobileCredentials(() => {
         window.location.href = dashboardUrl;
     });
 }
