@@ -961,6 +961,7 @@ h6 {
     <script defer src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
 </head>
 <body>
+    <?php include '../../src/views/modals/admin-donor-registration-modal.php'; ?>
     <!-- Notification Bell and Alerts -->
     <button class="notifications-toggle" id="notificationsToggle" style="position: fixed; top: 100px; right: 32px; z-index: 1100; display: none; background: none; border: none; outline: none; align-items: center; justify-content: center; padding: 0; width: 56px; height: 56px; border-radius: 50%; box-shadow: 0 2px 8px rgba(148,16,34,0.08); background: #fff; transition: box-shadow 0.2s;">
         <i class="fas fa-bell" style="font-size: 2em; color: #941022; position: relative;"></i>
@@ -1095,38 +1096,6 @@ h6 {
         }, 7000);
     }
     </script>
-
-    <!-- Confirmation Modal -->
-    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header bg-dark text-white">
-                    <h5 class="modal-title" id="confirmationModalLabel">Confirm Action</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to proceed to the donor form?</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" onclick="proceedToDonorForm()">Proceed</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Loading Modal -->
-    <div class="modal" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="false" data-bs-keyboard="false">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content" style="background: transparent; border: none; box-shadow: none;">
-                <div class="modal-body text-center">
-                    <div class="spinner-border text-danger" style="width: 3rem; height: 3rem;" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <div class="container-fluid">
         <!-- Header -->
@@ -3003,33 +2972,14 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
     <!-- Bootstrap 5.3 JS and Popper -->
     <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Initialize modals and add button functionality
         document.addEventListener('DOMContentLoaded', function() {
-            // Initialize modals
-            const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'), {
-                backdrop: true,
-                keyboard: true
-            });
-            const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
-                backdrop: false,
-                keyboard: false
-            });
-
-            // Function to show confirmation modal
             window.showConfirmationModal = function() {
-                confirmationModal.show();
-            };
-
-            // Function to handle form submission
-            window.proceedToDonorForm = function() {
-                confirmationModal.hide();
-                loadingModal.show();
-                
-                setTimeout(() => {
-                    // Pass current page as source parameter for proper redirect back
-                    const currentPage = encodeURIComponent(window.location.pathname + window.location.search);
-                    window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + currentPage;
-                }, 1500);
+                if (typeof window.openAdminDonorRegistrationModal === 'function') {
+                    window.openAdminDonorRegistrationModal();
+                } else {
+                    console.error('Admin donor registration modal not available yet');
+                    alert('Registration modal is still loading. Please try again in a moment.');
+                }
             };
         });
     </script>
@@ -3169,6 +3119,7 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
         }
     });
     </script>
+    <script src="../../assets/js/admin-donor-registration-modal.js"></script>
 </body>
 </html>
 </body>

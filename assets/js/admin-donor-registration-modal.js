@@ -779,25 +779,9 @@
                 keyboard: false
             });
 
-            const handleHidden = () => {
-                if (window.__launchingScreening) {
-                    console.log('[Admin Registration] Credentials modal hidden while launching screening – skip redirect.');
-                    credentialsModal.removeEventListener('hidden.bs.modal', handleHidden);
-                    return;
-                }
-
-                // Redirect to dashboard with success message
-                const currentUrl = window.location.pathname;
-                window.location.href = currentUrl + (currentUrl.includes('?') ? '&' : '?') + 'donor_registered=true';
-            };
-
-            credentialsModal.addEventListener('hidden.bs.modal', handleHidden, { once: true });
-
             credentialsModalInstance.show();
         } else {
-            // Fallback: redirect to dashboard
-            const currentUrl = window.location.pathname;
-            window.location.href = currentUrl + (currentUrl.includes('?') ? '&' : '?') + 'donor_registered=true';
+            console.error('[Admin Registration] mobileCredentialsModal element not found; skipping credentials step.');
         }
     }
 

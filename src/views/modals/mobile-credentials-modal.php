@@ -532,6 +532,12 @@ function launchInitialScreening() {
         return goBackToDashboard();
     }
 
+    const screeningModal = document.getElementById('adminScreeningFormModal');
+    if (!screeningModal || typeof window.openAdminScreeningModal !== 'function') {
+        alert('Initial screening form is not ready yet. Please refresh the page and try again.');
+        return;
+    }
+
     console.log('[Mobile Credentials] Launching initial screening for donor_id:', donorId);
 
     // Set flag to prevent credentials modal cleanup from interfering
@@ -571,41 +577,27 @@ function launchInitialScreening() {
         document.body.style.overflow = '';
         document.body.style.paddingRight = '';
 
-        // Verify screening modal element exists
-        const screeningModal = document.getElementById('adminScreeningFormModal');
-        if (!screeningModal) {
-            console.error('[Mobile Credentials] Screening modal element not found in DOM');
-            window.__launchingScreening = false;
-            alert('Initial screening form is not available. Please refresh the page and try again.');
-            return;
-        }
-
-        if (typeof window.openAdminScreeningModal === 'function') {
+        try {
             console.log('[Mobile Credentials] Opening admin screening modal for donor:', donorId);
-            try {
-                window.openAdminScreeningModal({ donor_id: donorId });
-                
-                // Verify modal opened successfully after a short delay
-                setTimeout(() => {
-                    const isOpen = screeningModal.classList.contains('show') || 
-                                   screeningModal.style.display !== 'none';
-                    if (isOpen) {
-                        console.log('[Mobile Credentials] Screening modal opened successfully');
-                    } else {
-                        console.warn('[Mobile Credentials] Screening modal may not have opened properly');
-                    }
-                    // Clear flag after verification
-                    window.__launchingScreening = false;
-                }, 200);
-            } catch (error) {
-                console.error('[Mobile Credentials] Error opening screening modal:', error);
+            window.openAdminScreeningModal({ donor_id: donorId });
+
+            // Verify modal opened successfully after a short delay
+            setTimeout(() => {
+                const isOpen = screeningModal.classList.contains('show') ||
+                               screeningModal.style.display !== 'none';
+                if (!isOpen) {
+                    console.warn('[Mobile Credentials] Screening modal may not have opened properly - re-showing credentials modal.');
+                    const credentialsInstance = bootstrap.Modal.getOrCreateInstance(modal);
+                    credentialsInstance?.show();
+                }
                 window.__launchingScreening = false;
-                alert('Error opening initial screening form. Please try again.');
-            }
-        } else {
-            console.warn('[Mobile Credentials] openAdminScreeningModal not available; redirecting to dashboard.');
+            }, 250);
+        } catch (error) {
+            console.error('[Mobile Credentials] Error opening screening modal:', error);
             window.__launchingScreening = false;
-            goBackToDashboard();
+            alert('Error opening initial screening form. Please try again.');
+            const credentialsInstance = bootstrap.Modal.getOrCreateInstance(modal);
+            credentialsInstance?.show();
         }
     }, 400); // Increased delay to ensure proper cleanup
 }

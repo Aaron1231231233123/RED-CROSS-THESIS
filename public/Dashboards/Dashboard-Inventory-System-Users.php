@@ -89,17 +89,12 @@ try {
     <title>Manage Users</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
+<style>
 body {
 	background-color: #f8f9fa;
 	margin: 0;
 	padding: 0;
 	font-family: Arial, sans-serif;
-}
-main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
-	margin-left: 280px !important;
-	margin-top: 70px !important;
-	padding-top: 20px;
 }
 .dashboard-home-header {
 	position: fixed;
@@ -108,12 +103,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 	width: calc(100% - 240px);
 	background-color: #f8f9fa;
 	padding: 15px;
-	min-height: 70px;
-	display: flex;
-	align-items: center;
 	border-bottom: 1px solid #ddd;
 	z-index: 1000;
-    transition: left 0.3s ease, width 0.3s ease;
+	transition: left 0.3s ease, width 0.3s ease;
 }
 .dashboard-home-sidebar {
 	height: 100vh;
@@ -123,36 +115,82 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 	background-color: #ffffff;
 	border-right: 1px solid #ddd;
 	padding: 15px;
-    display: flex;
+	display: flex;
 	flex-direction: column;
-    transition: width 0.3s ease;
+	transition: width 0.3s ease;
 }
-.sidebar-main-content { flex-grow: 1; padding-bottom: 80px; }
-.logout-container { position: absolute; bottom: 0; left: 0; right: 0; padding: 20px 15px; border-top: 1px solid #ddd; background-color: #ffffff; }
-.logout-link { color: #dc3545 !important; }
-.dashboard-home-sidebar .nav-link { color: #333; padding: 10px 15px; margin: 2px 0; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; text-decoration: none; font-size: 0.9rem; }
-.dashboard-home-sidebar .nav-link i { margin-right: 10px; font-size: 0.9rem; width: 16px; text-align: center; }
-.dashboard-home-sidebar .nav-link:hover { background-color: #f8f9fa; color: #dc3545; }
-.dashboard-home-sidebar .nav-link.active { background-color: #dc3545; color: #fff; }
-.content-wrapper { background: #fff; box-shadow: 0 0 15px rgba(0,0,0,0.05); margin-top: 0; border-radius: 12px; padding: 24px; }
-/* Match responsive behavior with other dashboards */
+.sidebar-main-content {
+	flex-grow: 1;
+	padding-bottom: 80px;
+}
+.logout-container {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	padding: 20px 15px;
+	border-top: 1px solid #ddd;
+	background-color: #ffffff;
+}
+.logout-link {
+	color: #dc3545 !important;
+}
+.logout-link:hover {
+	background-color: #dc3545 !important;
+	color: #fff !important;
+}
+.dashboard-home-sidebar .nav-link {
+	color: #333;
+	padding: 10px 15px;
+	margin: 2px 0;
+	border-radius: 4px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	text-decoration: none;
+	font-size: 0.9rem;
+	transition: all 0.2s ease;
+}
+.dashboard-home-sidebar .nav-link i {
+	margin-right: 10px;
+	font-size: 0.9rem;
+	width: 16px;
+	text-align: center;
+}
+.dashboard-home-sidebar .nav-link:hover {
+	background-color: #f8f9fa;
+	color: #dc3545;
+}
+.dashboard-home-sidebar .nav-link.active {
+	background-color: #dc3545;
+	color: #fff;
+}
+.content-wrapper {
+	background: #fff;
+	box-shadow: 0 0 15px rgba(0,0,0,0.05);
+	border-radius: 12px;
+	padding: 24px;
+	margin-top: 0;
+}
+main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
+	margin-left: 280px !important;
+	margin-top: 70px !important;
+	padding-top: 20px;
+}
 @media (max-width: 992px) {
 	.dashboard-home-sidebar { width: 200px; }
 	.dashboard-home-header { left: 200px; width: calc(100% - 200px); }
-	main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 { margin-left: 200px; }
+	main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 { margin-left: 200px !important; }
 }
 @media (max-width: 768px) {
 	.dashboard-home-sidebar { width: 0; padding: 0; overflow: hidden; }
 	.dashboard-home-header { left: 0; width: 100%; }
 	main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 { margin-left: 0 !important; padding: 10px; }
 }
-/* Ensure mid-size behavior matches */
-@media (max-width: 991px) {
-    main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 { margin-left: 240px !important; }
-}
-    </style>
+	</style>
 </head>
 <body>
+    <?php include '../../src/views/modals/admin-donor-registration-modal.php'; ?>
     <div class="container-fluid">
         <div class="dashboard-home-header bg-light p-3 border-bottom">
             <div class="d-flex justify-content-between align-items-center">
@@ -262,13 +300,30 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                 <?php endif; ?>
                                             </td>
                                             <td>
-                                                <button class="btn btn-sm btn-info me-1" onclick="showViewUserModal('<?php echo htmlspecialchars($u['id']); ?>', '<?php echo htmlspecialchars($u['name']); ?>', '<?php echo htmlspecialchars($u['email']); ?>', '<?php echo htmlspecialchars($u['role']); ?>', '<?php echo isset($u['is_active']) && $u['is_active'] ? "Active" : "Inactive"; ?>', '<?php echo isset($u['created_at']) ? htmlspecialchars($u['created_at']) : ''; ?>', '<?php echo isset($u['last_login_at']) ? htmlspecialchars($u['last_login_at']) : ''; ?>')">
+                                                <button
+                                                    class="btn btn-sm btn-info me-1 view-user-btn"
+                                                    data-user-id="<?php echo htmlspecialchars($u['id'], ENT_QUOTES, 'UTF-8'); ?>"
+                                                    data-user-name="<?php echo htmlspecialchars($u['name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                    data-user-email="<?php echo htmlspecialchars($u['email'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                    data-user-role="<?php echo htmlspecialchars($u['role'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                    data-user-status="<?php echo isset($u['is_active']) && $u['is_active'] ? 'Active' : 'Inactive'; ?>"
+                                                    data-user-created="<?php echo htmlspecialchars($u['created_at'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                    data-user-last-login="<?php echo htmlspecialchars($u['last_login_at'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                >
                                                     <i class="fas fa-eye"></i>
                                                 </button>
                                                 <?php if (isset($u['is_active']) && $u['is_active']): ?>
-                                                    <button class="btn btn-sm btn-danger" onclick="showDeactivateModal('<?php echo htmlspecialchars($u['id']); ?>', '<?php echo htmlspecialchars($u['name']); ?>')">Deactivate</button>
+                                                    <button
+                                                        class="btn btn-sm btn-danger deactivate-user-btn"
+                                                        data-user-id="<?php echo htmlspecialchars($u['id'], ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-user-name="<?php echo htmlspecialchars($u['name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                    >Deactivate</button>
                                                 <?php else: ?>
-                                                    <button class="btn btn-sm btn-success" onclick="showActivateModal('<?php echo htmlspecialchars($u['id']); ?>', '<?php echo htmlspecialchars($u['name']); ?>')">Activate</button>
+                                                    <button
+                                                        class="btn btn-sm btn-success activate-user-btn"
+                                                        data-user-id="<?php echo htmlspecialchars($u['id'], ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-user-name="<?php echo htmlspecialchars($u['name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                    >Activate</button>
                                                 <?php endif; ?>
                                             </td>
                                         </tr>
@@ -525,37 +580,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         </div>
     </div>
 
-    <!-- Confirmation Modal for Donor Registration -->
-    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header bg-dark text-white">
-                    <h5 class="modal-title" id="confirmationModalLabel">Confirm Action</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to proceed to the admin donor form?</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" onclick="proceedToDonorForm()">Proceed</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Loading Modal for Donor Registration -->
-    <div class="modal" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="false" data-bs-keyboard="false">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content" style="background: transparent; border: none; box-shadow: none;">
-                <div class="modal-body text-center">
-                    <div class="spinner-border text-danger" style="width: 3rem; height: 3rem;" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         let currentUserId = null;
         let currentUserName = null;
@@ -566,32 +591,45 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             console.log('confirmActivateBtn exists:', document.getElementById('confirmActivateBtn') !== null);
             console.log('activateModal exists:', document.getElementById('activateModal') !== null);
             
-            // Initialize donor registration modals
-            const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'), {
-                backdrop: true,
-                keyboard: true
-            });
-            const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'), {
-                backdrop: false,
-                keyboard: false
-            });
-
-            // Function to show confirmation modal
             window.showConfirmationModal = function() {
-                confirmationModal.show();
+                if (typeof window.openAdminDonorRegistrationModal === 'function') {
+                    window.openAdminDonorRegistrationModal();
+                } else {
+                    console.error('Admin donor registration modal not available yet');
+                    alert('Registration modal is still loading. Please try again in a moment.');
+                }
             };
 
-            // Function to handle form submission
-            window.proceedToDonorForm = function() {
-                confirmationModal.hide();
-                loadingModal.show();
-                
-                setTimeout(() => {
-                    // Pass current page as source parameter for proper redirect back
-                    const currentPage = encodeURIComponent(window.location.pathname + window.location.search);
-                    window.location.href = '../../src/views/forms/donor-form-modal.php?source=' + currentPage;
-                }, 1500);
-            };
+            document.addEventListener('click', function(event) {
+                const viewBtn = event.target.closest('.view-user-btn');
+                if (viewBtn) {
+                    const dataset = viewBtn.dataset;
+                    showViewUserModal(
+                        dataset.userId || '',
+                        dataset.userName || '',
+                        dataset.userEmail || '',
+                        dataset.userRole || '',
+                        dataset.userStatus || '',
+                        dataset.userCreated || '',
+                        dataset.userLastLogin || ''
+                    );
+                    return;
+                }
+
+                const deactivateBtn = event.target.closest('.deactivate-user-btn');
+                if (deactivateBtn) {
+                    const dataset = deactivateBtn.dataset;
+                    showDeactivateModal(dataset.userId || '', dataset.userName || '');
+                    return;
+                }
+
+                const activateBtn = event.target.closest('.activate-user-btn');
+                if (activateBtn) {
+                    const dataset = activateBtn.dataset;
+                    showActivateModal(dataset.userId || '', dataset.userName || '');
+                    return;
+                }
+            });
         });
 
         // Show deactivate confirmation modal
@@ -918,11 +956,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             }
         });
     </script>
-
-    <?php
-    // NOTE: Mobile credentials modal is NOT shown on dashboards
-    // It should ONLY appear on the declaration form when registering a new donor
-    ?>
+    <script src="../../assets/js/admin-donor-registration-modal.js"></script>
 </body>
 </html>
 
