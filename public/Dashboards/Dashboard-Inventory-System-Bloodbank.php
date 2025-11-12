@@ -1,4 +1,9 @@
 <?php
+// Start session FIRST before any headers or output
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
+
 // Prevent browser caching
 header("Cache-Control: no-cache, no-store, must-revalidate");
 header("Pragma: no-cache");
@@ -1628,5 +1633,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         });
     </script>
     <script src="../../assets/js/admin-donor-registration-modal.js"></script>
+    <script src="../../assets/js/admin-screening-form-modal.js"></script>
 </body>
 </html>

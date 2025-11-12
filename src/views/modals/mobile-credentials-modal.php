@@ -6,9 +6,12 @@
  * for admin-registered donors after successful registration.
  */
 
-// Start session if not already started
-if (session_status() == PHP_SESSION_NONE) {
+// Start session if not already started and headers haven't been sent
+if (session_status() == PHP_SESSION_NONE && !headers_sent()) {
     session_start();
+} elseif (session_status() == PHP_SESSION_NONE && headers_sent()) {
+    // Headers already sent, cannot start session - log warning but continue
+    error_log("Mobile Credentials Modal - Warning: Cannot start session, headers already sent");
 }
 
 // Debug: Log that modal file was included

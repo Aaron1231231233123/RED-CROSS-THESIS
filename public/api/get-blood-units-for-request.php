@@ -78,15 +78,21 @@ try {
     $encodedTypes = array_map(function($t) { return rawurlencode($t); }, $compatible_types);
     $inFilter = 'in.(' . implode(',', $encodedTypes) . ')';
 
-    // Only include units collected within the last 45 days (oldest-first within valid window)
+    // Only include units collected within the last 45 days
     $threshold = gmdate('Y-m-d\TH:i:s\Z', strtotime('-45 days'));
+    
+    // Only include units that are NOT expired (expiration date >= today)
+    $today = gmdate('Y-m-d\TH:i:s\Z');
 
+    // Order by expiration date (nearest expiration first) - FIFO based on expiration
+    // This ensures we use blood that expires soonest first, but only if not expired
     $endpoint = "blood_bank_units"
         . "?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,hospital_request_id"
         . "&blood_type={$inFilter}"
         . "&status=eq.Valid&hospital_request_id=is.null"
         . "&collected_at=gte." . rawurlencode($threshold)
-        . "&order=collected_at.asc&limit={$needed_units}";
+        . "&expires_at=gte." . rawurlencode($today)
+        . "&order=expires_at.asc&limit={$needed_units}";
 
     $response = supabaseRequest($endpoint);
     if (isset($response['code']) && $response['code'] >= 200 && $response['code'] < 300 && isset($response['data'])) {

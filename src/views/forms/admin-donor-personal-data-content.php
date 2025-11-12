@@ -262,5 +262,31 @@ function adminRegistrationPrevSection(currentSection) {
         window.adminRegistrationPrevSection(currentSection);
     }
 }
+
+function adminRegistrationCalculateAge() {
+    const birthdateInput = document.getElementById('birthdate');
+    const ageInput = document.getElementById('age');
+    
+    if (!birthdateInput || !ageInput) {
+        return;
+    }
+    
+    if (!birthdateInput.value) {
+        ageInput.value = '';
+        return;
+    }
+    
+    const birthdate = new Date(birthdateInput.value);
+    const today = new Date();
+    
+    let age = today.getFullYear() - birthdate.getFullYear();
+    const monthDiff = today.getMonth() - birthdate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthdate.getDate())) {
+        age--;
+    }
+    
+    ageInput.value = age;
+}
 </script>
 

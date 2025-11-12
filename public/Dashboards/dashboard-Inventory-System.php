@@ -3120,6 +3120,7 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
     });
     </script>
     <script src="../../assets/js/admin-donor-registration-modal.js"></script>
+    <script src="../../assets/js/admin-screening-form-modal.js"></script>
 </body>
 </html>
 </body>

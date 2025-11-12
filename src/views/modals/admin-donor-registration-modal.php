@@ -36,6 +36,14 @@
 <!-- Include Mobile Credentials Modal -->
 <?php include 'mobile-credentials-modal.php'; ?>
 
+<!-- Include Admin Screening Form Modal -->
+<?php 
+$screeningModalPath = __DIR__ . '/../forms/admin_donor_initial_screening_form_modal.php';
+if (file_exists($screeningModalPath)) {
+    include $screeningModalPath;
+}
+?>
+
 <!-- Styles for the registration modal -->
 <style>
 /* Import styles from donor-form-modal for consistency */

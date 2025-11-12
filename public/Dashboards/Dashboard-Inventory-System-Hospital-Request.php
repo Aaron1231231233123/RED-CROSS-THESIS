@@ -2,6 +2,7 @@
 session_start();
 require_once '../../assets/conn/db_conn.php';
 require_once 'module/optimized_functions.php';
+require_once '../../assets/php_func/admin_hospital_request_priority_handler.php';
 // Send short-term caching headers for better performance on slow networks
 header('Cache-Control: public, max-age=180, stale-while-revalidate=60');
 header('Vary: Accept-Encoding');
@@ -182,22 +183,111 @@ $startTime = microtime(true);
 // Unified view: ignore status filters for this page and show all requests
 $status = 'all';
 
-function fetchAllBloodRequests($limit = 50, $offset = 0) {
-    // Narrow columns and paginate (urgent first, newest first)
-    $select = "request_id,hospital_admitted,patient_blood_type,rh_factor,units_requested,is_asap,requested_on,status,patient_name,patient_age,patient_gender,patient_diagnosis,physician_name,when_needed,handed_over_by,handed_over_date";
-    $endpoint = "blood_requests?select=" . urlencode($select) . "&order=is_asap.desc,requested_on.desc&limit={$limit}&offset={$offset}";
-    $response = supabaseRequest($endpoint);
-    if (isset($response['data'])) {
-        return $response['data'];
+function fetchAllBloodRequests($limit = 50, $offset = 0, &$totalCount = null) {
+    // First, get total count for pagination
+    $countResponse = supabaseRequest("blood_requests?select=request_id&limit=1");
+    // Get total count by fetching all (with reasonable limit)
+    $countEndpoint = "blood_requests?select=request_id";
+    $countResponse = supabaseRequest($countEndpoint);
+    $totalCount = isset($countResponse['data']) ? count($countResponse['data']) : 0;
+    
+    // If we need more accurate count, fetch in batches
+    if ($totalCount >= 1000) {
+        // Supabase has 1000 record limit, so we need to count differently
+        // For now, fetch all we can and estimate
+        $fetchLimit = 1000;
+    } else {
+        $fetchLimit = $totalCount;
     }
-    error_log("Error fetching all blood requests: " . ($response['error'] ?? 'Unknown error'));
-    return [];
+    
+    // Narrow columns - fetch all records for proper sorting
+    $select = "request_id,hospital_admitted,patient_blood_type,rh_factor,units_requested,is_asap,requested_on,status,patient_name,patient_age,patient_gender,patient_diagnosis,physician_name,when_needed,handed_over_by,handed_over_date";
+    $endpoint = "blood_requests?select=" . urlencode($select) . "&order=requested_on.desc&limit={$fetchLimit}&offset=0";
+    $response = supabaseRequest($endpoint);
+    if (!isset($response['data']) || empty($response['data'])) {
+        error_log("Error fetching all blood requests: " . ($response['error'] ?? 'Unknown error'));
+        $totalCount = 0;
+        return [];
+    }
+    
+    $allRequests = $response['data'];
+    $totalCount = count($allRequests); // Update with actual fetched count
+    
+    // Sort requests: Pending first (by when_needed deadline), then others
+    usort($allRequests, function($a, $b) {
+        $statusA = strtolower($a['status'] ?? '');
+        $statusB = strtolower($b['status'] ?? '');
+        $isPendingA = ($statusA === 'pending');
+        $isPendingB = ($statusB === 'pending');
+        
+        // Pending requests come first
+        if ($isPendingA && !$isPendingB) {
+            return -1;
+        }
+        if (!$isPendingA && $isPendingB) {
+            return 1;
+        }
+        
+        // If both are pending, sort by when_needed deadline (earliest first)
+        if ($isPendingA && $isPendingB) {
+            $whenNeededA = $a['when_needed'] ?? null;
+            $whenNeededB = $b['when_needed'] ?? null;
+            
+            // Handle null values - put nulls at the end
+            if ($whenNeededA === null && $whenNeededB === null) {
+                // If both null, sort by is_asap (ASAP first), then by requested_on
+                $asapA = !empty($a['is_asap']);
+                $asapB = !empty($b['is_asap']);
+                if ($asapA && !$asapB) return -1;
+                if (!$asapA && $asapB) return 1;
+                // Both same ASAP status, sort by requested_on (newest first)
+                $reqA = strtotime($a['requested_on'] ?? '1970-01-01');
+                $reqB = strtotime($b['requested_on'] ?? '1970-01-01');
+                return $reqB - $reqA;
+            }
+            if ($whenNeededA === null) return 1;
+            if ($whenNeededB === null) return -1;
+            
+            // Parse timestamps
+            $timeA = strtotime($whenNeededA);
+            $timeB = strtotime($whenNeededB);
+            
+            if ($timeA === false) return 1;
+            if ($timeB === false) return -1;
+            
+            // Primary sort: by when_needed (earliest deadline first)
+            if ($timeA !== $timeB) {
+                return $timeA - $timeB;
+            }
+            
+            // If same deadline, prioritize ASAP requests
+            $asapA = !empty($a['is_asap']);
+            $asapB = !empty($b['is_asap']);
+            if ($asapA && !$asapB) return -1;
+            if (!$asapA && $asapB) return 1;
+            
+            // If same deadline and same ASAP status, sort by requested_on (newest first)
+            $reqA = strtotime($a['requested_on'] ?? '1970-01-01');
+            $reqB = strtotime($b['requested_on'] ?? '1970-01-01');
+            return $reqB - $reqA;
+        }
+        
+        // For non-pending requests, sort by requested_on (newest first)
+        $reqA = strtotime($a['requested_on'] ?? '1970-01-01');
+        $reqB = strtotime($b['requested_on'] ?? '1970-01-01');
+        return $reqB - $reqA;
+    });
+    
+    // Apply pagination after sorting
+    return array_slice($allRequests, $offset, $limit);
 }
 
 $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
 $page_size = 12;
 $offset = ($page - 1) * $page_size;
-$blood_requests = fetchAllBloodRequests($page_size, $offset);
+$total_count = 0;
+$blood_requests = fetchAllBloodRequests($page_size, $offset, $total_count);
+$total_pages = $total_count > 0 ? ceil($total_count / $page_size) : 1;
 
 // Batch fetch handed-over user names to avoid N+1 queries
 $handed_over_name_map = [];
@@ -314,7 +404,13 @@ function fetchBloodUnitsForRequest($request_id) {
         }
         
         $blood_type_filter = implode(',', $blood_type_conditions);
-        $endpoint = "blood_bank_units?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,hospital_request_id&or=({$blood_type_filter})&status=eq.Valid&hospital_request_id=is.null&order=collected_at.asc&limit=" . $needed_units;
+        
+        // Only include units that are NOT expired (expiration date >= today)
+        $today = gmdate('Y-m-d\TH:i:s\Z');
+        
+        // Order by expiration date (nearest expiration first) - FIFO based on expiration
+        // This ensures we use blood that expires soonest first, but only if not expired
+        $endpoint = "blood_bank_units?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,hospital_request_id&or=({$blood_type_filter})&status=eq.Valid&hospital_request_id=is.null&expires_at=gte." . rawurlencode($today) . "&order=expires_at.asc&limit=" . $needed_units;
         
     $response = supabaseRequest($endpoint);
     if (isset($response['data'])) {
@@ -1088,6 +1184,211 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         100% { background-position: -100% 0; }
     }
 
+    /* Priority Styling for Hospital Requests - Whole Row Highlighting */
+    .priority-asap-urgent {
+        background-color: rgba(220, 53, 69, 0.12) !important;
+        border-left: 4px solid #dc3545 !important;
+    }
+
+    .priority-urgent {
+        background-color: rgba(220, 53, 69, 0.12) !important;
+        border-left: 4px solid #dc3545 !important;
+    }
+
+    .priority-normal {
+        background-color: rgba(13, 110, 253, 0.08) !important;
+        border-left: 4px solid #0d6efd !important;
+    }
+    
+    /* Ensure all cells in the row have the background */
+    #requestTable tbody tr.priority-asap-urgent td,
+    #requestTable tbody tr.priority-urgent td,
+    #requestTable tbody tr.priority-normal td {
+        background-color: transparent !important;
+    }
+
+    /* Pulse animation for critical items */
+    .priority-pulse {
+        animation: priorityPulse 2s ease-in-out infinite;
+    }
+
+    @keyframes priorityPulse {
+        0%, 100% {
+            box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4);
+        }
+        50% {
+            box-shadow: 0 0 0 4px rgba(220, 53, 69, 0);
+        }
+    }
+
+    /* Ensure text readability on colored backgrounds */
+    #requestTable tbody tr.priority-asap-urgent,
+    #requestTable tbody tr.priority-urgent,
+    #requestTable tbody tr.priority-normal {
+        color: #212529 !important;
+    }
+
+    #requestTable tbody tr.priority-asap-urgent:hover,
+    #requestTable tbody tr.priority-urgent:hover {
+        background-color: rgba(220, 53, 69, 0.18) !important;
+    }
+
+    #requestTable tbody tr.priority-normal:hover {
+        background-color: rgba(13, 110, 253, 0.12) !important;
+    }
+
+    /* Priority badge styling */
+    .priority-badge-cell {
+        vertical-align: middle;
+    }
+
+    /* Alert Container on Right Side */
+    #deadlineAlertContainer {
+        position: fixed;
+        right: 20px;
+        top: 100px;
+        width: 320px;
+        max-height: calc(100vh - 120px);
+        overflow-y: auto;
+        z-index: 9999 !important; /* High z-index to ensure it's above everything */
+        pointer-events: none;
+    }
+
+    /* Notification Badge */
+    #deadlineNotificationBadge {
+        position: fixed;
+        right: 20px;
+        top: 100px;
+        width: 50px;
+        height: 50px;
+        background: #dc3545;
+        border-radius: 50%;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+        z-index: 10000 !important;
+        transition: transform 0.2s, box-shadow 0.2s;
+        pointer-events: auto;
+    }
+    
+
+    #deadlineNotificationBadge:hover {
+        transform: scale(1.1);
+        box-shadow: 0 6px 16px rgba(220, 53, 69, 0.6);
+    }
+
+    #deadlineNotificationBadge i {
+        color: white;
+        font-size: 1.5rem;
+    }
+
+    #deadlineNotificationBadge .badge-count {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        background: #ffc107;
+        color: #000;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        font-weight: bold;
+        border: 2px solid #fff;
+    }
+
+    .deadline-alert {
+        pointer-events: auto;
+        background: #fff;
+        border-left: 4px solid #dc3545;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        margin-bottom: 12px;
+        padding: 12px 16px;
+        animation: slideInRight 0.3s ease-out;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        z-index: 10000 !important; /* Ensure alerts are above everything */
+        position: relative;
+    }
+
+    .deadline-alert:hover {
+        transform: translateX(-4px);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    .deadline-alert-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+
+    .deadline-alert-title {
+        font-weight: bold;
+        color: #dc3545;
+        font-size: 0.95rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .deadline-alert-title i {
+        font-size: 1.1rem;
+    }
+
+    .deadline-alert-close {
+        background: none;
+        border: none;
+        color: #6c757d;
+        font-size: 1.2rem;
+        cursor: pointer;
+        padding: 0;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+    }
+
+    .deadline-alert-close:hover {
+        color: #dc3545;
+    }
+
+    .deadline-alert-body {
+        font-size: 0.85rem;
+        color: #495057;
+        line-height: 1.4;
+    }
+
+    .deadline-alert-body strong {
+        color: #212529;
+    }
+
+    @keyframes slideInRight {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    @media (max-width: 768px) {
+        #deadlineAlertContainer {
+            width: 280px;
+            right: 10px;
+            top: 80px;
+        }
+    }
+
     </style>
     <script>
     (function() {
@@ -1253,7 +1554,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             </div>
             <?php endif; ?>
 
-            
+            <!-- Deadline Alert Container (Right Side) -->
+            <div id="deadlineAlertContainer"></div>
+            <!-- Deadline Notification Badge -->
+            <div id="deadlineNotificationBadge" title="Click to view dismissed deadline alerts">
+                <i class="fas fa-bell"></i>
+                <span class="badge-count" id="deadlineNotificationCount">0</span>
+            </div>
             
             <div class="container-fluid p-3 email-container">
                 <h2 class="text-left">
@@ -1325,7 +1632,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     <table class="table table-striped table-hover" id="requestTable">
                         <thead class="table-dark">
                             <tr>
-                                <th style="width:32px;"></th>
                                 <th>No.</th>
                                 <th>Request ID</th>
                                 <th>Hospital</th>
@@ -1344,13 +1650,25 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 $priority_display = $request['is_asap'] ? 'Urgent' : 'Routine';
                                 $requested_on = $request['requested_on'] ? date('Y-m-d', strtotime($request['requested_on'])) : '-';
                                 $is_asap = !empty($request['is_asap']);
+                                
+                                // Calculate priority for this request
+                                $priority_data = calculateHospitalRequestPriority(
+                                    $is_asap,
+                                    $request['when_needed'] ?? null,
+                                    $request['status'] ?? 'pending'
+                                );
                             ?>
-                            <tr>
-                                <td style="text-align:center;">
-                                    <?php if ($is_asap && strtolower($request['status']) === 'pending'): ?>
-                                        <img src="../assets/img/icons8-warning-96.png" alt="Urgent" style="height:20px; width:20px;" loading="lazy" />
-                                    <?php endif; ?>
-                                </td>
+                            <tr data-is-asap="<?php echo $is_asap ? 'true' : 'false'; ?>"
+                                data-when-needed="<?php echo htmlspecialchars($request['when_needed'] ?? ''); ?>"
+                                data-status="<?php echo htmlspecialchars($request['status'] ?? 'pending'); ?>"
+                                data-priority-class="<?php echo htmlspecialchars($priority_data['urgency_class']); ?>"
+                                data-is-urgent="<?php echo $priority_data['is_urgent'] ? 'true' : 'false'; ?>"
+                                data-is-critical="<?php echo $priority_data['is_critical'] ? 'true' : 'false'; ?>"
+                                data-time-remaining="<?php echo htmlspecialchars($priority_data['time_remaining']); ?>"
+                                data-priority-level="<?php echo $priority_data['priority_level']; ?>"
+                                data-is-one-day-before="<?php echo isset($priority_data['is_one_day_before']) && $priority_data['is_one_day_before'] ? 'true' : 'false'; ?>"
+                                data-request-id="<?php echo htmlspecialchars($request['request_id']); ?>"
+                                data-hospital-name="<?php echo htmlspecialchars($hospital_name); ?>">
                                 <td><?php echo $rowNum++; ?></td>
                                 <td><?php echo htmlspecialchars($request['request_id']); ?></td>
                                 <td><?php echo htmlspecialchars($hospital_name); ?></td>
@@ -1367,7 +1685,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     } elseif ($status_val === 'approved') {
                                         echo '<span class="badge bg-success">Approved</span>';
                                     } elseif ($status_val === 'printed') {
-                                        echo '<span class="badge bg-info text-dark">Printed</span>';
+                                        echo '<span class="badge bg-success">Approved</span>';
                                     } elseif ($status_val === 'completed') {
                                         echo '<span class="badge bg-success">Completed</span>';
                                     } elseif ($status_val === 'declined') {
@@ -1411,14 +1729,74 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <?php endforeach; ?>
                         </tbody>
                     </table>
-                    <div class="d-flex justify-content-end gap-2 mt-2">
-                        <?php if ($page > 1): ?>
-                            <a class="btn btn-outline-secondary btn-sm" href="?page=<?php echo $page-1; ?>">Prev</a>
-                        <?php endif; ?>
-                        <?php if (count($blood_requests) === $page_size): ?>
-                            <a class="btn btn-outline-secondary btn-sm" href="?page=<?php echo $page+1; ?>">Next</a>
-                        <?php endif; ?>
-                    </div>
+                    <!-- Pagination -->
+                    <nav aria-label="Page navigation" class="mt-3">
+                        <ul class="pagination justify-content-center">
+                            <?php if ($page > 1): ?>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=1" aria-label="First">
+                                        <span aria-hidden="true">&laquo;&laquo;</span>
+                                    </a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=<?php echo $page-1; ?>" aria-label="Previous">
+                                        <span aria-hidden="true">&laquo;</span>
+                                    </a>
+                                </li>
+                            <?php else: ?>
+                                <li class="page-item disabled">
+                                    <span class="page-link">&laquo;&laquo;</span>
+                                </li>
+                                <li class="page-item disabled">
+                                    <span class="page-link">&laquo;</span>
+                                </li>
+                            <?php endif; ?>
+                            
+                            <?php
+                            // Calculate page range to show
+                            $start_page = max(1, $page - 2);
+                            $end_page = min($total_pages, $page + 2);
+                            
+                            // Adjust if we're near the start
+                            if ($page <= 3) {
+                                $end_page = min($total_pages, 5);
+                            }
+                            // Adjust if we're near the end
+                            if ($page >= $total_pages - 2) {
+                                $start_page = max(1, $total_pages - 4);
+                            }
+                            
+                            for ($i = $start_page; $i <= $end_page; $i++):
+                            ?>
+                                <li class="page-item <?php echo $i === $page ? 'active' : ''; ?>">
+                                    <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                </li>
+                            <?php endfor; ?>
+                            
+                            <?php if ($page < $total_pages): ?>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=<?php echo $page+1; ?>" aria-label="Next">
+                                        <span aria-hidden="true">&raquo;</span>
+                                    </a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=<?php echo $total_pages; ?>" aria-label="Last">
+                                        <span aria-hidden="true">&raquo;&raquo;</span>
+                                    </a>
+                                </li>
+                            <?php else: ?>
+                                <li class="page-item disabled">
+                                    <span class="page-link">&raquo;</span>
+                                </li>
+                                <li class="page-item disabled">
+                                    <span class="page-link">&raquo;&raquo;</span>
+                                </li>
+                            <?php endif; ?>
+                        </ul>
+                        <div class="text-center text-muted small mt-2">
+                            Showing <?php echo $offset + 1; ?> to <?php echo min($offset + $page_size, $total_count); ?> of <?php echo $total_count; ?> requests
+                        </div>
+                    </nav>
                 </div>
                 <?php endif; ?>
             </div>
@@ -1593,9 +1971,44 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body" style="padding: 25px;">
-                    <p id="approveConfirmText" style="margin: 0; font-size: 1rem; color: #333;">
+                    <p id="approveConfirmText" style="margin: 0 0 20px 0; font-size: 1rem; color: #333; line-height: 1.6;">
                         Are you sure you want to approve this blood request? The requested units will be prepared for handover.
                     </p>
+                    
+                    <!-- Blood Type Information - Smooth integrated design -->
+                    <div id="approveBloodTypeInfo" style="display: none; margin-bottom: 15px;">
+                        <div style="background: linear-gradient(135deg, #e3f2fd 0%, #f0f8ff 100%); border-left: 3px solid #2196f3; padding: 12px 16px; border-radius: 6px; margin-bottom: 0;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                                <i class="fas fa-tint" style="color: #2196f3; font-size: 1rem;"></i>
+                                <span style="font-weight: 600; color: #1976d2; font-size: 0.95rem;">Blood Type Required:</span>
+                                <span id="approveBloodTypeNeeded" style="font-weight: bold; color: #1565c0; font-size: 1rem;">-</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                                <i class="fas fa-boxes" style="color: #2196f3; font-size: 0.9rem;"></i>
+                                <span style="font-weight: 600; color: #1976d2; font-size: 0.95rem;">Available Units:</span>
+                                <span id="approveAvailableUnits" style="font-weight: bold; color: #1565c0;">-</span>
+                                <span style="color: #666; font-size: 0.9rem;">/</span>
+                                <span id="approveRequiredUnits" style="font-weight: bold; color: #1565c0;">-</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- No Blood Available Alert - Smooth integrated design -->
+                    <div id="approveNoBloodAlert" style="display: none; margin-bottom: 15px;">
+                        <div style="background: linear-gradient(135deg, #ffebee 0%, #fce4ec 100%); border-left: 3px solid #f44336; padding: 12px 16px; border-radius: 6px; margin-bottom: 0;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                                <i class="fas fa-exclamation-triangle" style="color: #f44336; font-size: 1rem;"></i>
+                                <span style="font-weight: 600; color: #c62828; font-size: 0.95rem;">Insufficient Blood Supply</span>
+                            </div>
+                            <p id="approveNoBloodMessage" style="margin: 4px 0 0 0; color: #b71c1c; font-size: 0.9rem; line-height: 1.5;"></p>
+                        </div>
+                    </div>
+                    
+                    <!-- Loading State -->
+                    <div id="approveLoadingState" class="text-center" style="padding: 20px;">
+                        <i class="fas fa-spinner fa-spin fa-2x text-primary"></i>
+                        <p class="mt-2 text-muted" style="font-size: 0.9rem;">Checking blood availability...</p>
+                    </div>
                 </div>
                 <div class="modal-footer" style="padding: 20px 25px; border-top: 1px solid #ddd;">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="padding: 8px 20px; font-weight: bold;">Cancel</button>
@@ -1893,7 +2306,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 displayStatus = 'Approved';
                 break;
             case 'printed':
-                displayStatus = 'Printing';
+                displayStatus = 'Approved'; // Show Printed status as Approved
                 break;
             case 'completed':
                 displayStatus = 'Handed-Over';
@@ -1923,10 +2336,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 break;
             case 'Approved':
                 statusBadge.style.background = '#28a745';
-                statusBadge.style.color = '#fff';
-                break;
-            case 'Printing':
-                statusBadge.style.background = '#17a2b8';
                 statusBadge.style.color = '#fff';
                 break;
             case 'Handed-Over':
@@ -1960,28 +2369,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 declineButton.style.display = 'inline-block';
                 handOverButton.style.display = 'none';
             }
-            // Show approval info for Approved status (no action buttons)
+            // Show approval info for Approved status (includes both 'approved' and 'printed' database statuses)
             else if (['Approved'].includes(displayStatus)) {
                 acceptButton.style.display = 'none';
                 declineButton.style.display = 'none';
-                handOverButton.style.display = 'none';
-                if (approvalSection) {
-                    approvalSection.style.display = 'block';
-                    document.getElementById('modalApprovedBy').value = `Approved by ${adminName} - ${new Date().toLocaleDateString('en-US', { 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric' 
-                    })} at ${new Date().toLocaleTimeString('en-US', { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                    })}`;
+                // Show Hand Over button for Printed status (ready for handover), hide for Approved
+                if (status.toLowerCase() === 'printed') {
+                    handOverButton.style.display = 'inline-block';
+                } else {
+                    handOverButton.style.display = 'none';
                 }
-            }
-            // Show Hand Over button for Printed status (ready for handover)
-            else if (['Printing'].includes(displayStatus)) {
-                acceptButton.style.display = 'none';
-                declineButton.style.display = 'none';
-                handOverButton.style.display = 'inline-block';
                 if (approvalSection) {
                     approvalSection.style.display = 'block';
                     document.getElementById('modalApprovedBy').value = `Approved by ${adminName} - ${new Date().toLocaleDateString('en-US', { 
@@ -2258,10 +2655,66 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
         // Approve Request button logic
         document.getElementById('modalAcceptButton').addEventListener('click', function() {
+            // Get request ID
+            var requestId = document.getElementById('modalRequestId').value;
+            
+            // Show loading state in approve modal
+            document.getElementById('approveLoadingState').style.display = 'block';
+            document.getElementById('approveBloodTypeInfo').style.display = 'none';
+            document.getElementById('approveNoBloodAlert').style.display = 'none';
+            document.getElementById('confirmApproveBtn').disabled = true;
+            
             // Hide the main modal and show approval confirmation
             requestDetailsModal.hide();
             setTimeout(() => {
                 approveConfirmModal.show();
+                
+                // Fetch blood units for this request (same as handover)
+                fetchJson(`../api/get-blood-units-for-request.php?request_id=${encodeURIComponent(requestId)}&t=${Date.now()}`)
+                    .then(data => {
+                        // Hide loading
+                        document.getElementById('approveLoadingState').style.display = 'none';
+                        
+                        if (data.success) {
+                            const bloodTypeNeeded = data.request.blood_type_needed || '-';
+                            const availableUnits = data.total_units || 0;
+                            const requiredUnits = data.request.units_requested || 0;
+                            
+                            // Show blood type info
+                            document.getElementById('approveBloodTypeNeeded').textContent = bloodTypeNeeded;
+                            document.getElementById('approveAvailableUnits').textContent = availableUnits;
+                            document.getElementById('approveRequiredUnits').textContent = requiredUnits;
+                            document.getElementById('approveBloodTypeInfo').style.display = 'block';
+                            
+                            // Check if sufficient blood available
+                            if (availableUnits >= requiredUnits) {
+                                // Sufficient blood - enable approve button
+                                document.getElementById('confirmApproveBtn').disabled = false;
+                                document.getElementById('approveNoBloodAlert').style.display = 'none';
+                            } else {
+                                // Insufficient blood - show alert and disable button
+                                document.getElementById('approveNoBloodMessage').textContent = 
+                                    `Cannot approve Request #${requestId}. Required: ${requiredUnits} units of ${bloodTypeNeeded}, but only ${availableUnits} unit(s) available.`;
+                                document.getElementById('approveNoBloodAlert').style.display = 'block';
+                                document.getElementById('confirmApproveBtn').disabled = true;
+                            }
+                        } else {
+                            // Error fetching blood units
+                            document.getElementById('approveNoBloodMessage').textContent = 
+                                'Unable to check blood availability. Please try again.';
+                            document.getElementById('approveNoBloodAlert').style.display = 'block';
+                            document.getElementById('confirmApproveBtn').disabled = true;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        // Hide loading
+                        document.getElementById('approveLoadingState').style.display = 'none';
+                        document.getElementById('approveNoBloodMessage').textContent = 
+                            'Error checking blood availability: ' + (error.message || 'Unknown error');
+                        document.getElementById('approveNoBloodAlert').style.display = 'block';
+                        document.getElementById('confirmApproveBtn').disabled = true;
+                    });
             }, 300);
         });
 
@@ -2449,5 +2902,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     });
     </script>
     <script src="../../assets/js/admin-donor-registration-modal.js"></script>
+    <script src="../../assets/js/admin-screening-form-modal.js"></script>
+    <script src="../../assets/js/admin-hospital-request-priority-handler.js"></script>
 </body>
 </html>

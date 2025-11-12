@@ -49,7 +49,6 @@
             }
 
             document.head.appendChild(newScript);
-            document.head.removeChild(newScript);
         });
     }
 

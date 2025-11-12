@@ -2,6 +2,7 @@
 session_start();
 require_once '../../assets/conn/db_conn.php';
 require_once '../../assets/php_func/check_account_hospital_modal.php';
+require_once '../../assets/php_func/hospital_request_diagnosis_options.php';
 
 // Function to fetch ALL blood requests from Supabase (no filtering)
 function fetchBloodRequests($user_id) {
@@ -83,6 +84,7 @@ if (!empty($blood_requests) && is_array($blood_requests)) {
         }
     }
 }
+$hospital_location = $_SESSION['hospital_location'] ?? ($_SESSION['hospital_name'] ?? ($_SESSION['user_first_name'] ?? ''));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -145,6 +147,73 @@ if (!empty($blood_requests) && is_array($blood_requests)) {
         }
         #bloodRequestModal .form-control, #bloodRequestModal .form-select {
             border-radius: 8px;
+        }
+        
+        /* Diagnosis Dropdown Styling */
+        #bloodRequestModal #patient_diagnosis {
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin: 8px 0;
+            border: 1px solid #dee2e6;
+            background-color: #fff;
+            transition: all 0.3s ease;
+            outline: none !important;
+        }
+        
+        #bloodRequestModal #patient_diagnosis:hover {
+            border-color: #941022;
+            background-color: #fff;
+            outline: none !important;
+            box-shadow: none;
+        }
+        
+        #bloodRequestModal #patient_diagnosis:focus {
+            border-color: #941022;
+            box-shadow: 0 0 0 0.2rem rgba(148, 16, 34, 0.25);
+            outline: none !important;
+            background-color: #fff;
+        }
+        
+        #bloodRequestModal #patient_diagnosis:active {
+            border-color: #941022;
+            outline: none !important;
+            background-color: #fff;
+        }
+        
+        #bloodRequestModal #patient_diagnosis option {
+            padding: 12px 16px;
+            margin: 4px 0;
+            border-radius: 8px;
+            background-color: #fff;
+            transition: background-color 0.2s ease;
+        }
+        
+        #bloodRequestModal #patient_diagnosis option:hover {
+            background-color: #f8f9fa !important;
+            color: #212529 !important;
+        }
+        
+        #bloodRequestModal #patient_diagnosis option:checked,
+        #bloodRequestModal #patient_diagnosis option:focus {
+            background-color: #941022 !important;
+            color: #fff !important;
+            font-weight: 600;
+        }
+        
+        /* Prevent browser default blue styling on hover */
+        #bloodRequestModal #patient_diagnosis * {
+            color: inherit !important;
+        }
+        
+        #bloodRequestModal #patient_diagnosis optgroup {
+            padding: 8px 0;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        #bloodRequestModal #patient_diagnosis optgroup option {
+            padding-left: 24px;
+            font-weight: normal;
         }
         #bloodRequestModal .table thead th {
             background-color: #941022;
@@ -948,7 +1017,12 @@ th {
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Diagnosis</label>
-                        <input type="text" class="form-control" name="patient_diagnosis" placeholder="e.g., T/E, FTE, Septic Shock" required>
+                        <?php echo renderDiagnosisDropdown('', 'patient_diagnosis', 'patient_diagnosis', true); ?>
+                    </div>
+                    <!-- Other Diagnosis Input (shown when "Other" is selected) -->
+                    <div class="mb-3 d-none" id="other_diagnosis_container">
+                        <label class="form-label" for="other_diagnosis_input">Please specify:</label>
+                        <input type="text" class="form-control" id="other_diagnosis_input" name="other_diagnosis" placeholder="Enter diagnosis details">
                     </div>
 
                     </div>
@@ -976,23 +1050,24 @@ th {
                             </select>
                         </div>
                     </div>
-                    <div class="mb-3 row gx-3">
-                        <div class="col-md-4">
-                            <label class="form-label">Component</label>
-                            <input type="hidden" name="blood_component" value="Whole Blood">
-                            <input type="text" class="form-control" value="Whole Blood" readonly style="width: 105%;">
-                        </div>
-                        <div class="col-md-4">
+                    <input type="hidden" name="blood_component" value="Whole Blood">
+                    <div class="mb-3 row gx-3 align-items-end">
+                        <div class="col-md-6">
                             <label class="form-label">Number of Units</label>
-                            <input type="number" class="form-control" name="units_requested" min="1" required style="width: 105%;">
+                            <input type="number" class="form-control" name="units_requested" min="1" required>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="form-label">When Needed</label>
-                            <select id="whenNeeded" class="form-select" name="when_needed" required style="width: 105%;">
+                            <select id="whenNeeded" class="form-select" name="when_needed" required>
                                 <option value="ASAP">ASAP</option>
                                 <option value="Scheduled">Scheduled</option>
                             </select>
                         </div>
+                    </div>
+                    <!-- Location field hidden in form, shown only in review -->
+                    <div class="mb-3 d-none">
+                        <label class="form-label">Location</label>
+                        <input type="text" class="form-control" value="<?php echo htmlspecialchars($hospital_location); ?>" readonly>
                     </div>
                     <div id="scheduleDateTime" class="mb-3 d-none">
                         <label class="form-label">Scheduled Date & Time</label>
@@ -1000,7 +1075,7 @@ th {
                     </div>
 
                     <!-- Additional Information (hidden in step UI; shown in summary only) -->
-                    <input type="hidden" name="hospital_admitted" value="<?php echo $_SESSION['user_first_name'] ?? ''; ?>">
+                    <input type="hidden" name="hospital_admitted" value="<?php echo htmlspecialchars($hospital_location); ?>">
                     <input type="hidden" name="physician_name" value="<?php echo $_SESSION['user_surname'] ?? ''; ?>">
                     </div>
 
@@ -1021,7 +1096,7 @@ th {
                             <div class="col-12">
                                 <h6 class="fw-bold mt-2">Additional Information</h6>
                                 <div class="list-group">
-                                    <div class="list-group-item"><strong>Hospital Admitted:</strong> <span id="reviewHospital"></span></div>
+                                    <div class="list-group-item"><strong>Location:</strong> <span id="reviewHospital"></span></div>
                                     <div class="list-group-item"><strong>Requesting Physician:</strong> <span id="reviewPhysician"></span></div>
                                 </div>
                             </div>
@@ -1238,6 +1313,8 @@ th {
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script type="module" src="../../assets/js/handed-over-notify.js"></script>
+    <!-- Hospital Request Diagnosis Handler -->
+    <script src="../../assets/js/hospital-request-diagnosis-handler.js"></script>
 
     <script>
         // Configure one-time per-account notification for Handed_over (handled in external module)
@@ -1401,13 +1478,22 @@ document.addEventListener("DOMContentLoaded", function () {
             whenNeededElement.addEventListener('change', function() {
                 var scheduleDateTime = document.getElementById('scheduleDateTime');
                 if (scheduleDateTime) {
-                    if (this.value === 'Scheduled') { // Ensure it matches exactly
+                    if (this.value === 'Scheduled' || this.value === 'ASAP') { // Show for both Scheduled and ASAP
                         scheduleDateTime.classList.remove('d-none'); // Show the date picker
                         scheduleDateTime.style.opacity = 0;
                         setTimeout(() => scheduleDateTime.style.opacity = 1, 10); // Smooth fade-in
+                        const dateInput = scheduleDateTime.querySelector('input');
+                        if (dateInput) {
+                            dateInput.required = true;
+                        }
                     } else {
                         scheduleDateTime.style.opacity = 0;
                         setTimeout(() => scheduleDateTime.classList.add('d-none'), 500); // Hide after fade-out
+                        const dateInput = scheduleDateTime.querySelector('input');
+                        if (dateInput) {
+                            dateInput.required = false;
+                            dateInput.value = '';
+                        }
                     }
                 }
             });
@@ -1536,7 +1622,21 @@ document.addEventListener("DOMContentLoaded", function () {
             const patient = (first || mi || last) ? `${first}${mi ? ' ' + mi + '.' : ''} ${last}`.trim() : (get('patient_name')?.value || '');
             const age = get('patient_age')?.value || '';
             const gender = get('patient_gender')?.value || '';
-            const diagnosis = get('patient_diagnosis')?.value || '';
+            // Handle diagnosis - check if it's a select dropdown or input, and handle "Other"
+            const diagnosisSelect = modalEl.querySelector('#patient_diagnosis');
+            const otherDiagnosisInput = modalEl.querySelector('#other_diagnosis_input');
+            let diagnosis = '';
+            if (diagnosisSelect) {
+                diagnosis = diagnosisSelect.value || '';
+                if (diagnosis === 'Other' && otherDiagnosisInput && otherDiagnosisInput.value.trim()) {
+                    diagnosis = `Other: ${otherDiagnosisInput.value.trim()}`;
+                } else if (diagnosisSelect.options[diagnosisSelect.selectedIndex]) {
+                    // Get the display label instead of value
+                    diagnosis = diagnosisSelect.options[diagnosisSelect.selectedIndex].text || diagnosis;
+                }
+            } else {
+                diagnosis = get('patient_diagnosis')?.value || '';
+            }
             const bt = get('patient_blood_type')?.value || '';
             const rh = get('rh_factor')?.value || '';
             const units = get('units_requested')?.value || '';
@@ -1559,8 +1659,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     '[name="patient_first_name"]',
                     '[name="patient_last_name"]',
                     '[name="patient_age"]',
-                    '[name="patient_gender"]',
-                    '[name="patient_diagnosis"]'
+                    '[name="patient_gender"]'
                 ];
                 for (const sel of requiredFields) {
                     const el = modalEl.querySelector(sel);
@@ -1570,6 +1669,28 @@ document.addEventListener("DOMContentLoaded", function () {
                         if (body) { body.textContent = 'Please complete all required fields on this step before continuing.'; }
                         msgModal.show();
                         el.focus();
+                        return;
+                    }
+                }
+                // Validate diagnosis dropdown
+                const diagnosisSelect = modalEl.querySelector('#patient_diagnosis');
+                if (!diagnosisSelect || !diagnosisSelect.value) {
+                    const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
+                    const body = document.getElementById('actionResultBody');
+                    if (body) { body.textContent = 'Please select a diagnosis before continuing.'; }
+                    msgModal.show();
+                    diagnosisSelect?.focus();
+                    return;
+                }
+                // If "Other" is selected, validate the other diagnosis input
+                if (diagnosisSelect.value === 'Other') {
+                    const otherInput = modalEl.querySelector('#other_diagnosis_input');
+                    if (!otherInput || !otherInput.value.trim()) {
+                        const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
+                        const body = document.getElementById('actionResultBody');
+                        if (body) { body.textContent = 'Please specify the diagnosis details for "Other" option.'; }
+                        msgModal.show();
+                        otherInput?.focus();
                         return;
                     }
                 }
@@ -1598,7 +1719,41 @@ document.addEventListener("DOMContentLoaded", function () {
             if (current > 0) { current--; updateUI(); }
         });
 
-        modalEl.addEventListener('shown.bs.modal', function(){ current = 0; updateUI(); });
+        modalEl.addEventListener('shown.bs.modal', function(){ 
+            current = 0; 
+            updateUI(); 
+            // Reset diagnosis handler state when modal opens
+            const diagnosisSelect = modalEl.querySelector('#patient_diagnosis');
+            const whenNeededSelect = modalEl.querySelector('#whenNeeded');
+            const otherDiagnosisContainer = modalEl.querySelector('#other_diagnosis_container');
+            const scheduleDateTimeDiv = modalEl.querySelector('#scheduleDateTime');
+            if (diagnosisSelect) {
+                diagnosisSelect.value = '';
+                if (whenNeededSelect) {
+                    whenNeededSelect.disabled = false;
+                    whenNeededSelect.value = '';
+                    whenNeededSelect.style.cursor = 'pointer';
+                    whenNeededSelect.style.opacity = '1';
+                }
+                if (otherDiagnosisContainer) {
+                    otherDiagnosisContainer.classList.add('d-none');
+                    const otherInput = otherDiagnosisContainer.querySelector('input');
+                    if (otherInput) {
+                        otherInput.value = '';
+                        otherInput.required = false;
+                    }
+                }
+                if (scheduleDateTimeDiv) {
+                    scheduleDateTimeDiv.classList.add('d-none');
+                    scheduleDateTimeDiv.style.opacity = 0;
+                    const dateInput = scheduleDateTimeDiv.querySelector('input');
+                    if (dateInput) {
+                        dateInput.value = '';
+                        dateInput.required = false;
+                    }
+                }
+            }
+        });
     });
 
     document.addEventListener('DOMContentLoaded', function() {
@@ -1635,6 +1790,20 @@ document.addEventListener("DOMContentLoaded", function () {
                     this.querySelector('[name="patient_name"]').value = fullName;
                     formData.set('patient_name', fullName);
                 } catch (_) {}
+                
+                // Handle diagnosis - combine with "Other" specification if applicable
+                const diagnosisSelect = document.getElementById('patient_diagnosis');
+                const otherDiagnosisInput = document.getElementById('other_diagnosis_input');
+                if (diagnosisSelect && diagnosisSelect.value === 'Other' && otherDiagnosisInput) {
+                    const otherValue = otherDiagnosisInput.value.trim();
+                    if (otherValue) {
+                        formData.set('patient_diagnosis', `Other: ${otherValue}`);
+                    } else {
+                        formData.set('patient_diagnosis', 'Other');
+                    }
+                } else if (diagnosisSelect) {
+                    formData.set('patient_diagnosis', diagnosisSelect.value);
+                }
                 
                 // Handle "when needed" logic
                 const whenNeeded = document.getElementById('whenNeeded').value;
@@ -1776,15 +1945,22 @@ document.addEventListener("DOMContentLoaded", function () {
         
         if (whenNeededSelect && scheduleDateTimeDiv) {
             whenNeededSelect.addEventListener('change', function() {
-                if (this.value === 'Scheduled') {
+                if (this.value === 'Scheduled' || this.value === 'ASAP') {
                     scheduleDateTimeDiv.classList.remove('d-none');
                     scheduleDateTimeDiv.style.opacity = 1;
-                    scheduleDateTimeDiv.querySelector('input').required = true;
+                    const dateInput = scheduleDateTimeDiv.querySelector('input');
+                    if (dateInput) {
+                        dateInput.required = true;
+                    }
                 } else {
                     scheduleDateTimeDiv.style.opacity = 0;
                     setTimeout(() => {
                         scheduleDateTimeDiv.classList.add('d-none');
-                        scheduleDateTimeDiv.querySelector('input').required = false;
+                        const dateInput = scheduleDateTimeDiv.querySelector('input');
+                        if (dateInput) {
+                            dateInput.required = false;
+                            dateInput.value = '';
+                        }
                     }, 500);
                 }
             });
