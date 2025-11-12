@@ -47,11 +47,19 @@ $action = isset($_POST['action']) ? $_POST['action'] : '';
 try {
     if ($step === 1) {
         // Handle Personal Data submission
-        // Validate required fields
-        $requiredFields = ['surname', 'first_name', 'birthdate', 'age', 'sex', 'civil_status', 'permanent_address', 'mobile', 'email'];
+        // Validate required fields (excluding permanent_address - it will be built from components)
+        $requiredFields = ['surname', 'first_name', 'birthdate', 'age', 'sex', 'civil_status', 'nationality', 'religion', 'education', 'occupation', 'mobile', 'email'];
         $missingFields = [];
         
         foreach ($requiredFields as $field) {
+            if (!isset($_POST[$field]) || trim($_POST[$field]) === '') {
+                $missingFields[] = $field;
+            }
+        }
+        
+        // Validate required address components
+        $requiredAddressFields = ['barangay', 'town_municipality', 'province_city'];
+        foreach ($requiredAddressFields as $field) {
             if (!isset($_POST[$field]) || trim($_POST[$field]) === '') {
                 $missingFields[] = $field;
             }
@@ -61,25 +69,35 @@ try {
             throw new Exception("Missing required fields: " . implode(', ', $missingFields));
         }
         
-        // Build permanent address from components
-        $permanent_address = '';
+        // Build permanent address from components (same order as original form)
+        // Order: House/Unit No., Street, Barangay, Town/Municipality, Province/City, ZIP Code
+        $addressParts = [];
+        
         if (!empty($_POST['address_no'])) {
-            $permanent_address = $_POST['address_no'];
+            $addressParts[] = trim($_POST['address_no']);
         }
         if (!empty($_POST['street'])) {
-            $permanent_address .= ($permanent_address ? ", " : "") . $_POST['street'];
-        }
-        if (!empty($_POST['zip_code'])) {
-            $permanent_address .= ($permanent_address ? ", " : "") . $_POST['zip_code'];
+            $addressParts[] = trim($_POST['street']);
         }
         if (!empty($_POST['barangay'])) {
-            $permanent_address .= ($permanent_address ? ", " : "") . $_POST['barangay'];
+            $addressParts[] = trim($_POST['barangay']);
         }
         if (!empty($_POST['town_municipality'])) {
-            $permanent_address .= ($permanent_address ? ", " : "") . $_POST['town_municipality'];
+            $addressParts[] = trim($_POST['town_municipality']);
         }
         if (!empty($_POST['province_city'])) {
-            $permanent_address .= ($permanent_address ? ", " : "") . $_POST['province_city'];
+            $addressParts[] = trim($_POST['province_city']);
+        }
+        if (!empty($_POST['zip_code'])) {
+            $addressParts[] = trim($_POST['zip_code']);
+        }
+        
+        // Join all address parts with commas
+        $permanent_address = implode(', ', $addressParts);
+        
+        // Ensure permanent_address is not empty after building
+        if (empty($permanent_address)) {
+            throw new Exception("Permanent address could not be constructed from address components");
         }
         
         // Prepare data
