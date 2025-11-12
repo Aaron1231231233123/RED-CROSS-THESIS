@@ -2453,10 +2453,6 @@ foreach ($display_records as $index => $record) {
                     </div>
                     <div class="blood-step" data-step="4">
                         <div class="blood-step-number">4</div>
-                        <div class="blood-step-label">Results</div>
-                    </div>
-                    <div class="blood-step" data-step="5">
-                        <div class="blood-step-number">5</div>
                         <div class="blood-step-label">Review & Submit</div>
                     </div>
                 </div>
@@ -2643,64 +2639,19 @@ foreach ($display_records as $index => $record) {
                     <input type="hidden" name="amount_taken" value="1">
                 </div>
 
-                <!-- Step 4: Collection Results -->
+                <!-- Step 4: Review & Submit -->
                 <div class="blood-step-content" id="blood-step-4">
-                    <h4>Step 4: Collection Results</h4>
-                    <p class="text-muted">Indicate collection outcome</p>
+                    <h4>Step 4: Review & Submit</h4>
+                    <p class="text-muted">Review all information before submitting</p>
                     
-                    <div class="row">
-                        <div class="col-md-12 mb-3">
-                            <label class="form-label">Collection Status *</label>
-                            <div class="blood-status-options">
-                                <label class="blood-status-card">
-                                    <input type="radio" name="is_successful" value="YES" required>
-                                    <div class="blood-status-content">
-                                        <span>Successful</span>
-                                    </div>
-                                </label>
-                                <label class="blood-status-card">
-                                    <input type="radio" name="is_successful" value="NO" required>
-                                    <div class="blood-status-content">
-                                        <span>Failed</span>
-                                    </div>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
+                    <!-- Hidden field for is_successful - always true by default -->
+                    <input type="hidden" name="is_successful" value="YES">
+                    
                     <!-- Hidden unit serial number for form submission -->
                     <input type="hidden" id="blood-unit-serial" name="unit_serial_number">
 
                     <!-- Hidden phlebotomist (auto-filled from logged-in user) -->
                     <input type="hidden" id="blood-phlebotomist" name="phlebotomist">
-
-                    <!-- Reaction Section (Show only if failed) -->
-                    <div class="blood-reaction-section" style="display: none;">
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="blood-donor-reaction" class="form-label">Donor Reaction</label>
-                                <textarea class="form-control" 
-                                          id="blood-donor-reaction" 
-                                          name="donor_reaction" 
-                                          rows="4" 
-                                          placeholder="Describe any reactions observed"></textarea>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="blood-management-done" class="form-label">Management Done</label>
-                                <textarea class="form-control" 
-                                          id="blood-management-done" 
-                                          name="management_done" 
-                                          rows="4" 
-                                          placeholder="Describe procedures performed"></textarea>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Step 5: Review & Submit -->
-                <div class="blood-step-content" id="blood-step-5">
-                    <h4>Step 5: Review & Submit</h4>
-                    <p class="text-muted">Review all information before submitting</p>
                     
                     <div class="blood-collection-report">
                         <!-- Report Header -->
@@ -2769,19 +2720,11 @@ foreach ($display_records as $index => $record) {
                                 <div class="blood-results-content">
                                     <div class="blood-result-item">
                                         <span class="blood-result-label">Collection Status:</span>
-                                        <span class="blood-result-value" id="summary-successful">-</span>
+                                        <span class="blood-result-value" id="summary-successful">Successful</span>
                                     </div>
                                     <div class="blood-result-item">
                                         <span class="blood-result-label">Unit Serial Number:</span>
                                         <span class="blood-result-value" id="summary-serial-number">-</span>
-                                    </div>
-                                    <div class="blood-result-item" id="summary-reaction-section" style="display: none;">
-                                        <span class="blood-result-label">Donor Reaction:</span>
-                                        <span class="blood-result-value" id="summary-reaction">-</span>
-                                    </div>
-                                    <div class="blood-result-item" id="summary-management-section" style="display: none;">
-                                        <span class="blood-result-label">Management Done:</span>
-                                        <span class="blood-result-value" id="summary-management">-</span>
                                     </div>
                                 </div>
                             </div>

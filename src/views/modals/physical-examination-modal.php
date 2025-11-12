@@ -57,19 +57,20 @@
                                        class="form-control" 
                                        id="physical-blood-pressure-systolic" 
                                        placeholder="Systolic" 
-                                       min="70" 
-                                       max="200" 
                                        required
+                                       novalidate
                                        style="flex: 1;">
                                 <span class="text-muted" style="font-size: 1.2rem; font-weight: bold;">/</span>
                                 <input type="number" 
                                        class="form-control" 
                                        id="physical-blood-pressure-diastolic" 
                                        placeholder="Diastolic" 
-                                       min="40" 
-                                       max="130" 
                                        required
+                                       novalidate
                                        style="flex: 1;">
+                            </div>
+                            <div id="blood-pressure-error" class="text-danger" style="display: none; font-size: 0.875rem; margin-top: 0.25rem;">
+                                Blood pressure should be between 90-140 / 60-90
                             </div>
                             <input type="hidden" 
                                    id="physical-blood-pressure" 
@@ -82,9 +83,11 @@
                                    id="physical-pulse-rate" 
                                    name="pulse_rate" 
                                    placeholder="BPM" 
-                                   min="40" 
-                                   max="200" 
-                                   required>
+                                   required
+                                   novalidate>
+                            <div id="pulse-rate-error" class="text-danger" style="display: none; font-size: 0.875rem; margin-top: 0.25rem;">
+                                Pulse rate should be between 60-100 BPM
+                            </div>
                         </div>
                         <div class="col-md-4 mb-3">
                             <label for="physical-body-temp" class="form-label">Body Temperature (°C) *</label>
@@ -94,9 +97,11 @@
                                    name="body_temp" 
                                    placeholder="°C" 
                                    step="0.1" 
-                                   min="35" 
-                                   max="42" 
-                                   required>
+                                   required
+                                   novalidate>
+                            <div id="body-temp-error" class="text-danger" style="display: none; font-size: 0.875rem; margin-top: 0.25rem;">
+                                Temperature should be between 36.1-37.2°C
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -50,15 +50,12 @@
                         <!-- IN-HOUSE Section -->
                         <div class="screening-detail-card" style="background: #e9ecef; border: 1px solid #ddd; margin-bottom: 20px;">
                             <div class="screening-category-title" style="background: #e9ecef; color: #b22222; font-weight: bold; text-align: center; padding: 10px; margin: -20px -20px 15px -20px;">IN-HOUSE</div>
-                            <div class="row g-3">
-                                <div class="col-12">
-                                    <select name="donation-type" id="inhouseDonationTypeSelect" class="screening-input">
-                                        <option value="">Select Donation Type</option>
-                                        <option value="Walk-in">Walk-in</option>
-                                        <option value="Replacement">Replacement</option>
-                                        <option value="Patient-Directed">Patient-Directed</option>
-                                    </select>
-                                </div>
+                            <div class="screening-donation-options">
+                                <label class="screening-donation-option">
+                                    <input type="radio" name="donation-type" id="inhouseDonationTypeRadio" value="Walk-in">
+                                    <span class="screening-radio-custom"></span>
+                                    <span class="screening-option-text">Walk-in/Voluntary</span>
+                                </label>
                             </div>
                         </div>
                         
@@ -137,7 +134,7 @@
                                     <span class="screening-input-suffix">kg</span>
                                 </div>
                                 <div id="bodyWeightAlert" class="text-danger mt-1" style="display: none; font-size: 0.875rem;">
-                                    ⚠️ Minimum eligible weight is 50 kg. Donation must be deferred for donor safety.
+                                    ⚠️ Body weight must be between 50-120 kg for donor safety.
                                 </div>
                             </div>
                             <div class="col-12">
@@ -147,7 +144,7 @@
                                     <span class="screening-input-suffix">g/dL</span>
                                 </div>
                                 <div id="specificGravityAlert" class="text-danger mt-1" style="display: none; font-size: 0.875rem;">
-                                    ⚠️ Specific gravity should be between 12.5-18.0 g/dL for donor safety. Values outside this range require deferral.
+                                    ⚠️ Specific gravity must be between 12.5-18.0 g/dL for donor safety.
                                 </div>
                             </div>
                             <div class="col-12">

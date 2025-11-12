@@ -23,6 +23,21 @@ include_once '../../assets/conn/db_conn.php';
 // OPTIMIZATION: Include shared optimized functions
 include_once __DIR__ . '/module/optimized_functions.php';
 
+// Include auto-dispose function for expired blood units
+require_once '../../assets/php_func/admin_blood_bank_auto_dispose.php';
+
+// Auto-dispose expired blood bank units on page load
+// This marks units with expires_at <= today as "Disposed"
+try {
+    $disposeResult = admin_blood_bank_auto_dispose();
+    if ($disposeResult['success'] && $disposeResult['disposed_count'] > 0) {
+        error_log("Blood Bank Dashboard: Auto-disposed {$disposeResult['disposed_count']} expired unit(s)");
+    }
+} catch (Exception $e) {
+    error_log("Blood Bank Dashboard: Error during auto-dispose: " . $e->getMessage());
+    // Continue loading page even if auto-dispose fails
+}
+
 // OPTIMIZATION: Performance monitoring
 $startTime = microtime(true);
 
@@ -282,8 +297,9 @@ $stats = array_reduce($bloodInventory, function($carry, $bag) use ($today, $expi
         }
     }
     
-    // Count expired bags
-    if ($bag['status'] == 'Expired') {
+    // Count expired bags - includes both 'Expired' and 'Disposed' status
+    // Disposed units are expired units that have been marked as disposed
+    if ($bag['status'] == 'Expired' || $bag['status'] == 'Disposed') {
         $carry['expiredBags']++;
     }
     

@@ -2980,12 +2980,42 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             // Backdrop cleanup utility to prevent stuck overlays (expose globally)
             window.cleanupModalBackdrops = function() {
                 try {
+                    // DEBUG: Log when cleanup is called
+                    console.log('[BACKDROP DEBUG] cleanupModalBackdrops called');
+                    console.log('[BACKDROP DEBUG] Stack trace:', new Error().stack);
+                    
+                    // Check if medical history modal is open - if so, DON'T remove backdrops
+                    const medicalHistoryModal = document.getElementById('medicalHistoryModal');
+                    const isMedicalHistoryOpen = medicalHistoryModal && medicalHistoryModal.classList.contains('show');
+                    
+                    if (isMedicalHistoryOpen) {
+                        console.log('[BACKDROP DEBUG] ⚠️ Medical History modal is open - SKIPPING backdrop cleanup');
+                        return; // Don't remove backdrops if medical history modal is open
+                    }
+                    
+                    // Check if any other modals are open
+                    const openModals = document.querySelectorAll('.modal.show');
+                    if (openModals.length > 0) {
+                        console.log('[BACKDROP DEBUG] ⚠️ Other modals are open (' + openModals.length + ') - SKIPPING backdrop cleanup');
+                        openModals.forEach(modal => {
+                            console.log('[BACKDROP DEBUG]   - Open modal:', modal.id);
+                        });
+                        return; // Don't remove backdrops if any modals are open
+                    }
+                    
+                    console.log('[BACKDROP DEBUG] ✅ No modals open - proceeding with cleanup');
                     document.body.classList.remove('modal-open');
                     const backdrops = document.querySelectorAll('.modal-backdrop');
+                    console.log('[BACKDROP DEBUG] Found ' + backdrops.length + ' backdrop(s) to remove');
                     backdrops.forEach(el => {
-                        if (el && el.parentNode) el.parentNode.removeChild(el);
+                        if (el && el.parentNode) {
+                            console.log('[BACKDROP DEBUG] Removing backdrop:', el);
+                            el.parentNode.removeChild(el);
+                        }
                     });
-                } catch (e) {}
+                } catch (e) {
+                    console.error('[BACKDROP DEBUG] Error in cleanupModalBackdrops:', e);
+                }
             }
             
             // Search functionality now handled by external JS files:
@@ -3864,19 +3894,98 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 // Allow MH modal script to re-initialize cleanly on reopen
                 try { window.__mhEditInit = false; } catch (e) {}
                 
-                // Get or create the medical history modal instance - reuse for better performance
+                // Get or create the medical history modal instance with backdrop
                 const medicalHistoryModalEl = document.getElementById('medicalHistoryModal');
-                let medicalHistoryModal = medicalHistoryModalEl ? bootstrap.Modal.getInstance(medicalHistoryModalEl) : null;
-                if (!medicalHistoryModal) {
-                    medicalHistoryModal = new bootstrap.Modal(medicalHistoryModalEl);
+                // Always create a new instance to ensure backdrop is properly set
+                // Dispose of existing instance if any
+                const existingInstance = bootstrap.Modal.getInstance(medicalHistoryModalEl);
+                if (existingInstance) {
+                    existingInstance.dispose();
                 }
+                // Create new instance with backdrop enabled
+                const medicalHistoryModal = new bootstrap.Modal(medicalHistoryModalEl, {
+                    backdrop: true,
+                    keyboard: true
+                });
                 const modalContent = document.getElementById('medicalHistoryModalContent');
                 
                 // Reset modal content to loading state
                 modalContent.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
                 
-                // Show the modal
+                // Show the modal with backdrop
+                console.log('[BACKDROP DEBUG] ===== OPENING MEDICAL HISTORY MODAL =====');
                 medicalHistoryModal.show();
+                
+                // Monitor backdrop creation and removal
+                let backdropCheckInterval = null;
+                let backdropCheckCount = 0;
+                const maxBackdropChecks = 20; // Check for 2 seconds (20 * 100ms)
+                
+                // Function to ensure backdrop exists
+                function ensureBackdrop() {
+                    backdropCheckCount++;
+                    const medicalHistoryModalEl = document.getElementById('medicalHistoryModal');
+                    const isModalOpen = medicalHistoryModalEl && medicalHistoryModalEl.classList.contains('show');
+                    
+                    if (!isModalOpen) {
+                        console.log('[BACKDROP DEBUG] Modal is not open, stopping backdrop checks');
+                        if (backdropCheckInterval) {
+                            clearInterval(backdropCheckInterval);
+                            backdropCheckInterval = null;
+                        }
+                        return;
+                    }
+                    
+                    let backdrop = document.querySelector('.modal-backdrop');
+                    console.log('[BACKDROP DEBUG] Check #' + backdropCheckCount + ' - Backdrop exists:', !!backdrop);
+                    
+                    if (!backdrop) {
+                        console.log('[BACKDROP DEBUG] ⚠️ Backdrop missing! Creating manually...');
+                        backdrop = document.createElement('div');
+                        backdrop.className = 'modal-backdrop fade show';
+                        backdrop.style.zIndex = '1040';
+                        backdrop.setAttribute('data-medical-history-backdrop', 'true'); // Mark it
+                        document.body.appendChild(backdrop);
+                        console.log('[BACKDROP DEBUG] ✅ Backdrop created manually');
+                    } else {
+                        // Ensure backdrop is visible and has correct z-index
+                        backdrop.classList.add('show');
+                        backdrop.style.display = 'block';
+                        backdrop.style.zIndex = '1040';
+                        backdrop.setAttribute('data-medical-history-backdrop', 'true'); // Mark it
+                        console.log('[BACKDROP DEBUG] ✅ Backdrop exists and is visible');
+                    }
+                    
+                    // Ensure body has modal-open class
+                    if (!document.body.classList.contains('modal-open')) {
+                        document.body.classList.add('modal-open');
+                        console.log('[BACKDROP DEBUG] ✅ Added modal-open class to body');
+                    }
+                    
+                    // Stop checking after max attempts
+                    if (backdropCheckCount >= maxBackdropChecks) {
+                        console.log('[BACKDROP DEBUG] Reached max checks, stopping interval');
+                        if (backdropCheckInterval) {
+                            clearInterval(backdropCheckInterval);
+                            backdropCheckInterval = null;
+                        }
+                    }
+                }
+                
+                // Check immediately
+                setTimeout(ensureBackdrop, 50);
+                
+                // Continue checking periodically to catch aggressive removals
+                backdropCheckInterval = setInterval(ensureBackdrop, 100);
+                
+                // Stop checking when modal is closed
+                medicalHistoryModalEl.addEventListener('hidden.bs.modal', function() {
+                    console.log('[BACKDROP DEBUG] Medical History modal closed, stopping backdrop checks');
+                    if (backdropCheckInterval) {
+                        clearInterval(backdropCheckInterval);
+                        backdropCheckInterval = null;
+                    }
+                }, { once: true });
                 
                 // Load the medical history form content
                 fetch('../../src/views/forms/medical-history-modal-content.php?donor_id=' + currentDonorId)
@@ -3957,11 +4066,21 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 } catch (_) {}
 
             // Ensure backdrops are cleaned up when key modals are closed
+            // BUT: Don't cleanup if medical history modal is open
             ['deferralStatusModal', 'eligibilityAlertModal', 'stageNoticeModal', 'returningInfoModal']
                 .forEach(id => {
                     const el = document.getElementById(id);
                     if (el) {
-                        el.addEventListener('hidden.bs.modal', cleanupModalBackdrops);
+                        el.addEventListener('hidden.bs.modal', function() {
+                            console.log('[BACKDROP DEBUG] Modal hidden:', id);
+                            // Check if medical history modal is still open before cleaning
+                            const medicalHistoryModal = document.getElementById('medicalHistoryModal');
+                            if (medicalHistoryModal && medicalHistoryModal.classList.contains('show')) {
+                                console.log('[BACKDROP DEBUG] ⚠️ Medical History modal is still open - SKIPPING cleanup for', id);
+                                return;
+                            }
+                            cleanupModalBackdrops();
+                        });
                     }
                 });
             
@@ -4708,31 +4827,51 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
         function showScreeningFormModal(donorId) {
             //console.log('Showing screening form modal for donor ID:', donorId);
             
-            // Set donor data for the screening form
-            window.currentDonorData = { donor_id: donorId };
-            
-            // Show the screening form modal with static backdrop
-            const screeningModalElement = document.getElementById('screeningFormModal');
-            const screeningModal = new bootstrap.Modal(screeningModalElement, {
-                backdrop: 'static',
-                keyboard: false
-            });
-            screeningModal.show();
-            
-            // Prevent modal from closing when clicking on content
-            screeningModalElement.addEventListener('click', function(e) {
-                e.stopPropagation();
-            });
-            
-            // Set the donor ID in the screening form
-            const donorIdInput = document.querySelector('#screeningFormModal input[name="donor_id"]');
-            if (donorIdInput) {
-                donorIdInput.value = donorId;
+            // Close medical history modal first if it's open
+            const medicalHistoryModalEl = document.getElementById('medicalHistoryModal');
+            if (medicalHistoryModalEl) {
+                const medicalHistoryModal = bootstrap.Modal.getInstance(medicalHistoryModalEl);
+                if (medicalHistoryModal) {
+                    medicalHistoryModal.hide();
+                    // Wait for modal to fully close before opening next modal
+                    medicalHistoryModalEl.addEventListener('hidden.bs.modal', function onHidden() {
+                        medicalHistoryModalEl.removeEventListener('hidden.bs.modal', onHidden);
+                        openScreeningModal();
+                    }, { once: true });
+                } else {
+                    openScreeningModal();
+                }
+            } else {
+                openScreeningModal();
             }
             
-            // Initialize the screening form
-            if (window.initializeScreeningForm) {
-                window.initializeScreeningForm(donorId);
+            function openScreeningModal() {
+                // Set donor data for the screening form
+                window.currentDonorData = { donor_id: donorId };
+                
+                // Show the screening form modal with static backdrop
+                const screeningModalElement = document.getElementById('screeningFormModal');
+                const screeningModal = new bootstrap.Modal(screeningModalElement, {
+                    backdrop: 'static',
+                    keyboard: false
+                });
+                screeningModal.show();
+                
+                // Prevent modal from closing when clicking on content
+                screeningModalElement.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                });
+                
+                // Set the donor ID in the screening form
+                const donorIdInput = document.querySelector('#screeningFormModal input[name="donor_id"]');
+                if (donorIdInput) {
+                    donorIdInput.value = donorId;
+                }
+                
+                // Initialize the screening form
+                if (window.initializeScreeningForm) {
+                    window.initializeScreeningForm(donorId);
+                }
             }
         }
         

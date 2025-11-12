@@ -609,11 +609,6 @@ th {
             border-radius: 8px;
         }
         
-        .filter-icon {
-            color: #6c757d;
-            font-size: 1.2rem;
-        }
-        
         .filter-dropdown {
             border: 1px solid #dee2e6;
             border-radius: 5px;
@@ -621,12 +616,25 @@ th {
             background: white;
         }
         
-        .search-input {
+        .search-input-wrapper {
             flex: 1;
+            position: relative;
+        }
+        
+        .search-input {
+            width: 100%;
             border: 1px solid #dee2e6;
             border-radius: 5px;
-            padding: 8px 12px;
+            padding: 8px 40px 8px 12px; /* Extra padding on right for spinner */
             background: white;
+        }
+        
+        .search-loading-spinner {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
         }
         
         /* Pagination */
@@ -717,7 +725,6 @@ th {
 
         <!-- Filter and Search Bar -->
         <div class="filter-search-bar">
-            <i class="fas fa-filter filter-icon"></i>
             <select class="filter-dropdown">
                 <option>All Status</option>
                 <option>Pending</option>
@@ -725,7 +732,14 @@ th {
                 <option>Declined</option>
                 <option>Completed</option>
             </select>
-            <input type="text" class="search-input" placeholder="Search requests..." id="requestSearchBar">
+            <div class="search-input-wrapper">
+                <input type="text" class="search-input" placeholder="Search requests..." id="requestSearchBar">
+                <span class="search-loading-spinner" id="searchLoadingSpinner" style="display: none;">
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="color: #941022;">
+                        <span class="visually-hidden">Loading...</span>
+                    </span>
+                </span>
+            </div>
         </div>
 
         <!-- Requests Table -->
@@ -1312,6 +1326,10 @@ th {
     </div>
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Filter Loading Modal -->
+    <script src="../../assets/js/filter-loading-modal.js"></script>
+    <!-- Hospital Blood Requests Filter and Search -->
+    <script src="../../assets/js/search_func/filter_search_hospital_blood_requests.js"></script>
     <script type="module" src="../../assets/js/handed-over-notify.js"></script>
     <!-- Hospital Request Diagnosis Handler -->
     <script src="../../assets/js/hospital-request-diagnosis-handler.js"></script>
@@ -1545,50 +1563,9 @@ document.addEventListener("DOMContentLoaded", function () {
             });
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            // Search functionality
-            const requestSearchBar = document.getElementById('requestSearchBar');
-            
-            // Function to perform search
-            function performSearch(searchText) {
-                const table = document.getElementById('requestTable');
-                const rows = table.getElementsByTagName('tr');
-
-                for (let row of rows) {
-                    // Skip header row
-                    if (row.querySelector('th')) continue;
-                    
-                    // Get the request ID (2nd column) for search
-                    const requestIdCell = row.querySelector('td:nth-child(2)');
-                    
-                    if (requestIdCell) {
-                        const requestId = requestIdCell.textContent.toLowerCase();
-                        
-                        // Show row if request ID contains search text, hide otherwise
-                        if (requestId.includes(searchText.toLowerCase())) {
-                            row.style.display = '';
-                        } else {
-                            row.style.display = 'none';
-                        }
-                    }
-                }
-            }
-            
-            // Event listeners for search bar
-            if (requestSearchBar) {
-                requestSearchBar.addEventListener('keyup', function() {
-                    performSearch(this.value);
-                });
-                
-                requestSearchBar.addEventListener('focus', function() {
-                    this.style.boxShadow = '0 0 0 0.2rem rgba(148, 16, 34, 0.25)';
-                });
-
-                requestSearchBar.addEventListener('blur', function() {
-                    this.style.boxShadow = 'none';
-                });
-            }
-        });
+        // Note: Search and filter functionality is now handled by 
+        // filter_search_hospital_blood_requests.js (server-side filtering)
+        // The old client-side search has been replaced with API-based filtering
     </script>
 
     <!-- Blood Request Form JavaScript -->
@@ -2044,109 +2021,123 @@ document.addEventListener("DOMContentLoaded", function () {
         let currentRequestId = null;
         let currentStatus = null;
 
-        // Update the button click handlers to show appropriate buttons (exclude modal buttons)
-        document.querySelectorAll('.view-btn, .print-btn:not(#printRequestBtn), .handover-btn:not(#handoverRequestBtn)').forEach(button => {
-            button.addEventListener('click', function(e) {
-                e.preventDefault();
-                
-                // Get data from button attributes
-                const data = this.dataset;
-                currentRequestId = data.requestId || data['request-id'];
-                currentStatus = data.status;
-                
-                // Debug logging
-                console.log('Button clicked - Data attributes:', data);
-                console.log('Current Request ID:', currentRequestId);
-                console.log('Current Status:', currentStatus);
-                console.log('When needed from data:', data['when-needed']);
-                console.log('All data attributes:', Object.keys(data));
-                console.log('Debug when needed:', data['debug-when-needed']);
-                
-                try {
-                    // Store request ID
-                    const editRequestId = document.getElementById('editRequestId');
-                    if (editRequestId) editRequestId.value = currentRequestId;
+        // Use event delegation for dynamically loaded content
+        // Attach handler to tbody so it works with filtered/search results
+        const requestTable = document.getElementById('requestTable');
+        const tableContainer = requestTable ? requestTable.closest('table') : null;
+        
+        function attachButtonHandlers() {
+            // Remove old listeners by cloning (if needed) or use event delegation
+            if (tableContainer) {
+                // Use event delegation - attach once to table container
+                tableContainer.addEventListener('click', function(e) {
+                    // Check if clicked element is a view/print/handover button
+                    const button = e.target.closest('.view-btn, .print-btn, .handover-btn');
+                    if (!button) return;
                     
-                    // Populate view modal with request data
-                    // Set current date
-                    document.getElementById('modalCurrentDate').textContent = new Date().toLocaleDateString('en-US', { 
-                        year: 'numeric', month: 'long', day: 'numeric' 
-                    });
+                    // Exclude modal buttons
+                    if (button.id === 'printRequestBtn' || button.id === 'handoverRequestBtn') return;
                     
-                    // Set patient information
-                    document.getElementById('modalPatientName').textContent = data.patientName || data['patient-name'] || '';
-                    document.getElementById('modalPatientDetails').textContent = `${data.patientAge || data['patient-age'] || ''}, ${data.patientGender || data['patient-gender'] || ''}`;
+                    e.preventDefault();
                     
-                    // Set request details
-                    document.getElementById('modalDiagnosis').value = data.patientDiagnosis || data['patient-diagnosis'] || '';
-                    document.getElementById('modalBloodType').textContent = data.bloodType || data['blood-type'] || '';
-                    document.getElementById('modalRH').textContent = data.rhFactor || data['rh-factor'] || '';
-                    document.getElementById('modalUnits').textContent = data.units || '';
+                    // Get data from button attributes (use button, not this, since we're using event delegation)
+                    const data = button.dataset;
+                    currentRequestId = data.requestId || data['request-id'];
+                    currentStatus = data.status;
                     
-                    // Set when needed from dataset flags/values (dataset converts to camelCase)
-                    const whenNeededRaw = data.whenNeeded || data['when-needed'];
-                    const isAsapRaw = data.isAsap ?? data['is-asap'];
-                    const isAsapFlag = (isAsapRaw === true || isAsapRaw === 'true' || isAsapRaw === 1 || isAsapRaw === '1');
-                    console.log('Modal when_needed data:', whenNeededRaw, 'is_asap raw:', isAsapRaw, 'flag:', isAsapFlag);
-                    const asapRadio = document.getElementById('modalAsap');
-                    const schedRadio = document.getElementById('modalScheduled');
-                    const schedInput = document.getElementById('modalScheduledDate');
+                    // Debug logging
+                    console.log('Button clicked - Data attributes:', data);
+                    console.log('Current Request ID:', currentRequestId);
+                    console.log('Current Status:', currentStatus);
+                    console.log('When needed from data:', data['when-needed']);
+                    console.log('All data attributes:', Object.keys(data));
+                    console.log('Debug when needed:', data['debug-when-needed']);
+                    
+                    try {
+                        // Store request ID
+                        const editRequestId = document.getElementById('editRequestId');
+                        if (editRequestId) editRequestId.value = currentRequestId;
+                        
+                        // Populate view modal with request data
+                        // Set current date
+                        document.getElementById('modalCurrentDate').textContent = new Date().toLocaleDateString('en-US', { 
+                            year: 'numeric', month: 'long', day: 'numeric' 
+                        });
+                        
+                        // Set patient information
+                        document.getElementById('modalPatientName').textContent = data.patientName || data['patient-name'] || '';
+                        document.getElementById('modalPatientDetails').textContent = `${data.patientAge || data['patient-age'] || ''}, ${data.patientGender || data['patient-gender'] || ''}`;
+                        
+                        // Set request details
+                        document.getElementById('modalDiagnosis').value = data.patientDiagnosis || data['patient-diagnosis'] || '';
+                        document.getElementById('modalBloodType').textContent = data.bloodType || data['blood-type'] || '';
+                        document.getElementById('modalRH').textContent = data.rhFactor || data['rh-factor'] || '';
+                        document.getElementById('modalUnits').textContent = data.units || '';
+                        
+                        // Set when needed from dataset flags/values (dataset converts to camelCase)
+                        const whenNeededRaw = data.whenNeeded || data['when-needed'];
+                        const isAsapRaw = data.isAsap ?? data['is-asap'];
+                        const isAsapFlag = (isAsapRaw === true || isAsapRaw === 'true' || isAsapRaw === 1 || isAsapRaw === '1');
+                        console.log('Modal when_needed data:', whenNeededRaw, 'is_asap raw:', isAsapRaw, 'flag:', isAsapFlag);
+                        const asapRadio = document.getElementById('modalAsap');
+                        const schedRadio = document.getElementById('modalScheduled');
+                        const schedInput = document.getElementById('modalScheduledDate');
 
-                    // Reset controls first to avoid stale state from previous row
-                    if (asapRadio) asapRadio.checked = false;
-                    if (schedRadio) schedRadio.checked = false;
-                    if (schedInput) schedInput.value = '';
+                        // Reset controls first to avoid stale state from previous row
+                        if (asapRadio) asapRadio.checked = false;
+                        if (schedRadio) schedRadio.checked = false;
+                        if (schedInput) schedInput.value = '';
 
-                    // Helper: robustly parse various date formats into date input value (YYYY-MM-DD)
-                    const toDatetimeLocal = (raw) => {
-                        if (!raw) return '';
-                        let d;
-                        // If raw is only a date (YYYY-MM-DD), create local midnight
-                        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-                            d = new Date(raw + 'T00:00:00');
-                        } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) { // mm/dd/yyyy
-                            const [m, v, y] = raw.split('/');
-                            d = new Date(parseInt(y,10), parseInt(m,10)-1, parseInt(v,10), 0, 0, 0);
-                        } else {
-                            d = new Date(raw);
-                        }
-                        if (isNaN(d.getTime())) return '';
-                        const pad = (n) => String(n).padStart(2, '0');
-                        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-                    };
-
-                    if (isAsapFlag) {
-                        if (asapRadio) asapRadio.checked = true;
-                        // Even if ASAP, still display the stored when_needed from DB if provided
-                        const localVal = toDatetimeLocal(whenNeededRaw);
-                        if (localVal && schedInput) schedInput.value = localVal;
-                    } else {
-                        // Not ASAP: mark scheduled and populate if available
-                        if (schedRadio) schedRadio.checked = true;
-                        const localVal = toDatetimeLocal(whenNeededRaw);
-                        if (localVal && schedInput) schedInput.value = localVal;
-                    }
-                    
-                    // Set hospital and physician
-                    document.getElementById('modalHospital').value = '<?php echo $_SESSION['user_first_name'] ?? ''; ?>';
-                    document.getElementById('modalPhysician').value = data.physicianName || data['physician-name'] || data['physician_name'] || '<?php echo $_SESSION['user_surname'] ?? ''; ?>';
-                    
-                    // Set approval info from DB columns (approved_by, approved_date)
-                    (function(){
-                        const approvedBy = data.approvedBy || data['approved-by'] || data['approved_by'] || '';
-                        const approvedDateRaw = data.approvedDate || data['approved-date'] || data['approved_date'] || '';
-                        let approvedDateText = '';
-                        if (approvedDateRaw) {
-                            const d = new Date(approvedDateRaw);
-                            if (!isNaN(d.getTime())) {
-                                approvedDateText = d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) + ` at ` + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                        // Helper: robustly parse various date formats into date input value (YYYY-MM-DD)
+                        const toDatetimeLocal = (raw) => {
+                            if (!raw) return '';
+                            let d;
+                            // If raw is only a date (YYYY-MM-DD), create local midnight
+                            if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+                                d = new Date(raw + 'T00:00:00');
+                            } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) { // mm/dd/yyyy
+                                const [m, v, y] = raw.split('/');
+                                d = new Date(parseInt(y,10), parseInt(m,10)-1, parseInt(v,10), 0, 0, 0);
+                            } else {
+                                d = new Date(raw);
                             }
-                        }
-                        document.getElementById('modalApprovedBy').value = approvedBy && approvedDateText ? `Approved by ${approvedBy} - ${approvedDateText}` : approvedBy || approvedDateText || '';
-                    })();
+                            if (isNaN(d.getTime())) return '';
+                            const pad = (n) => String(n).padStart(2, '0');
+                            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                        };
 
-                    // Update modal status badge text/color based on DB status (modal-only rules)
-                    const statusBadge = document.getElementById('modalStatusBadge');
+                        if (isAsapFlag) {
+                            if (asapRadio) asapRadio.checked = true;
+                            // Even if ASAP, still display the stored when_needed from DB if provided
+                            const localVal = toDatetimeLocal(whenNeededRaw);
+                            if (localVal && schedInput) schedInput.value = localVal;
+                        } else {
+                            // Not ASAP: mark scheduled and populate if available
+                            if (schedRadio) schedRadio.checked = true;
+                            const localVal = toDatetimeLocal(whenNeededRaw);
+                            if (localVal && schedInput) schedInput.value = localVal;
+                        }
+                        
+                        // Set hospital and physician
+                        document.getElementById('modalHospital').value = '<?php echo $_SESSION['user_first_name'] ?? ''; ?>';
+                        document.getElementById('modalPhysician').value = data.physicianName || data['physician-name'] || data['physician_name'] || '<?php echo $_SESSION['user_surname'] ?? ''; ?>';
+                        
+                        // Set approval info from DB columns (approved_by, approved_date)
+                        (function(){
+                            const approvedBy = data.approvedBy || data['approved-by'] || data['approved_by'] || '';
+                            const approvedDateRaw = data.approvedDate || data['approved-date'] || data['approved_date'] || '';
+                            let approvedDateText = '';
+                            if (approvedDateRaw) {
+                                const d = new Date(approvedDateRaw);
+                                if (!isNaN(d.getTime())) {
+                                    approvedDateText = d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) + ` at ` + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                                }
+                            }
+                            document.getElementById('modalApprovedBy').value = approvedBy && approvedDateText ? `Approved by ${approvedBy} - ${approvedDateText}` : approvedBy || approvedDateText || '';
+                        })();
+
+                        // Update modal status badge text/color based on DB status (modal-only rules)
+                        const statusBadge = document.getElementById('modalStatusBadge');
                     if (statusBadge) {
                         // reset base classes and keep size/padding
                         statusBadge.classList.remove('bg-success', 'bg-primary', 'bg-warning', 'text-dark', 'bg-danger', 'bg-secondary');
@@ -2165,8 +2156,8 @@ document.addEventListener("DOMContentLoaded", function () {
                             badgeText = 'Approved';
                             badgeClass = 'bg-primary';
                         } else if (currentStatus === 'Printed') {
-                            // Show actual word "Printed" in modal
-                            badgeText = 'Printed';
+                            // Show "Approved" badge for Printed status (matching table display)
+                            badgeText = 'Approved';
                             badgeClass = 'bg-primary';
                         } else if (currentStatus === 'Handed_over') {
                             // Show actual word for handover
@@ -2356,6 +2347,16 @@ document.addEventListener("DOMContentLoaded", function () {
                     console.error('Error displaying view modal:', error);
                 }
             });
+        }
+        
+        // Attach handlers on initial load
+        attachButtonHandlers();
+        
+        // Re-attach handlers when table is updated (for filtered/search results)
+        document.addEventListener('tableUpdated', function() {
+            // Handlers are already attached via event delegation, so no need to re-attach
+            // But we can log for debugging
+            console.log('Table updated event received');
         });
 
         // Handle Print button click

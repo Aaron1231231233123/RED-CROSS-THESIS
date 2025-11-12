@@ -44,8 +44,24 @@ class PhysicalExaminationModal {
         document.addEventListener('input', (e) => {
             if (e.target.id === 'physical-blood-pressure-systolic' || e.target.id === 'physical-blood-pressure-diastolic') {
                 this.combineBloodPressure();
+                this.validateVitalSigns();
             }
         });
+        
+        // Real-time validation for vital signs
+        document.addEventListener('input', (e) => {
+            if (e.target.id === 'physical-pulse-rate' || e.target.id === 'physical-body-temp') {
+                this.validateVitalSigns();
+            }
+        });
+        
+        // Prevent HTML5 validation messages from showing
+        document.addEventListener('invalid', (e) => {
+            if (e.target.closest('#physicalExaminationModal')) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }, true);
         
         // Step indicator clicks
         document.addEventListener('click', (e) => {
@@ -80,6 +96,95 @@ class PhysicalExaminationModal {
                 hiddenField.value = `${sysVal}/${diaVal}`;
             } else {
                 hiddenField.value = '';
+            }
+        }
+    }
+    
+    // Validate vital signs and update error messages and next button
+    validateVitalSigns() {
+        // Get input values
+        const systolic = document.getElementById('physical-blood-pressure-systolic');
+        const diastolic = document.getElementById('physical-blood-pressure-diastolic');
+        const pulseRate = document.getElementById('physical-pulse-rate');
+        const bodyTemp = document.getElementById('physical-body-temp');
+        const nextButton = document.querySelector('.physical-next-btn');
+        
+        // Get error message elements
+        const bpError = document.getElementById('blood-pressure-error');
+        const pulseError = document.getElementById('pulse-rate-error');
+        const tempError = document.getElementById('body-temp-error');
+        
+        let allInRange = true;
+        
+        // Check Blood Pressure (Normal: Systolic 90-140, Diastolic 60-90)
+        let bpInRange = false;
+        if (systolic && diastolic && systolic.value && diastolic.value) {
+            const sys = parseInt(systolic.value);
+            const dia = parseInt(diastolic.value);
+            bpInRange = (sys >= 90 && sys <= 140 && dia >= 60 && dia <= 90);
+            if (!bpInRange) {
+                allInRange = false;
+                if (bpError) bpError.style.display = 'block';
+            } else {
+                if (bpError) bpError.style.display = 'none';
+            }
+        } else {
+            if (bpError) bpError.style.display = 'none';
+        }
+        
+        // Check Pulse Rate (Normal: 60-100 BPM)
+        let pulseInRange = false;
+        if (pulseRate && pulseRate.value) {
+            const pulse = parseInt(pulseRate.value);
+            pulseInRange = (pulse >= 60 && pulse <= 100);
+            if (!pulseInRange) {
+                allInRange = false;
+                if (pulseError) pulseError.style.display = 'block';
+            } else {
+                if (pulseError) pulseError.style.display = 'none';
+            }
+        } else {
+            if (pulseError) pulseError.style.display = 'none';
+        }
+        
+        // Check Body Temperature (Normal: 36.1-37.2°C)
+        let tempInRange = false;
+        if (bodyTemp && bodyTemp.value) {
+            const temp = parseFloat(bodyTemp.value);
+            tempInRange = (temp >= 36.1 && temp <= 37.2);
+            if (!tempInRange) {
+                allInRange = false;
+                if (tempError) tempError.style.display = 'block';
+            } else {
+                if (tempError) tempError.style.display = 'none';
+            }
+        } else {
+            if (tempError) tempError.style.display = 'none';
+        }
+        
+        // Update next button based on validation
+        if (nextButton && this.currentStep === 1) {
+            // Check if all fields are filled
+            const allFieldsFilled = systolic?.value && diastolic?.value && pulseRate?.value && bodyTemp?.value;
+            
+            // ALWAYS keep button red - never change to green
+            nextButton.style.setProperty('background-color', '#b22222', 'important');
+            nextButton.style.setProperty('border-color', '#b22222', 'important');
+            nextButton.style.setProperty('color', 'white', 'important');
+            // Remove any success classes that might make it green
+            nextButton.classList.remove('btn-success');
+            
+            // Button is enabled only if all fields are filled AND all values are in range
+            if (allFieldsFilled && allInRange) {
+                // All values in range and filled: 100% opacity, enabled, red color
+                nextButton.style.setProperty('opacity', '1', 'important');
+                nextButton.disabled = false;
+                nextButton.style.cursor = 'pointer';
+            } else {
+                // Values out of range or not filled: 20% opacity, disabled, red color
+                nextButton.style.setProperty('opacity', '0.2', 'important');
+                nextButton.disabled = true;
+                nextButton.style.cursor = 'not-allowed';
             }
         }
     }
@@ -123,6 +228,11 @@ class PhysicalExaminationModal {
         this.currentStep = 1;
         this.updateProgressIndicator();
         this.showStep(1);
+        
+        // Initialize vital signs validation (will set button to disabled state initially)
+        setTimeout(() => {
+            this.validateVitalSigns();
+        }, 100);
         
         // Add event listener to track when modal is actually shown
         modalEl.addEventListener('shown.bs.modal', () => {
@@ -553,18 +663,36 @@ class PhysicalExaminationModal {
             field.classList.remove('is-invalid', 'is-valid');
         });
         
+        // Ensure next button is red and reset to initial state
+        const nextButton = document.querySelector('.physical-next-btn');
+        if (nextButton) {
+            nextButton.style.backgroundColor = '#b22222';
+            nextButton.style.borderColor = '#b22222';
+            nextButton.style.opacity = '0.2';
+            nextButton.disabled = true;
+            nextButton.style.cursor = 'not-allowed';
+        }
+        
+        // Hide error messages
+        const bpError = document.getElementById('blood-pressure-error');
+        const pulseError = document.getElementById('pulse-rate-error');
+        const tempError = document.getElementById('body-temp-error');
+        if (bpError) bpError.style.display = 'none';
+        if (pulseError) pulseError.style.display = 'none';
+        if (tempError) tempError.style.display = 'none';
+        
         this.updateProgressIndicator();
         this.showStep(1);
     }
     
     nextStep() {
         if (this.validateCurrentStep()) {
-            // Check for abnormal vital signs before proceeding
+            // Validate vital signs are in range before proceeding from step 1
             if (this.currentStep === 1) {
-                const abnormalSigns = this.checkAbnormalVitalSigns();
-                if (abnormalSigns.length > 0) {
-                    this.showAbnormalVitalSignsModal(abnormalSigns);
-                    return;
+                this.validateVitalSigns();
+                const nextButton = document.querySelector('.physical-next-btn');
+                if (nextButton && nextButton.disabled) {
+                    return; // Don't proceed if button is disabled
                 }
             }
             
@@ -580,120 +708,6 @@ class PhysicalExaminationModal {
         }
     }
     
-    // Check if vital signs are within normal ranges
-    checkAbnormalVitalSigns() {
-        const abnormalSigns = [];
-        
-        // Check Blood Pressure
-        const systolic = document.getElementById('physical-blood-pressure-systolic');
-        const diastolic = document.getElementById('physical-blood-pressure-diastolic');
-        if (systolic && diastolic && systolic.value && diastolic.value) {
-            const sys = parseInt(systolic.value);
-            const dia = parseInt(diastolic.value);
-            // Normal BP: Systolic 90-140, Diastolic 60-90
-            if (sys < 90 || sys > 140 || dia < 60 || dia > 90) {
-                abnormalSigns.push({
-                    name: 'Blood Pressure',
-                    value: `${sys}/${dia}`,
-                    normal: '90-140 / 60-90'
-                });
-            }
-        }
-        
-        // Check Pulse Rate
-        const pulseRate = document.getElementById('physical-pulse-rate');
-        if (pulseRate && pulseRate.value) {
-            const pulse = parseInt(pulseRate.value);
-            // Normal Pulse Rate: 60-100 BPM
-            if (pulse < 60 || pulse > 100) {
-                abnormalSigns.push({
-                    name: 'Pulse Rate (BPM)',
-                    value: `${pulse} BPM`,
-                    normal: '60-100 BPM'
-                });
-            }
-        }
-        
-        // Check Body Temperature
-        const bodyTemp = document.getElementById('physical-body-temp');
-        if (bodyTemp && bodyTemp.value) {
-            const temp = parseFloat(bodyTemp.value);
-            // Normal Body Temperature: 36.1-37.2°C
-            if (temp < 36.1 || temp > 37.2) {
-                abnormalSigns.push({
-                    name: 'Body Temperature',
-                    value: `${temp}°C`,
-                    normal: '36.1-37.2°C'
-                });
-            }
-        }
-        
-        return abnormalSigns;
-    }
-    
-    // Show modal for abnormal vital signs
-    showAbnormalVitalSignsModal(abnormalSigns) {
-        const modalEl = document.getElementById('abnormalVitalSignsModal');
-        if (!modalEl) return;
-        
-        // Populate the list of abnormal signs
-        const listEl = document.getElementById('abnormalVitalSignsList');
-        if (listEl) {
-            listEl.innerHTML = abnormalSigns.map(sign => `
-                <div class="mb-2 p-2" style="background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
-                    <strong>${sign.name}:</strong> ${sign.value} 
-                    <span class="text-muted">(Normal: ${sign.normal})</span>
-                </div>
-            `).join('');
-        }
-        
-        // Show modal - informational only, user must fix values before proceeding
-        const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
-        try {
-            modalEl.style.zIndex = '20010';
-            const dlg = modalEl.querySelector('.modal-dialog');
-            if (dlg) dlg.style.zIndex = '20011';
-        } catch(_) {}
-        modal.show();
-        
-        // Wire the Defer action to open the Defer Donor modal for physical exam
-        try {
-            const btn = document.getElementById('abnormalDeferBtn');
-            if (btn) {
-                btn.onclick = () => {
-                    try { modal.hide(); } catch(_) {}
-                    // Populate defer modal with current donor/screening IDs
-                    const donorId = document.getElementById('physical-donor-id')?.value || '';
-                    const screeningId = document.getElementById('physical-screening-id')?.value || '';
-                    const deferEl = document.getElementById('deferDonorModal');
-                    if (!deferEl) return;
-                    try {
-                        const donorInput = deferEl.querySelector('#defer-donor-id');
-                        const screeningInput = deferEl.querySelector('#defer-screening-id');
-                        if (donorInput) donorInput.value = donorId;
-                        if (screeningInput) screeningInput.value = screeningId;
-                        // Show only Physical Examination reasons and preselect Abnormal Vitals
-                        const reasonSelect = deferEl.querySelector('#disapprovalReason');
-                        if (reasonSelect) {
-                            Array.from(reasonSelect.options).forEach(opt => {
-                                const cl = opt.getAttribute('class') || '';
-                                if (cl.includes('physical-reason')) {
-                                    opt.style.display = '';
-                                } else if (cl.includes('screening-reason')) {
-                                    opt.style.display = 'none';
-                                }
-                            });
-                            const targetText = 'Abnormal Vital Signs (BP/Pulse/Temp)';
-                            const targetOpt = Array.from(reasonSelect.options).find(o => (o.text || o.innerText) === targetText);
-                            if (targetOpt) reasonSelect.value = targetOpt.value;
-                        }
-                    } catch(_) {}
-                    const m2 = bootstrap.Modal.getOrCreateInstance(deferEl, { backdrop: 'static', keyboard: false });
-                    m2.show();
-                };
-            }
-        } catch(_) {}
-    }
     
     prevStep() {
         if (this.currentStep > 1) {
@@ -744,6 +758,11 @@ class PhysicalExaminationModal {
         
         // Update button visibility
         this.updateButtons();
+        
+        // Validate vital signs when showing step 1
+        if (step === 1) {
+            this.validateVitalSigns();
+        }
     }
     
     updateButtons() {
@@ -753,7 +772,18 @@ class PhysicalExaminationModal {
         const deferBtn = document.querySelector('.physical-defer-btn');
         
         if (prevBtn) prevBtn.style.display = this.currentStep === 1 ? 'none' : 'inline-block';
-        if (nextBtn) nextBtn.style.display = this.currentStep === this.totalSteps ? 'none' : 'inline-block';
+        if (nextBtn) {
+            nextBtn.style.display = this.currentStep === this.totalSteps ? 'none' : 'inline-block';
+            // Don't override validation styling on step 1 - let validateVitalSigns handle it
+            if (this.currentStep !== 1) {
+                // Reset to default styling for other steps
+                nextBtn.style.opacity = '1';
+                nextBtn.style.backgroundColor = '#b22222';
+                nextBtn.style.borderColor = '#b22222';
+                nextBtn.disabled = false;
+                nextBtn.style.cursor = 'pointer';
+            }
+        }
         if (submitBtn) {
             if (this.isReadonly) {
                 submitBtn.style.display = 'none';
@@ -866,25 +896,17 @@ class PhysicalExaminationModal {
             // Also combine BP when validating
             this.combineBloodPressure();
         }
-        // Validate pulse rate
+        // Validate pulse rate - use custom validation instead (validateVitalSigns handles this)
         else if (field.name === 'pulse_rate' && value) {
-            const pulse = parseInt(value);
-            if (pulse < 40 || pulse > 200) {
-                this.markFieldInvalid(field, 'Pulse rate should be between 40-200 BPM');
-                isValid = false;
-            } else {
-                this.markFieldValid(field);
-            }
+            // Don't show validation message here - validateVitalSigns handles it
+            // Just mark as valid for form submission purposes
+            this.markFieldValid(field);
         }
-        // Validate body temperature
+        // Validate body temperature - use custom validation instead (validateVitalSigns handles this)
         else if (field.name === 'body_temp' && value) {
-            const temp = parseFloat(value);
-            if (temp < 35 || temp > 42) {
-                this.markFieldInvalid(field, 'Temperature should be between 35-42°C');
-                isValid = false;
-            } else {
-                this.markFieldValid(field);
-            }
+            // Don't show validation message here - validateVitalSigns handles it
+            // Just mark as valid for form submission purposes
+            this.markFieldValid(field);
         }
         else if (value) {
             this.markFieldValid(field);

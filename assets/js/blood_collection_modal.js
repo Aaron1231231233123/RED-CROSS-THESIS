@@ -3,7 +3,7 @@ class BloodCollectionModal {
     constructor() {
         this.modal = null;
         this.currentStep = 1;
-        this.totalSteps = 5;
+        this.totalSteps = 4;
         this.bloodCollectionData = null;
         this.isSubmitting = false; // Prevent duplicate submissions
         this.init();
@@ -86,23 +86,7 @@ class BloodCollectionModal {
             });
         });
 
-        // Blood status option selection and reaction visibility
-        document.querySelectorAll('input[name="is_successful"]').forEach(radio => {
-            radio.addEventListener('change', () => {
-                // Remove selected class from all status options
-                document.querySelectorAll('.blood-status-card').forEach(opt => {
-                    opt.classList.remove('selected');
-                });
-                
-                // Add selected class to current option parent
-                if (radio.checked) {
-                    radio.closest('.blood-status-card').classList.add('selected');
-                }
-                
-                // Show/hide reaction management based on selection
-                this.updateReactionVisibility(radio.value === 'NO');
-            });
-        });
+        // Collection status is now always successful (hidden field), no event listeners needed
 
         // Initialize modern form elements
         this.initializeModernFormElements();
@@ -166,13 +150,6 @@ class BloodCollectionModal {
                 }
             });
         });
-    }
-
-    updateReactionVisibility(showReaction) {
-        const reactionSection = document.querySelector('.blood-reaction-section');
-        if (reactionSection) {
-            reactionSection.style.display = showReaction ? 'block' : 'none';
-        }
     }
 
     generateUnitSerialNumber() {
@@ -358,7 +335,7 @@ class BloodCollectionModal {
                 this.updateNavigationButtons();
                 
                 // Update summary if we're at the review step
-                if (this.currentStep === 5) {
+                if (this.currentStep === 4) {
                     this.updateFormSummary();
                 }
             }
@@ -381,7 +358,7 @@ class BloodCollectionModal {
             this.showStep(step);
             this.updateNavigationButtons();
             
-            if (step === 5) {
+            if (step === 4) {
                 this.updateFormSummary();
             }
         }
@@ -429,31 +406,17 @@ class BloodCollectionModal {
         
         const summaryElements = {
             'summary-blood-bag': formData.blood_bag_type || '-',
-            'summary-successful': formData.is_successful === 'YES' ? 'Successful' : 'Failed',
+            'summary-successful': 'Successful', // Always successful
             'summary-start-time': formData.start_time || '-',
             'summary-end-time': formData.end_time || '-',
             'summary-duration': duration,
-            'summary-serial-number': formData.unit_serial_number || '-',
-            'summary-reaction': formData.donor_reaction || 'None',
-            'summary-management': formData.management_done || 'None'
+            'summary-serial-number': formData.unit_serial_number || '-'
         };
 
         Object.entries(summaryElements).forEach(([id, value]) => {
             const element = document.getElementById(id);
             if (element) element.textContent = value;
         });
-
-        // Show/hide reaction and management sections based on success status
-        const reactionSection = document.getElementById('summary-reaction-section');
-        const managementSection = document.getElementById('summary-management-section');
-        
-        if (formData.is_successful === 'NO') {
-            if (reactionSection) reactionSection.style.display = 'block';
-            if (managementSection) managementSection.style.display = 'block';
-        } else {
-            if (reactionSection) reactionSection.style.display = 'none';
-            if (managementSection) managementSection.style.display = 'none';
-        }
     }
 
     getFormData() {
@@ -465,6 +428,9 @@ class BloodCollectionModal {
         for (let [key, value] of formData.entries()) {
             data[key] = value;
         }
+
+        // Always set is_successful to true (YES)
+        data.is_successful = 'YES';
 
         // Add hidden data
         data.physical_exam_id = this.bloodCollectionData.physical_exam_id;
@@ -514,7 +480,6 @@ class BloodCollectionModal {
     validateFormData(data) {
         const requiredFields = [
             'blood_bag_type',
-            'is_successful',
             'start_time',
             'end_time',
             'unit_serial_number'
@@ -527,8 +492,9 @@ class BloodCollectionModal {
             }
         }
 
+        // is_successful is always set to 'YES' (true) by default
         // Amount is automatically set to 1 unit (standard donation)
-        // No validation needed as it's a hidden field with fixed value
+        // No validation needed as these are hidden fields with fixed values
 
         return true;
     }
@@ -630,10 +596,6 @@ class BloodCollectionModal {
         
         // Clear modern form selections
         document.querySelectorAll('.bag-option').forEach(option => {
-            option.classList.remove('selected');
-        });
-        
-        document.querySelectorAll('.blood-status-card').forEach(option => {
             option.classList.remove('selected');
         });
         

@@ -809,8 +809,28 @@ function configureDeferModalForSource(source) {
 
 // Handle screening defer button click
 function handleScreeningDeferDonor() {
-    const donorIdInput = document.querySelector('input[name="donor_id"]');
-    const donorId = donorIdInput ? donorIdInput.value : null;
+    // Get donor ID from multiple sources - prioritize window.currentDonorData
+    let donorId = null;
+    
+    // First try to get from window.currentDonorData (most reliable)
+    if (window.currentDonorData && window.currentDonorData.donor_id) {
+        donorId = window.currentDonorData.donor_id;
+    }
+    
+    // Fallback to form input in screening modal
+    if (!donorId) {
+        const screeningModal = document.getElementById('screeningFormModal');
+        if (screeningModal) {
+            const donorIdInput = screeningModal.querySelector('input[name="donor_id"]');
+            donorId = donorIdInput ? donorIdInput.value : null;
+        }
+    }
+    
+    // Fallback to global form input
+    if (!donorId) {
+        const donorIdInput = document.querySelector('input[name="donor_id"]');
+        donorId = donorIdInput ? donorIdInput.value : null;
+    }
     
     if (!donorId) {
         console.error('No donor ID found in screening form');

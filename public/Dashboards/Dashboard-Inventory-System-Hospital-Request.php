@@ -1683,9 +1683,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     } elseif ($status_val === 'rescheduled') {
                                         echo '<span class="badge bg-warning text-dark">Rescheduled</span>';
                                     } elseif ($status_val === 'approved') {
-                                        echo '<span class="badge bg-success">Approved</span>';
+                                        echo '<span class="badge bg-primary">Approved</span>';
                                     } elseif ($status_val === 'printed') {
-                                        echo '<span class="badge bg-success">Approved</span>';
+                                        echo '<span class="badge bg-primary">Approved</span>';
                                     } elseif ($status_val === 'completed') {
                                         echo '<span class="badge bg-success">Completed</span>';
                                     } elseif ($status_val === 'declined') {
@@ -1937,11 +1937,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     <!-- Modal Footer -->
                     <div class="modal-footer" style="padding: 20px 30px; border-top: 1px solid #ddd; background: #f8f9fa; border-radius: 0 0 10px 10px;">
                         <div class="d-flex gap-2 w-100 justify-content-end">
-                            <!-- Decline Button -->
-                            <button type="button" class="btn btn-danger" id="declineRequest" style="padding: 10px 20px; font-weight: bold; border-radius: 5px; display: none;">
-                                <i class="fas fa-times-circle me-2"></i>Decline Request
-                                </button>
-                            
                             <!-- Approve Button -->
                             <button type="button" class="btn btn-success" id="modalAcceptButton" style="padding: 10px 20px; font-weight: bold; border-radius: 5px; display: none;">
                                 <i class="fas fa-check-circle me-2"></i>Approve Request
@@ -2335,7 +2330,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 statusBadge.style.color = '#000';
                 break;
             case 'Approved':
-                statusBadge.style.background = '#28a745';
+                statusBadge.style.background = '#0d6efd';
                 statusBadge.style.color = '#fff';
                 break;
             case 'Handed-Over':
@@ -2353,7 +2348,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         
         // Handle button visibility and sections based on status
         const acceptButton = document.getElementById('modalAcceptButton');
-        const declineButton = document.getElementById('declineRequest');
         const handOverButton = document.getElementById('handOverButton');
         const approvalSection = document.getElementById('approvalSection');
         const handoverSection = document.getElementById('handoverSection');
@@ -2362,17 +2356,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         if (approvalSection) approvalSection.style.display = 'none';
         if (handoverSection) handoverSection.style.display = 'none';
         
-        if (acceptButton && declineButton && handOverButton) {
+        if (acceptButton && handOverButton) {
             // Use displayStatus to determine controls
             if (['Pending', 'Rescheduled'].includes(displayStatus)) {
                 acceptButton.style.display = 'inline-block';
-                declineButton.style.display = 'inline-block';
                 handOverButton.style.display = 'none';
             }
             // Show approval info for Approved status (includes both 'approved' and 'printed' database statuses)
             else if (['Approved'].includes(displayStatus)) {
                 acceptButton.style.display = 'none';
-                declineButton.style.display = 'none';
                 // Show Hand Over button for Printed status (ready for handover), hide for Approved
                 if (status.toLowerCase() === 'printed') {
                     handOverButton.style.display = 'inline-block';
@@ -2394,7 +2386,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             // Show handover info for Handed-Over status (completed)
             else if (['Handed-Over'].includes(displayStatus)) {
                 acceptButton.style.display = 'none';
-                declineButton.style.display = 'none';
                 handOverButton.style.display = 'none';
                 if (handoverSection) {
                     handoverSection.style.display = 'block';
@@ -2424,7 +2415,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             // Hide all buttons for other statuses (Declined, etc.)
             else {
                 acceptButton.style.display = 'none';
-                declineButton.style.display = 'none';
                 handOverButton.style.display = 'none';
             }
         }
@@ -2490,8 +2480,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         // Initialize modals
         const requestDetailsModal = new bootstrap.Modal(document.getElementById('requestModal'));
         const approveConfirmModal = new bootstrap.Modal(document.getElementById('approveConfirmModal'));
-        const declineRequestModal = new bootstrap.Modal(document.getElementById('declineRequestModal'));
-        const requestDeclinedModal = new bootstrap.Modal(document.getElementById('requestDeclinedModal'));
         const requestApprovedModal = new bootstrap.Modal(document.getElementById('requestApprovedModal'));
         const handoverConfirmModal = new bootstrap.Modal(document.getElementById('handoverConfirmModal'));
         const handoverSuccessModal = new bootstrap.Modal(document.getElementById('handoverSuccessModal'));
@@ -2610,12 +2598,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             }
         };
 
-        // Get elements for declining requests
-        const declineButton = document.getElementById("declineRequest");
+        // Get elements for request handling
         const responseSelect = document.getElementById("responseSelect");
         const alertContainer = document.getElementById("alertContainer");
         const modalBodyText = document.getElementById("modalBodyText");
-        const confirmDeclineBtn = document.getElementById("confirmDeclineBtn");
         const confirmAcceptBtn = document.getElementById("confirmAcceptBtn");
         const requestDetailsForm = document.getElementById("requestDetailsForm");
 
@@ -2634,23 +2620,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     setTimeout(() => alertBox.remove(), 500);
                 }
             }, 5000);
-        }
-
-        // Handle decline button click
-        if (declineButton) {
-            declineButton.addEventListener("click", function (e) {
-                e.preventDefault();
-                let reason = responseSelect.value;
-
-                // Show alert if no reason is selected
-                if (!reason || reason === "") {
-                    showAlert("danger", "⚠️ Please select a valid reason for declining.");
-                    return;
-                }
-
-                // Show confirmation modal with selected reason
-                modalBodyText.innerHTML = `Are you sure you want to decline this request for the following reason? <br><strong>("${reason}")</strong>`
-            });
         }
 
         // Approve Request button logic
@@ -2823,7 +2792,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                unit_id: unit.unit_id
+                                unit_id: unit.unit_id,
+                                request_id: requestId
                             })
                         })
                     );
@@ -2862,43 +2832,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 });
         });
 
-        // Decline button in the request details modal
-        const declineBtn = document.getElementById('declineRequest');
-        if (declineBtn) {
-            declineBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                // Set the request ID in the decline modal
-                const reqId = document.getElementById('modalRequestId').value;
-                document.getElementById('declineRequestId').value = reqId;
-                document.getElementById('declineRequestIdText').textContent = reqId;
-                // Reset the textarea
-                document.getElementById('declineReasonText').value = '';
-                // Hide the request details modal first
-                requestDetailsModal.hide();
-                // Show the decline modal
-                setTimeout(function() { 
-                    declineRequestModal.show(); 
-                }, 300); // Wait for fade out
-            });
-        }
-
-        // Handle decline form submission
-        const declineRequestForm = document.getElementById('declineRequestForm');
-        const declineReasonText = document.getElementById('declineReasonText');
-
-        if (declineRequestForm) {
-            declineRequestForm.addEventListener('submit', function(e) {
-                    e.preventDefault();
-                const reason = declineReasonText.value.trim();
-                    if (!reason) {
-                    alert('Please provide a reason for declining.');
-                        return;
-                }
-                
-                // Submit the form directly
-                this.submit();
-            });
-        }
     });
     </script>
     <script src="../../assets/js/admin-donor-registration-modal.js"></script>

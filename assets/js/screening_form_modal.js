@@ -102,26 +102,58 @@ document.addEventListener('DOMContentLoaded', function() {
             prefillFromExisting();
         }, 100);
 
-        // Add donation type change handler for IN-HOUSE dropdown
-        const inhouseDonationTypeSelect = document.getElementById('inhouseDonationTypeSelect');
+        // Add donation type change handler for IN-HOUSE radio button
+        const inhouseDonationTypeRadio = document.getElementById('inhouseDonationTypeRadio');
         const mobilePlaceInput = document.getElementById('mobilePlaceInput');
         const mobileOrganizerInput = document.getElementById('mobileOrganizerInput');
         
-        if (inhouseDonationTypeSelect) {
-            inhouseDonationTypeSelect.addEventListener('change', function() {
-                const value = this.value;
+        // Initialize: Radio button starts unchecked, so mobile fields are enabled by default
+        if (mobilePlaceInput) {
+            mobilePlaceInput.disabled = false;
+            mobilePlaceInput.placeholder = 'Enter location.';
+        }
+        if (mobileOrganizerInput) {
+            mobileOrganizerInput.disabled = false;
+            mobileOrganizerInput.placeholder = 'Enter organizer.';
+        }
+        
+        if (inhouseDonationTypeRadio) {
+            // Store previous state to detect toggle
+            let wasCheckedBeforeClick = false;
+            
+            // Capture state before click
+            inhouseDonationTypeRadio.addEventListener('mousedown', function(e) {
+                wasCheckedBeforeClick = this.checked;
+            });
+            
+            // Handle toggle behavior: uncheck if already checked
+            inhouseDonationTypeRadio.addEventListener('click', function(e) {
+                // Use setTimeout to check state after browser's default behavior
+                setTimeout(() => {
+                    // If it was checked before click and is still checked, uncheck it
+                    if (wasCheckedBeforeClick && this.checked) {
+                        this.checked = false;
+                        // Trigger change event manually to update UI
+                        const changeEvent = new Event('change', { bubbles: true });
+                        this.dispatchEvent(changeEvent);
+                    }
+                }, 0);
+            });
+            
+            inhouseDonationTypeRadio.addEventListener('change', function() {
+                const value = this.checked ? this.value : '';
                 
                 // When IN-HOUSE is selected, clear and disable mobile fields
                 if (value && value !== '') {
                     if (mobilePlaceInput) {
                         mobilePlaceInput.value = '';
                         mobilePlaceInput.disabled = true;
-                        mobilePlaceInput.placeholder = 'Disabled - In-House selected';
+                        mobilePlaceInput.placeholder = 'Disabled';
                     }
                     if (mobileOrganizerInput) {
                         mobileOrganizerInput.value = '';
                         mobileOrganizerInput.disabled = true;
-                        mobileOrganizerInput.placeholder = 'Disabled - In-House selected';
+                        mobileOrganizerInput.placeholder = 'Disabled';
                     }
                 } else {
                     // When IN-HOUSE is cleared, re-enable mobile fields
@@ -140,46 +172,48 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
         
-        // Add change handlers for mobile fields to clear and disable IN-HOUSE when mobile is used
+        // Add change handlers for mobile fields to clear IN-HOUSE when mobile is used
         if (mobilePlaceInput) {
             mobilePlaceInput.addEventListener('input', function() {
-                if (this.value.trim() !== '' && inhouseDonationTypeSelect) {
-                    inhouseDonationTypeSelect.value = '';
-                    inhouseDonationTypeSelect.disabled = true;
+                if (this.value.trim() !== '' && inhouseDonationTypeRadio) {
+                    // Uncheck IN-HOUSE radio when mobile field is filled
+                    inhouseDonationTypeRadio.checked = false;
+                    // Trigger change event to update UI
+                    const changeEvent = new Event('change', { bubbles: true });
+                    inhouseDonationTypeRadio.dispatchEvent(changeEvent);
                     // Hide patient details if shown
                     const patientDetailsSection = document.getElementById('patientDetailsSection');
                     if (patientDetailsSection) {
                         patientDetailsSection.style.display = 'none';
                     }
-                } else if (this.value.trim() === '' && inhouseDonationTypeSelect) {
-                    // Re-enable IN-HOUSE dropdown if mobile field is cleared
-                    inhouseDonationTypeSelect.disabled = false;
                 }
+                // Don't auto-check radio when mobile field is cleared - let it stay unchecked
                 checkMutualExclusivity();
             });
         }
         
         if (mobileOrganizerInput) {
             mobileOrganizerInput.addEventListener('input', function() {
-                if (this.value.trim() !== '' && inhouseDonationTypeSelect) {
-                    inhouseDonationTypeSelect.value = '';
-                    inhouseDonationTypeSelect.disabled = true;
+                if (this.value.trim() !== '' && inhouseDonationTypeRadio) {
+                    // Uncheck IN-HOUSE radio when mobile field is filled
+                    inhouseDonationTypeRadio.checked = false;
+                    // Trigger change event to update UI
+                    const changeEvent = new Event('change', { bubbles: true });
+                    inhouseDonationTypeRadio.dispatchEvent(changeEvent);
                     // Hide patient details if shown
                     const patientDetailsSection = document.getElementById('patientDetailsSection');
                     if (patientDetailsSection) {
                         patientDetailsSection.style.display = 'none';
                     }
-                } else if (this.value.trim() === '' && inhouseDonationTypeSelect) {
-                    // Re-enable IN-HOUSE dropdown if mobile field is cleared
-                    inhouseDonationTypeSelect.disabled = false;
                 }
+                // Don't auto-check radio when mobile field is cleared - let it stay unchecked
                 checkMutualExclusivity();
             });
         }
 
         // Add mutual exclusivity check function
         function checkMutualExclusivity() {
-            const inhouseValue = inhouseDonationTypeSelect ? inhouseDonationTypeSelect.value : '';
+            const inhouseValue = inhouseDonationTypeRadio && inhouseDonationTypeRadio.checked ? inhouseDonationTypeRadio.value : '';
             const mobilePlace = mobilePlaceInput ? mobilePlaceInput.value.trim() : '';
             const mobileOrganizer = mobileOrganizerInput ? mobileOrganizerInput.value.trim() : '';
             
@@ -222,17 +256,171 @@ document.addEventListener('DOMContentLoaded', function() {
         // Add real-time validation for basic screening fields
         const bodyWeightInput = document.getElementById('bodyWeightInput');
         const specificGravityInput = document.getElementById('specificGravityInput');
+        const bloodTypeSelect = document.querySelector('select[name="blood-type"]');
+        
+        // Function to check and update Next button state in real-time
+        function updateNextButtonState() {
+            const nextButton = document.getElementById('screeningNextButton');
+            if (!nextButton) {
+                return;
+            }
+            
+            // Check if we're on step 2 by checking if step 2 content is active
+            const step2Content = document.querySelector('.screening-step-content[data-step="2"]');
+            const isStep2Active = step2Content && step2Content.classList.contains('active');
+            
+            if (!isStep2Active) {
+                // Not on step 2, don't modify button
+                return;
+            }
+            
+            // Get elements fresh each time to ensure we have the latest values
+            // Always scope to the modal to avoid conflicts
+            const screeningModal = document.getElementById('screeningFormModal');
+            if (!screeningModal) {
+                return;
+            }
+            
+            // Try to find elements in step 2 content first, then fallback to modal
+            const step2Container = step2Content || screeningModal;
+            const bodyWeightInputEl = step2Container.querySelector('#bodyWeightInput') || screeningModal.querySelector('#bodyWeightInput');
+            const specificGravityInputEl = step2Container.querySelector('#specificGravityInput') || screeningModal.querySelector('#specificGravityInput');
+            
+            // Find blood type select - be very specific to avoid conflicts
+            // Priority: step 2 content > modal > all selects in modal
+            let bloodTypeSelectEl = null;
+            
+            // First try: find in step 2 content
+            if (step2Content) {
+                bloodTypeSelectEl = step2Content.querySelector('select[name="blood-type"]');
+            }
+            
+            // Second try: find in modal
+            if (!bloodTypeSelectEl && screeningModal) {
+                bloodTypeSelectEl = screeningModal.querySelector('select[name="blood-type"]');
+            }
+            
+            // Last resort: search all selects and find the one in step 2
+            if (!bloodTypeSelectEl) {
+                const allSelects = document.querySelectorAll('select[name="blood-type"]');
+                for (let sel of allSelects) {
+                    const inStep2 = sel.closest('.screening-step-content[data-step="2"]');
+                    const inModal = sel.closest('#screeningFormModal');
+                    if (inStep2 || inModal) {
+                        bloodTypeSelectEl = sel;
+                        break;
+                    }
+                }
+            }
+            
+            if (!bodyWeightInputEl || !specificGravityInputEl || !bloodTypeSelectEl) {
+                // Elements not found, disable button
+                nextButton.disabled = true;
+                nextButton.style.backgroundColor = '#dc3545';
+                nextButton.style.borderColor = '#dc3545';
+                nextButton.style.opacity = '0.8';
+                nextButton.style.cursor = 'not-allowed';
+                return;
+            }
+            
+            const bodyWeightValue = bodyWeightInputEl.value ? String(bodyWeightInputEl.value).trim() : '';
+            const specificGravityValue = specificGravityInputEl.value ? String(specificGravityInputEl.value).trim() : '';
+            
+            // Get blood type value - check multiple ways to ensure we get it
+            const bloodTypeValue = bloodTypeSelectEl.value ? String(bloodTypeSelectEl.value).trim() : '';
+            const selectedIndex = bloodTypeSelectEl.selectedIndex;
+            const selectedOption = selectedIndex >= 0 && selectedIndex < bloodTypeSelectEl.options.length 
+                                 ? bloodTypeSelectEl.options[selectedIndex] 
+                                 : null;
+            
+            // Also check the selected option's value directly
+            const selectedOptionValue = selectedOption ? String(selectedOption.value || '').trim() : '';
+            
+            // Blood type is valid if:
+            // 1. selectedIndex > 0 (not the placeholder which is index 0)
+            // 2. The selected option exists and has a value
+            // 3. The selected option is not disabled
+            // 4. Either bloodTypeValue or selectedOptionValue is not empty
+            const hasBloodTypeValue = (bloodTypeValue && bloodTypeValue !== '') || (selectedOptionValue && selectedOptionValue !== '');
+            const isBloodTypeSelected = selectedIndex > 0 && // Must be greater than 0 (not the placeholder)
+                                       selectedOption && 
+                                       hasBloodTypeValue &&
+                                       !selectedOption.disabled;
+            
+            // Parse values
+            const weight = bodyWeightValue ? parseFloat(bodyWeightValue) : NaN;
+            const gravity = specificGravityValue ? parseFloat(specificGravityValue) : NaN;
+            
+            // Check if all fields are filled AND valid
+            const hasWeight = !isNaN(weight) && weight > 0;
+            const hasGravity = !isNaN(gravity) && gravity > 0;
+            const hasBloodType = isBloodTypeSelected;
+            
+            // Check ranges: weight 50-120kg, specific gravity 12.5-18.0
+            const isWeightValid = hasWeight && weight >= 50 && weight <= 120;
+            const isGravityValid = hasGravity && gravity >= 12.5 && gravity <= 18.0;
+            
+            // All conditions must be met
+            const allValid = isWeightValid && isGravityValid && hasBloodType;
+            
+            // If ALL conditions are met: weight in range AND gravity in range AND blood type selected
+            if (allValid) {
+                // Green inputs: button enabled with 100% opacity and clickable
+                nextButton.disabled = false;
+                nextButton.style.backgroundColor = '';
+                nextButton.style.borderColor = '';
+                nextButton.style.opacity = '1';
+                nextButton.style.cursor = 'pointer';
+            } else {
+                // Red inputs: button disabled with 80% opacity (20% less than 100%)
+                nextButton.disabled = true;
+                nextButton.style.backgroundColor = '#dc3545';
+                nextButton.style.borderColor = '#dc3545';
+                nextButton.style.opacity = '0.8';
+                nextButton.style.cursor = 'not-allowed';
+            }
+        }
         
         if (bodyWeightInput) {
             bodyWeightInput.addEventListener('input', function() {
                 validateBodyWeight(this.value);
+                updateNextButtonState();
             });
         }
         
         if (specificGravityInput) {
             specificGravityInput.addEventListener('input', function() {
                 validateSpecificGravity(this.value);
+                updateNextButtonState();
             });
+        }
+        
+        if (bloodTypeSelect) {
+            bloodTypeSelect.addEventListener('change', function() {
+                updateNextButtonState();
+            });
+            
+            // Also listen for input event (some browsers fire this instead)
+            bloodTypeSelect.addEventListener('input', function() {
+                updateNextButtonState();
+            });
+        }
+        
+        // Also add a global listener for blood type changes in case the element wasn't found during init
+        document.addEventListener('change', function(e) {
+            if (e.target && e.target.name === 'blood-type' && e.target.closest('#screeningFormModal')) {
+                if (typeof updateNextButtonState === 'function') {
+                    updateNextButtonState();
+                } else if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
+                }
+            }
+        });
+        
+        // Expose updateNextButtonState globally so it can be called from goToStep
+        // This must be done after the function is defined
+        if (typeof window !== 'undefined') {
+            window.updateNextButtonState = updateNextButtonState;
         }
     }
 
@@ -269,6 +457,16 @@ document.addEventListener('DOMContentLoaded', function() {
         // Ensure prefill has run by the time user navigates
         if (step === 1 || step === 3) {
             prefillFromExisting();
+        }
+        
+        // Initialize button state when entering step 2
+        if (step === 2) {
+            setTimeout(() => {
+                // Call the update function to set button state
+                if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
+                }
+            }, 150);
         }
 
         // Generate review content if going to step 3
@@ -339,12 +537,12 @@ document.addEventListener('DOMContentLoaded', function() {
     function validateCurrentStep() {
         
         if (currentStep === 1) {
-            // Validate donation type selection - either IN-HOUSE dropdown OR mobile fields filled
-            const inhouseSelect = document.getElementById('inhouseDonationTypeSelect');
+            // Validate donation type selection - either IN-HOUSE radio OR mobile fields filled
+            const inhouseRadio = document.getElementById('inhouseDonationTypeRadio');
             const mobilePlaceInput = document.getElementById('mobilePlaceInput');
             const mobileOrganizerInput = document.getElementById('mobileOrganizerInput');
             
-            const inhouseValue = inhouseSelect ? inhouseSelect.value : '';
+            const inhouseValue = inhouseRadio && inhouseRadio.checked ? inhouseRadio.value : '';
             const mobilePlace = mobilePlaceInput ? mobilePlaceInput.value.trim() : '';
             const mobileOrganizer = mobileOrganizerInput ? mobileOrganizerInput.value.trim() : '';
             
@@ -357,52 +555,127 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
             }
             
-            // If Patient-Directed is selected, validate patient information
-            if (inhouseValue === 'Patient-Directed') {
-                const patientName = document.querySelector('input[name="patient-name"]');
-                const hospital = document.querySelector('input[name="hospital"]');
-                const patientBloodType = document.querySelector('select[name="patient-blood-type"]');
-                const noUnits = document.querySelector('input[name="no-units"]');
-                
-                if (!patientName?.value.trim() || !hospital?.value.trim() || 
-                    !patientBloodType?.value || !noUnits?.value) {
-                    showAlert('Please fill in all patient information fields for Patient-Directed donations.', 'warning');
-                    return false;
-                }
-            }
+            // Patient-Directed is no longer available, so no need to validate it
             
             return true;
         } else if (currentStep === 2) {
             // Validate step 2 - Basic Info with specific validation for weight and specific gravity
-            const bodyWeightInput = document.getElementById('bodyWeightInput');
-            const specificGravityInput = document.getElementById('specificGravityInput');
-            const bloodTypeSelect = document.querySelector('select[name="blood-type"]');
+            // Scope queries to the screening modal to avoid conflicts
+            const screeningModal = document.getElementById('screeningFormModal');
+            if (!screeningModal) {
+                showAlert('Form not found. Please refresh the page and try again.', 'warning');
+                return false;
+            }
             
-            // Check required fields first
-            if (!bodyWeightInput?.value.trim() || !specificGravityInput?.value.trim() || !bloodTypeSelect?.value) {
+            const bodyWeightInput = screeningModal.querySelector('#bodyWeightInput');
+            const specificGravityInput = screeningModal.querySelector('#specificGravityInput');
+            const bloodTypeSelect = screeningModal.querySelector('select[name="blood-type"]');
+            
+            // Check if elements exist
+            if (!bodyWeightInput || !specificGravityInput || !bloodTypeSelect) {
+                console.error('[Validation Error] Missing form elements:', {
+                    bodyWeightInput: !!bodyWeightInput,
+                    specificGravityInput: !!specificGravityInput,
+                    bloodTypeSelect: !!bloodTypeSelect
+                });
                 showAlert('Please fill in all required fields (Body Weight, Specific Gravity, and Blood Type) before proceeding.', 'warning');
                 return false;
             }
             
-            // Check for validation errors (even if fields are filled)
-            const weight = parseFloat(bodyWeightInput.value);
-            const gravity = parseFloat(specificGravityInput.value);
+            // Get values safely - for number inputs, check if value exists and is not empty
+            const bodyWeightValue = bodyWeightInput.value ? String(bodyWeightInput.value).trim() : '';
+            const specificGravityValue = specificGravityInput.value ? String(specificGravityInput.value).trim() : '';
+            const bloodTypeValue = bloodTypeSelect.value ? String(bloodTypeSelect.value).trim() : '';
             
-            const hasWeightError = weight < 50 && weight > 0;
-            const hasGravityError = (gravity < 12.5 || gravity > 18.0) && gravity > 0;
+            // Debug logging to help identify the issue
+            console.log('[Screening Validation Step 2]', {
+                bodyWeightInput: bodyWeightInput.value,
+                bodyWeightValue: bodyWeightValue,
+                specificGravityInput: specificGravityInput.value,
+                specificGravityValue: specificGravityValue,
+                bloodTypeSelect: bloodTypeSelect.value,
+                bloodTypeValue: bloodTypeValue,
+                bodyWeightEmpty: !bodyWeightValue,
+                specificGravityEmpty: !specificGravityValue,
+                bloodTypeEmpty: !bloodTypeValue
+            });
             
-            // Debug logging
-            try {
-                console.log('[Screening Validation]', {
-                    weight: weight,
-                    gravity: gravity,
-                    hasWeightError: hasWeightError,
-                    hasGravityError: hasGravityError
-                });
-            } catch(_) {}
+            // Check required fields - must have non-empty values
+            if (!bodyWeightValue || bodyWeightValue === '' || bodyWeightValue === '0') {
+                showAlert('Please enter a valid Body Weight value.', 'warning');
+                if (bodyWeightInput) bodyWeightInput.focus();
+                return false;
+            }
+            
+            if (!specificGravityValue || specificGravityValue === '' || specificGravityValue === '0') {
+                showAlert('Please enter a valid Specific Gravity value.', 'warning');
+                if (specificGravityInput) specificGravityInput.focus();
+                return false;
+            }
+            
+            // Check if blood type is selected (not the default disabled option)
+            const selectedOption = bloodTypeSelect.options[bloodTypeSelect.selectedIndex];
+            if (!bloodTypeValue || bloodTypeValue === '' || !selectedOption || selectedOption.disabled || selectedOption.value === '') {
+                showAlert('Please select a Blood Type.', 'warning');
+                if (bloodTypeSelect) bloodTypeSelect.focus();
+                return false;
+            }
+            
+            // Parse numeric values
+            const weight = parseFloat(bodyWeightValue);
+            const gravity = parseFloat(specificGravityValue);
+            
+            // Check if values are valid numbers (not NaN)
+            if (isNaN(weight) || weight <= 0) {
+                showAlert('Please enter a valid numeric value for Body Weight (greater than 0).', 'warning');
+                if (bodyWeightInput) bodyWeightInput.focus();
+                return false;
+            }
+            
+            if (isNaN(gravity) || gravity <= 0) {
+                showAlert('Please enter a valid numeric value for Specific Gravity (greater than 0).', 'warning');
+                if (specificGravityInput) specificGravityInput.focus();
+                return false;
+            }
+            
+            // Check for validation errors - weight must be between 50-120kg, specific gravity 12.5-18.0
+            // Red if: weight < 50 OR weight > 120, gravity < 12.5 OR gravity > 18.0
+            const hasWeightError = weight < 50 || weight > 120;
+            const hasGravityError = gravity < 12.5 || gravity > 18.0;
+            
+            // Check if inputs are green (valid range)
+            const isWeightGreen = !hasWeightError && weight >= 50 && weight <= 120;
+            const isGravityGreen = !hasGravityError && gravity >= 12.5 && gravity <= 18.0;
+            
+            // Update Next button state based on validation
+            const nextButton = document.getElementById('screeningNextButton');
+            if (nextButton) {
+                if (hasWeightError || hasGravityError) {
+                    // Red inputs: button disabled with 80% opacity (20% less than 100%)
+                    nextButton.disabled = true;
+                    nextButton.style.backgroundColor = '#dc3545';
+                    nextButton.style.borderColor = '#dc3545';
+                    nextButton.style.opacity = '0.8';
+                    nextButton.style.cursor = 'not-allowed';
+                } else if (isWeightGreen && isGravityGreen) {
+                    // Green inputs: button enabled with 100% opacity and clickable
+                    nextButton.disabled = false;
+                    nextButton.style.backgroundColor = '';
+                    nextButton.style.borderColor = '';
+                    nextButton.style.opacity = '1';
+                    nextButton.style.cursor = 'pointer';
+                } else {
+                    // Default enabled state
+                    nextButton.disabled = false;
+                    nextButton.style.backgroundColor = '';
+                    nextButton.style.borderColor = '';
+                    nextButton.style.opacity = '1';
+                    nextButton.style.cursor = 'pointer';
+                }
+            }
             
             if (hasWeightError || hasGravityError) {
-                window.showValidationErrorModal(hasWeightError, hasGravityError);
+                // Don't show modal, just return false and let the disabled button indicate the issue
                 return false;
             }
             
@@ -445,14 +718,21 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const weight = parseFloat(value);
         
-        if (weight < 50 && weight > 0) {
-            // Show warning alert
+        // Updated range: 50-120kg
+        // Red if: weight < 50 OR weight > 120
+        if (weight > 0 && (weight < 50 || weight > 120)) {
+            // Show warning alert - RED border
             alert.style.display = 'block';
+            alert.textContent = '⚠️ Body weight must be between 50-120 kg for donor safety.';
             input.style.borderColor = '#dc3545';
-        } else {
-            // Hide alert and reset border
+        } else if (weight >= 50 && weight <= 120) {
+            // Valid range - GREEN border
             alert.style.display = 'none';
-            input.style.borderColor = weight > 0 ? '#28a745' : '#e9ecef';
+            input.style.borderColor = '#28a745';
+        } else {
+            // Empty or zero - default border
+            alert.style.display = 'none';
+            input.style.borderColor = '#e9ecef';
         }
     }
 
@@ -464,128 +744,27 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const gravity = parseFloat(value);
         
-        if (gravity < 12.5 && gravity > 0) {
-            // Show warning alert with range information
+        // Updated range: 12.5-18.0 g/dL
+        // Red if: gravity < 12.5 OR gravity > 18.0
+        if (gravity > 0 && (gravity < 12.5 || gravity > 18.0)) {
+            // Show warning alert - RED border
             alert.style.display = 'block';
+            alert.textContent = '⚠️ Specific gravity must be between 12.5-18.0 g/dL for donor safety.';
             input.style.borderColor = '#dc3545';
-        } else if (gravity > 18.0 && gravity > 0) {
-            // Show warning for high specific gravity
-            alert.style.display = 'block';
-            input.style.borderColor = '#dc3545';
-        } else {
-            // Hide alert and reset border
+        } else if (gravity >= 12.5 && gravity <= 18.0) {
+            // Valid range - GREEN border
             alert.style.display = 'none';
-            input.style.borderColor = gravity > 0 ? '#28a745' : '#e9ecef';
+            input.style.borderColor = '#28a745';
+        } else {
+            // Empty or zero - default border
+            alert.style.display = 'none';
+            input.style.borderColor = '#e9ecef';
         }
     }
 
-    // Make showValidationErrorModal globally accessible
-    window.showValidationErrorModal = function(hasWeightError, hasGravityError) {
-        
-        // Create modal HTML
-        const modalHtml = `
-            <div class="modal fade" id="validationErrorModal" tabindex="-1" aria-labelledby="validationErrorModalLabel" aria-hidden="true">
-                <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content">
-                        <div class="modal-header bg-danger text-white">
-                            <h5 class="modal-title" id="validationErrorModalLabel">
-                                <i class="fas fa-exclamation-triangle me-2"></i>
-                                Donor Safety Alert
-                            </h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="alert alert-danger mb-3">
-                                <i class="fas fa-heartbeat me-2"></i>
-                                <strong>Donor Safety Concern Detected</strong>
-                            </div>
-                            
-                            <p class="mb-3">The following screening measurements indicate potential safety concerns:</p>
-                            
-                            <ul class="list-unstyled">
-                                ${hasWeightError ? '<li><i class="fas fa-times-circle text-danger me-2"></i><strong>Body Weight:</strong> Below minimum requirement (50 kg)</li>' : ''}
-                                ${hasGravityError ? '<li><i class="fas fa-times-circle text-danger me-2"></i><strong>Specific Gravity:</strong> Outside acceptable range (12.5-18.0 g/dL)</li>' : ''}
-                            </ul>
-                            
-                            <div class="alert alert-warning">
-                                <i class="fas fa-info-circle me-2"></i>
-                                <strong>Recommendation:</strong> For donor safety, we recommend deferring this donor at this time. 
-                                The donor may be eligible for future donations once their health parameters improve.
-                            </div>
-                            
-                            <p class="text-muted small">
-                                <i class="fas fa-shield-alt me-1"></i>
-                                This is a safety measure to protect both the donor and potential recipients.
-                            </p>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                                <i class="fas fa-arrow-left me-1"></i>
-                                Go Back & Adjust
-                            </button>
-                            <button type="button" class="btn btn-danger" id="deferFromModal">
-                                <i class="fas fa-ban me-1"></i>
-                                Defer Donor
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        // Remove existing modal if present
-        const existingModal = document.getElementById('validationErrorModal');
-        if (existingModal) {
-            existingModal.remove();
-        }
-        
-        // Add modal to body
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-        
-        // Show modal with proper z-index management
-        const modalElement = document.getElementById('validationErrorModal');
-        const modal = new bootstrap.Modal(modalElement, {
-            backdrop: 'static',
-            keyboard: false
-        });
-        
-        // Set z-index before showing
-        modalElement.style.zIndex = '10560';
-        modal.show();
-        
-        // Ensure backdrop has proper z-index
-        setTimeout(() => {
-            const backdrop = document.querySelector('.modal-backdrop');
-            if (backdrop) {
-                backdrop.style.zIndex = '10550';
-            }
-        }, 50);
-        
-        // Handle defer button click
-        document.getElementById('deferFromModal').addEventListener('click', function() {
-            // Clean up validation modal properly
-            modal.hide();
-            setTimeout(() => {
-                modalElement.remove();
-                cleanupModalBackdrops();
-            }, 150);
-            
-            // Store the screening form modal state so we can restore it if defer modal is closed
-            window.pendingScreeningModal = {
-                hasWeightError: hasWeightError,
-                hasGravityError: hasGravityError,
-                currentStep: 2 // We want to return to step 2 (Basic Info)
-            };
-            // Trigger defer donor functionality
-            handleDeferDonor();
-        });
-        
-        // Clean up modal when hidden
-        modalElement.addEventListener('hidden.bs.modal', function() {
-            this.remove();
-            cleanupModalBackdrops();
-        });
-    };
+    // Validation error modal removed - using disabled button instead
+    // The Next button will be disabled with red color and 80% opacity (20% less than 100%) when validation fails
+    // When inputs are green (valid), button is enabled with 100% opacity and clickable
 
     function handleDonationTypeChange(type, value) {
         
@@ -862,6 +1041,11 @@ function openScreeningModal(donorData) {
     const form = document.getElementById('screeningForm');
     if (form) {
         form.reset();
+        // After reset, ensure blood type goes back to placeholder
+        const bloodTypeSelect = form.querySelector('select[name="blood-type"]');
+        if (bloodTypeSelect) {
+            bloodTypeSelect.selectedIndex = 0;
+        }
     }
 
     // Set donor_id in hidden field if it exists
@@ -960,8 +1144,16 @@ function prefillFromExisting() {
                 }
                 const d = j.data;
                 // Basic Info (do not autofill body weight or specific gravity)
-                const bt = document.querySelector('select[name="blood-type"]');
-                if (bt && (bt.value === '' || bt.value === null)) bt.value = d.blood_type || '';
+                // Find blood type select in the screening modal only
+                const screeningModal = document.getElementById('screeningFormModal');
+                const bt = screeningModal ? screeningModal.querySelector('select[name="blood-type"]') : null;
+                if (bt && (bt.value === '' || bt.value === null || bt.selectedIndex === 0)) {
+                    bt.value = d.blood_type || '';
+                    // Trigger change event to update button state
+                    if (typeof window.updateNextButtonState === 'function') {
+                        setTimeout(() => window.updateNextButtonState(), 100);
+                    }
+                }
 
                 // Trigger validation for any existing values (safely)
                 const bodyWeightInput = document.getElementById('bodyWeightInput');
@@ -992,12 +1184,31 @@ function prefillFromExisting() {
 function handleDeferDonor() {
     //console.log('Defer donor button clicked in screening form');
     
-    // Get donor ID from the form
-    const donorIdInput = document.querySelector('input[name="donor_id"]');
-    const donorId = donorIdInput ? donorIdInput.value : null;
+    // Get donor ID from multiple sources - prioritize window.currentDonorData
+    let donorId = null;
+    
+    // First try to get from window.currentDonorData (most reliable)
+    if (window.currentDonorData && window.currentDonorData.donor_id) {
+        donorId = window.currentDonorData.donor_id;
+    }
+    
+    // Fallback to form input
+    if (!donorId) {
+        const donorIdInput = document.querySelector('input[name="donor_id"]');
+        donorId = donorIdInput ? donorIdInput.value : null;
+    }
+    
+    // Fallback to screening modal scope
+    if (!donorId) {
+        const screeningModal = document.getElementById('screeningFormModal');
+        if (screeningModal) {
+            const donorIdInput = screeningModal.querySelector('input[name="donor_id"]');
+            donorId = donorIdInput ? donorIdInput.value : null;
+        }
+    }
     
     if (!donorId) {
-        //console.error('No donor ID found in screening form');
+        console.error('No donor ID found in screening form');
         alert('Error: No donor ID found. Please try again.');
         return;
     }

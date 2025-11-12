@@ -27,14 +27,37 @@ if (!$input || !isset($input['unit_id'])) {
 }
 
 $unit_id = $input['unit_id'];
+$request_id = isset($input['request_id']) ? intval($input['request_id']) : null;
 
 try {
-    // Update the blood unit to mark as handed over (do not alter hospital_request_id)
+    // Get request data to get hospital_admitted if request_id is provided
+    $hospital_from = null;
+    if ($request_id) {
+        $requestResponse = supabaseRequest("blood_requests?request_id=eq." . $request_id);
+        if (isset($requestResponse['data']) && !empty($requestResponse['data'])) {
+            $request_data = $requestResponse['data'][0];
+            $hospital_from = $request_data['hospital_admitted'] ?? null;
+        }
+    }
+    
+    // Update the blood unit to mark as handed over and assign to request
     $update_data = [
         'status' => 'handed_over',
         'handed_over_at' => date('Y-m-d H:i:s'),
         'updated_at' => date('Y-m-d H:i:s')
     ];
+    
+    // Add request_id and hospital_from if provided
+    // Note: request_id is int4, hospital_from is text
+    if ($request_id) {
+        // Use request_id (int4) - existing column in blood_bank_units
+        $update_data['request_id'] = intval($request_id);
+    }
+    
+    if ($hospital_from) {
+        // Use hospital_from (text) - existing column in blood_bank_units
+        $update_data['hospital_from'] = strval($hospital_from);
+    }
     
     $response = supabaseRequest(
         "blood_bank_units?unit_id=eq." . $unit_id,
@@ -45,7 +68,14 @@ try {
     if ($response['code'] >= 200 && $response['code'] < 300) {
         echo json_encode(['success' => true, 'message' => 'Blood unit updated successfully', 'updated' => $response['data']]);
     } else {
-        throw new Exception('Failed to update blood unit. HTTP Code: ' . $response['code']);
+        $errorMsg = 'Failed to update blood unit. HTTP Code: ' . $response['code'];
+        if (isset($response['error'])) {
+            $errorMsg .= '. Error: ' . (is_string($response['error']) ? $response['error'] : json_encode($response['error']));
+        }
+        if (isset($response['message'])) {
+            $errorMsg .= '. Message: ' . (is_string($response['message']) ? $response['message'] : json_encode($response['message']));
+        }
+        throw new Exception($errorMsg);
     }
     
 } catch (Exception $e) {
