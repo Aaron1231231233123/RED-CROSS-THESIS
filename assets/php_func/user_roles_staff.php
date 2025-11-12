@@ -44,4 +44,7 @@ if ($response) {
     }
 }
 
+// Persist staff subrole in session for downstream pages (e.g., reviewer workflows)
+$_SESSION['user_staff_roles'] = $user_staff_roles;
+
 ?>

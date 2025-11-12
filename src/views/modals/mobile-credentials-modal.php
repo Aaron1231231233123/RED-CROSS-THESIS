@@ -139,6 +139,10 @@ if (!$hasSessionCredentials && !$hasCookieCredentials && $isDeclarationForm && i
     }
 }
 
+$isReviewer = isset($_SESSION['role_id'], $_SESSION['user_staff_roles'])
+    && $_SESSION['role_id'] == 3
+    && $_SESSION['user_staff_roles'] === 'reviewer';
+
 $donorName = $_SESSION['donor_registered_name'] ?? $_COOKIE['donor_name'] ?? 'Donor';
 $modalDonorId = isset($_SESSION['donor_id']) ? (string)$_SESSION['donor_id'] : '';
 
@@ -225,13 +229,24 @@ error_log("Mobile Credentials Modal - Final check: showCredentials=" . ($showCre
             </div>
             <div class="modal-footer d-flex justify-content-between align-items-center">
                 <div class="text-muted small">
-                    If the donor is ready for the next step based on the medical history interview,
-                    click and proceed with Initial Screening.
+                    <?php if ($isReviewer): ?>
+                        Click return to continue working from the reviewer dashboard.
+                    <?php else: ?>
+                        If the donor is ready for the next step based on the medical history interview,
+                        click and proceed with Initial Screening.
+                    <?php endif; ?>
                 </div>
+                <?php if ($isReviewer): ?>
+                <button type="button" class="btn btn-danger" onclick="returnToReviewerDashboard()">
+                    <i class="fas fa-undo me-2"></i>
+                    Return
+                </button>
+                <?php else: ?>
                 <button type="button" class="btn btn-danger" onclick="launchInitialScreening()">
                     <i class="fas fa-arrow-right me-2"></i>
                     Initial Screening
                 </button>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -279,6 +294,13 @@ error_log("Mobile Credentials Modal - Final check: showCredentials=" . ($showCre
 </style>
 
 <script>
+if (typeof window.IS_REVIEWER === 'undefined') {
+    window.IS_REVIEWER = <?php echo $isReviewer ? 'true' : 'false'; ?>;
+} else if (!window.IS_REVIEWER) {
+    window.IS_REVIEWER = <?php echo $isReviewer ? 'true' : 'false'; ?>;
+}
+var IS_REVIEWER = window.IS_REVIEWER;
+
 // Function to copy text to clipboard
 function copyToClipboard(elementId) {
     const element = document.getElementById(elementId);
@@ -437,6 +459,12 @@ if (modalElement) {
         });
         
         console.log('[Mobile Credentials] Backdrop removed instantly');
+
+        if (IS_REVIEWER) {
+            setTimeout(() => {
+                window.location.reload();
+            }, 200);
+        }
     });
 }
 
@@ -523,7 +551,25 @@ function clearMobileCredentials(onComplete) {
     });
 }
 
+function returnToReviewerDashboard() {
+    const modal = document.getElementById('mobileCredentialsModal');
+
+    clearMobileCredentials(() => {
+        if (modal) {
+            const instance = bootstrap.Modal.getInstance(modal) || new bootstrap.Modal(modal);
+            instance.hide();
+        } else {
+            window.location.reload();
+        }
+    });
+}
+
 function launchInitialScreening() {
+    if (IS_REVIEWER) {
+        returnToReviewerDashboard();
+        return;
+    }
+
     const modal = document.getElementById('mobileCredentialsModal');
     const donorId = modal?.getAttribute('data-donor-id') || window.__latestRegisteredDonorId || '';
 

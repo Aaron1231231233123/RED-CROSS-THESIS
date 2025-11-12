@@ -27,10 +27,16 @@ if (!function_exists('generateNNBNetBarcode')) {
 
 header('Content-Type: application/json');
 
-// Check if user is logged in and is admin
-if (!isset($_SESSION['user_id']) || !isset($_SESSION['role_id']) || $_SESSION['role_id'] != 1) {
+// Check if user is logged in and authorized (admin or reviewer)
+$roleId = $_SESSION['role_id'] ?? null;
+$staffRole = $_SESSION['user_staff_roles'] ?? null;
+
+$isReviewer = ($roleId == 3) && (is_string($staffRole) && strtolower(trim($staffRole)) === 'reviewer');
+$isAdmin = ($roleId == 1);
+
+if (!isset($_SESSION['user_id']) || (!$isAdmin && !$isReviewer)) {
     http_response_code(401);
-    echo json_encode(['success' => false, 'error' => 'Unauthorized. Admin access required.']);
+    echo json_encode(['success' => false, 'error' => 'Unauthorized. Admin or reviewer access required.']);
     exit();
 }
 

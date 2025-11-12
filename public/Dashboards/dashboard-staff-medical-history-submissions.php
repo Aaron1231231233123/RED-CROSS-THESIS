@@ -3,6 +3,8 @@ session_start();
 require_once '../../assets/conn/db_conn.php';
 require '../../assets/php_func/user_roles_staff.php';
 
+$is_reviewer = isset($user_staff_roles) && $user_staff_roles === 'reviewer';
+
 // Lightweight endpoint to transition a donor from screening to physical examination review
 // - If physical_examination record for donor_id exists: update needs_review=true and updated_at
 // - If none exists: create with needs_review=true and updated_at
@@ -2421,6 +2423,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
 </head>
 
 <body class="light-mode">
+<?php if ($is_reviewer): ?>
+    <?php include '../../src/views/modals/admin-donor-registration-modal.php'; ?>
+<?php endif; ?>
     <div class="container-fluid p-0">
         <!-- Header -->
         <div class="dashboard-home-header">
@@ -2735,6 +2740,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
     </div>
 </div>
 
+    <?php if (!$is_reviewer): ?>
     <!-- Confirmation Modal -->
     <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -2756,6 +2762,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
     <!-- Medical History Modal -->
     <div class="modal fade" id="medicalHistoryModal" tabindex="-1" aria-labelledby="medicalHistoryModalLabel" aria-hidden="true">
@@ -2908,12 +2915,28 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
 
 
     <script>
+        if (typeof window.IS_REVIEWER === 'undefined') {
+            window.IS_REVIEWER = <?php echo $is_reviewer ? 'true' : 'false'; ?>;
+        } else if (!window.IS_REVIEWER) {
+            window.IS_REVIEWER = <?php echo $is_reviewer ? 'true' : 'false'; ?>;
+        }
+
         // Pass PHP data to JavaScript
         const medicalByDonor = <?php echo json_encode($medical_by_donor); ?>;
         const eligibilityDonorIds = <?php echo json_encode(array_keys($eligibility_by_donor)); ?>;
         const hasEligibility = (did) => Array.isArray(eligibilityDonorIds) && eligibilityDonorIds.includes(String(did)) || eligibilityDonorIds.includes(Number(did));
         
         function showConfirmationModal() {
+            if (IS_REVIEWER) {
+                if (typeof window.openAdminDonorRegistrationModal === 'function') {
+                    window.openAdminDonorRegistrationModal();
+                } else {
+                    console.error('Admin donor registration modal not available yet');
+                    alert('Registration modal is still loading. Please try again in a moment.');
+                }
+                return;
+            }
+
             const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
             confirmationModal.show();
         }
@@ -5823,5 +5846,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
     // It should ONLY appear on the declaration form when registering a new donor
     // Credentials are displayed there for context during registration
     ?>
+<?php if ($is_reviewer): ?>
+<script src="../../assets/js/admin-donor-registration-modal.js"></script>
+<?php endif; ?>
 </body>
 </html>
