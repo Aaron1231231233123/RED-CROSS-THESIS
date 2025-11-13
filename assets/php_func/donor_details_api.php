@@ -711,11 +711,48 @@ try {
     }
 
     // Phlebotomist status: attempt to compute from blood_collection
-    if (!isset($derived['collection_status']) || $derived['collection_status'] === '-' || empty($derived['collection_status'])) {
+    $collectionStatusRaw = isset($derived['collection_status']) ? trim((string)$derived['collection_status']) : '';
+    $shouldRecalculateCollection = (
+        $collectionStatusRaw === '' ||
+        $collectionStatusRaw === '-' ||
+        strcasecmp($collectionStatusRaw, 'pending') === 0 ||
+        strcasecmp($collectionStatusRaw, 'pending (collection)') === 0 ||
+        strcasecmp($collectionStatusRaw, 'yet to be collected') === 0 ||
+        strcasecmp($collectionStatusRaw, 'pending blood collection') === 0
+    );
+
+    $collectionDetails = null;
+
+    if (!isset($derived['collection_status']) || $shouldRecalculateCollection) {
         $collection_status = 'Pending';
         $blood_collection_id = $derived['blood_collection_id'] ?? null;
         $screening_id = $derived['screening_id'] ?? null;
         $physical_exam_id = $derived['physical_exam_id'] ?? null;
+        
+        // If we don't have physical_exam_id from eligibility, try to get it from physical_examination table
+        if (!$physical_exam_id) {
+            try {
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=physical_exam_id&donor_id=eq.' . urlencode($donor_id) . '&order=created_at.desc&limit=1');
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Accept: application/json'
+                ]);
+                $resp = curl_exec($ch);
+                $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if ($http === 200) {
+                    $arr = json_decode($resp, true);
+                    if (!empty($arr) && isset($arr[0]['physical_exam_id'])) {
+                        $physical_exam_id = $arr[0]['physical_exam_id'];
+                        error_log("Donor Details API - Found physical_exam_id from physical_examination table for donor $donor_id: $physical_exam_id");
+                    }
+                }
+            } catch (Exception $e) {
+                error_log("Error fetching physical_exam_id by donor_id: " . $e->getMessage());
+            }
+        }
         
         try {
             $headers = [
@@ -724,9 +761,11 @@ try {
                 'Accept: application/json'
             ];
             
+            error_log("Donor Details API - Checking blood collection for donor $donor_id - blood_collection_id: " . ($blood_collection_id ?? 'null') . ", physical_exam_id: " . ($physical_exam_id ?? 'null') . ", screening_id: " . ($screening_id ?? 'null'));
+            
             // First try by blood_collection_id
             if ($blood_collection_id) {
-                $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=is_successful,needs_review&blood_collection_id=eq.' . urlencode($blood_collection_id) . '&limit=1');
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=is_successful,needs_review,status&blood_collection_id=eq.' . urlencode($blood_collection_id) . '&limit=1');
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
                 $resp = curl_exec($ch);
@@ -734,19 +773,30 @@ try {
                 curl_close($ch);
                 if ($http === 200) {
                     $arr = json_decode($resp, true);
+                    error_log("Donor Details API - Blood collection query by blood_collection_id response: " . json_encode($arr));
                     if (!empty($arr)) {
+                        $collectionDetails = $arr[0];
                         if (isset($arr[0]['is_successful'])) {
-                            // Check is_successful column - if false, consider it disapproved
+                            // Check is_successful column - if true, it's successful
                             $collection_status = $arr[0]['is_successful'] ? 'Successful' : 'Declined/Not Approved';
+                            error_log("Donor Details API - Collection status set to: $collection_status (from is_successful: " . ($arr[0]['is_successful'] ? 'true' : 'false') . ")");
                         } elseif (isset($arr[0]['needs_review']) && $arr[0]['needs_review'] === true) {
                             $collection_status = 'Pending';
+                            error_log("Donor Details API - Collection status set to Pending (needs_review: true)");
+                        } elseif (isset($arr[0]['status'])) {
+                            // Check status field as fallback
+                            $statusLower = strtolower(trim($arr[0]['status']));
+                            if ($statusLower === 'successful') {
+                                $collection_status = 'Successful';
+                                error_log("Donor Details API - Collection status set to Successful (from status field)");
+                            }
                         }
                     }
                 }
             } 
             // Try by physical_exam_id (preferred method for workflow progression)
             elseif ($physical_exam_id) {
-                $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=is_successful,needs_review&physical_exam_id=eq.' . urlencode($physical_exam_id) . '&order=created_at.desc&limit=1');
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=is_successful,needs_review,status&physical_exam_id=eq.' . urlencode($physical_exam_id) . '&order=created_at.desc&limit=1');
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
                 $resp = curl_exec($ch);
@@ -754,19 +804,34 @@ try {
                 curl_close($ch);
                 if ($http === 200) {
                     $arr = json_decode($resp, true);
+                    error_log("Donor Details API - Blood collection query by physical_exam_id response: " . json_encode($arr));
                     if (!empty($arr)) {
+                        $collectionDetails = $arr[0];
                         if (isset($arr[0]['is_successful'])) {
-                            // Check is_successful column - if false, consider it disapproved
+                            // Check is_successful column - if true, it's successful
                             $collection_status = $arr[0]['is_successful'] ? 'Successful' : 'Declined/Not Approved';
+                            error_log("Donor Details API - Collection status set to: $collection_status (from is_successful: " . ($arr[0]['is_successful'] ? 'true' : 'false') . ")");
                         } elseif (isset($arr[0]['needs_review']) && $arr[0]['needs_review'] === true) {
                             $collection_status = 'Pending';
+                            error_log("Donor Details API - Collection status set to Pending (needs_review: true)");
+                        } elseif (isset($arr[0]['status'])) {
+                            // Check status field as fallback
+                            $statusLower = strtolower(trim($arr[0]['status']));
+                            if ($statusLower === 'successful') {
+                                $collection_status = 'Successful';
+                                error_log("Donor Details API - Collection status set to Successful (from status field)");
+                            }
                         }
+                    } else {
+                        error_log("Donor Details API - No blood collection records found for physical_exam_id: $physical_exam_id");
                     }
+                } else {
+                    error_log("Donor Details API - HTTP error $http when querying blood_collection by physical_exam_id: $physical_exam_id");
                 }
             }
             // Fallback to screening_id
             elseif ($screening_id) {
-                $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=is_successful,needs_review&screening_id=eq.' . urlencode($screening_id) . '&order=created_at.desc&limit=1');
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=is_successful,needs_review,status&screening_id=eq.' . urlencode($screening_id) . '&order=created_at.desc&limit=1');
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
                 $resp = curl_exec($ch);
@@ -774,20 +839,34 @@ try {
                 curl_close($ch);
                 if ($http === 200) {
                     $arr = json_decode($resp, true);
+                    error_log("Donor Details API - Blood collection query by screening_id response: " . json_encode($arr));
                     if (!empty($arr)) {
+                        $collectionDetails = $arr[0];
                         if (isset($arr[0]['is_successful'])) {
-                            // Check is_successful column - if false, consider it disapproved
+                            // Check is_successful column - if true, it's successful
                             $collection_status = $arr[0]['is_successful'] ? 'Successful' : 'Declined/Not Approved';
+                            error_log("Donor Details API - Collection status set to: $collection_status (from is_successful: " . ($arr[0]['is_successful'] ? 'true' : 'false') . ")");
                         } elseif (isset($arr[0]['needs_review']) && $arr[0]['needs_review'] === true) {
                             $collection_status = 'Pending';
+                            error_log("Donor Details API - Collection status set to Pending (needs_review: true)");
+                        } elseif (isset($arr[0]['status'])) {
+                            // Check status field as fallback
+                            $statusLower = strtolower(trim($arr[0]['status']));
+                            if ($statusLower === 'successful') {
+                                $collection_status = 'Successful';
+                                error_log("Donor Details API - Collection status set to Successful (from status field)");
+                            }
                         }
                     }
                 }
+            } else {
+                error_log("Donor Details API - No identifiers available to query blood_collection (donor_id: $donor_id)");
             }
         } catch (Exception $e) {
             error_log("Error fetching blood collection status: " . $e->getMessage());
         }
         $derived['collection_status'] = $collection_status;
+        error_log("Donor Details API - Final collection_status for donor $donor_id: $collection_status");
     }
 
     // Fetch physical examination data for physician section
@@ -825,7 +904,8 @@ try {
         'eligibility' => $derived,
         'medical_history' => $medicalHistoryData,
         'physical_examination' => $physicalExamData,
-        'screening_form' => $screeningLatest
+        'screening_form' => $screeningLatest,
+        'blood_collection' => $collectionDetails
     ]);
 
 } catch (Exception $e) {

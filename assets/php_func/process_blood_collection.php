@@ -32,7 +32,22 @@ try {
     $blood_bag_type     = $_POST['blood_bag_type'] ?? null;
     $original_bag_type  = $_POST['blood_bag_type'] ?? null; // keep raw for brand inference
     $amount_taken       = isset($_POST['amount_taken']) ? (int)$_POST['amount_taken'] : 1;
-    $is_successful      = isset($_POST['is_successful']) ? (bool)$_POST['is_successful'] : null;
+    $is_successful_raw  = $_POST['is_successful'] ?? null;
+    $is_successful      = null;
+    if ($is_successful_raw !== null) {
+        if (is_bool($is_successful_raw)) {
+            $is_successful = $is_successful_raw;
+        } elseif (is_numeric($is_successful_raw)) {
+            $is_successful = ((int)$is_successful_raw) === 1;
+        } elseif (is_string($is_successful_raw)) {
+            $normalized = strtolower(trim($is_successful_raw));
+            if (in_array($normalized, ['yes', 'true', '1', 'success', 'successful', 'y', 't'], true)) {
+                $is_successful = true;
+            } elseif (in_array($normalized, ['no', 'false', '0', 'fail', 'failed', 'unsuccessful', 'n', 'f'], true)) {
+                $is_successful = false;
+            }
+        }
+    }
     $donor_reaction     = $_POST['donor_reaction'] ?? null;
     $management_done    = $_POST['management_done'] ?? null;
     $unit_serial_number = $_POST['unit_serial_number'] ?? null;
@@ -161,6 +176,24 @@ try {
         $needs_review = false;
     }
 
+    // Determine collection status to persist (respect DB constraint)
+    $status = $_POST['status'] ?? '';
+    if (is_string($status)) {
+        $status = trim($status);
+    }
+    $statusLower = strtolower($status);
+    $allowedStatuses = [
+        'pending' => 'pending',
+        'incomplete' => 'Incomplete',
+        'failed' => 'Failed',
+        'yet to be collected' => 'Yet to be collected'
+    ];
+    if (isset($allowedStatuses[$statusLower])) {
+        $status = $allowedStatuses[$statusLower];
+    } else {
+        $status = 'pending';
+    }
+
     // Helper to convert HH:MM to ISO timestamp today
     $toIsoTs = function($hhmm) {
         $tz = date_default_timezone_get();
@@ -200,9 +233,6 @@ try {
 
     // Build payload for Supabase blood_collection
     $nowIso = (new DateTime())->format('c');
-    // Status is controlled by downstream review/eligibility; keep DB happy with 'pending'
-    $status = 'pending';
-
     $payload = [
         'physical_exam_id'   => $physical_exam_id,
         'blood_bag_type'     => $blood_bag_type,

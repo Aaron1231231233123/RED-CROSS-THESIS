@@ -6,6 +6,8 @@ class PhysicalExaminationModalAdmin {
         this.formData = {};
         this.screeningData = null;
         this.isReadonly = false;
+        this.forcedDeferralReasons = [];
+        this.forcedDeferral = false;
         
         this.init();
     }
@@ -143,6 +145,26 @@ class PhysicalExaminationModalAdmin {
     }
     
     populateFormFromData(data) {
+        const setControlValue = (id, value) => {
+            if (value == null) return;
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (el.tagName === 'SELECT') {
+                const exists = Array.from(el.options || []).some(opt => opt.value === value);
+                if (!exists) {
+                    const opt = document.createElement('option');
+                    opt.value = value;
+                    opt.textContent = value;
+                    opt.dataset.dynamic = 'true';
+                    el.appendChild(opt);
+                }
+            }
+            el.value = value;
+            const placeholder = el.querySelector('option[disabled][hidden]');
+            if (placeholder && placeholder.selected) {
+                placeholder.selected = false;
+            }
+        };
         // Populate blood pressure
         if (data.blood_pressure) {
             this.parseAndSetBloodPressure(data.blood_pressure);
@@ -160,25 +182,10 @@ class PhysicalExaminationModalAdmin {
         }
         
         // Populate examination findings
-        if (data.gen_appearance) {
-            const genAppInput = document.getElementById('physical-gen-appearance-admin');
-            if (genAppInput) genAppInput.value = data.gen_appearance;
-        }
-        
-        if (data.skin) {
-            const skinInput = document.getElementById('physical-skin-admin');
-            if (skinInput) skinInput.value = data.skin;
-        }
-        
-        if (data.heent) {
-            const heentInput = document.getElementById('physical-heent-admin');
-            if (heentInput) heentInput.value = data.heent;
-        }
-        
-        if (data.heart_and_lungs) {
-            const heartLungsInput = document.getElementById('physical-heart-lungs-admin');
-            if (heartLungsInput) heartLungsInput.value = data.heart_and_lungs;
-        }
+        setControlValue('physical-gen-appearance-admin', data.gen_appearance);
+        setControlValue('physical-skin-admin', data.skin);
+        setControlValue('physical-heent-admin', data.heent);
+        setControlValue('physical-heart-lungs-admin', data.heart_and_lungs);
         
         // Set donor and screening IDs
         if (data.donor_id) {
@@ -190,6 +197,7 @@ class PhysicalExaminationModalAdmin {
             const screeningInput = document.getElementById('physical-screening-id-admin');
             if (screeningInput) screeningInput.value = data.screening_id;
         }
+        this.evaluateDeferralState();
     }
     
     updateSummaryFromData(data) {
@@ -303,6 +311,11 @@ class PhysicalExaminationModalAdmin {
         if (form) {
             form.reset();
         }
+        try {
+            document.querySelectorAll('#physicalExaminationFormAdmin select option[data-dynamic="true"]').forEach(opt => opt.remove());
+        } catch (_) {}
+        this.forcedDeferralReasons = [];
+        this.forcedDeferral = false;
         
         // Reset BP inputs specifically
         const systolicInput = document.getElementById('physical-blood-pressure-systolic-admin');
@@ -319,6 +332,7 @@ class PhysicalExaminationModalAdmin {
         
         // Clear summary fields
         this.clearSummaryFields();
+        this.evaluateDeferralState();
     }
     
     parseAndSetBloodPressure(bpValue) {
@@ -371,6 +385,10 @@ class PhysicalExaminationModalAdmin {
         }
         
         if (this.validateCurrentStep()) {
+            if (this.currentStep === 2 && this.evaluateDeferralState()) {
+                this.showToast('This donor must be deferred based on the findings. Please use the Defer action.', 'error');
+                return;
+            }
             if (this.currentStep < this.totalSteps) {
                 this.currentStep++;
                 this.showStep(this.currentStep);
@@ -399,6 +417,11 @@ class PhysicalExaminationModalAdmin {
     goToStep(step) {
         // Prevent navigation in view mode
         if (this.isReadonly) {
+            return;
+        }
+        
+        if (step === 3 && this.evaluateDeferralState()) {
+            this.showToast('This donor must be deferred based on the findings. Please use the Defer action.', 'error');
             return;
         }
         
@@ -464,6 +487,33 @@ class PhysicalExaminationModalAdmin {
             
             if (deferBtn) {
                 deferBtn.style.display = this.currentStep === 3 ? 'inline-block' : 'none'; // Show defer on review step
+            }
+        }
+        const deferralRequired = this.evaluateDeferralState();
+        if (!this.isReadonly) {
+            if (deferralRequired) {
+                if (nextBtn && this.currentStep < this.totalSteps) {
+                    nextBtn.style.display = 'inline-block';
+                    nextBtn.disabled = true;
+                    nextBtn.classList.add('disabled');
+                }
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.classList.add('disabled');
+                }
+                if (deferBtn) {
+                    deferBtn.style.display = 'inline-block';
+                    deferBtn.disabled = false;
+                }
+            } else {
+                if (nextBtn) {
+                    nextBtn.disabled = false;
+                    nextBtn.classList.remove('disabled');
+                }
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.classList.remove('disabled');
+                }
             }
         }
     }
@@ -580,6 +630,10 @@ class PhysicalExaminationModalAdmin {
     }
     
     async submitForm() {
+        if (!this.isReadonly && this.evaluateDeferralState()) {
+            this.showToast('This donor must be deferred based on the findings. Please use the Defer action.', 'error');
+            return;
+        }
         
         if (!this.validateCurrentStep()) {
             return;
@@ -754,12 +808,51 @@ class PhysicalExaminationModalAdmin {
         }, 3000);
     }
     
+    evaluateDeferralState() {
+        try {
+            const normalize = (val) => (val || '').toString().trim().toLowerCase();
+            const genVal = normalize(document.getElementById('physical-gen-appearance-admin')?.value);
+            const skinVal = normalize(document.getElementById('physical-skin-admin')?.value);
+            const reasons = [];
+            if (genVal === 'deferred for further assessment') {
+                reasons.push('General appearance requires donor deferral.');
+            }
+            if (skinVal === 'with puncture marks (defer)') {
+                reasons.push('Skin findings require donor deferral.');
+            }
+            this.forcedDeferralReasons = reasons;
+            this.forcedDeferral = reasons.length > 0;
+            const warningEl = document.getElementById('physical-deferral-warning-admin');
+            if (warningEl) {
+                if (this.forcedDeferral) {
+                    const listHtml = reasons.map(reason => `<li>${reason}</li>`).join('');
+                    warningEl.innerHTML = `<strong>Deferral required:</strong><ul style="margin: 0 0 0.5rem 1.2rem; padding: 0;">${listHtml}</ul><span>Please use the Defer action to proceed.</span>`;
+                    warningEl.style.display = 'block';
+                } else {
+                    warningEl.innerHTML = '';
+                    warningEl.style.display = 'none';
+                }
+            }
+        } catch (_) {
+            this.forcedDeferral = false;
+            this.forcedDeferralReasons = [];
+        }
+        return this.forcedDeferral;
+    }
+    
     handleFieldChange(field) {
         
         // Store field data
         this.formData[field.name] = field.value;
         
-        // Real-time validation could be added here
+        const needsDeferral = this.evaluateDeferralState();
+        if (!this.isReadonly && needsDeferral && this.currentStep > 2) {
+            this.currentStep = 2;
+            this.showStep(2);
+            this.updateProgressIndicator();
+            return;
+        }
+        this.updateNavigationButtons();
     }
     
     async checkAndUpdateDonorStatus(donorId) {

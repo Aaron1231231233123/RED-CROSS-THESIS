@@ -147,6 +147,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_physical_exam'
             box-shadow: 0 0 0 0.2rem rgba(178, 34, 34, 0.25);
             outline: none;
         }
+        .physical-examination-table select {
+            width: 100%;
+            padding: 8px 40px 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: #fff;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%23b22222' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            background-size: 12px;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        .physical-examination-table select:focus {
+            border-color: #b22222;
+            box-shadow: 0 0 0 0.2rem rgba(178, 34, 34, 0.25);
+            outline: none;
+        }
         .remarks-section {
             margin-top: 30px;
         }
@@ -221,10 +242,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_physical_exam'
                         <td>
                             <input type="number" name="body_temp" placeholder="°C" step="0.1" min="35" max="42" required>
                         </td>
-                        <td><input type="text" name="gen_appearance" placeholder="Enter observation" required></td>
-                        <td><input type="text" name="skin" placeholder="Enter observation" required></td>
-                        <td><input type="text" name="heent" placeholder="Enter observation" required></td>
-                        <td><input type="text" name="heart_and_lungs" placeholder="Enter observation" required></td>
+                        <td>
+                            <select name="gen_appearance" required>
+                                <option value="" disabled selected hidden>Select observation</option>
+                                <option value="Appears healthy">Appears healthy</option>
+                                <option value="Weak/pale">Weak/pale</option>
+                                <option value="Anxious/nervous">Anxious/nervous</option>
+                                <option value="Ill-looking">Ill-looking</option>
+                                <option value="Deferred for further assessment">Deferred for further assessment (defer)</option>
+                            </select>
+                        </td>
+                        <td>
+                            <select name="skin" required>
+                                <option value="" disabled selected hidden>Select observation</option>
+                                <option value="Normal">Normal</option>
+                                <option value="With lesion/rash">With lesion/rash</option>
+                                <option value="With jaundice">With jaundice</option>
+                                <option value="With puncture marks (defer)">With puncture marks (defer)</option>
+                            </select>
+                        </td>
+                        <td>
+                            <select name="heent" required>
+                                <option value="" disabled selected hidden>Select observation</option>
+                                <option value="Normal">Normal</option>
+                                <option value="With congestion">With congestion</option>
+                                <option value="With infection">With infection</option>
+                                <option value="With abnormal findings">With abnormal findings</option>
+                            </select>
+                        </td>
+                        <td>
+                            <select name="heart_and_lungs" required>
+                                <option value="" disabled selected hidden>Select observation</option>
+                                <option value="Normal">Normal</option>
+                                <option value="With wheezing/crackles">With wheezing/crackles</option>
+                                <option value="Abnormal">Abnormal</option>
+                            </select>
+                        </td>
                     </tr>
                 </tbody>
             </table>

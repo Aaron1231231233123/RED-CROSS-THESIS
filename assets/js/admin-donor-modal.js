@@ -319,7 +319,19 @@ window.AdminDonorModal = (function() {
                     const interviewerScreening = safe(eligibility.screening_status);
                     const physicianMedical = safe(eligibility.review_status);
                     const physicianPhysical = safe(eligibility.physical_status);
-                    const phlebStatus = safe(eligibility.collection_status);
+                    // Get phlebotomist status - ensure we use the value from API response
+                    let phlebStatus = safe(eligibility.collection_status);
+                    // If collection_status is empty/pending but we have blood collection data, check it directly
+                    if ((!phlebStatus || phlebStatus === '-' || phlebStatus.toLowerCase() === 'pending') && data.blood_collection) {
+                        const bc = data.blood_collection;
+                        if (bc.is_successful === true || bc.is_successful === 'true' || bc.is_successful === 1) {
+                            phlebStatus = 'Successful';
+                            console.log('Phlebotomist Status - Overriding from blood_collection.is_successful: Successful');
+                        } else if (bc.status && bc.status.toLowerCase() === 'successful') {
+                            phlebStatus = 'Successful';
+                            console.log('Phlebotomist Status - Overriding from blood_collection.status: Successful');
+                        }
+                    }
                     const eligibilityStatus = String(safe(eligibility.status, '')).toLowerCase();
                     const isFullyApproved = eligibilityStatus === 'approved' || eligibilityStatus === 'eligible';
 
@@ -336,6 +348,15 @@ window.AdminDonorModal = (function() {
                         medicalApproval,
                         medicalHistoryData: medicalHistoryData,
                         eligibility: eligibility
+                    });
+                    
+                    // Additional debug for phlebotomist status
+                    console.log('Phlebotomist Status Debug:', {
+                        'eligibility.collection_status (raw)': eligibility.collection_status,
+                        'phlebStatus (after safe)': phlebStatus,
+                        'phlebStatus type': typeof phlebStatus,
+                        'phlebStatus length': phlebStatus ? phlebStatus.length : 0,
+                        'phlebStatus.toLowerCase()': phlebStatus ? phlebStatus.toLowerCase() : 'null'
                     });
 
                     // Derive blood type from donor, fallback to eligibility
@@ -465,7 +486,21 @@ window.AdminDonorModal = (function() {
                         ${physicianPhlebotomistSections}
                     `;
 
+                    // Debug: Log the phlebotomist section HTML before rendering
+                    console.log('Phlebotomist Section HTML:', physicianPhlebotomistSections);
+                    console.log('Final phlebStatus being used:', phlebStatus);
+                    
                     donorDetailsContainer.innerHTML = html;
+                    
+                    // Debug: Verify what was actually rendered
+                    setTimeout(() => {
+                        const renderedPhlebStatus = document.querySelector('.phlebotomist-section .status-cell, [class*="phlebotomist"] .status-cell');
+                        if (renderedPhlebStatus) {
+                            console.log('Rendered phlebotomist status element:', renderedPhlebStatus.innerHTML);
+                        } else {
+                            console.log('Could not find rendered phlebotomist status element');
+                        }
+                    }, 100);
 
                     // Store current donor info for admin actions
                     window.currentDonorId = donorId;

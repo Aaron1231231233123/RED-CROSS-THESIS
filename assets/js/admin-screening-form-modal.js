@@ -103,122 +103,39 @@ document.addEventListener('DOMContentLoaded', function() {
             prefillAdminFromExisting();
         }, 100);
 
-        // Add donation type change handler for IN-HOUSE dropdown
-        const inhouseDonationTypeSelect = document.getElementById('adminInhouseDonationTypeSelect');
+        const donationTypeInputs = document.querySelectorAll('input[name="donation-type"]');
         const mobilePlaceInput = document.getElementById('adminMobilePlaceInput');
         const mobileOrganizerInput = document.getElementById('adminMobileOrganizerInput');
-        
-        if (inhouseDonationTypeSelect) {
-            inhouseDonationTypeSelect.addEventListener('change', function() {
-                const value = this.value;
-                
-                // When IN-HOUSE is selected, clear and disable mobile fields
-                if (value && value !== '') {
+        const bloodTypeSelect = document.querySelector('.admin-screening-step-content[data-step="2"] select[name="blood-type"]') || document.querySelector('select[name="blood-type"]');
+
+        // Ensure mobile donation inputs remain disabled and cleared.
+        if (mobilePlaceInput) {
+            mobilePlaceInput.value = '';
+            mobilePlaceInput.disabled = true;
+            mobilePlaceInput.placeholder = 'Mobile donation disabled';
+        }
+
+        if (mobileOrganizerInput) {
+            mobileOrganizerInput.value = '';
+            mobileOrganizerInput.disabled = true;
+            mobileOrganizerInput.placeholder = 'Mobile donation disabled';
+        }
+
+        donationTypeInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                if (input.checked) {
+                    // Always keep mobile inputs disabled when Walk-in is chosen.
                     if (mobilePlaceInput) {
                         mobilePlaceInput.value = '';
                         mobilePlaceInput.disabled = true;
-                        mobilePlaceInput.placeholder = 'Disabled - In-House selected';
                     }
                     if (mobileOrganizerInput) {
                         mobileOrganizerInput.value = '';
                         mobileOrganizerInput.disabled = true;
-                        mobileOrganizerInput.placeholder = 'Disabled - In-House selected';
-                    }
-                } else {
-                    // When IN-HOUSE is cleared, re-enable mobile fields
-                    if (mobilePlaceInput) {
-                        mobilePlaceInput.disabled = false;
-                        mobilePlaceInput.placeholder = 'Enter location.';
-                    }
-                    if (mobileOrganizerInput) {
-                        mobileOrganizerInput.disabled = false;
-                        mobileOrganizerInput.placeholder = 'Enter organizer.';
                     }
                 }
-                
-                handleAdminDonationTypeChange('inhouse', value);
-                checkAdminMutualExclusivity();
             });
-        }
-        
-        // Add change handlers for mobile fields to clear and disable IN-HOUSE when mobile is used
-        if (mobilePlaceInput) {
-            mobilePlaceInput.addEventListener('input', function() {
-                if (this.value.trim() !== '' && inhouseDonationTypeSelect) {
-                    inhouseDonationTypeSelect.value = '';
-                    inhouseDonationTypeSelect.disabled = true;
-                    // Hide patient details if shown
-                    const patientDetailsSection = document.getElementById('adminPatientDetailsSection');
-                    if (patientDetailsSection) {
-                        patientDetailsSection.style.display = 'none';
-                    }
-                } else if (this.value.trim() === '' && inhouseDonationTypeSelect) {
-                    // Re-enable IN-HOUSE dropdown if mobile field is cleared
-                    inhouseDonationTypeSelect.disabled = false;
-                }
-                checkAdminMutualExclusivity();
-            });
-        }
-        
-        if (mobileOrganizerInput) {
-            mobileOrganizerInput.addEventListener('input', function() {
-                if (this.value.trim() !== '' && inhouseDonationTypeSelect) {
-                    inhouseDonationTypeSelect.value = '';
-                    inhouseDonationTypeSelect.disabled = true;
-                    // Hide patient details if shown
-                    const patientDetailsSection = document.getElementById('adminPatientDetailsSection');
-                    if (patientDetailsSection) {
-                        patientDetailsSection.style.display = 'none';
-                    }
-                } else if (this.value.trim() === '' && inhouseDonationTypeSelect) {
-                    // Re-enable IN-HOUSE dropdown if mobile field is cleared
-                    inhouseDonationTypeSelect.disabled = false;
-                }
-                checkAdminMutualExclusivity();
-            });
-        }
-
-        // Add mutual exclusivity check function
-        function checkAdminMutualExclusivity() {
-            const inhouseValue = inhouseDonationTypeSelect ? inhouseDonationTypeSelect.value : '';
-            const mobilePlace = mobilePlaceInput ? mobilePlaceInput.value.trim() : '';
-            const mobileOrganizer = mobileOrganizerInput ? mobileOrganizerInput.value.trim() : '';
-            
-            const hasInhouseSelection = inhouseValue && inhouseValue !== '';
-            const hasMobileSelection = mobilePlace !== '' || mobileOrganizer !== '';
-            
-            // If both are selected, show warning
-            if (hasInhouseSelection && hasMobileSelection) {
-                showAdminMutualExclusivityWarning();
-            } else {
-                hideAdminMutualExclusivityWarning();
-            }
-        }
-        
-        function showAdminMutualExclusivityWarning() {
-            // Create or show warning message
-            let warningDiv = document.getElementById('adminDonationTypeWarning');
-            if (!warningDiv) {
-                warningDiv = document.createElement('div');
-                warningDiv.id = 'adminDonationTypeWarning';
-                warningDiv.className = 'alert alert-warning mt-2';
-                warningDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Please select either In-House donation type OR fill mobile donation details, not both.';
-                
-                // Insert after the mobile donation section
-                const mobileSection = document.querySelector('.admin-mobile-donation-section');
-                if (mobileSection) {
-                    mobileSection.parentNode.insertBefore(warningDiv, mobileSection.nextSibling);
-                }
-            }
-            warningDiv.style.display = 'block';
-        }
-        
-        function hideAdminMutualExclusivityWarning() {
-            const warningDiv = document.getElementById('adminDonationTypeWarning');
-            if (warningDiv) {
-                warningDiv.style.display = 'none';
-            }
-        }
+        });
 
         // Add real-time validation for basic screening fields
         const bodyWeightInput = document.getElementById('adminBodyWeightInput');
@@ -243,6 +160,14 @@ document.addEventListener('DOMContentLoaded', function() {
             bodyWeightInput.addEventListener('input', function() {
                 updateAdminButtons();
             });
+        }
+
+        if (bloodTypeSelect) {
+            const handleBloodTypeInteraction = () => {
+                updateAdminButtons();
+            };
+            bloodTypeSelect.addEventListener('change', handleBloodTypeInteraction);
+            bloodTypeSelect.addEventListener('input', handleBloodTypeInteraction);
         }
     }
 
@@ -375,38 +300,11 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('validateAdminCurrentStep called for step:', currentStep);
         
         if (currentStep === 1) {
-            // Validate donation type selection - either IN-HOUSE dropdown OR mobile fields filled
-            const inhouseSelect = document.getElementById('adminInhouseDonationTypeSelect');
-            const mobilePlaceInput = document.getElementById('adminMobilePlaceInput');
-            const mobileOrganizerInput = document.getElementById('adminMobileOrganizerInput');
-            
-            const inhouseValue = inhouseSelect ? inhouseSelect.value : '';
-            const mobilePlace = mobilePlaceInput ? mobilePlaceInput.value.trim() : '';
-            const mobileOrganizer = mobileOrganizerInput ? mobileOrganizerInput.value.trim() : '';
-            
-            // Check if either IN-HOUSE is selected OR at least one mobile field is filled
-            const hasInhouseSelection = inhouseValue && inhouseValue !== '';
-            const hasMobileSelection = mobilePlace !== '' || mobileOrganizer !== '';
-            
-            if (!hasInhouseSelection && !hasMobileSelection) {
-                showAdminAlert('Please select an IN-HOUSE donation type OR fill in mobile donation details (Place or Organizer) before proceeding.', 'warning');
+            const selectedDonation = document.querySelector('input[name="donation-type"]:checked');
+            if (!selectedDonation) {
+                showAdminAlert('Please select a donation type before proceeding.', 'warning');
                 return false;
             }
-            
-            // If Patient-Directed is selected, validate patient information
-            if (inhouseValue === 'Patient-Directed') {
-                const patientName = document.querySelector('input[name="patient-name"]');
-                const hospital = document.querySelector('input[name="hospital"]');
-                const patientBloodType = document.querySelector('select[name="patient-blood-type"]');
-                const noUnits = document.querySelector('input[name="no-units"]');
-                
-                if (!patientName?.value.trim() || !hospital?.value.trim() || 
-                    !patientBloodType?.value || !noUnits?.value) {
-                    showAdminAlert('Please fill in all patient information fields for Patient-Directed donations.', 'warning');
-                    return false;
-                }
-            }
-            
             return true;
         } else if (currentStep === 2) {
             // Validate step 2 - Basic Info with specific validation for weight and specific gravity
@@ -623,19 +521,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     };
 
-    function handleAdminDonationTypeChange(type, value) {
-        // Only show Patient Information table when Patient-Directed is selected
-        const patientDetailsSection = document.getElementById('adminPatientDetailsSection');
-        
-        if (patientDetailsSection) {
-            if (value === 'Patient-Directed') {
-                patientDetailsSection.style.display = 'block';
-            } else {
-                patientDetailsSection.style.display = 'none';
-            }
-        }
-    }
-
     function generateAdminReviewContent() {
         const reviewContent = document.getElementById('adminReviewContent');
         if (!reviewContent) return;
@@ -661,74 +546,14 @@ document.addEventListener('DOMContentLoaded', function() {
         reviewHtml += '</div>';
 
         // Donation Type
-        const inhouseDonationType = formData.get('donation-type');
-        const mobilePlace = formData.get('mobile-place');
-        const mobileOrganizer = formData.get('mobile-organizer');
-        
-        // Determine final donation type
-        let finalDonationType = '';
-        if (mobilePlace || mobileOrganizer) {
-            finalDonationType = 'Mobile';
-        } else if (inhouseDonationType) {
-            finalDonationType = inhouseDonationType;
-        }
-        
+        const selectedDonationType = formData.get('donation-type') || 'Walk-in';
+
         reviewHtml += '<div class="mb-3">';
         reviewHtml += '<h6 class="text-danger mb-2">Donation Type</h6>';
         reviewHtml += `<div class="admin-screening-review-item">
             <span class="admin-screening-review-label">Type:</span>
-            <span class="admin-screening-review-value">${finalDonationType || 'Not selected'}</span>
+            <span class="admin-screening-review-value">${selectedDonationType}</span>
         </div>`;
-
-        // Mobile details if applicable
-        if (finalDonationType === 'Mobile') {
-            if (formData.get('mobile-place')) {
-                reviewHtml += `<div class="admin-screening-review-item">
-                    <span class="admin-screening-review-label">Place:</span>
-                    <span class="admin-screening-review-value">${formData.get('mobile-place')}</span>
-                </div>`;
-            }
-            if (formData.get('mobile-organizer')) {
-                reviewHtml += `<div class="admin-screening-review-item">
-                    <span class="admin-screening-review-label">Organizer:</span>
-                    <span class="admin-screening-review-value">${formData.get('mobile-organizer')}</span>
-                </div>`;
-            }
-        }
-
-        // Patient details if applicable
-        if (finalDonationType === 'Patient-Directed') {
-            if (formData.get('patient-name')) {
-                reviewHtml += `<div class="admin-screening-review-item">
-                    <span class="admin-screening-review-label">Patient Name:</span>
-                    <span class="admin-screening-review-value">${formData.get('patient-name')}</span>
-                </div>`;
-            }
-            if (formData.get('hospital')) {
-                reviewHtml += `<div class="admin-screening-review-item">
-                    <span class="admin-screening-review-label">Hospital:</span>
-                    <span class="admin-screening-review-value">${formData.get('hospital')}</span>
-                </div>`;
-            }
-            if (formData.get('blood-type-patient')) {
-                reviewHtml += `<div class="admin-screening-review-item">
-                    <span class="admin-screening-review-label">Patient Blood Type:</span>
-                    <span class="admin-screening-review-value">${formData.get('blood-type-patient')}</span>
-                </div>`;
-            }
-            if (formData.get('wb-component')) {
-                reviewHtml += `<div class="admin-screening-review-item">
-                    <span class="admin-screening-review-label">WB/Component:</span>
-                    <span class="admin-screening-review-value">${formData.get('wb-component')}</span>
-                </div>`;
-            }
-            if (formData.get('no-units')) {
-                reviewHtml += `<div class="admin-screening-review-item">
-                    <span class="admin-screening-review-label">No. of Units:</span>
-                    <span class="admin-screening-review-value">${formData.get('no-units')}</span>
-                </div>`;
-            }
-        }
         reviewHtml += '</div>';
 
         reviewContent.innerHTML = reviewHtml;
@@ -768,21 +593,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Get all form data
         const formData = new FormData(adminScreeningForm);
         
-        // Get donation type from IN-HOUSE dropdown
-        const selectedDonationType = formData.get('donation-type');
-        
-        // Check if mobile donation fields are filled (Place OR Organizer)
-        const mobilePlace = formData.get('mobile-place');
-        const mobileOrganizer = formData.get('mobile-organizer');
-        
-        if (mobilePlace || mobileOrganizer) {
-            // If either mobile field is filled, set donor_type to "Mobile" in the database
-            formData.set('donor_type', 'Mobile');
-            formData.set('donation-type', 'Mobile');
-        } else if (selectedDonationType) {
-            // Use the IN-HOUSE selection
-            formData.set('donation-type', selectedDonationType);
-        }
+        // Get donation type (defaults to Walk-in)
+        const selectedDonationType = formData.get('donation-type') || 'Walk-in';
+        formData.set('donation-type', selectedDonationType);
         
         // Apply auto-increment logic for Red Cross donations before submission
         const rcInput = document.querySelector('input[name="red-cross"]');

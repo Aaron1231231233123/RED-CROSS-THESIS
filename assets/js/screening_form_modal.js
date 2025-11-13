@@ -266,13 +266,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             // Check if we're on step 2 by checking if step 2 content is active
-            const step2Content = document.querySelector('.screening-step-content[data-step="2"]');
-            const isStep2Active = step2Content && step2Content.classList.contains('active');
-            
-            if (!isStep2Active) {
+            if (currentStep !== 2) {
                 // Not on step 2, don't modify button
                 return;
             }
+
+            const step2Content = document.querySelector('.screening-step-content[data-step="2"]');
             
             // Get elements fresh each time to ensure we have the latest values
             // Always scope to the modal to avoid conflicts

@@ -1361,7 +1361,7 @@ function getCacheStats() {
                                                                     
                                                                     if ($physicalExamId) {
                                                                         // Now check blood collection using physical_exam_id
-                                                                        $collectionCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?physical_exam_id=eq.' . $physicalExamId . '&select=needs_review,status&order=created_at.desc&limit=1');
+                                                                        $collectionCurl = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?physical_exam_id=eq.' . $physicalExamId . '&select=is_successful,needs_review,status&order=created_at.desc&limit=1');
                                                                         curl_setopt($collectionCurl, CURLOPT_RETURNTRANSFER, true);
                                                                         curl_setopt($collectionCurl, CURLOPT_HTTPHEADER, [
                                                                             'apikey: ' . SUPABASE_API_KEY,
@@ -1375,10 +1375,18 @@ function getCacheStats() {
                                                                         if ($collectionHttpCode === 200) {
                                                                             $collectionData = json_decode($collectionResponse, true) ?: [];
                                                                             if (!empty($collectionData)) {
+                                                                                $isSuccessful = $collectionData[0]['is_successful'] ?? false;
                                                                                 $collNeeds = $collectionData[0]['needs_review'] ?? null;
                                                                                 $collectionStatus = $collectionData[0]['status'] ?? '';
-                                                                                if ($collNeeds !== true && !empty($collectionStatus) &&
-                                                                                    !in_array($collectionStatus, ['pending', 'Incomplete', 'Failed', 'Yet to be collected'])) {
+                                                                                
+                                                                                // Check if collection is successful: either is_successful is true OR status is 'Successful'
+                                                                                if ($isSuccessful === true || $isSuccessful === 'true' || $isSuccessful === 1) {
+                                                                                    // Blood collection is successful
+                                                                                    $bloodCollectionCompleted = true;
+                                                                                } elseif ($collNeeds !== true && !empty($collectionStatus) &&
+                                                                                    !in_array($collectionStatus, ['pending', 'Incomplete', 'Failed', 'Yet to be collected']) &&
+                                                                                    strtolower(trim($collectionStatus)) === 'successful') {
+                                                                                    // Status field indicates successful
                                                                                     $bloodCollectionCompleted = true;
                                                                                 }
                                                                             }

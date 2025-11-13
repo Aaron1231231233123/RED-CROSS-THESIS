@@ -120,10 +120,12 @@
                                     id="physical-gen-appearance" 
                                     name="gen_appearance" 
                                     required>
-                                <option value="">Select an option</option>
-                                <option value="Normal">Normal</option>
-                                <option value="With mild abnormalities">With mild abnormalities</option>
-                                <option value="With major abnormalities">With major abnormalities</option>
+                                <option value="">Select observation</option>
+                                <option value="Appears healthy">Appears healthy</option>
+                                <option value="Weak/pale">Weak/pale</option>
+                                <option value="Anxious/nervous">Anxious/nervous</option>
+                                <option value="Ill-looking">Ill-looking</option>
+                                <option value="Deferred for further assessment">Deferred for further assessment (defer)</option>
                             </select>
                         </div>
                         <div class="col-md-6 mb-3">
@@ -132,10 +134,11 @@
                                     id="physical-skin" 
                                     name="skin" 
                                     required>
-                                <option value="">Select an option</option>
+                                <option value="">Select observation</option>
                                 <option value="Normal">Normal</option>
-                                <option value="With mild abnormalities">With mild abnormalities</option>
-                                <option value="With major abnormalities">With major abnormalities</option>
+                                <option value="With lesion/rash">With lesion/rash</option>
+                                <option value="With jaundice">With jaundice</option>
+                                <option value="With puncture marks (defer)">With puncture marks (defer)</option>
                             </select>
                         </div>
                         <div class="col-md-6 mb-3">
@@ -144,10 +147,11 @@
                                     id="physical-heent" 
                                     name="heent" 
                                     required>
-                                <option value="">Select an option</option>
+                                <option value="">Select observation</option>
                                 <option value="Normal">Normal</option>
-                                <option value="With mild abnormalities">With mild abnormalities</option>
-                                <option value="With major abnormalities">With major abnormalities</option>
+                                <option value="With congestion">With congestion</option>
+                                <option value="With infection">With infection</option>
+                                <option value="With abnormal findings">With abnormal findings</option>
                             </select>
                         </div>
                         <div class="col-md-6 mb-3">
@@ -156,13 +160,14 @@
                                     id="physical-heart-lungs" 
                                     name="heart_and_lungs" 
                                     required>
-                                <option value="">Select an option</option>
+                                <option value="">Select observation</option>
                                 <option value="Normal">Normal</option>
-                                <option value="With mild abnormalities">With mild abnormalities</option>
-                                <option value="With major abnormalities">With major abnormalities</option>
+                                <option value="With wheezing/crackles">With wheezing/crackles</option>
+                                <option value="Abnormal">Abnormal</option>
                             </select>
                         </div>
                     </div>
+                    <div id="physical-deferral-warning" class="alert alert-warning mt-3" role="alert" style="display:none;"></div>
                 </div>
             </div>
 

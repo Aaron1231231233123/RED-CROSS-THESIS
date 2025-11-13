@@ -422,8 +422,18 @@ try {
 
     // Build payload for Supabase blood_collection
     $nowIso = (new DateTime())->format('c');
-    // Status is controlled by downstream review/eligibility; keep DB happy with 'pending'
-    $status = 'pending';
+    $statusInput = $_POST['status'] ?? '';
+    if (is_string($statusInput)) {
+        $statusInput = trim($statusInput);
+    }
+    $statusLower = strtolower($statusInput);
+    $allowedStatuses = [
+        'pending' => 'pending',
+        'incomplete' => 'Incomplete',
+        'failed' => 'Failed',
+        'yet to be collected' => 'Yet to be collected'
+    ];
+    $status = $allowedStatuses[$statusLower] ?? 'pending';
 
     $payload = [
         'physical_exam_id'   => $physical_exam_id,

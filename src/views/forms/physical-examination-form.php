@@ -973,10 +973,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <td>
                                 <input type="number" name="body_temp" placeholder="°C" step="0.1" min="35" max="42" required>
                             </td>
-                            <td><input type="text" name="gen_appearance" placeholder="Enter observation" required></td>
-                            <td><input type="text" name="skin" placeholder="Enter observation" required></td>
-                            <td><input type="text" name="heent" placeholder="Enter observation" required></td>
-                            <td><input type="text" name="heart_and_lungs" placeholder="Enter observation" required></td>
+                            <td>
+                                <select name="gen_appearance" required>
+                                    <option value="">Select observation</option>
+                                    <option value="Appears healthy">Appears healthy</option>
+                                    <option value="Weak/pale">Weak/pale</option>
+                                    <option value="Anxious/nervous">Anxious/nervous</option>
+                                    <option value="Ill-looking">Ill-looking</option>
+                                    <option value="Deferred for further assessment">Deferred for further assessment (defer)</option>
+                                </select>
+                            </td>
+                            <td>
+                                <select name="skin" required>
+                                    <option value="">Select observation</option>
+                                    <option value="Normal">Normal</option>
+                                    <option value="With lesion/rash">With lesion/rash</option>
+                                    <option value="With jaundice">With jaundice</option>
+                                    <option value="With puncture marks (defer)">With puncture marks (defer)</option>
+                                </select>
+                            </td>
+                            <td>
+                                <select name="heent" required>
+                                    <option value="">Select observation</option>
+                                    <option value="Normal">Normal</option>
+                                    <option value="With congestion">With congestion</option>
+                                    <option value="With infection">With infection</option>
+                                    <option value="With abnormal findings">With abnormal findings</option>
+                                </select>
+                            </td>
+                            <td>
+                                <select name="heart_and_lungs" required>
+                                    <option value="">Select observation</option>
+                                    <option value="Normal">Normal</option>
+                                    <option value="With wheezing/crackles">With wheezing/crackles</option>
+                                    <option value="Abnormal">Abnormal</option>
+                                </select>
+                            </td>
                         </tr>
                     </tbody>
                 </table>

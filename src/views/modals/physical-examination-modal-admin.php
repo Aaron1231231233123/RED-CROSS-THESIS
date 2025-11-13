@@ -4,6 +4,44 @@
  * This file contains the HTML structure for the physical examination modal
  * Used specifically for admin workflows
  */
+
+$physical_exam_physician_name = 'Physician';
+if (isset($_SESSION['user_id'])) {
+    $user_id = $_SESSION['user_id'];
+    $user_data = [];
+
+    if (function_exists('makeSupabaseApiCall')) {
+        $user_data = makeSupabaseApiCall(
+            'users',
+            ['first_name', 'surname'],
+            ['user_id' => 'eq.' . $user_id]
+        );
+    } else {
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/users?select=first_name,surname&user_id=eq.' . $user_id);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY
+        ]);
+        $response = curl_exec($ch);
+        curl_close($ch);
+        $user_data = json_decode($response, true) ?: [];
+    }
+
+    if (!empty($user_data) && isset($user_data[0]) && is_array($user_data[0])) {
+        $first_name = trim($user_data[0]['first_name'] ?? '');
+        $surname = trim($user_data[0]['surname'] ?? '');
+        $combined = trim($first_name . ' ' . $surname);
+
+        if ($combined !== '') {
+            $physical_exam_physician_name = $combined;
+        } elseif ($first_name !== '') {
+            $physical_exam_physician_name = $first_name;
+        } elseif ($surname !== '') {
+            $physical_exam_physician_name = $surname;
+        }
+    }
+}
 ?>
 
 <!-- Physical Examination Modal - Admin -->
@@ -108,41 +146,58 @@
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="physical-gen-appearance-admin" class="form-label">General Appearance *</label>
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="physical-gen-appearance-admin" 
-                                   name="gen_appearance" 
-                                   placeholder="Enter observation" 
-                                   required>
+                            <select class="form-control" 
+                                    id="physical-gen-appearance-admin" 
+                                    name="gen_appearance" 
+                                    required>
+                                <option value="" disabled selected hidden>Select observation</option>
+                                <option value="Appears healthy">Appears healthy</option>
+                                <option value="Weak/pale">Weak/pale</option>
+                                <option value="Anxious/nervous">Anxious/nervous</option>
+                                <option value="Ill-looking">Ill-looking</option>
+                                <option value="Deferred for further assessment">Deferred for further assessment (defer)</option>
+                            </select>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="physical-skin-admin" class="form-label">Skin *</label>
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="physical-skin-admin" 
-                                   name="skin" 
-                                   placeholder="Enter observation" 
-                                   required>
+                            <select class="form-control" 
+                                    id="physical-skin-admin" 
+                                    name="skin" 
+                                    required>
+                                <option value="" disabled selected hidden>Select observation</option>
+                                <option value="Normal">Normal</option>
+                                <option value="With lesion/rash">With lesion/rash</option>
+                                <option value="With jaundice">With jaundice</option>
+                                <option value="With puncture marks (defer)">With puncture marks (defer)</option>
+                            </select>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="physical-heent-admin" class="form-label">HEENT *</label>
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="physical-heent-admin" 
-                                   name="heent" 
-                                   placeholder="Enter observation" 
-                                   required>
+                            <select class="form-control" 
+                                    id="physical-heent-admin" 
+                                    name="heent" 
+                                    required>
+                                <option value="" disabled selected hidden>Select observation</option>
+                                <option value="Normal">Normal</option>
+                                <option value="With congestion">With congestion</option>
+                                <option value="With infection">With infection</option>
+                                <option value="With abnormal findings">With abnormal findings</option>
+                            </select>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="physical-heart-lungs-admin" class="form-label">Heart and Lungs *</label>
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="physical-heart-lungs-admin" 
-                                   name="heart_and_lungs" 
-                                   placeholder="Enter observation" 
-                                   required>
+                            <select class="form-control" 
+                                    id="physical-heart-lungs-admin" 
+                                    name="heart_and_lungs" 
+                                    required>
+                                <option value="" disabled selected hidden>Select observation</option>
+                                <option value="Normal">Normal</option>
+                                <option value="With wheezing/crackles">With wheezing/crackles</option>
+                                <option value="Abnormal">Abnormal</option>
+                            </select>
                         </div>
                     </div>
+                    <div id="physical-deferral-warning-admin" class="alert alert-warning mt-3" role="alert" style="display:none;"></div>
                 </div>
             </div>
 
@@ -152,147 +207,72 @@
                     <h4>Step 3: Review & Submit</h4>
                     <p class="text-muted">Please review all information before submitting</p>
                     
-                    <div class="examination-report">
-                        <!-- Header Section -->
-                        <div class="report-header">
-                            <div class="report-title">
-                                <h5>Physical Examination Report - Admin</h5>
-                                <div class="report-meta">
-                                    <span class="report-date"><?php echo date('F j, Y'); ?></span>
-                                    <span class="report-physician">Physician: <span id="summary-interviewer-admin">-</span></span>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Vital Signs Section -->
-                        <div class="report-section">
-                            <div class="section-header">
-                                <i class="fas fa-heartbeat"></i>
-                                <span>Vital Signs</span>
-                            </div>
-                            <div class="section-content">
-                                <div class="vital-signs-grid">
-                                    <div class="vital-item">
-                                        <span class="vital-label">Blood Pressure:</span>
-                                        <span class="vital-value" id="summary-blood-pressure-admin">-</span>
+                    <div class="physical-review-section">
+                        <div class="row g-4">
+                            <div class="col-lg-8">
+                                <div class="physical-review-card">
+                                    <h6 class="physical-review-title">Physical Examination Summary</h6>
+                                    <div class="physical-review-group">
+                                        <div class="physical-review-subtitle"><i class="fas fa-heartbeat me-2"></i>Vital Signs</div>
+                                        <div class="physical-review-item">
+                                            <span class="physical-review-label">Blood Pressure</span>
+                                            <span class="physical-review-value" id="summary-blood-pressure-admin">-</span>
+                                        </div>
+                                        <div class="physical-review-item">
+                                            <span class="physical-review-label">Pulse Rate</span>
+                                            <span class="physical-review-value" id="summary-pulse-rate-admin">-</span>
+                                        </div>
+                                        <div class="physical-review-item">
+                                            <span class="physical-review-label">Body Temperature</span>
+                                            <span class="physical-review-value" id="summary-body-temp-admin">-</span>
+                                        </div>
                                     </div>
-                                    <div class="vital-item">
-                                        <span class="vital-label">Pulse Rate:</span>
-                                        <span class="vital-value" id="summary-pulse-rate-admin">-</span>
-                                        <span class="vital-unit">BPM</span>
-                                    </div>
-                                    <div class="vital-item">
-                                        <span class="vital-label">Temperature:</span>
-                                        <span class="vital-value" id="summary-body-temp-admin">-</span>
-                                        <span class="vital-unit">°C</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Physical Examination Section -->
-                        <div class="report-section">
-                            <div class="section-header">
-                                <i class="fas fa-user-md"></i>
-                                <span>Physical Examination Findings</span>
-                            </div>
-                            <div class="section-content">
-                                <div class="examination-findings">
-                                    <div class="finding-row">
-                                        <span class="finding-label">General Appearance:</span>
-                                        <span class="finding-value" id="summary-gen-appearance-admin">-</span>
-                                    </div>
-                                    <div class="finding-row">
-                                        <span class="finding-label">Skin:</span>
-                                        <span class="finding-value" id="summary-skin-admin">-</span>
-                                    </div>
-                                    <div class="finding-row">
-                                        <span class="finding-label">HEENT:</span>
-                                        <span class="finding-value" id="summary-heent-admin">-</span>
-                                    </div>
-                                    <div class="finding-row">
-                                        <span class="finding-label">Heart and Lungs:</span>
-                                        <span class="finding-value" id="summary-heart-lungs-admin">-</span>
+                                    <div class="physical-review-group">
+                                        <div class="physical-review-subtitle"><i class="fas fa-user-md me-2"></i>Examination Findings</div>
+                                        <div class="physical-review-item">
+                                            <span class="physical-review-label">General Appearance</span>
+                                            <span class="physical-review-value" id="summary-gen-appearance-admin">-</span>
+                                        </div>
+                                        <div class="physical-review-item">
+                                            <span class="physical-review-label">Skin</span>
+                                            <span class="physical-review-value" id="summary-skin-admin">-</span>
+                                        </div>
+                                        <div class="physical-review-item">
+                                            <span class="physical-review-label">HEENT</span>
+                                            <span class="physical-review-value" id="summary-heent-admin">-</span>
+                                        </div>
+                                        <div class="physical-review-item">
+                                            <span class="physical-review-label">Heart &amp; Lungs</span>
+                                            <span class="physical-review-value" id="summary-heart-lungs-admin">-</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        
-                        <!-- Assessment & Conclusion -->
-                        <div class="report-section">
-                            <div class="section-header">
-                                <i class="fas fa-clipboard-check"></i>
-                                <span>Assessment & Conclusion</span>
-                            </div>
-                            <div class="section-content">
-                                <div class="assessment-content">
-                                    <div class="assessment-result">
-                                        <span class="result-label">Medical Assessment:</span>
-                                        <span class="result-value">Accepted for Blood Collection</span>
+                            <div class="col-lg-4">
+                                <div class="physical-review-card">
+                                    <h6 class="physical-review-title">Assessment &amp; Next Step</h6>
+                                    <div class="physical-review-item">
+                                        <span class="physical-review-label">Medical Assessment</span>
+                                        <span class="physical-review-value">Accepted for Blood Collection</span>
                                     </div>
-                                    <div class="assessment-collection">
-                                        <span class="collection-label">Next Step:</span>
-                                        <span class="collection-value">Proceed to Blood Collection</span>
+                                    <div class="physical-review-item">
+                                        <span class="physical-review-label">Next Step</span>
+                                        <span class="physical-review-value">Proceed to Blood Collection</span>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Signature Section -->
-                        <div class="report-signature">
-                            <div class="signature-content">
-                                <div class="signature-line">
-                                    <span>Examining Physician</span>
-                                    <span class="physician-name"><?php 
-                                        // Get the logged-in user's name from the users table
-                                        if (isset($_SESSION['user_id'])) {
-                                            $user_id = $_SESSION['user_id'];
-                                            
-                                            // Use the unified API function if available, otherwise fallback to direct CURL
-                                            if (function_exists('makeSupabaseApiCall')) {
-                                                $user_data = makeSupabaseApiCall(
-                                                    'users',
-                                                    ['first_name', 'surname'],
-                                                    ['user_id' => 'eq.' . $user_id]
-                                                );
-                                            } else {
-                                                // Fallback to direct CURL if unified function not available
-                                                $ch = curl_init(SUPABASE_URL . '/rest/v1/users?select=first_name,surname&user_id=eq.' . $user_id);
-                                                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                                                curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                                                    'apikey: ' . SUPABASE_API_KEY,
-                                                    'Authorization: Bearer ' . SUPABASE_API_KEY
-                                                ]);
-                                                
-                                                $response = curl_exec($ch);
-                                                curl_close($ch);
-                                                $user_data = json_decode($response, true) ?: [];
-                                            }
-                                            
-                                            if (!empty($user_data) && is_array($user_data)) {
-                                                $user = $user_data[0];
-                                                $first_name = isset($user['first_name']) ? htmlspecialchars($user['first_name']) : '';
-                                                $surname = isset($user['surname']) ? htmlspecialchars($user['surname']) : '';
-                                                
-                                                if ($first_name && $surname) {
-                                                    echo $first_name . ' ' . $surname;
-                                                } elseif ($first_name) {
-                                                    echo $first_name;
-                                                } elseif ($surname) {
-                                                    echo $surname;
-                                                } else {
-                                                    echo 'Physician';
-                                                }
-                                            } else {
-                                                echo 'Physician';
-                                            }
-                                        } else {
-                                            echo 'Physician';
-                                        }
-                                    ?></span>
-                                </div>
-                                <div class="signature-note">
-                                    This examination was conducted in accordance with Philippine Red Cross standards and protocols.
+                                <div class="physical-review-card mt-4">
+                                    <h6 class="physical-review-title">Physician Details</h6>
+                                    <div class="physical-review-item">
+                                        <span class="physical-review-label">Physician</span>
+                                        <span class="physical-review-value" id="summary-interviewer-admin"><?php echo htmlspecialchars($physical_exam_physician_name, ENT_QUOTES, 'UTF-8'); ?></span>
+                                    </div>
+                                    <div class="physical-review-item">
+                                        <span class="physical-review-label">Examination Date</span>
+                                        <span class="physical-review-value"><?php echo date('F j, Y'); ?></span>
+                                    </div>
+                                    <p class="physical-review-note">
+                                        This examination was conducted in accordance with Philippine Red Cross standards and protocols.
+                                    </p>
                                 </div>
                             </div>
                         </div>

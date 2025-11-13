@@ -52,72 +52,35 @@
                             <div class="admin-screening-category-title">IN-HOUSE</div>
                             <div class="row g-3">
                                 <div class="col-12">
-                                    <label class="admin-screening-label">Donation Type</label>
-                                    <select name="donation-type" id="adminInhouseDonationTypeSelect" class="admin-screening-input" required>
-                                        <option value="">Select Donation Type</option>
-                                        <option value="Walk-in">Walk-in</option>
-                                        <option value="Replacement">Replacement</option>
-                                        <option value="Patient-Directed">Patient-Directed</option>
-                                    </select>
+                                    <label class="admin-screening-label d-block">Donation Type</label>
+                                    <div class="form-check">
+                                        <input type="radio"
+                                            class="form-check-input"
+                                            name="donation-type"
+                                            id="adminDonationTypeWalkIn"
+                                            value="Walk-in"
+                                            required
+                                            checked>
+                                        <label class="form-check-label" for="adminDonationTypeWalkIn">Walk-in</label>
+                                    </div>
+                                    <small class="text-muted">Only walk-in donations are currently available for admin processing.</small>
                                 </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Patient Information Table (shows when Patient-Directed is selected) -->
-                        <div id="adminPatientDetailsSection" class="admin-screening-detail-card" style="display: none;">
-                            <div class="admin-screening-category-title">PATIENT INFORMATION</div>
-                            <div class="table-responsive">
-                                <table class="table table-bordered">
-                                    <thead>
-                                        <tr>
-                                            <th>Patient Name</th>
-                                            <th>Hospital</th>
-                                            <th>Blood Type</th>
-                                            <th>No. of Units</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr>
-                                            <td>
-                                                <input type="text" name="patient-name" class="admin-screening-input" placeholder="Enter patient name">
-                                            </td>
-                                            <td>
-                                                <input type="text" name="hospital" class="admin-screening-input" placeholder="Enter hospital">
-                                            </td>
-                                            <td>
-                                                <select name="patient-blood-type" class="admin-screening-input">
-                                                    <option value="">Select Blood Type</option>
-                                                    <option value="A+">A+</option>
-                                                    <option value="A-">A-</option>
-                                                    <option value="B+">B+</option>
-                                                    <option value="B-">B-</option>
-                                                    <option value="AB+">AB+</option>
-                                                    <option value="AB-">AB-</option>
-                                                    <option value="O+">O+</option>
-                                                    <option value="O-">O-</option>
-                                                </select>
-                                            </td>
-                                            <td>
-                                                <input type="number" name="no-units" class="admin-screening-input" placeholder="1" min="1">
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
                             </div>
                         </div>
                         
                         <!-- MOBILE BLOOD DONATION Section (always visible) -->
-                        <div class="admin-screening-detail-card">
+                        <div class="admin-screening-detail-card admin-mobile-donation-section" aria-disabled="true">
                             <div class="admin-screening-category-title">MOBILE BLOOD DONATION</div>
                             <h6 class="admin-screening-section-subtitle">Mobile Donation Details</h6>
+                            <p class="text-muted mb-3"><i class="fas fa-info-circle me-2"></i>Mobile blood donation entries are disabled for admin submissions.</p>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="admin-screening-label">Place</label>
-                                    <input type="text" name="mobile-place" id="adminMobilePlaceInput" class="admin-screening-input" placeholder="Enter location">
+                                    <input type="text" name="mobile-place" id="adminMobilePlaceInput" class="admin-screening-input" placeholder="Mobile donation disabled" disabled>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="admin-screening-label">Organizer</label>
-                                    <input type="text" name="mobile-organizer" id="adminMobileOrganizerInput" class="admin-screening-input" placeholder="Enter organizer">
+                                    <input type="text" name="mobile-organizer" id="adminMobileOrganizerInput" class="admin-screening-input" placeholder="Mobile donation disabled" disabled>
                                 </div>
                             </div>
                         </div>
