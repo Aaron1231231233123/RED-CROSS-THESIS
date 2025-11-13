@@ -15,6 +15,10 @@ header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type');
+// Prevent caching to ensure real-time data from database
+header('Cache-Control: no-cache, no-store, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
 
 // Path to Python script
 $pythonScript = __DIR__ . '/../../assets/reports-model/dashboard_inventory_system_reports_admin.py';

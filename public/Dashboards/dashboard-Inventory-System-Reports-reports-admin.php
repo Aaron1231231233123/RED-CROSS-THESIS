@@ -113,6 +113,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
                     <div class="content-wrapper">
                     <div class="d-flex justify-content-between align-items-center mb-2" style="padding: 8px 4px;">
                         <h2 class="mb-0" style="font-weight:700">Forecast Reports</h2>
+                        <button class="btn btn-outline-danger btn-sm" id="refreshReportsBtn" title="Refresh data from database">
+                            <i class="fas fa-sync-alt me-2"></i>Refresh Data
+                        </button>
                     </div>
 
                     <div class="row g-2 mb-2 align-items-stretch">

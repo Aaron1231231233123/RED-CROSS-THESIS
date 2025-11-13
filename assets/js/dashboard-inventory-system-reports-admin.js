@@ -22,14 +22,28 @@
     // API endpoint for forecast data (using Python calculator)
     const FORECAST_API_URL = '../api/forecast-reports-api-python.php';
 
-    // Fetch forecast data from API
-    async function fetchForecastData() {
+    // Fetch forecast data from API with cache-busting to ensure real-time data
+    async function fetchForecastData(forceRefresh = false) {
         if (isLoading) return;
         isLoading = true;
         
         try {
             showLoadingState();
-            const response = await fetch(FORECAST_API_URL);
+            // Add cache-busting timestamp to ensure fresh data from database
+            const timestamp = new Date().getTime();
+            const url = forceRefresh 
+                ? `${FORECAST_API_URL}?t=${timestamp}&_nocache=${Math.random()}`
+                : `${FORECAST_API_URL}?t=${timestamp}`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                cache: 'no-cache', // Prevent browser caching
+                headers: {
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
+                }
+            });
             const data = await response.json();
             
             if (data.success) {
@@ -42,45 +56,34 @@
                 forecastMonths = data.forecast_months || []; // Future months = forecasts
                 currentMonths = data.all_months || data.historical_months || data.current_months || []; // All database months for display
                 
-                // Debug: Log received data
-                console.log('Received forecast data:', data);
-                console.log('Historical months (ALL DATABASE DATA 2023-2025):', currentMonths);
-                console.log('Forecast months (December 2025+):', forecastMonths);
-                console.log('Data source explanation:', data.debug_frontend_data?.data_source_explanation);
-                console.log('Forecast explanation:', data.debug_frontend_data?.forecast_explanation);
-                
-                // Log database summary
-                if (data.debug_frontend_data?.database_summary) {
-                    const summary = data.debug_frontend_data.database_summary;
-                    console.log('Database Summary:', summary);
-                    console.log(`Total Blood Units: ${summary.total_blood_units}`);
-                    console.log(`Total Months: ${summary.total_months}`);
-                    console.log(`Years Covered: ${summary.years_covered}`);
-                    console.log(`2023 Months: ${summary.months_2023}, 2024 Months: ${summary.months_2024}, 2025 Months: ${summary.months_2025}`);
-                }
-                console.log('Forecast data:', forecastData);
-                
-                // Log training data info
-                if (data.training_data_info) {
-                    console.log('Training Data Info:', data.training_data_info);
-                    console.log('Historical months used for training:', data.training_data_info.historical_months_count);
-                    console.log('Current months used for training:', data.training_data_info.current_months_count);
-                    console.log('Total training months:', data.training_data_info.total_training_months);
-                }
                 
                 // Reset charts to ensure they update with new data
                 chartsInitialized = false;
+                
+                // Destroy all existing charts before updating
+                if (chartInstances.lineChart) {
+                    chartInstances.lineChart.destroy();
+                    chartInstances.lineChart = null;
+                }
+                if (chartInstances.barChart) {
+                    chartInstances.barChart.destroy();
+                    chartInstances.barChart = null;
+                }
+                if (chartInstances.pieChart) {
+                    chartInstances.pieChart.destroy();
+                    chartInstances.pieChart = null;
+                }
+                chartInstances = {};
                 
                 updateKPIs();
                 updateMonthFilter();
                 renderTable();
                 initCharts();
+                
             } else {
-                console.error('API Error:', data.error);
                 showErrorState(data.message || 'Failed to load forecast data');
             }
         } catch (error) {
-            console.error('Fetch Error:', error);
             showErrorState('Network error while loading forecast data');
         } finally {
             isLoading = false;
@@ -130,16 +133,6 @@
         const selectedMonth = monthFilter.value;
         const selectedType = typeFilter.value;
         
-        console.log('=== KPI DEBUG START ===');
-        console.log('Updating KPIs for:', selectedMonth, selectedType);
-        console.log('Selected month exact value:', JSON.stringify(selectedMonth));
-        console.log('Does it include Historical Data?', selectedMonth.includes('Historical Data'));
-        console.log('Does it include R Studio Forecast?', selectedMonth.includes('R Studio Forecast'));
-        console.log('Available forecast data:', forecastData);
-        console.log('Available current months:', currentMonths);
-        console.log('Available monthly data keys:', Object.keys(monthlyData.supply || {}));
-        console.log('Monthly supply data:', monthlyData.supply);
-        console.log('Monthly demand data:', monthlyData.demand);
         
         // Calculate KPIs based on filtered data
         let totalDemand = 0;
@@ -148,7 +141,6 @@
         
         // Only use forecast data (historical data hidden as per professor's requirement)
         if (selectedMonth.includes('R Studio Forecast')) {
-            console.log('Using forecast data for KPIs');
             const monthName = selectedMonth.replace(' (R Studio Forecast)', '');
             
             // Filter forecast data to only the selected month
@@ -157,26 +149,22 @@
                 const itemMonth = new Date(item.forecast_month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
                 
                 if (itemMonth === monthName) {
-                    console.log(`Adding forecast item for ${monthName}: ${item.blood_type} - Demand: ${item.forecasted_demand}, Supply: ${item.forecasted_supply}, Balance: ${item.projected_balance}`);
                     totalDemand += item.forecasted_demand || 0;
                     totalSupply += item.forecasted_supply || 0;
                     
                     if (item.projected_balance < 0) {
                         criticalTypes.push(item.blood_type);
-                        console.log(`Found critical forecast blood type: ${item.blood_type} with balance: ${item.projected_balance}`);
                     }
                 }
             });
         } else if (selectedMonth === 'All Months') {
             // For "All Months", only aggregate forecast data (historical data hidden)
-            console.log('Using all forecast data for KPIs (historical data hidden)');
             forecastData.forEach(item => {
                 totalDemand += item.forecasted_demand || 0;
                 totalSupply += item.forecasted_supply || 0;
                 
                 if (item.projected_balance < 0) {
                     criticalTypes.push(item.blood_type);
-                    console.log(`Found critical forecast blood type: ${item.blood_type} with balance: ${item.projected_balance}`);
                 }
             });
         }
@@ -196,9 +184,6 @@
         
         const mostCritical = criticalTypes.length > 0 ? criticalTypes[0] : 'None';
         
-        console.log(`Critical types found: [${criticalTypes.join(', ')}]`);
-        console.log(`Most critical: ${mostCritical}`);
-        
         // Update KPI display
         document.getElementById('kpiDemand').textContent = totalDemand;
         document.getElementById('kpiDonations').textContent = totalSupply;
@@ -217,10 +202,6 @@
         if (kpiData.expiring_monthly !== undefined) {
             document.getElementById('kpiExpiringMonthly').textContent = kpiData.expiring_monthly;
         }
-        
-        console.log(`=== KPI DEBUG END ===`);
-        console.log(`FINAL KPIs: Demand: ${totalDemand}, Supply: ${totalSupply}, Balance: ${totalBalance}, Critical: ${mostCritical}`);
-        console.log(`Critical types array:`, criticalTypes);
     }
     
     // Get filtered data for KPI calculation
@@ -326,10 +307,6 @@
     
     // Get forecast data for specific month
     function getForecastDataForMonth(selectedMonth) {
-        const monthName = selectedMonth.replace(' (R Studio Forecast)', '');
-        console.log('Looking for forecast data for month:', monthName);
-        console.log('Available forecast data:', forecastData);
-        
         // For now, return all forecast data since we're showing forecast months
         // The filtering will be handled by the month selection in renderTable
         return forecastData || [];
@@ -342,8 +319,6 @@
         
         // Clear ALL existing options (including the first one to start fresh)
         monthFilter.innerHTML = '';
-        
-        console.log('Clearing all dropdown options and rebuilding...');
         
         // Add "All Months" option (default selection)
         const allMonthsOption = document.createElement('option');
@@ -364,11 +339,7 @@
             option.value = monthName + ' (R Studio Forecast)';
             option.textContent = monthName + ' (R Studio Forecast)';
             monthFilter.appendChild(option);
-            console.log(`Added forecast option: "${option.value}"`);
         });
-        
-        // Historical months are hidden from dropdown (as per professor's requirement)
-        console.log(`Total filter options added: ${monthFilter.children.length} (1 All Months + ${forecastMonths.length} Forecast - Historical data hidden)`);
     }
 
     function statusFor(balance){
@@ -421,8 +392,6 @@
         const filteredForecastData = filtered();
         
         // Show ONLY forecast data (hide historical data as per professor's requirement)
-        console.log(`Rendering table with ${forecastMonths.length} forecast months (historical data hidden)`);
-        
         if (forecastMonths.length > 0 && filteredForecastData.length > 0) {
             forecastMonths.forEach(monthKey => {
                 const monthDate = new Date(monthKey);
@@ -433,16 +402,12 @@
                     return;
                 }
                 
-                console.log(`Adding forecast rows for ${monthName} (${monthKey})`);
-                
                 // Filter forecast data for this specific month
                 const monthForecastData = filteredForecastData.filter(r => r.forecast_month === monthKey);
                 
                 monthForecastData.forEach(r => {
                     const st = statusFor(r.projected_balance);
                     const bal = r.projected_balance > 0 ? `+${r.projected_balance}` : `${r.projected_balance}`;
-                    
-                    console.log(`Adding forecast row: ${r.blood_type} - Demand: ${r.forecasted_demand}, Supply: ${r.forecasted_supply}, Balance: ${bal}`);
                 
                     allRows.push(`
                     <tr>
@@ -614,7 +579,7 @@
         // Combine historical and forecast data for timeline
         const allData = [];
         
-        // Add historical data
+        // Add historical data (current database data)
         Object.keys(monthlyData.supply || {}).forEach(monthKey => {
             const supplyData = monthlyData.supply[monthKey] || {};
             const demandData = monthlyData.demand[monthKey] || {};
@@ -628,13 +593,14 @@
                     allData.push({
                         month: monthKey,
                         blood_type: bt,
-                        balance: balance
+                        balance: balance,
+                        isForecast: false
                     });
                 }
             });
         });
         
-        // Add forecast data
+        // Add forecast data (future predictions)
         forecastData.forEach(item => {
             if (selectedBloodType === 'all' || item.blood_type === selectedBloodType) {
                 allData.push({
@@ -647,7 +613,11 @@
         });
         
         // Sort by month
-        allData.sort((a, b) => new Date(a.month) - new Date(b.month));
+        allData.sort((a, b) => {
+            const dateA = new Date(a.month);
+            const dateB = new Date(b.month);
+            return dateA - dateB;
+        });
         
         // Group by month and aggregate balances
         const monthMap = {};
@@ -661,9 +631,15 @@
                 };
             }
             monthMap[monthKey].balance += item.balance;
+            // If any data point in this month is forecast, mark the month as forecast
+            if (item.isForecast) {
+                monthMap[monthKey].isForecast = true;
+            }
         });
         
-        const months = Object.keys(monthMap).sort();
+        const months = Object.keys(monthMap).sort((a, b) => {
+            return new Date(a) - new Date(b);
+        });
         const labels = months.map(m => {
             const date = new Date(m);
             return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
@@ -673,7 +649,12 @@
         
         // Destroy existing chart if it exists
         if (chartInstances.lineChart) {
-            chartInstances.lineChart.destroy();
+            try {
+                chartInstances.lineChart.destroy();
+            } catch (e) {
+                // Silently handle destruction errors
+            }
+            chartInstances.lineChart = null;
         }
         
         chartInstances.lineChart = new Chart(document.getElementById('lineChart'), {
@@ -782,8 +763,6 @@
         const supply = bloodTypes.map(bt => bloodTypeMap[bt].totalSupply);
         const balances = bloodTypes.map(bt => bloodTypeMap[bt].totalBalance);
         
-        console.log('Blood type aggregation:', bloodTypeMap);
-        
         return { bloodTypes, demand, supply, balances };
     }
 
@@ -792,11 +771,20 @@
     let chartInstances = {};
     
     function initCharts(){
-        if (forecastData.length === 0) return;
+        // Allow charts to initialize even if only monthlyData exists (historical data)
+        if (forecastData.length === 0 && Object.keys(monthlyData.supply || {}).length === 0) {
+            return;
+        }
         
         // Reset charts if already initialized
         if (chartsInitialized) {
-            Object.values(chartInstances).forEach(chart => chart.destroy());
+            Object.values(chartInstances).forEach(chart => {
+                try {
+                    if (chart) chart.destroy();
+                } catch (e) {
+                    // Silently handle destruction errors
+                }
+            });
             chartInstances = {};
         }
         
@@ -809,9 +797,6 @@
         const demand = aggregatedData.demand;
         const supply = aggregatedData.supply;
         const balances = aggregatedData.balances;
-        
-        // Debug: Log chart data
-        console.log('Aggregated Chart Data:', { bloodTypes, demand, supply, balances });
 
         // Bar Chart - Demand vs Supply
         chartInstances.barChart = new Chart(document.getElementById('barChart'), {
@@ -846,7 +831,10 @@
         });
 
         // Line Chart - Projected Balance by Month/Year
-        updateLineChart();
+        // Ensure line chart uses latest data by calling updateLineChart
+        setTimeout(() => {
+            updateLineChart();
+        }, 100); // Small delay to ensure data is fully loaded
 
         // Pie Chart - Demand Share
         const totalDemand = demand.reduce((a, b) => a + b, 0);
@@ -1033,12 +1021,8 @@
             const exportMonth = document.getElementById('exportMonth').value;
             const exportBloodType = document.getElementById('exportBloodType').value;
             
-            console.log('Generating Blood Bank Report:', { exportMonth, exportBloodType });
-            console.log('Available data:', { kpiData, forecastData, monthlyData });
-            
             // Check if we have data
             if (!kpiData || !forecastData || !monthlyData) {
-                console.error('Missing data for report generation');
                 alert('Error: No data available for report generation. Please ensure the dashboard is fully loaded.');
                 return;
             }
@@ -1054,8 +1038,6 @@
             // Generate comprehensive report content
             const reportContent = generateComprehensiveReport(exportMonth, exportBloodType);
             
-            console.log('Generated report content length:', reportContent.length);
-            
             reportWindow.document.write(reportContent);
             reportWindow.document.close();
             
@@ -1067,7 +1049,6 @@
             }, 1000);
             
         } catch (error) {
-            console.error('Error generating report:', error);
             alert('Error generating report: ' + error.message);
         }
     }
@@ -1081,12 +1062,8 @@
                 day: 'numeric' 
             });
             
-            console.log('Generating report for:', { exportMonth, exportBloodType });
-            
             // Get filtered data based on selections
             const filteredData = getFilteredReportData(exportMonth, exportBloodType);
-            
-            console.log('Filtered data:', filteredData);
         
         let reportHTML = `
         <!DOCTYPE html>
@@ -1336,7 +1313,6 @@
             return reportHTML;
             
         } catch (error) {
-            console.error('Error in generateComprehensiveReport:', error);
             return `
             <!DOCTYPE html>
             <html>
@@ -1362,8 +1338,6 @@
     // Get filtered data for report (unifies historical + forecast and recomputes KPIs)
     function getFilteredReportData(exportMonth, exportBloodType) {
         try {
-            console.log('Filtering data with:', { exportMonth, exportBloodType });
-            console.log('Available data:', { kpiData, forecastData, monthlyData });
 
             // Helper to format a YYYY-MM-01 key to "Month YYYY"
             const toMonthLabel = (isoLike) => {
@@ -1400,7 +1374,7 @@
                     });
                 });
             } catch (e) {
-                console.warn('Historical build failed:', e);
+                // Silently handle historical build errors
             }
 
             // 2) Append forecast rows with normalized month label
@@ -1413,7 +1387,7 @@
                     });
                 });
             } catch (e) {
-                console.warn('Forecast build failed:', e);
+                // Silently handle forecast build errors
             }
 
             // 3) Apply filters
@@ -1454,10 +1428,8 @@
                 monthlyDemand: monthlyData?.demand || {}
             };
 
-            console.log('Filtered unified result:', result);
             return result;
         } catch (error) {
-            console.error('Error in getFilteredReportData:', error);
             return {
                 kpis: {},
                 forecastData: [],
@@ -1547,7 +1519,6 @@
             </div>
         `;
         } catch (error) {
-            console.error('Error in generateMedicalSummary:', error);
             return `
             <div class="section">
                 <h3>📊 Medical Summary</h3>
@@ -1692,23 +1663,80 @@
         `;
     }
 
+    // Refresh button handler
+    function setupRefreshButton() {
+        const refreshBtn = document.getElementById('refreshReportsBtn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', function() {
+                const icon = this.querySelector('i');
+                if (icon) {
+                    icon.classList.add('fa-spin');
+                }
+                this.disabled = true;
+                
+                // Force refresh with cache-busting
+                fetchForecastData(true).then(() => {
+                    if (icon) {
+                        icon.classList.remove('fa-spin');
+                    }
+                    this.disabled = false;
+                    
+                    // Show success message
+                    const originalText = this.innerHTML;
+                    this.innerHTML = '<i class="fas fa-check me-2"></i>Refreshed!';
+                    this.classList.remove('btn-outline-danger');
+                    this.classList.add('btn-success');
+                    
+                    setTimeout(() => {
+                        this.innerHTML = originalText;
+                        this.classList.remove('btn-success');
+                        this.classList.add('btn-outline-danger');
+                    }, 2000);
+                }).catch(() => {
+                    if (icon) {
+                        icon.classList.remove('fa-spin');
+                    }
+                    this.disabled = false;
+                });
+            });
+        }
+    }
+
+    // Auto-refresh mechanism (every 5 minutes to keep data fresh)
+    let autoRefreshInterval = null;
+    function setupAutoRefresh() {
+        // Clear any existing interval
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+        }
+        
+        // Auto-refresh every 5 minutes (300000 ms)
+        autoRefreshInterval = setInterval(() => {
+            fetchForecastData(false); // Use normal refresh, not force
+        }, 300000); // 5 minutes
+    }
+
     // Initialize
     document.addEventListener('DOMContentLoaded', function(){
         // Fetch forecast data from API
         fetchForecastData();
+        
+        // Setup refresh button
+        setupRefreshButton();
+        
+        // Setup auto-refresh
+        setupAutoRefresh();
         
         // Defer charts init for faster first paint
         scheduleChartsInit();
         
         // Force refresh dropdown after a short delay to ensure data is loaded
         setTimeout(() => {
-            console.log('Force refreshing month filter dropdown...');
             updateMonthFilter();
         }, 1000);
         
         // Additional force refresh after 3 seconds to ensure cache is cleared
         setTimeout(() => {
-            console.log('Second force refresh to clear any cache...');
             updateMonthFilter();
         }, 3000);
     });
@@ -1777,7 +1805,6 @@
                 </div>
             `;
         } catch (error) {
-            console.error('Error generating executive summary:', error);
             return `<div class="section"><h3>Executive Summary</h3><p>Error generating summary: ${error.message}</p></div>`;
         }
     }
@@ -1867,7 +1894,6 @@
                 </div>
             `;
         } catch (error) {
-            console.error('Error generating blood type analysis:', error);
             return `<div class="section"><h3>Blood Type Analysis</h3><p>Error generating analysis: ${error.message}</p></div>`;
         }
     }
@@ -1959,7 +1985,6 @@
                 </div>
             `;
         } catch (error) {
-            console.error('Error generating supply demand analysis:', error);
             return `<div class="section"><h3>Supply vs Demand Analysis</h3><p>Error generating analysis: ${error.message}</p></div>`;
         }
     }
@@ -2016,7 +2041,6 @@
                 </div>
             `;
         } catch (error) {
-            console.error('Error generating forecast analysis:', error);
             return `<div class="section"><h3>Forecast Analysis</h3><p>Error generating analysis: ${error.message}</p></div>`;
         }
     }
