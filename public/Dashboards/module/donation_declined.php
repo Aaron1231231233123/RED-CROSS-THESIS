@@ -301,6 +301,15 @@ try {
     debug_log("Error in donation_declined.php: " . $error);
 }
 
+// Sort by newest first (LIFO: Last In First Out)
+if (!empty($declinedDonations) && !isset($declinedDonations['error'])) {
+    usort($declinedDonations, function($a, $b) {
+        $ta = $a['sort_ts'] ?? 0; $tb = $b['sort_ts'] ?? 0;
+        if ($ta === $tb) return 0;
+        return ($ta > $tb) ? -1 : 1; // Descending order: newest first
+    });
+}
+
 // Set error message if no records found
 if (empty($declinedDonations) && !$error) {
     $error = "No declined donation records found.";

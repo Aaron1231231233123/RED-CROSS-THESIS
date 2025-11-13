@@ -472,7 +472,7 @@ if (!is_array($donations)) {
         $error = "No data returned or invalid data format";
     }
 }
-// Data is ordered by created_at.desc in the API query to implement First In, First Out (FIFO) order
+// Data is ordered by created_at.desc in the API query to implement Last In, First Out (LIFO) order
 // This ensures newest entries appear at the top of the table on the first page
 // OPTIMIZATION: Add performance monitoring
 $startTime = microtime(true);

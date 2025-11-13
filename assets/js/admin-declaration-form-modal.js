@@ -409,15 +409,50 @@ window.proceedToAdminDeclarationForm = function(donorId) {
                                 }
                             }, 1000); // Longer delay to ensure database has time to update after declaration form submission
                             
-                            // Show success modal with admin-specific message
-                            if (window.showSuccessModal) {
-                                showSuccessModal('Admin Registration Completed', 'The donor has been successfully registered and forwarded to the physician for physical examination.', { autoCloseMs: 2000, reloadOnClose: true });
+                            // Check if we're in registration flow - if so, reload to dashboard instead of current page
+                            if (window.__inRegistrationFlow && window.__registrationDashboardUrl) {
+                                console.log('Registration flow complete - reloading dashboard:', window.__registrationDashboardUrl);
+                                // Store the dashboard URL for reload
+                                const dashboardUrl = window.__registrationDashboardUrl + (window.__registrationDashboardUrl.includes('?') ? '&' : '?') + 'donor_registered=true';
+                                // Clear the flag
+                                window.__inRegistrationFlow = false;
+                                // Show success message and reload to dashboard
+                                if (window.showSuccessModal) {
+                                    // Show modal but override reload behavior
+                                    const modal = showSuccessModal('Admin Registration Completed', 'The donor has been successfully registered and forwarded to the physician for physical examination.', { 
+                                        autoCloseMs: 2000, 
+                                        reloadOnClose: false // Don't use default reload
+                                    });
+                                    // Get the modal element and attach custom reload handler
+                                    const modalElement = document.getElementById('feedbackModal');
+                                    if (modalElement) {
+                                        modalElement.addEventListener('hidden.bs.modal', function() {
+                                            window.location.href = dashboardUrl;
+                                        }, { once: true });
+                                    } else {
+                                        // Fallback: reload after delay
+                                        setTimeout(() => {
+                                            window.location.href = dashboardUrl;
+                                        }, 2000);
+                                    }
+                                } else {
+                                    // Fallback
+                                    alert('Admin Registration Completed: The donor has been successfully registered and forwarded to the physician for physical examination.');
+                                    setTimeout(() => {
+                                        window.location.href = dashboardUrl;
+                                    }, 1500);
+                                }
                             } else {
-                                // Fallback
-                                alert('Admin Registration Completed: The donor has been successfully registered and forwarded to the physician for physical examination.');
-                                setTimeout(() => {
-                                    window.location.reload();
-                                }, 1500);
+                                // Normal flow: Show success modal with admin-specific message
+                                if (window.showSuccessModal) {
+                                    showSuccessModal('Admin Registration Completed', 'The donor has been successfully registered and forwarded to the physician for physical examination.', { autoCloseMs: 2000, reloadOnClose: true });
+                                } else {
+                                    // Fallback
+                                    alert('Admin Registration Completed: The donor has been successfully registered and forwarded to the physician for physical examination.');
+                                    setTimeout(() => {
+                                        window.location.reload();
+                                    }, 1500);
+                                }
                             }
                         } else {
                             // Show error modal

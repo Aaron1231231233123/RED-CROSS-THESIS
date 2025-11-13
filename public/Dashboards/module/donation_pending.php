@@ -380,11 +380,11 @@ try {
                 error_log("DEBUG - Donor $donorId: Added to pendingDonations array with status: '$statusLabel'");
             }        }
 
-        // Enforce FIFO: oldest first
+        // Sort by newest first (LIFO: Last In First Out)
         usort($pendingDonations, function($a, $b) {
             $ta = $a['sort_ts'] ?? 0; $tb = $b['sort_ts'] ?? 0;
             if ($ta === $tb) return 0;
-            return ($ta < $tb) ? -1 : 1;
+            return ($ta > $tb) ? -1 : 1; // Descending order: newest first
         });
         
         // Do NOT slice here - return ALL filtered results

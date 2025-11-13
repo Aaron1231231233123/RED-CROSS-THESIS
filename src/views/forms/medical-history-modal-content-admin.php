@@ -1240,10 +1240,13 @@ setTimeout(() => {
                                   document.getElementById('modalSubmitButton').style.display === 'none');
                 
                 if (currentStep === totalSteps) {
-                    if (isViewOnly) {
-                        // In view-only mode, show "Close" button instead of "Submit"
+                    // Check if we're in admin registration flow
+                    const isRegistrationFlow = window.__adminDonorRegistrationFlow === true;
+                    if (isViewOnly && !isRegistrationFlow) {
+                        // In view-only mode (but not registration), show "Close" button instead of "Submit"
                         nextButton.innerHTML = '<i class="fas fa-times me-1"></i>Close';
                     } else {
+                        // In registration flow or normal mode, show "Submit"
                         nextButton.innerHTML = '<i class="fas fa-check me-1"></i>Submit';
                     }
                 } else {
@@ -1291,8 +1294,10 @@ setTimeout(() => {
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 } else {
                     // Final step
-                    if (isViewOnly) {
-                        // In view-only mode, close the modal instead of submitting (like screening summary)
+                    // Check if we're in admin registration flow
+                    const isRegistrationFlow = window.__adminDonorRegistrationFlow === true;
+                    if (isViewOnly && !isRegistrationFlow) {
+                        // In view-only mode (but not registration), close the modal instead of submitting
                         console.log('View-only mode: Closing medical history modal');
                         if (typeof closeMedicalHistoryModal === 'function') {
                             closeMedicalHistoryModal();
@@ -1305,7 +1310,7 @@ setTimeout(() => {
                             }
                         }
                     } else {
-                        // Normal mode: dispatch submit event
+                        // Normal mode or registration flow: dispatch submit event
                         console.log('Final step reached - dispatching submit event');
                         try {
                             const evt = new Event('submit', { bubbles: true, cancelable: true });
@@ -1814,13 +1819,18 @@ window.mhApplyViewOnlyMode = function() {
     }
     
     // Force update step display to show "Close" instead of "Submit" if on last step
+    // BUT NOT if we're in registration flow
     if (typeof updateStepDisplay === 'function') {
         setTimeout(() => {
             try {
-                // Try to trigger updateStepDisplay if it's accessible
-                const nextBtn = document.getElementById('modalNextButton');
-                if (nextBtn && nextBtn.textContent.includes('Submit')) {
-                    nextBtn.innerHTML = '<i class="fas fa-times me-1"></i>Close';
+                // Check if we're in admin registration flow
+                const isRegistrationFlow = window.__adminDonorRegistrationFlow === true;
+                if (!isRegistrationFlow) {
+                    // Try to trigger updateStepDisplay if it's accessible
+                    const nextBtn = document.getElementById('modalNextButton');
+                    if (nextBtn && nextBtn.textContent.includes('Submit')) {
+                        nextBtn.innerHTML = '<i class="fas fa-times me-1"></i>Close';
+                    }
                 }
             } catch(e) {
                 console.warn('Could not update button text:', e);
