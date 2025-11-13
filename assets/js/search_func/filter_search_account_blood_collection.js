@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', function(){
                             <label class="form-check-label" for="fltStatusNotStarted">Not Started</label>
                         </div>
                         <div class="d-grid">
-                            <button id="fltRunBlood" class="btn btn-danger btn-sm">Run</button>
+                            <button id="fltRunBlood" class="btn btn-danger btn-sm">Apply</button>
                         </div>
                     </div>
                 </div>

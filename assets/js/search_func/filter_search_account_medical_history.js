@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', function(){
                         <label class="form-check-label" for="fltViaSystem">System</label>
                     </div>
                     <div class="d-grid">
-                        <button id="fltRun" class="btn btn-danger btn-sm">Run</button>
+                        <button id="fltRun" class="btn btn-danger btn-sm">Apply</button>
                     </div>
                 </div>
             </div>

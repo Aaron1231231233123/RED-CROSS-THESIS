@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', function(){
                         <label class="form-check-label" for="fltStatusIneligible">Ineligible</label>
                     </div>
                     <div class="d-grid">
-                        <button id="fltRunPE" class="btn btn-danger btn-sm">Run</button>
+                        <button id="fltRunPE" class="btn btn-danger btn-sm">Apply</button>
                     </div>
                 </div>
             </div>

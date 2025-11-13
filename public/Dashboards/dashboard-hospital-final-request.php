@@ -2463,6 +2463,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 // Show/hide buttons based on status
                 const printBtn = document.getElementById('printRequestBtn');
                 const handoverBtn = document.getElementById('handoverRequestBtn');
+                const closeBtn = document.querySelector('#bloodReorderModal .modal-footer .btn-secondary[data-bs-dismiss="modal"]');
                 
                 if (printBtn && handoverBtn) {
                     printBtn.setAttribute('data-request-id', requestId);
@@ -2471,15 +2472,23 @@ document.addEventListener("DOMContentLoaded", function () {
                     if (status === 'Approved' || status === 'Accepted' || status === 'Confirmed') {
                         printBtn.style.display = 'inline-block';
                         handoverBtn.style.display = 'none';
+                        if (closeBtn) closeBtn.style.display = 'none';
                     } else if (status === 'Printed') {
+                        printBtn.style.display = 'inline-block';
+                        handoverBtn.style.display = 'none';
+                        if (closeBtn) closeBtn.style.display = 'none';
+                    } else if (status === 'Completed') {
                         printBtn.style.display = 'none';
                         handoverBtn.style.display = 'none';
+                        if (closeBtn) closeBtn.style.display = 'none';
                     } else if (status === 'Handed_over') {
                         handoverBtn.style.display = 'inline-block';
                         printBtn.style.display = 'none';
+                        if (closeBtn) closeBtn.style.display = 'inline-block';
                     } else {
                         printBtn.style.display = 'none';
                         handoverBtn.style.display = 'none';
+                        if (closeBtn) closeBtn.style.display = 'inline-block';
                     }
                 }
                 

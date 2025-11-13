@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', function(){
                 <label class="form-check-label" for="fltStatusCompleted">Completed</label>
             </div>
             <div class="d-grid">
-                <button id="fltRunBloodRequests" class="btn btn-danger btn-sm">Run</button>
+                <button id="fltRunBloodRequests" class="btn btn-danger btn-sm">Apply</button>
             </div>
         </div>
     `;
@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const runBtn = filterContainer.querySelector('#fltRunBloodRequests');
     if (runBtn) {
         runBtn.addEventListener('click', function() {
-            applyFilters(true); // Show modal for filter Run button
+            applyFilters(true); // Show modal for filter Apply button
         });
     }
 
@@ -140,7 +140,7 @@ document.addEventListener('DOMContentLoaded', function(){
         // Show loading indicator based on source
         const searchSpinner = document.getElementById('searchLoadingSpinner');
         if (showModal) {
-            // Show modal for filter "Run" button
+            // Show modal for filter "Apply" button
             if (typeof FilterLoadingModal !== 'undefined') {
                 FilterLoadingModal.show();
             }
