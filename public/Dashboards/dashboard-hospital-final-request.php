@@ -766,7 +766,7 @@ th {
                         // Debug: Log when_needed for each request
                         error_log("Debug - Request " . $request['request_id'] . " when_needed: " . print_r($request['when_needed'], true));
                         ?>
-                        <tr>
+                        <tr class="table-row" data-row-index="<?php echo $rowNum - 1; ?>">
                             <td><?php echo $rowNum++; ?></td>
                             <td><?php echo htmlspecialchars($request['request_id']); ?></td>
                             <td><?php echo htmlspecialchars($request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-')); ?></td>
@@ -964,14 +964,8 @@ th {
 
         <!-- Pagination -->
         <div class="pagination-container">
-            <div class="pagination">
-                <a href="#" class="pagination-btn">&lt;</a>
-                <a href="#" class="pagination-btn active">1</a>
-                <a href="#" class="pagination-btn">2</a>
-                <a href="#" class="pagination-btn">3</a>
-                <a href="#" class="pagination-btn">4</a>
-                <a href="#" class="pagination-btn">5</a>
-                <a href="#" class="pagination-btn">&gt;</a>
+            <div class="pagination" id="pagination">
+                <!-- Pagination buttons will be generated dynamically -->
             </div>
         </div>
     </div>
@@ -1304,8 +1298,9 @@ th {
             </div>
         </div>
     </div>
+</div>
 
-    <!-- Confirm Submit Modal -->
+<!-- Confirm Submit Modal -->
     <div class="modal fade" id="confirmSubmitModal" tabindex="-1" aria-labelledby="confirmSubmitModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -1888,22 +1883,107 @@ document.addEventListener("DOMContentLoaded", function () {
                     })
                     .then(result => {
                         console.log('Request submitted successfully:', result);
-                        // Show success modal instead of alert
-                        const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
-                        const body = document.getElementById('actionResultBody');
-                        if (body) { body.textContent = 'Blood request submitted successfully!'; }
-                        msgModal.show();
-                        // Reset and close after dismiss
+                        
+                        // Close all open modals first (confirm modal and request modal)
+                        const confirmModalInstance = bootstrap.Modal.getInstance(document.getElementById('confirmSubmitModal'));
+                        if (confirmModalInstance) {
+                            confirmModalInstance.hide();
+                        }
+                        
                         const brm = bootstrap.Modal.getInstance(document.getElementById('bloodRequestModal'));
-                        if (brm) brm.hide();
-                        document.getElementById('actionResultModal').addEventListener('hidden.bs.modal', () => window.location.reload(), { once: true });
+                        if (brm) {
+                            // Wait for the modal to fully close before showing the result modal
+                            const bloodRequestModalEl = document.getElementById('bloodRequestModal');
+                            bloodRequestModalEl.addEventListener('hidden.bs.modal', function showResultModal() {
+                                // Remove the listener to avoid multiple calls
+                                bloodRequestModalEl.removeEventListener('hidden.bs.modal', showResultModal);
+                                
+                                // Now show the success modal
+                                const msgModalEl = document.getElementById('actionResultModal');
+                                if (msgModalEl) {
+                                    const msgModal = new bootstrap.Modal(msgModalEl);
+                                    const body = document.getElementById('actionResultBody');
+                                    if (body) { 
+                                        body.textContent = 'Blood request submitted successfully!'; 
+                                    }
+                                    msgModal.show();
+                                    
+                                    // Reload page after result modal is dismissed
+                                    msgModalEl.addEventListener('hidden.bs.modal', () => {
+                                        window.location.reload();
+                                    }, { once: true });
+                                } else {
+                                    console.error('actionResultModal element not found!');
+                                    // Fallback: reload immediately if modal doesn't exist
+                                    window.location.reload();
+                                }
+                            }, { once: true });
+                            
+                            brm.hide();
+                        } else {
+                            // If request modal is not open, show result modal directly
+                            const msgModalEl = document.getElementById('actionResultModal');
+                            if (msgModalEl) {
+                                const msgModal = new bootstrap.Modal(msgModalEl);
+                                const body = document.getElementById('actionResultBody');
+                                if (body) { 
+                                    body.textContent = 'Blood request submitted successfully!'; 
+                                }
+                                msgModal.show();
+                                
+                                msgModalEl.addEventListener('hidden.bs.modal', () => {
+                                    window.location.reload();
+                                }, { once: true });
+                            } else {
+                                console.error('actionResultModal element not found!');
+                                window.location.reload();
+                            }
+                        }
                     })
                     .catch(error => {
                         console.error('Error submitting request:', error);
-                        const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
-                        const body = document.getElementById('actionResultBody');
-                        if (body) { body.textContent = 'Error submitting request: ' + error.message; }
-                        msgModal.show();
+                        
+                        // Close confirm modal if still open
+                        const confirmModalInstance = bootstrap.Modal.getInstance(document.getElementById('confirmSubmitModal'));
+                        if (confirmModalInstance) {
+                            confirmModalInstance.hide();
+                        }
+                        
+                        // Close request modal and show error modal
+                        const brm = bootstrap.Modal.getInstance(document.getElementById('bloodRequestModal'));
+                        if (brm) {
+                            const bloodRequestModalEl = document.getElementById('bloodRequestModal');
+                            bloodRequestModalEl.addEventListener('hidden.bs.modal', function showErrorModal() {
+                                bloodRequestModalEl.removeEventListener('hidden.bs.modal', showErrorModal);
+                                
+                                const msgModalEl = document.getElementById('actionResultModal');
+                                if (msgModalEl) {
+                                    const msgModal = new bootstrap.Modal(msgModalEl);
+                                    const body = document.getElementById('actionResultBody');
+                                    if (body) { 
+                                        body.textContent = 'Error submitting request: ' + error.message; 
+                                    }
+                                    msgModal.show();
+                                } else {
+                                    alert('Error submitting request: ' + error.message);
+                                }
+                            }, { once: true });
+                            
+                            brm.hide();
+                        } else {
+                            // If request modal is not open, show error modal directly
+                            const msgModalEl = document.getElementById('actionResultModal');
+                            if (msgModalEl) {
+                                const msgModal = new bootstrap.Modal(msgModalEl);
+                                const body = document.getElementById('actionResultBody');
+                                if (body) { 
+                                    body.textContent = 'Error submitting request: ' + error.message; 
+                                }
+                                msgModal.show();
+                            } else {
+                                alert('Error submitting request: ' + error.message);
+                            }
+                        }
                     })
                     .finally(() => {
                         // Restore button state
@@ -1911,12 +1991,23 @@ document.addEventListener("DOMContentLoaded", function () {
                         submitBtn.innerHTML = originalBtnText;
                     });
                 };
-                // Wire confirm button once
+                // Wire confirm button - remove any existing listeners first
                 const confirmBtn = document.getElementById('confirmSubmitBtn');
                 if (confirmBtn) {
-                    confirmBtn.onclick = function() {
-                        confirmModal.hide();
-                        doSubmit();
+                    // Remove any existing click handlers
+                    const newConfirmBtn = confirmBtn.cloneNode(true);
+                    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+                    
+                    // Add new click handler
+                    newConfirmBtn.onclick = function() {
+                        const confirmModalInstance = bootstrap.Modal.getInstance(document.getElementById('confirmSubmitModal'));
+                        if (confirmModalInstance) {
+                            confirmModalInstance.hide();
+                        }
+                        // Small delay to ensure confirm modal closes before starting submission
+                        setTimeout(() => {
+                            doSubmit();
+                        }, 100);
                     };
                 }
             });
@@ -2603,7 +2694,154 @@ document.addEventListener("DOMContentLoaded", function () {
                 }, 500);
             }
         });
+        
     });
+    
+    // Pagination functionality
+    (function() {
+        const rowsPerPage = 15;
+        let currentPage = 1;
+        let totalRows = 0;
+        let totalPages = 0;
+        
+        function initPagination() {
+            const tableRows = document.querySelectorAll('#requestTable tr.table-row');
+            totalRows = tableRows.length;
+            
+            // Don't paginate if there are no rows or only empty message
+            if (totalRows === 0) {
+                const paginationEl = document.getElementById('pagination');
+                if (paginationEl) paginationEl.innerHTML = '';
+                return;
+            }
+            
+            totalPages = Math.ceil(totalRows / rowsPerPage);
+            
+            // Show first page by default
+            showPage(1);
+            renderPagination();
+        }
+        
+        function showPage(page) {
+            currentPage = page;
+            const tableRows = document.querySelectorAll('#requestTable tr.table-row');
+            const startIndex = (page - 1) * rowsPerPage;
+            const endIndex = startIndex + rowsPerPage;
+            
+            tableRows.forEach((row, index) => {
+                if (index >= startIndex && index < endIndex) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+            
+            // Update row numbers for visible rows
+            let visibleRowNum = startIndex + 1;
+            tableRows.forEach((row, index) => {
+                if (index >= startIndex && index < endIndex) {
+                    const firstCell = row.querySelector('td:first-child');
+                    if (firstCell) {
+                        firstCell.textContent = visibleRowNum++;
+                    }
+                }
+            });
+            
+            renderPagination();
+        }
+        
+        function renderPagination() {
+            const paginationContainer = document.getElementById('pagination');
+            if (!paginationContainer) return;
+            
+            if (totalPages <= 1) {
+                paginationContainer.innerHTML = '';
+                return;
+            }
+            
+            let html = '';
+            
+            // Previous button
+            if (currentPage > 1) {
+                html += `<a href="#" class="pagination-btn" data-page="${currentPage - 1}">&lt;</a>`;
+            } else {
+                html += `<span class="pagination-btn" style="opacity: 0.5; cursor: not-allowed;">&lt;</span>`;
+            }
+            
+            // Page numbers
+            const maxVisiblePages = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+            
+            // Adjust start page if we're near the end
+            if (endPage - startPage < maxVisiblePages - 1) {
+                startPage = Math.max(1, endPage - maxVisiblePages + 1);
+            }
+            
+            // Show first page if not in range
+            if (startPage > 1) {
+                html += `<a href="#" class="pagination-btn" data-page="1">1</a>`;
+                if (startPage > 2) {
+                    html += `<span class="pagination-btn" style="border: none; background: transparent;">...</span>`;
+                }
+            }
+            
+            // Show page numbers
+            for (let i = startPage; i <= endPage; i++) {
+                if (i === currentPage) {
+                    html += `<span class="pagination-btn active">${i}</span>`;
+                } else {
+                    html += `<a href="#" class="pagination-btn" data-page="${i}">${i}</a>`;
+                }
+            }
+            
+            // Show last page if not in range
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    html += `<span class="pagination-btn" style="border: none; background: transparent;">...</span>`;
+                }
+                html += `<a href="#" class="pagination-btn" data-page="${totalPages}">${totalPages}</a>`;
+            }
+            
+            // Next button
+            if (currentPage < totalPages) {
+                html += `<a href="#" class="pagination-btn" data-page="${currentPage + 1}">&gt;</a>`;
+            } else {
+                html += `<span class="pagination-btn" style="opacity: 0.5; cursor: not-allowed;">&gt;</span>`;
+            }
+            
+            paginationContainer.innerHTML = html;
+            
+            // Attach click handlers
+            paginationContainer.querySelectorAll('a[data-page]').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const page = parseInt(this.getAttribute('data-page'));
+                    if (page && page !== currentPage) {
+                        showPage(page);
+                        // Scroll to top of table
+                        const table = document.querySelector('table');
+                        if (table) {
+                            table.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    }
+                });
+            });
+        }
+        
+        // Initialize pagination when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initPagination);
+        } else {
+            initPagination();
+        }
+        
+        // Re-initialize pagination when table is updated (e.g., after search/filter)
+        document.addEventListener('tableUpdated', function() {
+            currentPage = 1;
+            initPagination();
+        });
+    })();
     </script>
 </body>
 </html> 

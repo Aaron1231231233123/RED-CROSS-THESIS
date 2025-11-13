@@ -363,7 +363,7 @@ switch ($status_filter) {
 
 // Sort records with priority:
 // 1) needs_review === true first
-// 2) FIFO by time (prefer blood_collection.updated_at, fallback created_at, else exam created_at)
+// 2) FIFO by time (descending - newest first) (prefer blood_collection.updated_at, fallback created_at, else exam created_at)
 usort($display_records, function($a, $b) {
     $a_needs_review = (!empty($a['blood_collection_data']) && isset($a['blood_collection_data']['needs_review']) && ($a['blood_collection_data']['needs_review'] === true || $a['blood_collection_data']['needs_review'] === 1 || $a['blood_collection_data']['needs_review'] === '1'));
     $b_needs_review = (!empty($b['blood_collection_data']) && isset($b['blood_collection_data']['needs_review']) && ($b['blood_collection_data']['needs_review'] === true || $b['blood_collection_data']['needs_review'] === 1 || $b['blood_collection_data']['needs_review'] === '1'));
@@ -390,7 +390,8 @@ usort($display_records, function($a, $b) {
 
     $a_time = $resolveTime($a);
     $b_time = $resolveTime($b);
-    return $a_time <=> $b_time;
+    if ($a_time == $b_time) return 0;
+    return ($a_time > $b_time) ? -1 : 1; // Descending (newest first)
 });
 
 // Prepare pagination

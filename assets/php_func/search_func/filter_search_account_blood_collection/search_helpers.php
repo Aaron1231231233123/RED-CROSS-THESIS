@@ -241,6 +241,37 @@ if (!defined('SABC_FILTER_HELPERS_INCLUDED')) {
                     return $direction === 'asc' ? $cmp : -$cmp;
                 });
             }
+        } else {
+            // Default FIFO sorting: needs_review first, then descending by time (newest first)
+            usort($rows, function($a, $b) {
+                // Priority 1: needs_review === true first
+                $a_needs_review = !empty($a['needs_review']);
+                $b_needs_review = !empty($b['needs_review']);
+                
+                if ($a_needs_review !== $b_needs_review) {
+                    return $a_needs_review ? -1 : 1;
+                }
+                
+                // Priority 2: FIFO by time (descending - newest first)
+                // Helper to normalize ISO timestamp to a plain timestamp
+                $normalizeTs = function($ts) {
+                    if (!$ts || !is_string($ts)) return 0;
+                    // Remove fractional seconds
+                    $s = preg_replace('/\.[0-9]{1,6}/', '', $ts);
+                    // Replace 'T' with space
+                    $s = str_replace('T', ' ', $s);
+                    // Drop trailing timezone like 'Z' or +hh:mm/-hh:mm
+                    $s = preg_replace('/(Z|[+-][0-9]{2}:[0-9]{2})$/', '', $s);
+                    return strtotime(trim($s)) ?: 0;
+                };
+                
+                // Use created_at field for time comparison
+                $a_time = isset($a['created_at']) ? $normalizeTs($a['created_at']) : 0;
+                $b_time = isset($b['created_at']) ? $normalizeTs($b['created_at']) : 0;
+                
+                if ($a_time == $b_time) return 0;
+                return ($a_time > $b_time) ? -1 : 1; // Descending (newest first)
+            });
         }
 
         if ($limit > 0 && count($rows) > $limit) {

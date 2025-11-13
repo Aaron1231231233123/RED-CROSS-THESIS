@@ -192,7 +192,7 @@ while ($has_more && $iteration < $max_iterations) {
     $batch = makeSupabaseApiCall(
         'physical_examination',
         ['physical_exam_id', 'screening_id', 'donor_id', 'remarks', 'disapproval_reason', 'gen_appearance', 'heart_and_lungs', 'skin', 'reason', 'blood_pressure', 'pulse_rate', 'body_temp', 'blood_bag_type', 'created_at', 'updated_at', 'needs_review', 'physician'],
-        ['order' => 'updated_at.asc', 'limit' => $limit, 'offset' => $offset]
+        ['order' => 'updated_at.desc', 'limit' => $limit, 'offset' => $offset]
     );
     
     error_log("Physical exams batch $iteration: fetched " . count($batch) . " records (offset: $offset)");
@@ -428,7 +428,7 @@ switch ($status_filter) {
 // Sort records with priority:
 // 1) needs_review === true first
 // 2) then pending (screening or physical_exam with remarks 'pending')
-// 3) FIFO by time
+// 3) FIFO by time (descending - newest first)
 //    - For physical_examination rows: use updated_at, normalized to a plain timestamp (strip fractional seconds and timezone)
 //    - Otherwise: use created_at
 usort($display_records, function($a, $b) {
@@ -471,11 +471,11 @@ usort($display_records, function($a, $b) {
     }
     
     // Remove debug code
-    // For needs_review records, show oldest first (FIFO - ascending order)
-    // For other records, show oldest first (FIFO - ascending order)
+    // For needs_review records, show newest first (FIFO - descending order)
+    // For other records, show newest first (FIFO - descending order)
     // Use direct timestamp comparison to ensure proper FIFO
     if ($a_time == $b_time) return 0;
-    return ($a_time < $b_time) ? -1 : 1; // Always ascending (FIFO - oldest first)
+    return ($a_time > $b_time) ? -1 : 1; // Always descending (newest first)
 });
 
 // Remove debug code

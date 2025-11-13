@@ -40,7 +40,7 @@ function fpe_build_filtered_rows($filters, $limit = 150, $q = '', $sortOptions =
     if (is_string($q) && trim($q) !== '') {
         $base = spe_search_rows($q, $limit);
     } else {
-        // fallback: recent physical exams
+        // fallback: recent physical exams - fetch in descending order for FIFO (newest first)
         $physExams = spe_supabase_get('physical_examination', ['physical_exam_id','screening_id','donor_id','remarks','needs_review','updated_at','created_at','physician'], [ 'order' => 'updated_at.desc' ]);
         // donor cache
         $allIds = array_values(array_unique(array_map(function($e){ return (int)$e['donor_id']; }, $physExams)));
@@ -154,6 +154,37 @@ function fpe_build_filtered_rows($filters, $limit = 150, $q = '', $sortOptions =
                 return $direction === 'asc' ? $cmp : -$cmp;
             });
         }
+    } else {
+        // Default FIFO sorting: needs_review first, then descending by time (newest first)
+        usort($rows, function($a, $b) {
+            // Priority 1: needs_review === true first
+            $a_needs_review = isset($a['needs_review']) && $a['needs_review'] === true;
+            $b_needs_review = isset($b['needs_review']) && $b['needs_review'] === true;
+            
+            if ($a_needs_review !== $b_needs_review) {
+                return $a_needs_review ? -1 : 1;
+            }
+            
+            // Priority 2: FIFO by time (descending - newest first)
+            // Helper to normalize ISO timestamp to a plain timestamp
+            $normalizeTs = function($ts) {
+                if (!$ts || !is_string($ts)) return 0;
+                // Remove fractional seconds
+                $s = preg_replace('/\.[0-9]{1,6}/', '', $ts);
+                // Replace 'T' with space
+                $s = str_replace('T', ' ', $s);
+                // Drop trailing timezone like 'Z' or +hh:mm/-hh:mm
+                $s = preg_replace('/(Z|[+-][0-9]{2}:[0-9]{2})$/', '', $s);
+                return strtotime(trim($s)) ?: 0;
+            };
+            
+            // Use date field (which is updated_at for physical exams, or created_at)
+            $a_time = isset($a['date']) ? $normalizeTs($a['date']) : 0;
+            $b_time = isset($b['date']) ? $normalizeTs($b['date']) : 0;
+            
+            if ($a_time == $b_time) return 0;
+            return ($a_time > $b_time) ? -1 : 1; // Descending (newest first)
+        });
     }
 
     if ($limit > 0 && count($rows) > $limit) {
