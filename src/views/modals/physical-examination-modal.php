@@ -70,7 +70,7 @@
                                        style="flex: 1;">
                             </div>
                             <div id="blood-pressure-error" class="text-danger" style="display: none; font-size: 0.875rem; margin-top: 0.25rem;">
-                                Blood pressure should be between 90-140 / 60-90
+                                Blood pressure should be between 90-120 / 60-100
                             </div>
                             <input type="hidden" 
                                    id="physical-blood-pressure" 
@@ -100,7 +100,7 @@
                                    required
                                    novalidate>
                             <div id="body-temp-error" class="text-danger" style="display: none; font-size: 0.875rem; margin-top: 0.25rem;">
-                                Temperature should be between 36.1-37.2°C
+                                Temperature should be between 30-37°C
                             </div>
                         </div>
                     </div>

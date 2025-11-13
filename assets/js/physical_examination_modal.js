@@ -40,20 +40,26 @@ class PhysicalExaminationModal {
             }
         });
         
-        // Input events for blood pressure fields (to combine them)
-        document.addEventListener('input', (e) => {
+        // Input events for blood pressure fields (to combine them) - trigger on input, change, and blur events
+        const bloodPressureHandler = (e) => {
             if (e.target.id === 'physical-blood-pressure-systolic' || e.target.id === 'physical-blood-pressure-diastolic') {
                 this.combineBloodPressure();
                 this.validateVitalSigns();
             }
-        });
+        };
+        document.addEventListener('input', bloodPressureHandler);
+        document.addEventListener('change', bloodPressureHandler);
+        document.addEventListener('blur', bloodPressureHandler);
         
-        // Real-time validation for vital signs
-        document.addEventListener('input', (e) => {
+        // Real-time validation for vital signs - trigger on input, change, and blur events
+        const validateVitalSignsHandler = (e) => {
             if (e.target.id === 'physical-pulse-rate' || e.target.id === 'physical-body-temp') {
                 this.validateVitalSigns();
             }
-        });
+        };
+        document.addEventListener('input', validateVitalSignsHandler);
+        document.addEventListener('change', validateVitalSignsHandler);
+        document.addEventListener('blur', validateVitalSignsHandler);
         
         // Prevent HTML5 validation messages from showing
         document.addEventListener('invalid', (e) => {
@@ -116,12 +122,12 @@ class PhysicalExaminationModal {
         
         let allInRange = true;
         
-        // Check Blood Pressure (Normal: Systolic 90-140, Diastolic 60-90)
+        // Check Blood Pressure (Normal: Systolic 90-120, Diastolic 60-100)
         let bpInRange = false;
         if (systolic && diastolic && systolic.value && diastolic.value) {
             const sys = parseInt(systolic.value);
             const dia = parseInt(diastolic.value);
-            bpInRange = (sys >= 90 && sys <= 140 && dia >= 60 && dia <= 90);
+            bpInRange = (sys >= 90 && sys <= 120 && dia >= 60 && dia <= 100);
             if (!bpInRange) {
                 allInRange = false;
                 if (bpError) bpError.style.display = 'block';
@@ -147,11 +153,11 @@ class PhysicalExaminationModal {
             if (pulseError) pulseError.style.display = 'none';
         }
         
-        // Check Body Temperature (Normal: 36.1-37.2°C)
+        // Check Body Temperature (Normal: 30-37°C)
         let tempInRange = false;
         if (bodyTemp && bodyTemp.value) {
             const temp = parseFloat(bodyTemp.value);
-            tempInRange = (temp >= 36.1 && temp <= 37.2);
+            tempInRange = (temp >= 30 && temp <= 37);
             if (!tempInRange) {
                 allInRange = false;
                 if (tempError) tempError.style.display = 'block';
@@ -438,6 +444,10 @@ class PhysicalExaminationModal {
                     setVal('physical-heart-lungs', hl);
                     // Blood bag selection
                     this.setBloodBagSelection(bag);
+                    // Validate vital signs after pre-filling to update next button state
+                    setTimeout(() => {
+                        this.validateVitalSigns();
+                    }, 100);
                 }
                 // If still pending, ensure no prefill leaks
                 if (!terminal && !window.forcePhysicalReadonly) {
@@ -526,6 +536,10 @@ class PhysicalExaminationModal {
 
             // Update review summary if already on final step
             this.updateSummary();
+            // Validate vital signs after pre-filling to update next button state
+            setTimeout(() => {
+                this.validateVitalSigns();
+            }, 100);
             return exam;
         } catch (e) {
             console.warn('Failed to fetch existing physical exam:', e);

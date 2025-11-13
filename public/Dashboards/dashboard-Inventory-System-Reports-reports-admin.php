@@ -165,11 +165,16 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
                             <div class="card chart-card p-3">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <h6 class="mb-0">Projected Balance Forecast by Month/Year</h6>
-                                    <select class="form-select form-select-sm" id="chartBloodTypeFilter" style="max-width:150px">
-                                        <option value="all">All Blood Types</option>
-                                        <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
-                                        <option>O+</option><option>O-</option><option>AB+</option><option>AB-</option>
-                                    </select>
+                                    <div class="d-flex gap-2">
+                                        <select class="form-select form-select-sm" id="chartYearFilter" style="max-width:120px">
+                                            <option value="all">All Years</option>
+                                        </select>
+                                        <select class="form-select form-select-sm" id="chartBloodTypeFilter" style="max-width:150px">
+                                            <option value="all">All Blood Types</option>
+                                            <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
+                                            <option>O+</option><option>O-</option><option>AB+</option><option>AB-</option>
+                                        </select>
+                                    </div>
                                 </div>
                                 <canvas id="lineChart" height="400"></canvas>
                             </div>
