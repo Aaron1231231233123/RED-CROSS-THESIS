@@ -95,7 +95,6 @@
                 <option value="" selected disabled>Select Sex</option>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
-                <option value="Others">Others</option>
             </select>
         </div>
         
@@ -143,8 +142,10 @@
                 <input type="text" class="form-control" id="address_no" name="address_no">
             </div>
                             <div class="col-md-6 mb-3 position-relative">
-                                <label for="zip_code" class="form-label">ZIP Code</label>
-                                <input type="text" class="form-control" id="zip_code" name="zip_code" autocomplete="off">
+                                <label for="zip_code" class="form-label">ZIP Code <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="zip_code" name="zip_code" autocomplete="off" required maxlength="4" pattern="[0-9]{4}" placeholder="e.g., 5000">
+                                <div id="zipCodeSuggestions" class="list-group position-absolute w-100" style="z-index: 1050; max-height: 220px; overflow-y: auto; display:none; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
+                                <small class="form-text text-muted">4-digit ZIP code (auto-filled from address or type to search)</small>
                             </div>
         </div>
 
@@ -200,11 +201,10 @@
             <label for="occupation" class="form-label">Occupation <span class="text-danger">*</span></label>
             <select class="form-select" id="occupation" name="occupation" required style="appearance:none;-webkit-appearance:none;-moz-appearance:none;padding-right:36px;background:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2214%22 height=%2214%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23666%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><polyline points=%226 9 12 15 18 9%22/></svg>') no-repeat right 12px center/14px;">
                 <option value="" selected disabled>Select Occupation</option>
+                <option value="Employed">Employed</option>
+                <option value="Unemployed">Unemployed</option>
                 <option value="Student">Student</option>
-                <option value="Teacher">Teacher</option>
-                <option value="Police Officer">Police Officer</option>
-                <option value="Engineer">Engineer</option>
-                <option value="Others">Others</option>
+                <option value="Retired">Retired</option>
             </select>
         </div>
         

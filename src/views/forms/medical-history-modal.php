@@ -619,6 +619,33 @@ if (isset($_SESSION['error_message'])) {
             top: 12px;
         }
         
+        .mh-header-submit-button {
+            background: #9c0000;
+            border: none;
+            color: white;
+            padding: 8px 20px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            position: absolute;
+            right: 15px;
+            top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: background-color 0.3s;
+        }
+        
+        .mh-header-submit-button:hover {
+            background: #7a0000;
+        }
+        
+        .mh-header-submit-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
         .mh-modal-body {
             padding: 20px;
             background-color: #fff;
@@ -997,7 +1024,17 @@ if (isset($_SESSION['error_message'])) {
     <div class="mh-modal">
         <div class="mh-modal-header">
             <h2 class="mh-modal-title">Medical History</h2>
-            <button class="close-button">&times;</button>
+            <?php 
+            // Check if we're in registration mode (has donor_form_data in session)
+            $isRegistrationMode = isset($_SESSION['donor_form_data']) && !empty($_SESSION['donor_form_data']);
+            if ($isRegistrationMode): 
+            ?>
+                <button class="mh-header-submit-button" id="mhSubmitButton" type="button">
+                    <i class="fas fa-check"></i> Submit
+                </button>
+            <?php else: ?>
+                <button class="close-button">&times;</button>
+            <?php endif; ?>
         </div>
         
         <div class="mh-modal-body">
@@ -2000,8 +2037,12 @@ if (isset($_SESSION['error_message'])) {
             const prevButton = document.getElementById('prevButton');
             const nextButton = document.getElementById('nextButton');
             const closeButton = document.querySelector('.close-button');
+            const submitButton = document.getElementById('mhSubmitButton');
             const errorMessage = document.getElementById('validationError');
             const loadingSpinner = document.getElementById('loadingSpinner');
+            
+            // Check if we're in registration mode
+            const isRegistrationMode = <?php echo (isset($_SESSION['donor_form_data']) && !empty($_SESSION['donor_form_data'])) ? 'true' : 'false'; ?>;
             
             // Get all form steps and step indicators
             const formSteps = document.querySelectorAll('.form-step');
@@ -2319,17 +2360,42 @@ if (isset($_SESSION['error_message'])) {
                 window.location.href = dashboardUrl;
             }
             
-            // Handle close button click
-            closeButton.addEventListener('click', function() {
-                goBackToDashboard();
-            });
-            
-            // Add ESC key listener to close the form
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
+            // Handle close button click (only if not in registration mode)
+            if (closeButton) {
+                closeButton.addEventListener('click', function() {
                     goBackToDashboard();
-                }
-            });
+                });
+            }
+            
+            // Handle submit button click (in registration mode)
+            if (submitButton && isRegistrationMode) {
+                submitButton.addEventListener('click', function() {
+                    // Validate all steps before submitting
+                    if (validateAllSteps()) {
+                        // Show loading spinner
+                        loadingSpinner.style.display = 'flex';
+                        // Submit the form
+                        form.submit();
+                    } else {
+                        // Go to the first invalid step
+                        updateStepDisplay();
+                        // Show error message
+                        errorMessage.style.display = 'block';
+                        errorMessage.textContent = 'Please answer all questions before submitting.';
+                        // Scroll to error message
+                        errorMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                });
+            }
+            
+            // Add ESC key listener to close the form (only if not in registration mode)
+            if (!isRegistrationMode) {
+                document.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape') {
+                        goBackToDashboard();
+                    }
+                });
+            }
             
             // Replace the event listeners for next and previous buttons
             // Event listener for next button click

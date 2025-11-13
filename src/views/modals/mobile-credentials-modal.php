@@ -591,6 +591,85 @@ function launchInitialScreening() {
 
     // Set flag to prevent credentials modal cleanup from interfering
     window.__launchingScreening = true;
+    
+    // Store dashboard URL for reload after screening submission
+    // Use the same logic as goBackToDashboard to determine which dashboard to reload
+    const redirectUrl = '<?php 
+        $redirect_url = '';
+        
+        // Get user staff role for role-based redirects (for staff users)
+        $user_staff_roles = '';
+        if (isset($_SESSION['user_id']) && isset($_SESSION['role_id']) && $_SESSION['role_id'] == 3) {
+            $user_id = $_SESSION['user_id'];
+            $url = SUPABASE_URL . "/rest/v1/user_roles?select=user_staff_roles&user_id=eq." . urlencode($user_id);
+            
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json',
+                'Prefer: return=minimal'
+            ));
+            
+            $response = curl_exec($ch);
+            curl_close($ch);
+            
+            if ($response) {
+                $data = json_decode($response, true);
+                if (!empty($data) && isset($data[0]['user_staff_roles'])) {
+                    $user_staff_roles = strtolower(trim($data[0]['user_staff_roles']));
+                }
+            }
+        }
+        
+        // For staff users, use role-based redirect
+        if (isset($_SESSION['role_id']) && $_SESSION['role_id'] == 3 && !empty($user_staff_roles)) {
+            switch($user_staff_roles) {
+                case 'reviewer':
+                    $redirect_url = '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-medical-history-submissions.php';
+                    break;
+                case 'interviewer':
+                    $redirect_url = '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-donor-submission.php';
+                    break;
+                case 'physician':
+                    $redirect_url = '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-physical-submission.php';
+                    break;
+                case 'phlebotomist':
+                    $redirect_url = '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-blood-collection-submission.php';
+                    break;
+                default:
+                    $redirect_url = '/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-donor-submission.php';
+                    break;
+            }
+        } elseif (isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1) {
+            // For admin users (role_id 1), use admin dashboard
+            // Prioritize session referrer, but default to admin dashboard
+            if (isset($_SESSION['declaration_form_referrer']) && stripos($_SESSION['declaration_form_referrer'], 'dashboard') !== false) {
+                $redirect_url = $_SESSION['declaration_form_referrer'];
+            } elseif (isset($_SESSION['donor_form_referrer']) && stripos($_SESSION['donor_form_referrer'], 'dashboard') !== false) {
+                $redirect_url = $_SESSION['donor_form_referrer'];
+            } elseif (isset($_SESSION['post_registration_redirect']) && stripos($_SESSION['post_registration_redirect'], 'dashboard') !== false) {
+                $redirect_url = $_SESSION['post_registration_redirect'];
+            } else {
+                // Default admin dashboard
+                $redirect_url = '/RED-CROSS-THESIS/public/Dashboards/dashboard-Inventory-System-list-of-donations.php';
+            }
+        } else {
+            // Fallback for other roles
+            if (isset($_SESSION['declaration_form_referrer'])) {
+                $redirect_url = $_SESSION['declaration_form_referrer'];
+            } elseif (isset($_SESSION['donor_form_referrer'])) {
+                $redirect_url = $_SESSION['donor_form_referrer'];
+            } elseif (isset($_SESSION['post_registration_redirect'])) {
+                $redirect_url = $_SESSION['post_registration_redirect'];
+            } else {
+                $redirect_url = '/RED-CROSS-THESIS/public/Dashboards/dashboard-Inventory-System-list-of-donations.php';
+            }
+        }
+        echo $redirect_url;
+    ?>';
+    window.__registrationDashboardUrl = redirectUrl;
 
     // Close credentials modal first
     if (modal) {

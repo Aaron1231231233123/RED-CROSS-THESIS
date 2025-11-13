@@ -867,12 +867,28 @@ document.addEventListener('DOMContentLoaded', function() {
                     screeningModalInstance.hide();
                 }
                 
-                // Show declaration form modal with confirmation
-                if (window.showAdminDeclarationFormModal) {
-                    window.showAdminDeclarationFormModal(window.currentAdminDonorData.donor_id);
+                // Check if launched from registration - if so, show declaration form as part of registration flow
+                if (window.__launchingScreening && window.__registrationDashboardUrl) {
+                    console.log('Screening launched from registration - showing declaration form as part of registration flow');
+                    // Clear the flag but keep the dashboard URL for later use
+                    window.__launchingScreening = false;
+                    // Set flag to indicate we're in registration flow for declaration form
+                    window.__inRegistrationFlow = true;
+                    // Show declaration form modal (part of registration process)
+                    if (window.showAdminDeclarationFormModal) {
+                        window.showAdminDeclarationFormModal(window.currentAdminDonorData.donor_id);
+                    } else {
+                        // Fallback: show success message
+                        showAdminAlert('Screening data saved! Please proceed to declaration form.', 'success');
+                    }
                 } else {
-                    // Fallback: show success message
-                    showAdminAlert('Screening data saved! Please proceed to declaration form.', 'success');
+                    // Normal flow: Show declaration form modal with confirmation
+                    if (window.showAdminDeclarationFormModal) {
+                        window.showAdminDeclarationFormModal(window.currentAdminDonorData.donor_id);
+                    } else {
+                        // Fallback: show success message
+                        showAdminAlert('Screening data saved! Please proceed to declaration form.', 'success');
+                    }
                 }
             } else {
                 const errorMsg = (data && data.error) ? data.error : 'Failed to submit screening form';
@@ -886,6 +902,10 @@ document.addEventListener('DOMContentLoaded', function() {
             // Reset button state on error
             submitButton.innerHTML = originalText;
             submitButton.disabled = false;
+            // Clear registration flag on error
+            if (window.__launchingScreening) {
+                window.__launchingScreening = false;
+            }
         });
     }
 });

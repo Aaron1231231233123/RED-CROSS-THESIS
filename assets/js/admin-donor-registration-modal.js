@@ -465,15 +465,42 @@
                         }
                         if (found && zipInput && !zipInput.value) {
                             zipInput.value = found;
+                            // Add visual feedback when zipcode is auto-filled
+                            zipInput.style.backgroundColor = '#d4edda';
+                            zipInput.style.borderColor = '#28a745';
+                            setTimeout(() => {
+                                zipInput.style.backgroundColor = '';
+                                zipInput.style.borderColor = '';
+                            }, 2000);
                         }
                     }
 
                     const dataset = await loadZipDataset();
                     if (dataset) {
                         zipIndex = buildZipIndex(dataset);
-                        if (provinceInput) provinceInput.addEventListener('change', tryFillPostal);
-                        if (municipalityInput) municipalityInput.addEventListener('change', tryFillPostal);
-                        if (barangayInput) barangayInput.addEventListener('change', tryFillPostal);
+                        // Add both 'change' and 'input' event listeners for better responsiveness
+                        if (provinceInput) {
+                            provinceInput.addEventListener('change', tryFillPostal);
+                            provinceInput.addEventListener('input', () => {
+                                // Debounce input events to avoid too many calls
+                                clearTimeout(window.zipFillTimeout);
+                                window.zipFillTimeout = setTimeout(tryFillPostal, 500);
+                            });
+                        }
+                        if (municipalityInput) {
+                            municipalityInput.addEventListener('change', tryFillPostal);
+                            municipalityInput.addEventListener('input', () => {
+                                clearTimeout(window.zipFillTimeout);
+                                window.zipFillTimeout = setTimeout(tryFillPostal, 500);
+                            });
+                        }
+                        if (barangayInput) {
+                            barangayInput.addEventListener('change', tryFillPostal);
+                            barangayInput.addEventListener('input', () => {
+                                clearTimeout(window.zipFillTimeout);
+                                window.zipFillTimeout = setTimeout(tryFillPostal, 500);
+                            });
+                        }
                         // Try on load in case fields already filled
                         tryFillPostal();
                     }
@@ -481,6 +508,174 @@
             }
         } catch (err) {
             console.error('PSGC address autofill initialization error:', err);
+        }
+        
+        // Initialize ZIP Code autosuggest using the address API
+        try {
+            const zipInput = document.getElementById('zip_code');
+            const zipSuggestions = document.getElementById('zipCodeSuggestions');
+            const provinceInput = document.getElementById('province_city');
+            const municipalityInput = document.getElementById('town_municipality');
+            const barangayInput = document.getElementById('barangay');
+            
+            if (zipInput && zipSuggestions) {
+                const API = '../api/suggest-address.php';
+                
+                function debounce(fn, ms) {
+                    let t;
+                    return (...args) => {
+                        clearTimeout(t);
+                        t = setTimeout(() => fn.apply(this, args), ms);
+                    };
+                }
+                
+                function makeItem(text, zipCode, onClick) {
+                    const a = document.createElement('a');
+                    a.href = '#';
+                    a.className = 'list-group-item list-group-item-action';
+                    a.innerHTML = `<strong>${zipCode}</strong> - ${text}`;
+                    a.onclick = (e) => {
+                        e.preventDefault();
+                        onClick();
+                        hideSuggestions();
+                    };
+                    return a;
+                }
+                
+                function hideSuggestions() {
+                    if (zipSuggestions) {
+                        zipSuggestions.style.display = 'none';
+                        zipSuggestions.innerHTML = '';
+                    }
+                }
+                
+                function showSuggestions() {
+                    if (zipSuggestions) {
+                        zipSuggestions.style.display = 'block';
+                    }
+                }
+                
+                const debouncedSuggest = debounce((query) => {
+                    if (!query || query.length < 1) {
+                        hideSuggestions();
+                        return;
+                    }
+                    
+                    // Check if query is a zipcode (4 digits)
+                    const isZipcodeQuery = /^\d{1,4}$/.test(query);
+                    
+                    let fullQuery;
+                    if (isZipcodeQuery) {
+                        // If searching by zipcode, search for "zipcode Philippines" or use address context
+                        const parts = [];
+                        if (municipalityInput?.value) parts.push(municipalityInput.value);
+                        if (provinceInput?.value) parts.push(provinceInput.value);
+                        parts.push(query); // Add zipcode
+                        parts.push('Philippines');
+                        fullQuery = parts.filter(Boolean).join(', ');
+                    } else {
+                        // Normal location search with context
+                        const parts = [];
+                        if (query) parts.push(query);
+                        if (municipalityInput?.value) parts.push(municipalityInput.value);
+                        if (provinceInput?.value) parts.push(provinceInput.value);
+                        parts.push('Philippines');
+                        fullQuery = parts.filter(Boolean).join(', ');
+                    }
+                    
+                    fetch(`${API}?q=${encodeURIComponent(fullQuery)}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (!zipSuggestions) return;
+                            
+                            zipSuggestions.innerHTML = '';
+                            const results = data.results || [];
+                            
+                            // Filter and show unique zipcodes
+                            const seenZipcodes = new Set();
+                            const zipcodeResults = [];
+                            
+                            results.forEach(r => {
+                                const addr = r.address || {};
+                                const zipcode = addr.postcode || '';
+                                
+                                // Only show 4-digit zipcodes and avoid duplicates
+                                if (zipcode && zipcode.length === 4 && !seenZipcodes.has(zipcode)) {
+                                    seenZipcodes.add(zipcode);
+                                    zipcodeResults.push({
+                                        zipcode: zipcode,
+                                        display: r.display_name,
+                                        address: addr
+                                    });
+                                }
+                            });
+                            
+                            // Limit to 8 results
+                            zipcodeResults.slice(0, 8).forEach(result => {
+                                const item = makeItem(result.display, result.zipcode, () => {
+                                    zipInput.value = result.zipcode;
+                                    
+                                    // Optionally fill other address fields if empty
+                                    if (result.address) {
+                                        if (result.address.barangay && !barangayInput?.value) {
+                                            barangayInput.value = result.address.barangay;
+                                        }
+                                        if ((result.address.city || result.address.town) && !municipalityInput?.value) {
+                                            municipalityInput.value = result.address.city || result.address.town;
+                                        }
+                                        if ((result.address.province || result.address.state) && !provinceInput?.value) {
+                                            provinceInput.value = result.address.province || result.address.state;
+                                        }
+                                    }
+                                    
+                                    // Visual feedback
+                                    zipInput.style.backgroundColor = '#d4edda';
+                                    zipInput.style.borderColor = '#28a745';
+                                    setTimeout(() => {
+                                        zipInput.style.backgroundColor = '';
+                                        zipInput.style.borderColor = '';
+                                    }, 1500);
+                                });
+                                zipSuggestions.appendChild(item);
+                            });
+                            
+                            if (zipcodeResults.length > 0) {
+                                showSuggestions();
+                            } else {
+                                hideSuggestions();
+                            }
+                        })
+                        .catch(() => {
+                            hideSuggestions();
+                        });
+                }, 300);
+                
+                // Add input event listener for autosuggest
+                zipInput.addEventListener('input', (e) => {
+                    const value = e.target.value.trim();
+                    // Only show suggestions if user is typing (not just numbers)
+                    // But also allow searching by zipcode itself
+                    if (value.length >= 1) {
+                        debouncedSuggest(value);
+                    } else {
+                        hideSuggestions();
+                    }
+                });
+                
+                // Hide suggestions when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('#zip_code') && !e.target.closest('#zipCodeSuggestions')) {
+                        hideSuggestions();
+                    }
+                });
+                
+                // Hide suggestions on blur (with delay to allow click on suggestion)
+                zipInput.addEventListener('blur', () => {
+                    setTimeout(() => hideSuggestions(), 200);
+                });
+            }
+        } catch (err) {
+            console.error('ZIP Code autosuggest initialization error:', err);
         }
     }
 

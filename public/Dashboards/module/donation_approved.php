@@ -156,6 +156,15 @@ try {
 			];
 		}
 
+        // Sort by newest first (LIFO: Last In First Out)
+        if (!empty($approvedDonations) && !isset($approvedDonations['error'])) {
+            usort($approvedDonations, function($a, $b) {
+                $ta = $a['sort_ts'] ?? 0; $tb = $b['sort_ts'] ?? 0;
+                if ($ta === $tb) return 0;
+                return ($ta > $tb) ? -1 : 1; // Descending order: newest first
+            });
+        }
+
         // Expose next/prev cursors for API when perf mode
         if ($perfMode && !empty($eligibilityData)) {
             // Data is ordered desc; first is newest, last is oldest
