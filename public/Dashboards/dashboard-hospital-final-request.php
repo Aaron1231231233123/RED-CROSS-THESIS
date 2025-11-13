@@ -1352,7 +1352,12 @@ th {
     if (!headers || headers.length === 0) return;
 
     headers.forEach((header, index) => {
-        if (index < headers.length - 1 && header) { // Ignore the last column (Action) and check if header exists
+        // Exclude Status column (index 5) and Action column (last column, index 6)
+        // Only add sorting to columns: No., Request ID, Blood Type, Units Needed, Date Needed
+        const isStatusColumn = index === 5;
+        const isActionColumn = index === headers.length - 1;
+        
+        if (!isStatusColumn && !isActionColumn && header) {
             // Create a single sorting indicator for each column
             let icon = document.createElement("span");
             icon.classList.add("sort-indicator");
