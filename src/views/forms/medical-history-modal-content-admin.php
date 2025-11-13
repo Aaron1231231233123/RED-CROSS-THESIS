@@ -1760,23 +1760,21 @@ function mhInitializeAdminFlow() {
     if (approveButton) approveButton.style.display = 'none';
     
     // Handle decline button click
-        if (declineButton) {
-            declineButton.addEventListener('click', function() {
-                // Show decline confirmation modal
-                const declineModal = new bootstrap.Modal(document.getElementById('declineMedicalHistoryModal'));
-                declineModal.show();
-            });
-        }
-        
-        
-        // Handle approve button click
-        if (approveButton) {
-            approveButton.addEventListener('click', function() {
-                // Show approve confirmation modal
-                const approveModal = new bootstrap.Modal(document.getElementById('approveMedicalHistoryModal'));
-                approveModal.show();
-            });
-        }
+    if (declineButton) {
+        declineButton.addEventListener('click', function() {
+            // Show decline confirmation modal
+            const declineModal = new bootstrap.Modal(document.getElementById('declineMedicalHistoryModal'));
+            declineModal.show();
+        });
+    }
+    
+    // Handle approve button click
+    if (approveButton) {
+        approveButton.addEventListener('click', function() {
+            // Show approve confirmation modal
+            const approveModal = new bootstrap.Modal(document.getElementById('approveMedicalHistoryModal'));
+            approveModal.show();
+        });
     }
     
     // Initialize decline modal functionality
@@ -2185,9 +2183,9 @@ function mhShowQuietErrorToast(message) {
                 document.body.removeChild(toast);
             }
         }, 300);
-     }, 4000);
- }
- </script>
+    }, 4000);
+}
+</script>
 
 <?php
 // Clean up output buffer and send response

@@ -48,11 +48,12 @@
                         </div>
                         
                         <!-- IN-HOUSE Section -->
-                        <div class="admin-screening-detail-card" style="background: #e9ecef; border: 1px solid #ddd; margin-bottom: 20px;">
-                            <div class="admin-screening-category-title" style="background: #e9ecef; color: #b22222; font-weight: bold; text-align: center; padding: 10px; margin: -20px -20px 15px -20px;">IN-HOUSE</div>
+                        <div class="admin-screening-detail-card">
+                            <div class="admin-screening-category-title">IN-HOUSE</div>
                             <div class="row g-3">
                                 <div class="col-12">
-                                    <select name="donation-type" id="adminInhouseDonationTypeSelect" class="admin-screening-input">
+                                    <label class="admin-screening-label">Donation Type</label>
+                                    <select name="donation-type" id="adminInhouseDonationTypeSelect" class="admin-screening-input" required>
                                         <option value="">Select Donation Type</option>
                                         <option value="Walk-in">Walk-in</option>
                                         <option value="Replacement">Replacement</option>
@@ -63,28 +64,28 @@
                         </div>
                         
                         <!-- Patient Information Table (shows when Patient-Directed is selected) -->
-                        <div id="adminPatientDetailsSection" style="display: none; margin-bottom: 20px;">
-                            <h6 style="color: #b22222; font-weight: bold; margin-bottom: 15px;">Patient Information</h6>
+                        <div id="adminPatientDetailsSection" class="admin-screening-detail-card" style="display: none;">
+                            <div class="admin-screening-category-title">PATIENT INFORMATION</div>
                             <div class="table-responsive">
-                                <table class="table table-bordered" style="margin-bottom: 0;">
+                                <table class="table table-bordered">
                                     <thead>
-                                        <tr style="background: #b22222; color: white;">
-                                            <th style="text-align: center; font-weight: bold;">Patient Name</th>
-                                            <th style="text-align: center; font-weight: bold;">Hospital</th>
-                                            <th style="text-align: center; font-weight: bold;">Blood Type</th>
-                                            <th style="text-align: center; font-weight: bold;">No. of Units</th>
+                                        <tr>
+                                            <th>Patient Name</th>
+                                            <th>Hospital</th>
+                                            <th>Blood Type</th>
+                                            <th>No. of Units</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <tr>
                                             <td>
-                                                <input type="text" name="patient-name" class="form-control form-control-sm" placeholder="Enter patient name">
+                                                <input type="text" name="patient-name" class="admin-screening-input" placeholder="Enter patient name">
                                             </td>
                                             <td>
-                                                <input type="text" name="hospital" class="form-control form-control-sm" placeholder="Enter hospital">
+                                                <input type="text" name="hospital" class="admin-screening-input" placeholder="Enter hospital">
                                             </td>
                                             <td>
-                                                <select name="patient-blood-type" class="form-control form-control-sm">
+                                                <select name="patient-blood-type" class="admin-screening-input">
                                                     <option value="">Select Blood Type</option>
                                                     <option value="A+">A+</option>
                                                     <option value="A-">A-</option>
@@ -97,7 +98,7 @@
                                                 </select>
                                             </td>
                                             <td>
-                                                <input type="number" name="no-units" class="form-control form-control-sm" placeholder="1" min="1">
+                                                <input type="number" name="no-units" class="admin-screening-input" placeholder="1" min="1">
                                             </td>
                                         </tr>
                                     </tbody>
@@ -106,9 +107,9 @@
                         </div>
                         
                         <!-- MOBILE BLOOD DONATION Section (always visible) -->
-                        <div class="admin-screening-detail-card" style="background: #e9ecef; border: 1px solid #ddd;">
-                            <div class="admin-screening-category-title" style="background: #e9ecef; color: #b22222; font-weight: bold; text-align: center; padding: 10px; margin: -20px -20px 15px -20px;">MOBILE BLOOD DONATION</div>
-                            <h6 style="color: #b22222; font-weight: bold; margin-bottom: 15px;">Mobile Donation Details</h6>
+                        <div class="admin-screening-detail-card">
+                            <div class="admin-screening-category-title">MOBILE BLOOD DONATION</div>
+                            <h6 class="admin-screening-section-subtitle">Mobile Donation Details</h6>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="admin-screening-label">Place</label>
@@ -203,14 +204,14 @@
                 </form>
             </div>
             
-            <div class="modal-footer admin-screening-modal-footer" style="justify-content: flex-end; align-items: center; position: relative; z-index: 1071; background: white; border-top: 1px solid #dee2e6;">
+            <div class="modal-footer admin-screening-modal-footer">
                 <!-- Left side - Cancel button (removed) -->
-                <div style="display:none;">
+                <div class="admin-screening-footer-left" style="display:none;">
                     <button type="button" class="btn btn-outline-secondary" id="adminScreeningCancelButton" style="display:none;" aria-hidden="true" tabindex="-1"></button>
                 </div>
                 
                 <!-- Right side - Action buttons -->
-                <div style="display: flex; gap: 8px;">
+                <div class="admin-screening-footer-right">
                     <button type="button" class="btn btn-outline-danger" id="adminScreeningPrevButton" style="display: none;">
                         <i class="fas fa-arrow-left me-1"></i>Previous
                     </button>

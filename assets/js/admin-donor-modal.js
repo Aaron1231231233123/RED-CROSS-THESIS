@@ -53,7 +53,7 @@ window.AdminDonorModal = (function() {
             </div>
         </div>`;
 
-    const createInterviewerRows = (donor, eligibility, interviewerMedical, interviewerScreening) => {
+    const createInterviewerRows = (donor, eligibility, interviewerMedical, interviewerScreening, screeningForm, medicalHistoryData) => {
         const baseUrl = '../../src/views/forms/';
         const donorId = encodeURIComponent(safe(donor.donor_id, ''));
         
@@ -63,6 +63,13 @@ window.AdminDonorModal = (function() {
         const isScreeningPending = interviewerScreening.toLowerCase() === 'pending' || interviewerScreening === '' || interviewerScreening === '-';
         const isScreeningCompleted = interviewerScreening.toLowerCase() !== 'pending' && interviewerScreening !== '' && interviewerScreening !== '-';
         
+        // Check if screening record exists
+        const hasScreeningRecord = screeningForm && Object.keys(screeningForm).length > 0 && screeningForm.screening_id;
+        
+        // Check if medical history is approved
+        const medicalApproval = medicalHistoryData?.medical_approval || medicalHistoryData?.status || '';
+        const isMedicalHistoryApproved = medicalApproval.toLowerCase() === 'approved';
+        
         // Determine action buttons for each process
         let medicalHistoryAction = '';
         let screeningAction = '';
@@ -71,6 +78,7 @@ window.AdminDonorModal = (function() {
         if (isMedicalHistoryPending) {
             medicalHistoryAction = `<button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="Edit Medical History" onclick="editMedicalHistory('${safe(donor.donor_id,'')}')"><i class="fas fa-pen"></i></button>`;
         } else if (isMedicalHistoryCompleted) {
+            // Always show view button - approve/decline buttons will be shown inside the MH modal
             medicalHistoryAction = `<button type="button" class="btn btn-sm btn-outline-success circular-btn" title="View Medical History" onclick="viewMedicalHistory('${safe(donor.donor_id,'')}')"><i class="fas fa-eye"></i></button>`;
         }
         
@@ -147,21 +155,27 @@ window.AdminDonorModal = (function() {
             if (!interviewerCompleted) {
                 actionButton = `<button type="button" class="btn btn-sm btn-outline-secondary circular-btn" title="Complete Interviewer Phase First" disabled><i class="fas fa-lock"></i></button>`;
             } else {
-                const pmLower = String(physicianMedical || '').toLowerCase();
-                const physicianMHAccepted = (
-                    pmLower.includes('approved') ||
-                    pmLower.includes('accepted') ||
-                    pmLower.includes('completed') ||
-                    pmLower.includes('passed') ||
-                    pmLower.includes('success')
+                // Physical examination should only show PE form (no approval process)
+                // Check if physical examination is completed
+                const ppLower = String(physicianPhysical || '').toLowerCase();
+                const isPhysicalExamCompleted = (
+                    ppLower.includes('approved') ||
+                    ppLower.includes('accepted') ||
+                    ppLower.includes('completed') ||
+                    ppLower.includes('passed') ||
+                    ppLower.includes('success') ||
+                    (ppLower !== 'pending' && ppLower !== '' && ppLower !== '-')
                 );
-                const btnTitle = physicianMHAccepted ? 'View Medical History' : 'Review Medical History';
-                const btnClass = physicianMHAccepted ? 'btn-outline-success' : 'btn-outline-primary';
-                const icon = physicianMHAccepted ? 'fa-eye' : 'fa-pen';
-                if (physicianMHAccepted) {
-                    actionButton = `<button type="button" class="btn btn-sm ${btnClass} circular-btn" title="${btnTitle}" onclick="viewPhysicianDetails('${donor.donor_id || ''}')"><i class="fas ${icon}"></i></button>`;
+                
+                const btnTitle = isPhysicalExamCompleted ? 'View Physical Examination' : 'Edit Physical Examination';
+                const btnClass = isPhysicalExamCompleted ? 'btn-outline-success' : 'btn-outline-primary';
+                const icon = isPhysicalExamCompleted ? 'fa-eye' : 'fa-pen';
+                
+                // Directly open physical examination form (no medical history approval)
+                if (isPhysicalExamCompleted) {
+                    actionButton = `<button type="button" class="btn btn-sm ${btnClass} circular-btn" title="${btnTitle}" onclick="openPhysicalExaminationView('${donor.donor_id || ''}')"><i class="fas ${icon}"></i></button>`;
                 } else {
-                    actionButton = `<button type="button" class="btn btn-sm ${btnClass} circular-btn" title="${btnTitle}" onclick="openPhysicianMedicalPreview('${donor.donor_id || ''}')"><i class="fas ${icon}"></i></button>`;
+                    actionButton = `<button type="button" class="btn btn-sm ${btnClass} circular-btn" title="${btnTitle}" onclick="openPhysicalExaminationForm('${donor.donor_id || ''}')"><i class="fas ${icon}"></i></button>`;
                 }
             }
             return actionButton;
@@ -252,7 +266,20 @@ window.AdminDonorModal = (function() {
             window.currentDetailsDonorId = donorId;
             window.currentDetailsEligibilityId = eligibilityId;
 
-            fetch(`../../assets/php_func/donor_details_api.php?donor_id=${donorId}&eligibility_id=${eligibilityId}`)
+            // Add cache-busting timestamp to ensure fresh data
+            const timestamp = Date.now();
+            const url = `../../assets/php_func/donor_details_api.php?donor_id=${donorId}&eligibility_id=${eligibilityId}&_t=${timestamp}`;
+            
+            console.log(`Fetching from URL: ${url}`);
+
+            fetch(url, {
+                method: 'GET',
+                cache: 'no-cache',
+                headers: {
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
+                }
+            })
                 .then(response => {
                     if (!response.ok) {
                         throw new Error(`HTTP error! Status: ${response.status}`);
@@ -272,7 +299,23 @@ window.AdminDonorModal = (function() {
                     // Check medical history completion status from medical_history table
                     const medicalHistoryData = data.medical_history || {};
                     const isAdminCompleted = medicalHistoryData.is_admin === true || medicalHistoryData.is_admin === 'true' || medicalHistoryData.is_admin === 'True';
-                    const interviewerMedical = isAdminCompleted ? 'Completed' : safe(eligibility.medical_history_status);
+                    const medicalApproval = medicalHistoryData.medical_approval || '';
+                    const hasMedicalHistory = medicalHistoryData && Object.keys(medicalHistoryData).length > 0;
+                    
+                    // Determine interviewer medical status
+                    let interviewerMedicalStatus = safe(eligibility.medical_history_status);
+                    
+                    // Priority: Approved > Completed (if admin completed) > eligibility status
+                    if (medicalApproval.toLowerCase() === 'approved') {
+                        interviewerMedicalStatus = 'Approved';
+                    } else if (isAdminCompleted || hasMedicalHistory) {
+                        // If admin completed or medical history exists, show "Completed"
+                        interviewerMedicalStatus = 'Completed';
+                    } else if (!interviewerMedicalStatus || interviewerMedicalStatus === '-' || interviewerMedicalStatus === '') {
+                        interviewerMedicalStatus = 'Pending';
+                    }
+                    
+                    const interviewerMedical = interviewerMedicalStatus;
                     const interviewerScreening = safe(eligibility.screening_status);
                     const physicianMedical = safe(eligibility.review_status);
                     const physicianPhysical = safe(eligibility.physical_status);
@@ -288,6 +331,10 @@ window.AdminDonorModal = (function() {
                         physicianPhysical,
                         phlebStatus,
                         eligibilityStatus,
+                        isAdminCompleted,
+                        hasMedicalHistory,
+                        medicalApproval,
+                        medicalHistoryData: medicalHistoryData,
                         eligibility: eligibility
                     });
 
@@ -403,8 +450,11 @@ window.AdminDonorModal = (function() {
                         </div>
                     `;
 
+                    // Get screening form data (medicalHistoryData already declared above)
+                    const screeningForm = data.screening_form || {};
+                    
                     // Create sections
-                    const interviewerRows = createInterviewerRows(donor, eligibility, interviewerMedical, interviewerScreening);
+                    const interviewerRows = createInterviewerRows(donor, eligibility, interviewerMedical, interviewerScreening, screeningForm, medicalHistoryData);
                     const physicianPhlebotomistSections = createPhysicianPhlebotomistSections(donor, eligibility, interviewerMedical, interviewerScreening, physicianMedical, physicianPhysical, phlebStatus);
 
                     // Generate final HTML
@@ -499,4 +549,280 @@ window.openBloodCollectionView = async function(donorId) {
         console.error('[Admin] Error opening blood collection view:', error);
         alert('Error loading blood collection data: ' + error.message);
     }
+};
+
+// Function to refresh donor details modal after medical history approval/decline
+function refreshDonorDetailsAfterMHApproval(donorId) {
+    console.log('Refreshing donor details after medical history approval/decline for donor_id:', donorId);
+    
+    const eligibilityId = window.currentDetailsEligibilityId || `pending_${donorId}`;
+    
+    // Helper function to attempt refresh
+    const attemptRefresh = () => {
+        // Try using the dashboard's fetchDonorDetails function first (it has proper error handling)
+        if (typeof window.fetchDonorDetails === 'function') {
+            console.log('Calling window.fetchDonorDetails for donor_id:', donorId, 'eligibility_id:', eligibilityId);
+            try {
+                window.fetchDonorDetails(donorId, eligibilityId);
+                return true;
+            } catch (error) {
+                console.error('Error calling fetchDonorDetails:', error);
+                return false;
+            }
+        } else if (typeof AdminDonorModal !== 'undefined' && AdminDonorModal && AdminDonorModal.fetchDonorDetails) {
+            // Direct call to AdminDonorModal (matching dashboard's check pattern)
+            console.log('Calling AdminDonorModal.fetchDonorDetails directly for donor_id:', donorId, 'eligibility_id:', eligibilityId);
+            try {
+                AdminDonorModal.fetchDonorDetails(donorId, eligibilityId);
+                return true;
+            } catch (error) {
+                console.error('Error calling AdminDonorModal.fetchDonorDetails:', error);
+                return false;
+            }
+        } else if (typeof window.AdminDonorModal !== 'undefined' && window.AdminDonorModal && window.AdminDonorModal.fetchDonorDetails) {
+            // Fallback: try window.AdminDonorModal
+            console.log('Calling window.AdminDonorModal.fetchDonorDetails for donor_id:', donorId, 'eligibility_id:', eligibilityId);
+            try {
+                window.AdminDonorModal.fetchDonorDetails(donorId, eligibilityId);
+                return true;
+            } catch (error) {
+                console.error('Error calling window.AdminDonorModal.fetchDonorDetails:', error);
+                return false;
+            }
+        }
+        return false;
+    };
+    
+    // Small delay to ensure database has time to update
+    setTimeout(() => {
+        // Try to refresh immediately
+        if (attemptRefresh()) {
+            return; // Success
+        }
+        
+        // If not available, wait a bit more and try again (module might still be loading)
+        let attempts = 0;
+        const maxAttempts = 5;
+        const retryInterval = 200; // 200ms between attempts
+        
+        const retryRefresh = setInterval(() => {
+            attempts++;
+            console.log(`Retry attempt ${attempts} to refresh donor details...`);
+            
+            if (attemptRefresh()) {
+                clearInterval(retryRefresh);
+                return; // Success
+            }
+            
+            if (attempts >= maxAttempts) {
+                clearInterval(retryRefresh);
+                console.warn('AdminDonorModal not available after multiple attempts, reloading page');
+                window.location.reload();
+            }
+        }, retryInterval);
+    }, 800); // Initial delay to ensure database update
+}
+
+// Function to handle medical history approval/decline from interviewer section
+window.handleMedicalHistoryApprovalFromInterviewer = function(donorId, action) {
+    console.log(`Handling medical history ${action} for donor:`, donorId);
+    
+    const currentDonorId = donorId;
+    
+    // Function to close the medical history modal
+    const closeMedicalHistoryModal = () => {
+        const modal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModal'));
+        if (modal) {
+            modal.hide();
+        } else {
+            // Fallback: manual close
+            const modalEl = document.getElementById('medicalHistoryModal');
+            if (modalEl) {
+                modalEl.classList.remove('show');
+                modalEl.style.display = 'none';
+                document.body.classList.remove('modal-open');
+                const backdrop = document.querySelector('.modal-backdrop');
+                if (backdrop) backdrop.remove();
+            }
+        }
+    };
+    
+    if (action === 'approve') {
+        // Show confirmation first
+        if (confirm('Are you sure you want to approve this donor\'s medical history?')) {
+            // Show loading state
+            const approveBtn = document.getElementById('viewMHApproveBtn');
+            const originalText = approveBtn ? approveBtn.innerHTML : '';
+            if (approveBtn) {
+                approveBtn.disabled = true;
+                approveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+            }
+            
+            // Direct API call to update medical history
+            fetch(`../../assets/php_func/update_medical_history.php`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    donor_id: donorId,
+                    medical_approval: 'Approved',
+                    updated_at: new Date().toISOString()
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (approveBtn) {
+                    approveBtn.disabled = false;
+                    approveBtn.innerHTML = originalText;
+                }
+                
+                if (data.success) {
+                    console.log('Medical history approved successfully');
+                    // Close modal first
+                    closeMedicalHistoryModal();
+                    // Then refresh donor details modal to show updated status
+                    setTimeout(() => {
+                        refreshDonorDetailsAfterMHApproval(currentDonorId);
+                    }, 300);
+                } else {
+                    alert('Failed to approve medical history: ' + (data.message || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                if (approveBtn) {
+                    approveBtn.disabled = false;
+                    approveBtn.innerHTML = originalText;
+                }
+                console.error('Error approving medical history:', error);
+                alert('Error approving medical history: ' + error.message);
+            });
+        }
+    } else if (action === 'decline') {
+        // Get decline reason
+        const reason = prompt('Please provide a reason for declining this donor\'s medical history:');
+        if (reason && reason.trim()) {
+            // Show loading state
+            const declineBtn = document.getElementById('viewMHDeclineBtn');
+            const originalText = declineBtn ? declineBtn.innerHTML : '';
+            if (declineBtn) {
+                declineBtn.disabled = true;
+                declineBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+            }
+            
+            // Direct API call to update medical history
+            fetch(`../../assets/php_func/update_medical_history.php`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    donor_id: donorId,
+                    medical_approval: 'Declined',
+                    disapproval_reason: reason.trim(),
+                    updated_at: new Date().toISOString()
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (declineBtn) {
+                    declineBtn.disabled = false;
+                    declineBtn.innerHTML = originalText;
+                }
+                
+                if (data.success) {
+                    console.log('Medical history declined successfully');
+                    // Close modal first
+                    closeMedicalHistoryModal();
+                    // Then refresh donor details modal to show updated status
+                    setTimeout(() => {
+                        refreshDonorDetailsAfterMHApproval(currentDonorId);
+                    }, 300);
+                } else {
+                    alert('Failed to decline medical history: ' + (data.message || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                if (declineBtn) {
+                    declineBtn.disabled = false;
+                    declineBtn.innerHTML = originalText;
+                }
+                console.error('Error declining medical history:', error);
+                alert('Error declining medical history: ' + error.message);
+            });
+        }
+    }
+};
+
+// Function to open physical examination form (edit mode)
+window.openPhysicalExaminationForm = function(donorId) {
+    console.log('[Admin] Opening physical examination form for donor:', donorId);
+    
+    // Get screening data for the donor
+    fetch(`../../assets/php_func/get_screening_details.php?donor_id=${encodeURIComponent(donorId)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.data) {
+                const screeningData = data.data;
+                // Open physical examination modal
+                if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
+                    window.physicalExaminationModalAdmin.openModal(screeningData);
+                } else {
+                    console.error('[Admin] physicalExaminationModalAdmin not available');
+                    alert('Physical examination modal not available');
+                }
+            } else {
+                // If no screening data, create a basic screening data object
+                const screeningData = {
+                    donor_form_id: donorId
+                };
+                if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
+                    window.physicalExaminationModalAdmin.openModal(screeningData);
+                } else {
+                    console.error('[Admin] physicalExaminationModalAdmin not available');
+                    alert('Physical examination modal not available');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('[Admin] Error fetching screening data:', error);
+            // Try to open modal anyway with basic data
+            const screeningData = {
+                donor_form_id: donorId
+            };
+            if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
+                window.physicalExaminationModalAdmin.openModal(screeningData);
+            } else {
+                alert('Error loading physical examination: ' + error.message);
+            }
+        });
+};
+
+// Function to open physical examination view (read-only mode)
+window.openPhysicalExaminationView = function(donorId) {
+    console.log('[Admin] Opening physical examination view for donor:', donorId);
+    
+    // Get physical exam data
+    fetch(`../../assets/php_func/admin/get_physical_exam_details_admin.php?donor_id=${encodeURIComponent(donorId)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.data) {
+                const examData = data.data;
+                // Open physical examination modal in view mode
+                if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
+                    // Pass a flag to indicate view mode
+                    examData.viewMode = true;
+                    window.physicalExaminationModalAdmin.openModal(examData);
+                } else {
+                    console.error('[Admin] physicalExaminationModalAdmin not available');
+                    alert('Physical examination modal not available');
+                }
+            } else {
+                alert('No physical examination found for this donor');
+            }
+        })
+        .catch(error => {
+            console.error('[Admin] Error fetching physical exam data:', error);
+            alert('Error loading physical examination: ' + error.message);
+        });
 };

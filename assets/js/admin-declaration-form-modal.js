@@ -92,6 +92,60 @@ window.proceedToAdminDeclarationForm = function(donorId) {
         
         document.body.insertAdjacentHTML('beforeend', modalHtml);
         adminDeclarationModal = document.getElementById('adminDeclarationFormModal');
+        
+        // Add event listener to refresh donor details when modal is closed
+        adminDeclarationModal.addEventListener('hidden.bs.modal', function() {
+            console.log('Admin declaration form modal closed');
+            
+            // Small delay to ensure modal is fully closed and database has time to update
+            setTimeout(() => {
+                if (window.currentAdminDonorData && window.currentAdminDonorData.donor_id) {
+                    const donorId = window.currentAdminDonorData.donor_id;
+                    console.log('Refreshing donor details after declaration form close for donor_id:', donorId);
+                    
+                    // Check if donor details modal is open
+                    const donorModal = document.getElementById('donorModal');
+                    const isDonorModalOpen = donorModal && donorModal.classList.contains('show');
+                    
+                    // Check if donor details modal content exists
+                    const donorDetailsContent = document.getElementById('donorDetails');
+                    const donorDetailsModalContent = document.getElementById('donorDetailsModalContent');
+                    
+                    if (isDonorModalOpen || donorDetailsContent || donorDetailsModalContent) {
+                        console.log('Donor details modal is open, refreshing...');
+                        
+                        // Show loading state in the modal
+                        if (donorDetailsContent) {
+                            donorDetailsContent.innerHTML = '<div class="text-center my-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Refreshing...</span></div><p class="mt-2">Refreshing donor details...</p></div>';
+                        }
+                        
+                        // Clear any cached data to force fresh fetch
+                        window.currentDetailsDonorId = donorId;
+                        
+                        // Use the admin dashboard's fetchDonorDetails function
+                        // Prefer AdminDonorModal for better control
+                        if (typeof AdminDonorModal !== 'undefined' && AdminDonorModal.fetchDonorDetails) {
+                            const eligibilityId = window.currentDetailsEligibilityId || `pending_${donorId}`;
+                            console.log('Calling AdminDonorModal.fetchDonorDetails for donor_id:', donorId, 'eligibility_id:', eligibilityId);
+                            AdminDonorModal.fetchDonorDetails(donorId, eligibilityId);
+                        } else if (typeof window.fetchDonorDetails === 'function') {
+                            const eligibilityId = window.currentDetailsEligibilityId || `pending_${donorId}`;
+                            console.log('Calling fetchDonorDetails for donor_id:', donorId, 'eligibility_id:', eligibilityId);
+                            window.fetchDonorDetails(donorId, eligibilityId);
+                        } else if (typeof window.fetchDonorDetailsModal === 'function') {
+                            const eligibilityId = window.currentDetailsEligibilityId || `pending_${donorId}`;
+                            console.log('Calling fetchDonorDetailsModal for donor_id:', donorId, 'eligibility_id:', eligibilityId);
+                            window.fetchDonorDetailsModal(donorId, eligibilityId);
+                        } else {
+                            console.warn('No refresh function available, reloading page');
+                            window.location.reload();
+                        }
+                    } else {
+                        console.log('Donor details modal is not open, no refresh needed');
+                    }
+                }
+            }, 800); // Longer delay to ensure database has time to update after declaration form submission
+        });
     }
     
     const modalContent = document.getElementById('adminDeclarationFormModalContent');
@@ -264,12 +318,15 @@ window.proceedToAdminDeclarationForm = function(donorId) {
                     if (window.currentAdminScreeningData) {
                         formData.append('screening_data', JSON.stringify(window.currentAdminScreeningData));
                         formData.append('debug_log', 'Including admin screening data: ' + JSON.stringify(window.currentAdminScreeningData));
+                        console.log('Including admin screening data in declaration form:', window.currentAdminScreeningData);
                     } else if (window.currentScreeningData) {
                         // Fallback to regular screening data
                         formData.append('screening_data', JSON.stringify(window.currentScreeningData));
                         formData.append('debug_log', 'Including screening data: ' + JSON.stringify(window.currentScreeningData));
+                        console.log('Including regular screening data in declaration form:', window.currentScreeningData);
                     } else {
                         formData.append('debug_log', 'No screening data available');
+                        console.warn('No screening data available for declaration form submission');
                     }
                     
                     formData.append('debug_log', 'Submitting admin declaration form data...');
@@ -303,13 +360,64 @@ window.proceedToAdminDeclarationForm = function(donorId) {
                                 declarationModal.hide();
                             }
                             
+                            // Refresh donor details modal if it's open (after a delay to allow database update)
+                            setTimeout(() => {
+                                if (window.currentAdminDonorData && window.currentAdminDonorData.donor_id) {
+                                    const donorId = window.currentAdminDonorData.donor_id;
+                                    console.log('Refreshing donor details after declaration form submission for donor_id:', donorId);
+                                    
+                                    // Check if donor details modal is open
+                                    const donorModal = document.getElementById('donorModal');
+                                    const isDonorModalOpen = donorModal && donorModal.classList.contains('show');
+                                    
+                                    // Check if donor details modal content exists
+                                    const donorDetailsContent = document.getElementById('donorDetails');
+                                    const donorDetailsModalContent = document.getElementById('donorDetailsModalContent');
+                                    
+                                    if (isDonorModalOpen || donorDetailsContent || donorDetailsModalContent) {
+                                        console.log('Donor details modal is open, refreshing after submission...');
+                                        
+                                        // Show loading state
+                                        if (donorDetailsContent) {
+                                            donorDetailsContent.innerHTML = '<div class="text-center my-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Refreshing...</span></div><p class="mt-2">Refreshing donor details...</p></div>';
+                                        }
+                                        
+                                        // Clear any cached data to force fresh fetch
+                                        window.currentDetailsDonorId = donorId;
+                                        
+                                        // Use the admin dashboard's fetchDonorDetails function
+                                        // Prefer AdminDonorModal for better control
+                                        if (typeof AdminDonorModal !== 'undefined' && AdminDonorModal.fetchDonorDetails) {
+                                            const eligibilityId = window.currentDetailsEligibilityId || `pending_${donorId}`;
+                                            console.log('Calling AdminDonorModal.fetchDonorDetails for donor_id:', donorId, 'eligibility_id:', eligibilityId);
+                                            AdminDonorModal.fetchDonorDetails(donorId, eligibilityId);
+                                        } else if (typeof window.fetchDonorDetails === 'function') {
+                                            const eligibilityId = window.currentDetailsEligibilityId || `pending_${donorId}`;
+                                            console.log('Calling fetchDonorDetails for donor_id:', donorId, 'eligibility_id:', eligibilityId);
+                                            window.fetchDonorDetails(donorId, eligibilityId);
+                                        } else if (typeof window.fetchDonorDetailsModal === 'function') {
+                                            const eligibilityId = window.currentDetailsEligibilityId || `pending_${donorId}`;
+                                            console.log('Calling fetchDonorDetailsModal for donor_id:', donorId, 'eligibility_id:', eligibilityId);
+                                            window.fetchDonorDetailsModal(donorId, eligibilityId);
+                                        } else {
+                                            console.warn('No refresh function available, reloading page');
+                                            window.location.reload();
+                                        }
+                                    } else {
+                                        console.log('Donor details modal is not open, no refresh needed');
+                                    }
+                                }
+                            }, 1000); // Longer delay to ensure database has time to update after declaration form submission
+                            
                             // Show success modal with admin-specific message
                             if (window.showSuccessModal) {
                                 showSuccessModal('Admin Registration Completed', 'The donor has been successfully registered and forwarded to the physician for physical examination.', { autoCloseMs: 2000, reloadOnClose: true });
                             } else {
                                 // Fallback
                                 alert('Admin Registration Completed: The donor has been successfully registered and forwarded to the physician for physical examination.');
-                                window.location.reload();
+                                setTimeout(() => {
+                                    window.location.reload();
+                                }, 1500);
                             }
                         } else {
                             // Show error modal

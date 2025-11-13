@@ -4637,13 +4637,137 @@ function getCacheStats() {
             console.log('=== VIEWING MEDICAL HISTORY (VIEW-ONLY) ===');
             console.log('Donor ID:', donorId);
             
+            // Reset any previous state to allow reopening
+            window.isOpeningMedicalHistory = false;
+            
+            // Clear any existing button fix interval
+            if (window.mhButtonFixInterval) {
+                clearInterval(window.mhButtonFixInterval);
+                window.mhButtonFixInterval = null;
+            }
+            
+            // Remove any existing approve/decline buttons from previous openings
+            const existingApproveBtn = document.getElementById('viewMHApproveBtn');
+            const existingDeclineBtn = document.getElementById('viewMHDeclineBtn');
+            if (existingApproveBtn) {
+                existingApproveBtn.remove();
+            }
+            if (existingDeclineBtn) {
+                existingDeclineBtn.remove();
+            }
+            
+            // Check if modal elements exist first
+            const modalEl = document.getElementById('medicalHistoryModal');
+            const modalContent = document.getElementById('medicalHistoryModalContent');
+            
+            if (!modalEl || !modalContent) {
+                console.error('Medical history modal elements not found');
+                alert('Medical history modal not found. Please refresh the page.');
+                return;
+            }
+            
+            // Dispose of any existing modal instance to ensure clean state
+            const existingModal = bootstrap.Modal.getInstance(modalEl);
+            if (existingModal) {
+                existingModal.dispose();
+            }
+            
+            // Show loading spinner immediately
+            modalContent.innerHTML = '<div class="d-flex justify-content-center my-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+            
+            // Create a fresh modal instance
+            const modal = new bootstrap.Modal(modalEl, {
+                backdrop: true,
+                keyboard: true,
+                focus: true
+            });
+            
+            // Add event listener to reset state when modal is closed
+            modalEl.addEventListener('hidden.bs.modal', function cleanup() {
+                // Reset opening flag
+                window.isOpeningMedicalHistory = false;
+                
+                // Clear button fix interval
+                if (window.mhButtonFixInterval) {
+                    clearInterval(window.mhButtonFixInterval);
+                    window.mhButtonFixInterval = null;
+                }
+                
+                // Remove approve/decline buttons
+                const approveBtn = document.getElementById('viewMHApproveBtn');
+                const declineBtn = document.getElementById('viewMHDeclineBtn');
+                if (approveBtn) approveBtn.remove();
+                if (declineBtn) declineBtn.remove();
+                
+                // Dispose of modal instance
+                const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                if (modalInstance) {
+                    modalInstance.dispose();
+                }
+                
+                // Remove this listener to prevent duplicates
+                modalEl.removeEventListener('hidden.bs.modal', cleanup);
+            }, { once: true });
+            
+            // Show modal with proper error handling
+            try {
+                // Use Bootstrap's show method properly - ensure we have a valid modal instance
+                if (modal && typeof modal.show === 'function') {
+                    // Use setTimeout to ensure DOM is ready
+                    setTimeout(() => {
+                        try {
+                            modal.show();
+                        } catch (showError) {
+                            console.warn('Modal.show() failed, trying fallback:', showError);
+                            // Fallback to manual show
+                            showModalManually(modalEl);
+                        }
+                    }, 50);
+                } else {
+                    // No valid modal instance, show manually
+                    showModalManually(modalEl);
+                }
+            } catch (modalError) {
+                console.error('Error showing modal:', modalError);
+                // Try alternative method
+                showModalManually(modalEl);
+            }
+            
+            // Helper function to show modal manually
+            function showModalManually(modalElement) {
+                try {
+                    modalElement.classList.add('show');
+                    modalElement.style.display = 'block';
+                    modalElement.setAttribute('aria-modal', 'true');
+                    modalElement.setAttribute('aria-hidden', 'false');
+                    modalElement.style.paddingRight = '0px';
+                    document.body.classList.add('modal-open');
+                    
+                    // Add backdrop if it doesn't exist
+                    if (!document.querySelector('.modal-backdrop')) {
+                        const backdrop = document.createElement('div');
+                        backdrop.className = 'modal-backdrop fade show';
+                        document.body.appendChild(backdrop);
+                    }
+                } catch (manualError) {
+                    console.error('Manual modal show also failed:', manualError);
+                }
+            }
+            
             // First, check if donor is approved
             fetch(`../../assets/php_func/comprehensive_donor_details_api.php?donor_id=${encodeURIComponent(donorId)}`)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(donorData => {
                     if (donorData.error) {
                         console.error('Error fetching donor data:', donorData.error);
-                        alert('Error loading donor details. Please try again.');
+                        if (modalContent) {
+                            modalContent.innerHTML = '<div class="alert alert-danger">Error loading donor details: ' + (donorData.error || 'Unknown error') + '</div>';
+                        }
                         return;
                     }
                     
@@ -4652,36 +4776,28 @@ function getCacheStats() {
                     const eligibilityStatus = String(eligibility.status || '').toLowerCase();
                     const medicalHistory = donorData.medical_history || {};
                     const medicalApproval = String(medicalHistory.medical_approval || '').toLowerCase();
+                    const screeningForm = donorData.screening_form || {};
+                    const hasScreeningRecord = screeningForm && Object.keys(screeningForm).length > 0 && screeningForm.screening_id;
                     const isApproved = eligibilityStatus === 'approved' || eligibilityStatus === 'eligible' || 
                                      medicalApproval === 'approved';
                     
-                    console.log('Donor approval status:', { eligibilityStatus, medicalApproval, isApproved });
+                    console.log('Donor approval status:', { eligibilityStatus, medicalApproval, isApproved, hasScreeningRecord });
                     
                     // Set view-only flag for approved donors
+                    // For examination status: show form with navigation and approve/decline buttons
                     window.medicalHistoryViewOnly = isApproved;
+                    // Store donor data for approve/decline buttons
+                    window.currentViewMHDonorId = donorId;
+                    window.currentViewMHScreeningRecord = hasScreeningRecord;
+                    window.currentViewMHApproved = isApproved;
                     
-                    // Open the medical history modal with view-only parameter
-                    // Use Bootstrap Modal like the screening summary does
-                    const modalEl = document.getElementById('medicalHistoryModal');
-                    const modalContent = document.getElementById('medicalHistoryModalContent');
-                    
-                    if (!modalEl || !modalContent) {
-                        console.error('Medical history modal elements not found');
-                        alert('Medical history modal not found. Please refresh the page.');
-                        return;
-                    }
-                    
-                    // Show loading spinner
-                    modalContent.innerHTML = '<div class="d-flex justify-content-center my-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
-                    
-                    // Show the modal simply (like screening summary does)
-                    // Clear any previous styles
-                    modalEl.removeAttribute('style');
-                    modalEl.style.display = 'flex';
-                    modalEl.classList.add('show');
+                    // For examination status (has screening but not approved), use view_only=0 to show full form
+                    // This allows navigation buttons and approve/decline buttons to work
+                    const viewOnlyParam = isApproved ? '1' : '0';
+                    console.log('Loading MH form with view_only:', viewOnlyParam, 'isApproved:', isApproved, 'hasScreeningRecord:', hasScreeningRecord);
                     
                     // Fetch the admin medical history content with view-only parameter
-                    fetch(`../../src/views/forms/medical-history-modal-content-admin.php?donor_id=${encodeURIComponent(donorId)}&view_only=${isApproved ? '1' : '0'}`)
+                    fetch(`../../src/views/forms/medical-history-modal-content-admin.php?donor_id=${encodeURIComponent(donorId)}&view_only=${viewOnlyParam}`)
                         .then(response => {
                             if (!response.ok) {
                                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -4689,38 +4805,768 @@ function getCacheStats() {
                             return response.text();
                         })
                         .then(html => {
+                            console.log('MH form HTML loaded, length:', html.length);
                             // Update modal content
                             if (modalContent) {
                                 modalContent.innerHTML = html;
+                                console.log('MH form content inserted into modal');
                                 
                                 // Execute any script tags in the loaded content
                                 const scripts = modalContent.querySelectorAll('script');
-                                scripts.forEach((script) => {
+                                console.log('Found', scripts.length, 'script tags in MH form');
+                                scripts.forEach((script, index) => {
                                     try {
+                                        // Skip empty scripts
+                                        if (!script.textContent || script.textContent.trim() === '') {
+                                            console.log(`Skipping empty script ${index + 1}`);
+                                            return;
+                                        }
+                                        
+                                        // Get script content
+                                        const scriptContent = script.textContent.trim();
+                                        
+                                        // Create a new script element and execute it
                                         const newScript = document.createElement('script');
-                                        newScript.textContent = script.textContent;
                                         newScript.type = script.type || 'text/javascript';
-                                        document.head.appendChild(newScript);
-                                        newScript.remove();
+                                        
+                                        // Use standard method to execute script
+                                        try {
+                                            newScript.textContent = scriptContent;
+                                            // Append to body for execution
+                                            const target = document.body || document.head;
+                                            if (target) {
+                                                target.appendChild(newScript);
+                                                
+                                                // Remove after execution
+                                                setTimeout(() => {
+                                                    try {
+                                                        if (newScript.parentNode) {
+                                                            newScript.parentNode.removeChild(newScript);
+                                                        }
+                                                    } catch (removeError) {
+                                                        // Ignore removal errors
+                                                    }
+                                                }, 50);
+                                                
+                                                console.log(`Executed script ${index + 1} successfully`);
+                                            } else {
+                                                console.warn(`No target element found for script ${index + 1}`);
+                                            }
+                                        } catch (execError) {
+                                            console.error(`Error executing script ${index + 1}:`, execError);
+                                            // Skip this script and continue with others
+                                        }
                                     } catch (e) {
-                                        console.warn('Error executing script:', e);
+                                        console.error(`Error processing script ${index + 1}:`, e);
+                                        // Continue with other scripts even if one fails
                                     }
                                 });
                                 
-                                // After loading, ensure view-only mode is applied
+                                // After loading, ensure view-only mode is applied only if approved
                                 if (isApproved) {
+                                    // Clear any existing interval (shouldn't exist for approved, but just in case)
+                                    if (window.mhButtonFixInterval) {
+                                        clearInterval(window.mhButtonFixInterval);
+                                        window.mhButtonFixInterval = null;
+                                    }
+                                    
                                     setTimeout(() => {
                                         if (typeof window.mhApplyViewOnlyMode === 'function') {
                                             window.mhApplyViewOnlyMode();
                                         }
-                                    }, 100);
+                                        
+                                        // For approved donors, hide all action buttons and show only navigation
+                                        const submitBtn = document.getElementById('modalSubmitButton');
+                                        const approveBtn = document.getElementById('viewMHApproveBtn');
+                                        const declineBtn = document.getElementById('viewMHDeclineBtn');
+                                        
+                                        if (submitBtn) {
+                                            submitBtn.style.display = 'none';
+                                            submitBtn.style.visibility = 'hidden';
+                                        }
+                                        if (approveBtn) {
+                                            approveBtn.style.display = 'none';
+                                            approveBtn.style.visibility = 'hidden';
+                                        }
+                                        if (declineBtn) {
+                                            declineBtn.style.display = 'none';
+                                            declineBtn.style.visibility = 'hidden';
+                                        }
+                                        
+                                        // Ensure next button shows "Close" on last step for approved donors
+                                        const nextBtn = document.getElementById('modalNextButton');
+                                        const prevBtn = document.getElementById('modalPrevButton');
+                                        if (nextBtn) {
+                                            const form = document.getElementById('modalMedicalHistoryForm');
+                                            const totalSteps = form ? form.querySelectorAll('.form-step').length : 6;
+                                            const currentStep = form ? parseInt(form.querySelector('.form-step.active')?.getAttribute('data-step') || '1') : 1;
+                                            
+                                            // Always show navigation buttons
+                                            nextBtn.style.display = 'inline-block';
+                                            nextBtn.style.visibility = 'visible';
+                                            
+                                            if (currentStep === totalSteps) {
+                                                nextBtn.innerHTML = '<i class="fas fa-times me-1"></i>Close';
+                                                // Make it close the modal
+                                                nextBtn.onclick = function() {
+                                                    const modal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModal'));
+                                                    if (modal) {
+                                                        modal.hide();
+                                                    } else {
+                                                        // Fallback: manual close
+                                                        const modalEl = document.getElementById('medicalHistoryModal');
+                                                        if (modalEl) {
+                                                            modalEl.classList.remove('show');
+                                                            modalEl.style.display = 'none';
+                                                            document.body.classList.remove('modal-open');
+                                                            const backdrop = document.querySelector('.modal-backdrop');
+                                                            if (backdrop) backdrop.remove();
+                                                        }
+                                                    }
+                                                };
+                                            } else {
+                                                nextBtn.innerHTML = 'Next <i class="fas fa-arrow-right ms-1"></i>';
+                                            }
+                                        }
+                                        if (prevBtn) {
+                                            prevBtn.style.display = 'inline-block';
+                                            prevBtn.style.visibility = 'visible';
+                                        }
+                                        
+                                        // Call updateStepDisplay to ensure view-only mode is applied
+                                        if (window.updateStepDisplay) {
+                                            window.updateStepDisplay();
+                                        }
+                                        
+                                        console.log('✅ Applied view-only mode for approved donor');
+                                    }, 300);
+                                } else {
+                                    // For non-approved donors, ensure form is interactive
+                                    console.log('MH form loaded in interactive mode (not view-only)');
                                 }
                                 
-                                // Call the admin generator
+                                // Add approve/decline buttons if screening exists and not approved
+                                // Hide submit button and show approve/decline instead
+                                // Keep next/prev buttons visible for traversal
+                                if (hasScreeningRecord && !isApproved) {
+                                    // Set flag to prevent next button from changing to "Submit"
+                                    window.mhShowApproveDecline = true;
+                                    
+                                    // Function to ensure approve/decline buttons are created
+                                    // COMPREHENSIVE DIAGNOSTIC AND FIX FUNCTION
+                                    // Make it globally accessible
+                                    window.ensureApproveDeclineButtons = () => {
+                                        console.log('🔍 === COMPREHENSIVE BUTTON CREATION DIAGNOSTIC ===');
+                                        
+                                        // Step 1: Find the modal and content containers
+                                        const modalEl = document.getElementById('medicalHistoryModal');
+                                        const modalContent = document.getElementById('medicalHistoryModalContent');
+                                        console.log('Modal element:', !!modalEl);
+                                        console.log('Modal content element:', !!modalContent);
+                                        
+                                        if (!modalEl || !modalContent) {
+                                            console.error('❌ Modal elements not found');
+                                            return false;
+                                        }
+                                        
+                                        // Step 2: Find modal footer - try all possible locations
+                                        // CRITICAL: Must find the footer INSIDE the loaded content that has footer-left/footer-right
+                                        let modalFooter = null;
+                                        
+                                        // First, try to find footer inside the loaded content that has footer-left/footer-right
+                                        const allFootersInContent = modalContent.querySelectorAll('.modal-footer');
+                                        console.log('Found', allFootersInContent.length, 'modal-footer elements in content');
+                                        
+                                        // Look for the footer that has footer-left or footer-right (the actual form footer)
+                                        for (const footer of allFootersInContent) {
+                                            // Skip confirmation modal footers (they have mhCustomConfirmYes button)
+                                            if (footer.querySelector('#mhCustomConfirmYes')) {
+                                                console.log('Skipping confirmation modal footer');
+                                                continue;
+                                            }
+                                            // Check if this footer has footer-left or footer-right divs (the actual form footer)
+                                            if (footer.querySelector('.footer-left') || footer.querySelector('.footer-right')) {
+                                                modalFooter = footer;
+                                                console.log('✅ Found medical history form footer with footer-left/footer-right');
+                                                break;
+                                            }
+                                        }
+                                        
+                                        // If still not found, use the first footer that's not a confirmation modal
+                                        if (!modalFooter && allFootersInContent.length > 0) {
+                                            for (const footer of allFootersInContent) {
+                                                if (!footer.querySelector('#mhCustomConfirmYes')) {
+                                                    modalFooter = footer;
+                                                    console.log('✅ Using first non-confirmation footer found in content');
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        
+                                        if (modalFooter) {
+                                            console.log('✅ Found modal footer');
+                                        } else {
+                                            console.error('❌ Could not find medical history form footer');
+                                        }
+                                        
+                                        // Step 3: If footer doesn't exist, check the structure
+                                        if (!modalFooter) {
+                                            console.warn('⚠️ Modal footer not found, inspecting structure...');
+                                            console.log('Modal content HTML length:', modalContent.innerHTML.length);
+                                            console.log('Modal content contains "modal-footer":', modalContent.innerHTML.includes('modal-footer'));
+                                            console.log('Modal content contains "footer-left":', modalContent.innerHTML.includes('footer-left'));
+                                            
+                                            // Check if footer is inside the content - look for the one with footer-left/footer-right
+                                            const allFooters = modalContent.querySelectorAll('.modal-footer');
+                                            console.log('Found', allFooters.length, 'modal-footer elements in content');
+                                            
+                                            // Find the footer that has footer-left or footer-right (the actual form footer)
+                                            for (const footer of allFooters) {
+                                                // Skip confirmation modal footers
+                                                if (footer.querySelector('#mhCustomConfirmYes')) {
+                                                    console.log('Skipping confirmation modal footer');
+                                                    continue;
+                                                }
+                                                // Check if this footer has footer-left or footer-right (the actual form footer)
+                                                if (footer.querySelector('.footer-left') || footer.querySelector('.footer-right')) {
+                                                    modalFooter = footer;
+                                                    console.log('✅ Found medical history form footer with footer-left/footer-right');
+                                                    break;
+                                                }
+                                            }
+                                            
+                                            // If still not found, use the first one that's not a confirmation modal
+                                            if (!modalFooter && allFooters.length > 0) {
+                                                for (const footer of allFooters) {
+                                                    if (!footer.querySelector('#mhCustomConfirmYes')) {
+                                                        modalFooter = footer;
+                                                        console.log('✅ Using first non-confirmation footer found in content');
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            
+                                            if (!modalFooter) {
+                                                // Footer doesn't exist - we need to check if the loaded HTML has it
+                                                // The footer should be in the loaded HTML from medical-history-modal-content-admin.php
+                                                console.error('❌ Modal footer not found in DOM. The loaded HTML may not include it.');
+                                                return false;
+                                            }
+                                        }
+                                        
+                                        // Step 4: Inspect footer structure
+                                        console.log('Modal footer element:', modalFooter);
+                                        console.log('Modal footer classes:', modalFooter.className);
+                                        console.log('Modal footer innerHTML length:', modalFooter.innerHTML.length);
+                                        console.log('Modal footer innerHTML preview:', modalFooter.innerHTML.substring(0, 300));
+                                        
+                                        // Step 5: Find or create footer-left
+                                        let footerLeft = modalFooter.querySelector('.footer-left');
+                                        const footerRight = modalFooter.querySelector('.footer-right');
+                                        
+                                        console.log('Footer-left found:', !!footerLeft);
+                                        console.log('Footer-right found:', !!footerRight);
+                                        
+                                        // If footer-left doesn't exist, create it
+                                        if (!footerLeft) {
+                                            console.log('⚠️ Footer-left not found, creating it...');
+                                            footerLeft = document.createElement('div');
+                                            footerLeft.className = 'footer-left';
+                                            footerLeft.style.cssText = 'flex: 1; display: flex; gap: 10px; align-items: center;';
+                                            
+                                            // Insert at the beginning of modal-footer
+                                            if (modalFooter.firstChild) {
+                                                modalFooter.insertBefore(footerLeft, modalFooter.firstChild);
+                                            } else {
+                                                modalFooter.appendChild(footerLeft);
+                                            }
+                                            console.log('✅ Created footer-left div');
+                                            console.log('Footer-left parent:', footerLeft.parentNode);
+                                            console.log('Footer-left in DOM:', document.body.contains(footerLeft));
+                                        }
+                                        
+                                        if (!footerLeft) {
+                                            console.error('❌ Could not create footer-left div');
+                                            return false;
+                                        }
+                                        
+                                        // Step 6: Remove any existing buttons
+                                        const existingApprove = document.getElementById('viewMHApproveBtn');
+                                        const existingDecline = document.getElementById('viewMHDeclineBtn');
+                                        console.log('Existing buttons - Approve:', !!existingApprove, 'Decline:', !!existingDecline);
+                                        
+                                        if (existingApprove) {
+                                            console.log('Removing existing approve button from:', existingApprove.parentNode);
+                                            existingApprove.remove();
+                                        }
+                                        if (existingDecline) {
+                                            console.log('Removing existing decline button from:', existingDecline.parentNode);
+                                            existingDecline.remove();
+                                        }
+                                        
+                                        // Step 7: Create new buttons with full styling
+                                        const approveBtn = document.createElement('button');
+                                        approveBtn.type = 'button';
+                                        approveBtn.className = 'btn btn-success me-2';
+                                        approveBtn.innerHTML = '<i class="fas fa-check me-2"></i>Approve Medical History';
+                                        approveBtn.id = 'viewMHApproveBtn';
+                                        // Use inline styles with !important to override any CSS
+                                        approveBtn.setAttribute('style', 'display: inline-block !important; visibility: visible !important; opacity: 1 !important; width: auto !important; height: auto !important; padding: 0.375rem 0.75rem !important;');
+                                        
+                                        const declineBtn = document.createElement('button');
+                                        declineBtn.type = 'button';
+                                        declineBtn.className = 'btn btn-danger me-2';
+                                        declineBtn.innerHTML = '<i class="fas fa-times me-2"></i>Decline Medical History';
+                                        declineBtn.id = 'viewMHDeclineBtn';
+                                        // Use inline styles with !important to override any CSS
+                                        declineBtn.setAttribute('style', 'display: inline-block !important; visibility: visible !important; opacity: 1 !important; width: auto !important; height: auto !important; padding: 0.375rem 0.75rem !important;');
+                                        
+                                        // Step 8: Ensure footer-left is visible and has proper layout
+                                        const footerLeftComputed = window.getComputedStyle(footerLeft);
+                                        if (footerLeftComputed.display === 'none' || footerLeft.offsetWidth === 0) {
+                                            footerLeft.setAttribute('style', 'flex: 1; display: flex !important; gap: 10px; align-items: center; visibility: visible !important;');
+                                            console.log('✅ Fixed footer-left visibility');
+                                        }
+                                        
+                                        // Step 9: Insert buttons into footer-left
+                                        footerLeft.appendChild(approveBtn);
+                                        footerLeft.appendChild(declineBtn);
+                                        console.log('✅ Inserted buttons into footer-left');
+                                        
+                                        // Step 10: Force a reflow to ensure buttons render
+                                        void footerLeft.offsetHeight;
+                                        
+                                        // Step 11: Comprehensive verification
+                                        const verifyApprove = document.getElementById('viewMHApproveBtn');
+                                        const verifyDecline = document.getElementById('viewMHDeclineBtn');
+                                        
+                                        console.log('=== VERIFICATION ===');
+                                        console.log('Approve button in DOM:', !!verifyApprove);
+                                        console.log('Decline button in DOM:', !!verifyDecline);
+                                        
+                                        if (verifyApprove) {
+                                            console.log('Approve button parent:', verifyApprove.parentNode);
+                                            console.log('Approve button computed display:', window.getComputedStyle(verifyApprove).display);
+                                            console.log('Approve button computed visibility:', window.getComputedStyle(verifyApprove).visibility);
+                                            console.log('Approve button offsetWidth:', verifyApprove.offsetWidth);
+                                            console.log('Approve button offsetHeight:', verifyApprove.offsetHeight);
+                                            
+                                            // If still zero width, try one more fix
+                                            if (verifyApprove.offsetWidth === 0) {
+                                                console.warn('⚠️ Approve button still has zero width, applying emergency fix...');
+                                                verifyApprove.setAttribute('style', 'display: inline-block !important; visibility: visible !important; opacity: 1 !important; width: auto !important; min-width: 150px !important; height: auto !important; min-height: 38px !important; padding: 0.375rem 0.75rem !important; margin-right: 0.5rem !important;');
+                                                void verifyApprove.offsetHeight; // Force reflow
+                                            }
+                                        }
+                                        
+                                        if (verifyDecline) {
+                                            console.log('Decline button parent:', verifyDecline.parentNode);
+                                            console.log('Decline button computed display:', window.getComputedStyle(verifyDecline).display);
+                                            console.log('Decline button computed visibility:', window.getComputedStyle(verifyDecline).visibility);
+                                            console.log('Decline button offsetWidth:', verifyDecline.offsetWidth);
+                                            console.log('Decline button offsetHeight:', verifyDecline.offsetHeight);
+                                            
+                                            // If still zero width, try one more fix
+                                            if (verifyDecline.offsetWidth === 0) {
+                                                console.warn('⚠️ Decline button still has zero width, applying emergency fix...');
+                                                verifyDecline.setAttribute('style', 'display: inline-block !important; visibility: visible !important; opacity: 1 !important; width: auto !important; min-width: 150px !important; height: auto !important; min-height: 38px !important; padding: 0.375rem 0.75rem !important; margin-right: 0.5rem !important;');
+                                                void verifyDecline.offsetHeight; // Force reflow
+                                            }
+                                        }
+                                        
+                                        // Step 10: Bind event handlers
+                                        approveBtn.addEventListener('click', function(e) {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            
+                                            // Call the handler - it will handle confirmation, API call, and modal closing
+                                            if (typeof handleMedicalHistoryApprovalFromInterviewer === 'function') {
+                                                handleMedicalHistoryApprovalFromInterviewer(donorId, 'approve');
+                                            } else {
+                                                console.error('handleMedicalHistoryApprovalFromInterviewer function not found');
+                                                alert('Error: Approval function not available. Please refresh the page.');
+                                            }
+                                        });
+                                        
+                                        declineBtn.addEventListener('click', function(e) {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            
+                                            // Call the handler - it will handle prompt, API call, and modal closing
+                                            if (typeof handleMedicalHistoryApprovalFromInterviewer === 'function') {
+                                                handleMedicalHistoryApprovalFromInterviewer(donorId, 'decline');
+                                            } else {
+                                                console.error('handleMedicalHistoryApprovalFromInterviewer function not found');
+                                                alert('Error: Decline function not available. Please refresh the page.');
+                                            }
+                                        });
+                                        
+                                        console.log('✅ === BUTTON CREATION COMPLETE ===');
+                                        return true;
+                                    };
+                                    
+                                    // Try to create buttons after form is loaded - use multiple retries
+                                    let retryCount = 0;
+                                    const maxRetries = 5;
+                                    const tryCreateButtons = () => {
+                                        retryCount++;
+                                        console.log(`🔄 Attempt ${retryCount} to create approve/decline buttons...`);
+                                        if (!ensureApproveDeclineButtons() && retryCount < maxRetries) {
+                                            setTimeout(tryCreateButtons, 300);
+                                        } else if (retryCount >= maxRetries) {
+                                            console.error('❌ Failed to create approve/decline buttons after', maxRetries, 'attempts');
+                                        }
+                                    };
+                                    
+                                    // Start trying after form content is loaded
+                                    setTimeout(() => {
+                                        tryCreateButtons();
+                                        
+                                        const modalFooter = document.querySelector('#medicalHistoryModal .modal-footer');
+                                        if (modalFooter) {
+                                            // Hide submit button
+                                            const submitButton = document.getElementById('modalSubmitButton');
+                                            if (submitButton) {
+                                                submitButton.style.display = 'none';
+                                                submitButton.style.visibility = 'hidden';
+                                                console.log('✅ Hid submit button');
+                                            }
+                                            
+                                            // Override updateStepDisplay to keep next button as "Next" not "Submit"
+                                            const originalUpdateStepDisplay = window.updateStepDisplay;
+                                            if (originalUpdateStepDisplay) {
+                                                window.updateStepDisplay = function() {
+                                                    // Call original function first
+                                                    originalUpdateStepDisplay();
+                                                    
+                                                    // Override: keep next button as "Next" and ensure approve/decline are visible
+                                                    const nextBtn = document.getElementById('modalNextButton');
+                                                    const prevBtn = document.getElementById('modalPrevButton');
+                                                    
+                                                    if (nextBtn) {
+                                                        // Always keep as "Next" button, not "Submit" when approve/decline should show
+                                                        const currentStep = document.querySelector('.form-step.active');
+                                                        const totalSteps = document.querySelectorAll('.form-step').length;
+                                                        const isLastStep = currentStep && parseInt(currentStep.getAttribute('data-step')) === totalSteps;
+                                                        
+                                                        if (isLastStep) {
+                                                            // On last step, keep as "Next" (not "Submit") since we have approve/decline buttons
+                                                            nextBtn.innerHTML = 'Next <i class="fas fa-arrow-right ms-1"></i>';
+                                                        } else {
+                                                            // On other steps, keep as "Next"
+                                                            nextBtn.innerHTML = 'Next <i class="fas fa-arrow-right ms-1"></i>';
+                                                        }
+                                                        nextBtn.style.display = 'inline-block';
+                                                        nextBtn.style.visibility = 'visible';
+                                                    }
+                                                    if (prevBtn) {
+                                                        prevBtn.style.display = 'inline-block';
+                                                        prevBtn.style.visibility = 'visible';
+                                                    }
+                                                    
+                                                    // Ensure submit button stays hidden
+                                                    const submitBtn = document.getElementById('modalSubmitButton');
+                                                    if (submitBtn) {
+                                                        submitBtn.style.display = 'none';
+                                                        submitBtn.style.visibility = 'hidden';
+                                                    }
+                                                    
+                                                    // Ensure approve/decline buttons are visible
+                                                    const approveBtn = document.getElementById('viewMHApproveBtn');
+                                                    const declineBtn = document.getElementById('viewMHDeclineBtn');
+                                                    if (approveBtn) {
+                                                        approveBtn.style.display = 'inline-block';
+                                                        approveBtn.style.visibility = 'visible';
+                                                    }
+                                                    if (declineBtn) {
+                                                        declineBtn.style.display = 'inline-block';
+                                                        declineBtn.style.visibility = 'visible';
+                                                    }
+                                                };
+                                                console.log('✅ Overrode updateStepDisplay to keep next button and show approve/decline');
+                                            }
+                                            
+                                            // Also override the next button click handler to prevent submission
+                                            const nextBtn = document.getElementById('modalNextButton');
+                                            if (nextBtn) {
+                                                // Remove any existing click handlers and add our own
+                                                const newNextBtn = nextBtn.cloneNode(true);
+                                                nextBtn.parentNode.replaceChild(newNextBtn, nextBtn);
+                                                
+                                                newNextBtn.addEventListener('click', function(e) {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    
+                                                    const form = document.getElementById('modalMedicalHistoryForm');
+                                                    const currentStep = form ? parseInt(form.querySelector('.form-step.active')?.getAttribute('data-step') || '1') : 1;
+                                                    const totalSteps = form ? form.querySelectorAll('.form-step').length : 6;
+                                                    
+                                                    if (currentStep < totalSteps) {
+                                                        // Move to next step
+                                                        const nextStep = currentStep + 1;
+                                                        const currentStepEl = form.querySelector(`.form-step[data-step="${currentStep}"]`);
+                                                        const nextStepEl = form.querySelector(`.form-step[data-step="${nextStep}"]`);
+                                                        
+                                                        if (currentStepEl && nextStepEl) {
+                                                            currentStepEl.classList.remove('active');
+                                                            nextStepEl.classList.add('active');
+                                                            
+                                                            // Update step display
+                                                            if (window.updateStepDisplay) {
+                                                                window.updateStepDisplay();
+                                                            }
+                                                            
+                                                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                        }
+                                                    } else {
+                                                        // On last step, don't submit - just stay on last step
+                                                        // Approve/decline buttons handle the action
+                                                        console.log('On last step - approve/decline buttons handle the action');
+                                                    }
+                                                });
+                                            }
+                                            
+                                            // Keep next/prev buttons visible - don't hide them
+                                            const nextButton = document.getElementById('modalNextButton');
+                                            const prevButton = document.getElementById('modalPrevButton');
+                                            // Ensure next/prev buttons are visible
+                                            if (nextButton) {
+                                                nextButton.style.display = 'inline-block';
+                                                nextButton.style.visibility = 'visible';
+                                                // Keep as "Next" button, not "Submit"
+                                                nextButton.innerHTML = 'Next <i class="fas fa-arrow-right ms-1"></i>';
+                                            }
+                                            if (prevButton) {
+                                                prevButton.style.display = 'inline-block';
+                                                prevButton.style.visibility = 'visible';
+                                            }
+                                            
+                                            // Buttons are now created by ensureApproveDeclineButtons function above
+                                            // Just ensure they're visible if they exist
+                                            const approveBtn = document.getElementById('viewMHApproveBtn');
+                                            const declineBtn = document.getElementById('viewMHDeclineBtn');
+                                            if (approveBtn) {
+                                                approveBtn.style.display = 'inline-block';
+                                                approveBtn.style.visibility = 'visible';
+                                            }
+                                            if (declineBtn) {
+                                                declineBtn.style.display = 'inline-block';
+                                                declineBtn.style.visibility = 'visible';
+                                            }
+                                        }
+                                    }, 500); // Increased delay to ensure form is fully loaded
+                                } else {
+                                    // Ensure next/prev buttons are visible even if no approve/decline needed
+                                    setTimeout(() => {
+                                        const nextButton = document.getElementById('modalNextButton');
+                                        const prevButton = document.getElementById('modalPrevButton');
+                                        if (nextButton) nextButton.style.display = 'inline-block';
+                                        if (prevButton) prevButton.style.display = 'inline-block';
+                                    }, 300);
+                                }
+                                
+                                // Call the admin generator to initialize the form
                                 if (typeof window.generateAdminMedicalHistoryQuestions === 'function') {
                                     setTimeout(() => {
-                                        window.generateAdminMedicalHistoryQuestions();
-                                    }, 200);
+                                        console.log('Calling generateAdminMedicalHistoryQuestions...');
+                                        try {
+                                            window.generateAdminMedicalHistoryQuestions();
+                                            console.log('generateAdminMedicalHistoryQuestions called successfully');
+                                            
+                                            // After form is generated, ensure buttons are correct
+                                            setTimeout(() => {
+                                                const form = document.getElementById('modalMedicalHistoryForm');
+                                                const nextBtn = document.getElementById('modalNextButton');
+                                                const prevBtn = document.getElementById('modalPrevButton');
+                                                const submitBtn = document.getElementById('modalSubmitButton');
+                                                
+                                                if (hasScreeningRecord && !isApproved) {
+                                                    // For non-approved with screening: hide submit, show approve/decline, keep next as "Next"
+                                                    if (submitBtn) {
+                                                        submitBtn.style.display = 'none';
+                                                        submitBtn.style.visibility = 'hidden';
+                                                    }
+                                                    
+                                                    // Force next button to stay as "Next" (not "Submit")
+                                                    if (nextBtn) {
+                                                        nextBtn.innerHTML = 'Next <i class="fas fa-arrow-right ms-1"></i>';
+                                                        nextBtn.style.display = 'inline-block';
+                                                        nextBtn.style.visibility = 'visible';
+                                                    }
+                                                    
+                                                    // CRITICAL: Re-create approve/decline buttons after form generation
+                                                    // Use the same comprehensive diagnostic function
+                                                    console.log('🔄 Re-creating approve/decline buttons after form generation...');
+                                                    // Reuse the same comprehensive function (now globally accessible)
+                                                    if (window.ensureApproveDeclineButtons) {
+                                                        if (!window.ensureApproveDeclineButtons()) {
+                                                            setTimeout(() => {
+                                                                if (window.ensureApproveDeclineButtons && !window.ensureApproveDeclineButtons()) {
+                                                                    console.error('❌ Failed to create buttons after form generation');
+                                                                }
+                                                            }, 300);
+                                                        }
+                                                    } else {
+                                                        console.error('❌ ensureApproveDeclineButtons function not available');
+                                                    }
+                                                    
+                                                    // Also ensure buttons are visible if they already exist
+                                                    const approveBtn = document.getElementById('viewMHApproveBtn');
+                                                    const declineBtn = document.getElementById('viewMHDeclineBtn');
+                                                    if (approveBtn) {
+                                                        approveBtn.style.display = 'inline-block';
+                                                        approveBtn.style.visibility = 'visible';
+                                                    }
+                                                    if (declineBtn) {
+                                                        declineBtn.style.display = 'inline-block';
+                                                        declineBtn.style.visibility = 'visible';
+                                                    }
+                                                    
+                                                    // Set up interval to continuously check and fix buttons
+                                                    // This ensures buttons stay correct even when updateStepDisplay is called
+                                                    // ONLY for non-approved donors
+                                                    if (!window.mhButtonFixInterval && hasScreeningRecord && !isApproved) {
+                                                        window.mhButtonFixInterval = setInterval(() => {
+                                                            const nextBtn = document.getElementById('modalNextButton');
+                                                            const submitBtn = document.getElementById('modalSubmitButton');
+                                                            const approveBtn = document.getElementById('viewMHApproveBtn');
+                                                            const declineBtn = document.getElementById('viewMHDeclineBtn');
+                                                            
+                                                            // Only run for non-approved donors
+                                                            if (hasScreeningRecord && !isApproved) {
+                                                                // Keep next as "Next", not "Submit"
+                                                                if (nextBtn && nextBtn.innerHTML.includes('Submit')) {
+                                                                    nextBtn.innerHTML = 'Next <i class="fas fa-arrow-right ms-1"></i>';
+                                                                }
+                                                                // Keep submit hidden
+                                                                if (submitBtn && submitBtn.style.display !== 'none') {
+                                                                    submitBtn.style.display = 'none';
+                                                                    submitBtn.style.visibility = 'hidden';
+                                                                }
+                                                                // CRITICAL: If buttons don't exist, recreate them
+                                                                if (!approveBtn || !declineBtn) {
+                                                                    console.warn('⚠️ Buttons missing in interval check, recreating...');
+                                                                    if (window.ensureApproveDeclineButtons) {
+                                                                        window.ensureApproveDeclineButtons();
+                                                                    }
+                                                                    return;
+                                                                }
+                                                                
+                                                                // Keep approve/decline visible and ensure they're in the right place
+                                                                const computedDisplayApprove = window.getComputedStyle(approveBtn).display;
+                                                                const computedDisplayDecline = window.getComputedStyle(declineBtn).display;
+                                                                
+                                                                // Find the correct footer-left (exclude confirmation modals)
+                                                                let footerLeft = null;
+                                                                const allFooterLefts = document.querySelectorAll('.footer-left');
+                                                                for (const fl of allFooterLefts) {
+                                                                    // Check if this footer-left is in the medical history modal content
+                                                                    const modalContent = document.getElementById('medicalHistoryModalContent');
+                                                                    if (modalContent && (modalContent.contains(fl) || fl.closest('#medicalHistoryModalContent'))) {
+                                                                        // Make sure it's not in a confirmation modal
+                                                                        if (!fl.closest('#mhCustomConfirmModal')) {
+                                                                            footerLeft = fl;
+                                                                            break;
+                                                                        }
+                                                                    }
+                                                                }
+                                                                
+                                                                // If buttons have zero dimensions, they're likely in wrong place or hidden
+                                                                const needsFix = (computedDisplayApprove === 'none' || approveBtn.offsetWidth === 0 || 
+                                                                                computedDisplayDecline === 'none' || declineBtn.offsetWidth === 0);
+                                                                
+                                                                if (needsFix && footerLeft) {
+                                                                    // Ensure buttons are in footer-left
+                                                                    if (approveBtn.parentNode !== footerLeft) {
+                                                                        footerLeft.appendChild(approveBtn);
+                                                                    }
+                                                                    if (declineBtn.parentNode !== footerLeft) {
+                                                                        footerLeft.appendChild(declineBtn);
+                                                                    }
+                                                                    
+                                                                    // Force visibility with inline styles
+                                                                    approveBtn.setAttribute('style', 'display: inline-block !important; visibility: visible !important; opacity: 1 !important; width: auto !important; height: auto !important; padding: 0.375rem 0.75rem !important; margin-right: 0.5rem !important;');
+                                                                    declineBtn.setAttribute('style', 'display: inline-block !important; visibility: visible !important; opacity: 1 !important; width: auto !important; height: auto !important; padding: 0.375rem 0.75rem !important; margin-right: 0.5rem !important;');
+                                                                    
+                                                                    // Ensure footer-left is visible and has proper layout
+                                                                    const footerLeftStyle = window.getComputedStyle(footerLeft);
+                                                                    if (footerLeftStyle.display === 'none' || footerLeft.offsetWidth === 0) {
+                                                                        footerLeft.setAttribute('style', 'flex: 1; display: flex !important; gap: 10px; align-items: center; visibility: visible !important;');
+                                                                    }
+                                                                    
+                                                                    // Only log once per fix attempt, not continuously
+                                                                    if (!window._mhButtonsFixedLogged) {
+                                                                        console.log('✅ Fixed approve/decline button visibility and positioning');
+                                                                        window._mhButtonsFixedLogged = true;
+                                                                        setTimeout(() => { window._mhButtonsFixedLogged = false; }, 2000);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }, 200);
+                                                        
+                                                        // Clear interval when modal is closed
+                                                        const modalEl = document.getElementById('medicalHistoryModal');
+                                                        if (modalEl) {
+                                                            modalEl.addEventListener('hidden.bs.modal', function() {
+                                                                if (window.mhButtonFixInterval) {
+                                                                    clearInterval(window.mhButtonFixInterval);
+                                                                    window.mhButtonFixInterval = null;
+                                                                }
+                                                            }, { once: true });
+                                                        }
+                                                    }
+                                                    
+                                                    // Call updateStepDisplay to refresh, but our override will keep next as "Next"
+                                                    if (window.updateStepDisplay) {
+                                                        window.updateStepDisplay();
+                                                    }
+                                                    
+                                                    console.log('✅ Ensured approve/decline buttons visible and submit hidden');
+                                                } else if (isApproved) {
+                                                    // For approved: hide all action buttons, show only navigation
+                                                    if (submitBtn) submitBtn.style.display = 'none';
+                                                    const approveBtn = document.getElementById('viewMHApproveBtn');
+                                                    const declineBtn = document.getElementById('viewMHDeclineBtn');
+                                                    if (approveBtn) approveBtn.style.display = 'none';
+                                                    if (declineBtn) declineBtn.style.display = 'none';
+                                                    
+                                                    // On last step, show "Close" button
+                                                    if (nextBtn && form) {
+                                                        const totalSteps = form.querySelectorAll('.form-step').length;
+                                                        const currentStep = parseInt(form.querySelector('.form-step.active')?.getAttribute('data-step') || '1');
+                                                        if (currentStep === totalSteps) {
+                                                            nextBtn.innerHTML = '<i class="fas fa-times me-1"></i>Close';
+                                                            nextBtn.onclick = function() {
+                                                                const modal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModal'));
+                                                                if (modal) modal.hide();
+                                                            };
+                                                        }
+                                                    }
+                                                    
+                                                    // Call updateStepDisplay to refresh view-only mode
+                                                    if (window.updateStepDisplay) {
+                                                        window.updateStepDisplay();
+                                                    }
+                                                    
+                                                    console.log('✅ Applied view-only mode - all action buttons hidden');
+                                                }
+                                                
+                                                // Always ensure navigation buttons are visible
+                                                if (nextBtn) {
+                                                    nextBtn.style.display = 'inline-block';
+                                                    nextBtn.style.visibility = 'visible';
+                                                }
+                                                if (prevBtn) {
+                                                    prevBtn.style.display = 'inline-block';
+                                                    prevBtn.style.visibility = 'visible';
+                                                }
+                                            }, 500);
+                                        } catch (e) {
+                                            console.error('Error calling generateAdminMedicalHistoryQuestions:', e);
+                                        }
+                                    }, 300);
+                                } else {
+                                    console.warn('generateAdminMedicalHistoryQuestions function not found');
                                 }
                             }
                         })
@@ -4733,7 +5579,13 @@ function getCacheStats() {
                 })
                 .catch(error => {
                     console.error('Error fetching donor details:', error);
-                    alert('Error loading donor details. Please try again.');
+                    const errorMessage = error && error.message ? error.message : (error && error.toString ? error.toString() : 'Unknown error');
+                    console.error('Full error details:', error);
+                    if (modalContent) {
+                        modalContent.innerHTML = '<div class="alert alert-danger m-4">Error loading donor details: ' + errorMessage + '<br><small>Please try again or refresh the page.</small></div>';
+                    } else {
+                        alert('Error loading donor details: ' + errorMessage + '. Please try again.');
+                    }
                 });
         };
         

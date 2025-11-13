@@ -805,23 +805,88 @@ document.addEventListener('DOMContentLoaded', function() {
         // Store screening data globally for declaration form
         window.currentAdminScreeningData = formDataObj;
         
-        // Close the screening modal
-        const screeningModalInstance = bootstrap.Modal.getInstance(document.getElementById('adminScreeningFormModal'));
-        if (screeningModalInstance) {
-            screeningModalInstance.hide();
+        // Immediately submit screening data to Supabase
+        // Try multiple possible paths to handle different dashboard locations
+        const possiblePaths = [
+            '../../assets/php_func/process_admin_screening_form.php',
+            '../../../assets/php_func/process_admin_screening_form.php',
+            'assets/php_func/process_admin_screening_form.php'
+        ];
+        
+        let submissionPromise = null;
+        let lastError = null;
+        
+        // Try each path until one works
+        for (const path of possiblePaths) {
+            try {
+                submissionPromise = fetch(path, {
+                    method: 'POST',
+                    body: formData
+                });
+                break;
+            } catch (e) {
+                lastError = e;
+                continue;
+            }
         }
         
-        // Show declaration form modal with confirmation (no data submission yet)
-        if (window.showAdminDeclarationFormModal) {
-            window.showAdminDeclarationFormModal(window.currentAdminDonorData.donor_id);
-        } else {
-            // Fallback: show success message
-            showAdminAlert('Screening data saved! Please proceed to declaration form.', 'success');
+        if (!submissionPromise) {
+            console.error('Could not determine correct path for screening form submission');
+            showAdminAlert('Error: Could not submit screening form. Please check the console for details.', 'error');
+            submitButton.innerHTML = originalText;
+            submitButton.disabled = false;
+            return;
         }
         
-        // Reset button state
-        submitButton.innerHTML = originalText;
-        submitButton.disabled = false;
+        submissionPromise
+        .then(response => {
+            console.log('Screening form submission response status:', response.status);
+            if (!response.ok) {
+                return response.text().then(text => {
+                    console.error('Screening form submission error response:', text);
+                    throw new Error('Network response was not ok: ' + response.status + ' - ' + text);
+                });
+            }
+            return response.json().catch(e => {
+                console.error('Failed to parse JSON response:', e);
+                return response.text().then(text => {
+                    console.error('Response text:', text);
+                    throw new Error('Invalid JSON response: ' + text);
+                });
+            });
+        })
+        .then(data => {
+            console.log('Admin screening form submission result:', data);
+            if (data && data.success) {
+                console.log('Admin screening form submitted successfully:', data);
+                showAdminAlert('Screening data saved successfully!', 'success');
+                
+                // Close the screening modal
+                const screeningModalInstance = bootstrap.Modal.getInstance(document.getElementById('adminScreeningFormModal'));
+                if (screeningModalInstance) {
+                    screeningModalInstance.hide();
+                }
+                
+                // Show declaration form modal with confirmation
+                if (window.showAdminDeclarationFormModal) {
+                    window.showAdminDeclarationFormModal(window.currentAdminDonorData.donor_id);
+                } else {
+                    // Fallback: show success message
+                    showAdminAlert('Screening data saved! Please proceed to declaration form.', 'success');
+                }
+            } else {
+                const errorMsg = (data && data.error) ? data.error : 'Failed to submit screening form';
+                console.error('Screening form submission failed:', errorMsg);
+                throw new Error(errorMsg);
+            }
+        })
+        .catch(error => {
+            console.error('Error submitting admin screening form:', error);
+            showAdminAlert('Error submitting screening form: ' + error.message + '. Please check the console for details.', 'error');
+            // Reset button state on error
+            submitButton.innerHTML = originalText;
+            submitButton.disabled = false;
+        });
     }
 });
 

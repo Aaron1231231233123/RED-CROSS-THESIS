@@ -555,11 +555,23 @@ if (typeof window.submitAdminDeclarationForm !== 'function') {
 
             var formData = new FormData(form);
 
-            // Include screening data if provided by screening modal
-            if (window.currentScreeningData) {
+            // Include screening data if provided by screening modal (check both admin and regular)
+            if (window.currentAdminScreeningData) {
+                try {
+                    formData.append('screening_data', JSON.stringify(window.currentAdminScreeningData));
+                    console.log('Including admin screening data in declaration form submission');
+                } catch (e) {
+                    console.error('Error including admin screening data:', e);
+                }
+            } else if (window.currentScreeningData) {
                 try {
                     formData.append('screening_data', JSON.stringify(window.currentScreeningData));
-                } catch (_) {}
+                    console.log('Including regular screening data in declaration form submission');
+                } catch (e) {
+                    console.error('Error including screening data:', e);
+                }
+            } else {
+                console.warn('No screening data available for declaration form submission');
             }
 
             // Path is relative to dashboards using this modal (e.g., public/Dashboards/*)

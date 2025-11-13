@@ -1304,11 +1304,10 @@ th {
             </div>
         </div>
     </div>
-    </div>
 
     <!-- Confirm Submit Modal -->
     <div class="modal fade" id="confirmSubmitModal" tabindex="-1" aria-labelledby="confirmSubmitModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header" style="background-color: #941022; color: white;">
                     <h5 class="modal-title" id="confirmSubmitModalLabel">Confirm Blood Request</h5>
@@ -1744,175 +1743,177 @@ document.addEventListener("DOMContentLoaded", function () {
                 confirmModal.show();
                 
                 const doSubmit = () => {
-                // Show loading state
-                const submitBtn = bloodRequestForm.querySelector('button[type="submit"]');
-                const originalBtnText = submitBtn.innerHTML;
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
-                
-                // Create FormData object
-                const formData = new FormData(bloodRequestForm);
-                
-                // Add additional data
-                formData.append('user_id', '<?php echo $_SESSION['user_id']; ?>');
-                formData.append('status', 'Pending');
-                formData.append('physician_name', '<?php echo $_SESSION['user_surname']; ?>');
-                formData.append('requested_on', new Date().toISOString());
-                // Compose patient_name from split fields for uniform DB storage
-                try {
-                    const first = this.querySelector('[name="patient_first_name"]').value?.trim() || '';
-                    const mi = this.querySelector('[name="patient_middle_initial"]').value?.trim() || '';
-                    const last = this.querySelector('[name="patient_last_name"]').value?.trim() || '';
-                    const fullName = `${first}${mi ? ' ' + mi + '.' : ''} ${last}`.trim();
-                    this.querySelector('[name="patient_name"]').value = fullName;
-                    formData.set('patient_name', fullName);
-                } catch (_) {}
-                
-                // Handle diagnosis - combine with "Other" specification if applicable
-                const diagnosisSelect = document.getElementById('patient_diagnosis');
-                const otherDiagnosisInput = document.getElementById('other_diagnosis_input');
-                if (diagnosisSelect && diagnosisSelect.value === 'Other' && otherDiagnosisInput) {
-                    const otherValue = otherDiagnosisInput.value.trim();
-                    if (otherValue) {
-                        formData.set('patient_diagnosis', `Other: ${otherValue}`);
-                    } else {
-                        formData.set('patient_diagnosis', 'Other');
+                    // Show loading state
+                    const submitBtn = bloodRequestForm.querySelector('button[type="submit"]');
+                    const originalBtnText = submitBtn.innerHTML;
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+                    
+                    // Create FormData object
+                    const formData = new FormData(bloodRequestForm);
+                    
+                    // Add additional data
+                    formData.append('user_id', <?php echo json_encode($_SESSION['user_id'] ?? ''); ?>);
+                    formData.append('status', 'Pending');
+                    formData.append('physician_name', <?php echo json_encode($_SESSION['user_surname'] ?? ''); ?>);
+                    formData.append('requested_on', new Date().toISOString());
+                    // Compose patient_name from split fields for uniform DB storage
+                    try {
+                        const first = bloodRequestForm.querySelector('[name="patient_first_name"]').value?.trim() || '';
+                        const mi = bloodRequestForm.querySelector('[name="patient_middle_initial"]').value?.trim() || '';
+                        const last = bloodRequestForm.querySelector('[name="patient_last_name"]').value?.trim() || '';
+                        const fullName = `${first}${mi ? ' ' + mi + '.' : ''} ${last}`.trim();
+                        bloodRequestForm.querySelector('[name="patient_name"]').value = fullName;
+                        formData.set('patient_name', fullName);
+                    } catch (_) {}
+                    
+                    // Handle diagnosis - combine with "Other" specification if applicable
+                    const diagnosisSelect = document.getElementById('patient_diagnosis');
+                    const otherDiagnosisInput = document.getElementById('other_diagnosis_input');
+                    if (diagnosisSelect && diagnosisSelect.value === 'Other' && otherDiagnosisInput) {
+                        const otherValue = otherDiagnosisInput.value.trim();
+                        if (otherValue) {
+                            formData.set('patient_diagnosis', `Other: ${otherValue}`);
+                        } else {
+                            formData.set('patient_diagnosis', 'Other');
+                        }
+                    } else if (diagnosisSelect) {
+                        formData.set('patient_diagnosis', diagnosisSelect.value);
                     }
-                } else if (diagnosisSelect) {
-                    formData.set('patient_diagnosis', diagnosisSelect.value);
-                }
-                
-                // Handle "when needed" logic
-                const whenNeeded = document.getElementById('whenNeeded').value;
-                const isAsap = whenNeeded === 'ASAP';
-                formData.append('is_asap', isAsap ? 'true' : 'false');
-                
-                // Always set when_needed as a timestamp
-                if (isAsap) {
-                    // For ASAP, use current date/time
-                    formData.set('when_needed', new Date().toISOString());
-                } else {
-                    // For Scheduled, use the selected date/time
-                    const scheduledDate = document.querySelector('#scheduleDateTime input').value;
-                    if (scheduledDate) {
-                        formData.set('when_needed', new Date(scheduledDate).toISOString());
-                    } else {
-                        // If no date selected for scheduled, default to current date
+                    
+                    // Handle "when needed" logic
+                    const whenNeeded = document.getElementById('whenNeeded').value;
+                    const isAsap = whenNeeded === 'ASAP';
+                    formData.append('is_asap', isAsap ? 'true' : 'false');
+                    
+                    // Always set when_needed as a timestamp
+                    if (isAsap) {
+                        // For ASAP, use current date/time
                         formData.set('when_needed', new Date().toISOString());
-                    }
-                }
-                
-                // Define exact fields from the database schema
-                const validFields = [
-                    'request_id', 'user_id', 'patient_name', 'patient_age', 'patient_gender', 
-                    'patient_diagnosis', 'patient_blood_type', 'rh_factor', 'blood_component', 
-                    'units_requested', 'when_needed', 'is_asap', 'hospital_admitted', 
-                    'physician_name', 'requested_on', 'status'
-                ];
-                
-                // Convert FormData to JSON object, only including valid fields
-                const data = {};
-                validFields.forEach(field => {
-                    if (formData.has(field)) {
-                        const value = formData.get(field);
-                        
-                        // Convert numeric values to numbers
-                        if (field === 'patient_age' || field === 'units_requested') {
-                            data[field] = parseInt(value, 10);
-                        } 
-                        // Convert boolean strings to actual booleans
-                        else if (field === 'is_asap') {
-                            data[field] = value === 'true';
+                    } else {
+                        // For Scheduled, use the selected date/time
+                        const scheduledDate = document.querySelector('#scheduleDateTime input').value;
+                        if (scheduledDate) {
+                            formData.set('when_needed', new Date(scheduledDate).toISOString());
+                        } else {
+                            // If no date selected for scheduled, default to current date
+                            formData.set('when_needed', new Date().toISOString());
                         }
-                        // Format timestamps properly
-                        else if (field === 'when_needed' || field === 'requested_on') {
-                            try {
-                                // Ensure we have a valid date
-                                const dateObj = new Date(value);
-                                if (isNaN(dateObj.getTime())) {
-                                    throw new Error(`Invalid date for ${field}: ${value}`);
+                    }
+                    
+                    // Define exact fields from the database schema
+                    const validFields = [
+                        'request_id', 'user_id', 'patient_name', 'patient_age', 'patient_gender', 
+                        'patient_diagnosis', 'patient_blood_type', 'rh_factor', 'blood_component', 
+                        'units_requested', 'when_needed', 'is_asap', 'hospital_admitted', 
+                        'physician_name', 'requested_on', 'status'
+                    ];
+                    
+                    // Convert FormData to JSON object, only including valid fields
+                    const data = {};
+                    validFields.forEach(field => {
+                        if (formData.has(field)) {
+                            const value = formData.get(field);
+                            
+                            // Convert numeric values to numbers
+                            if (field === 'patient_age' || field === 'units_requested') {
+                                data[field] = parseInt(value, 10);
+                            } 
+                            // Convert boolean strings to actual booleans
+                            else if (field === 'is_asap') {
+                                data[field] = value === 'true';
+                            }
+                            // Format timestamps properly
+                            else if (field === 'when_needed' || field === 'requested_on') {
+                                try {
+                                    // Ensure we have a valid date
+                                    const dateObj = new Date(value);
+                                    if (isNaN(dateObj.getTime())) {
+                                        throw new Error(`Invalid date for ${field}: ${value}`);
+                                    }
+                                    // Format as ISO string with timezone
+                                    data[field] = dateObj.toISOString();
+                                } catch (err) {
+                                    console.error(`Error formatting date for ${field}:`, err);
+                                    // Default to current time if invalid
+                                    data[field] = new Date().toISOString();
                                 }
-                                // Format as ISO string with timezone
-                                data[field] = dateObj.toISOString();
-                            } catch (err) {
-                                console.error(`Error formatting date for ${field}:`, err);
-                                // Default to current time if invalid
-                                data[field] = new Date().toISOString();
+                            }
+                            // All other fields as strings
+                            else {
+                                data[field] = value;
                             }
                         }
-                        // All other fields as strings
-                        else {
-                            data[field] = value;
+                    });
+                    
+                    console.log('Submitting request data:', data);
+                    console.log('Valid fields in database:', validFields);
+                    console.log('FormData keys:', Array.from(formData.keys()));
+                    console.log('when_needed value:', data.when_needed);
+                    console.log('requested_on value:', data.requested_on);
+                    console.log('is_asap value:', data.is_asap);
+                    
+                    // Send data to server
+                    fetch('<?php echo SUPABASE_URL; ?>/rest/v1/blood_requests', {
+                        method: 'POST',
+                        headers: {
+                            'apikey': '<?php echo SUPABASE_API_KEY; ?>',
+                            'Authorization': 'Bearer <?php echo SUPABASE_API_KEY; ?>',
+                            'Content-Type': 'application/json',
+                            'Prefer': 'return=minimal'
+                        },
+                        body: JSON.stringify(data)
+                    })
+                    .then(response => {
+                        console.log('Request response status:', response.status);
+                        if (!response.ok) {
+                            return response.text().then(text => {
+                                console.error('Error response body:', text);
+                                // Try to parse as JSON to extract more details
+                                try {
+                                    const errorJson = JSON.parse(text);
+                                    throw new Error(`Error ${response.status}: ${errorJson.message || errorJson.error || text}`);
+                                } catch (jsonError) {
+                                    // If can't parse as JSON, use the raw text
+                                    throw new Error(`Error ${response.status}: ${text}`);
+                                }
+                            });
                         }
-                    }
-                });
-                
-                console.log('Submitting request data:', data);
-                console.log('Valid fields in database:', validFields);
-                console.log('FormData keys:', Array.from(formData.keys()));
-                console.log('when_needed value:', data.when_needed);
-                console.log('requested_on value:', data.requested_on);
-                console.log('is_asap value:', data.is_asap);
-                
-                // Send data to server
-                fetch('<?php echo SUPABASE_URL; ?>/rest/v1/blood_requests', {
-                    method: 'POST',
-                    headers: {
-                        'apikey': '<?php echo SUPABASE_API_KEY; ?>',
-                        'Authorization': 'Bearer <?php echo SUPABASE_API_KEY; ?>',
-                        'Content-Type': 'application/json',
-                        'Prefer': 'return=minimal'
-                    },
-                    body: JSON.stringify(data)
-                })
-                .then(response => {
-                    console.log('Request response status:', response.status);
-                    if (!response.ok) {
-                        return response.text().then(text => {
-                            console.error('Error response body:', text);
-                            // Try to parse as JSON to extract more details
-                            try {
-                                const errorJson = JSON.parse(text);
-                                throw new Error(`Error ${response.status}: ${errorJson.message || errorJson.error || text}`);
-                            } catch (jsonError) {
-                                // If can't parse as JSON, use the raw text
-                                throw new Error(`Error ${response.status}: ${text}`);
-                            }
-                        });
-                    }
-                    return response.text();
-                })
-                .then(result => {
-                    console.log('Request submitted successfully:', result);
-                    // Show success modal instead of alert
-                    const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
-                    const body = document.getElementById('actionResultBody');
-                    if (body) { body.textContent = 'Blood request submitted successfully!'; }
-                    msgModal.show();
-                    // Reset and close after dismiss
-                    const brm = bootstrap.Modal.getInstance(document.getElementById('bloodRequestModal'));
-                    if (brm) brm.hide();
-                    document.getElementById('actionResultModal').addEventListener('hidden.bs.modal', () => window.location.reload(), { once: true });
-                })
-                .catch(error => {
-                    console.error('Error submitting request:', error);
-                    const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
-                    const body = document.getElementById('actionResultBody');
-                    if (body) { body.textContent = 'Error submitting request: ' + error.message; }
-                    msgModal.show();
-                })
-                .finally(() => {
-                    // Restore button state
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = originalBtnText;
-                });
+                        return response.text();
+                    })
+                    .then(result => {
+                        console.log('Request submitted successfully:', result);
+                        // Show success modal instead of alert
+                        const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
+                        const body = document.getElementById('actionResultBody');
+                        if (body) { body.textContent = 'Blood request submitted successfully!'; }
+                        msgModal.show();
+                        // Reset and close after dismiss
+                        const brm = bootstrap.Modal.getInstance(document.getElementById('bloodRequestModal'));
+                        if (brm) brm.hide();
+                        document.getElementById('actionResultModal').addEventListener('hidden.bs.modal', () => window.location.reload(), { once: true });
+                    })
+                    .catch(error => {
+                        console.error('Error submitting request:', error);
+                        const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
+                        const body = document.getElementById('actionResultBody');
+                        if (body) { body.textContent = 'Error submitting request: ' + error.message; }
+                        msgModal.show();
+                    })
+                    .finally(() => {
+                        // Restore button state
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalBtnText;
+                    });
                 };
                 // Wire confirm button once
                 const confirmBtn = document.getElementById('confirmSubmitBtn');
-                confirmBtn.onclick = function() {
-                    confirmModal.hide();
-                    doSubmit();
-                };
+                if (confirmBtn) {
+                    confirmBtn.onclick = function() {
+                        confirmModal.hide();
+                        doSubmit();
+                    };
+                }
             });
         }
         
@@ -2026,437 +2027,560 @@ document.addEventListener("DOMContentLoaded", function () {
         const requestTable = document.getElementById('requestTable');
         const tableContainer = requestTable ? requestTable.closest('table') : null;
         
+        console.log('DEBUG: Initializing button handlers');
+        console.log('DEBUG: requestTable:', requestTable);
+        console.log('DEBUG: tableContainer:', tableContainer);
+        
         function attachButtonHandlers() {
             // Remove old listeners by cloning (if needed) or use event delegation
             if (tableContainer) {
+                console.log('DEBUG: Attaching click handler to table container');
                 // Use event delegation - attach once to table container
                 tableContainer.addEventListener('click', function(e) {
-                    // Check if clicked element is a view/print/handover button
-                    const button = e.target.closest('.view-btn, .print-btn, .handover-btn');
-                    if (!button) return;
+                    // Skip if already handled by document handler
+                    if (e._handledByDocument) {
+                        console.log('DEBUG: Event already handled by document handler, skipping');
+                        return;
+                    }
+                    
+                    console.log('DEBUG: ===== CLICK DETECTED ON TABLE CONTAINER =====');
+                    console.log('DEBUG: Click target:', e.target);
+                    console.log('DEBUG: Click target tagName:', e.target.tagName);
+                    console.log('DEBUG: Click target classes:', e.target.className);
+                    console.log('DEBUG: Click target parentElement:', e.target.parentElement);
+                    console.log('DEBUG: Click target parentElement classes:', e.target.parentElement?.className);
+                    
+                    // Check if clicked element is a view/print/handover button or inside one
+                    let button = e.target.closest('.view-btn, .print-btn, .handover-btn');
+                    console.log('DEBUG: Found button via closest:', button);
+                    
+                    // If not found, check if target itself is a button
+                    if (!button) {
+                        if (e.target.classList.contains('view-btn') || e.target.classList.contains('print-btn') || e.target.classList.contains('handover-btn')) {
+                            button = e.target;
+                            console.log('DEBUG: Target itself is a button');
+                        }
+                    }
+                    
+                    // Also check if clicking on icon inside button
+                    if (!button && (e.target.tagName === 'I' || e.target.classList.contains('fa-eye') || e.target.classList.contains('fas'))) {
+                        button = e.target.closest('button');
+                        console.log('DEBUG: Clicked on icon, found parent button:', button);
+                    }
+                    
+                    if (!button) {
+                        console.log('DEBUG: No button found, returning');
+                        return;
+                    }
+                    
+                    console.log('DEBUG: Button found:', button);
+                    console.log('DEBUG: Button ID:', button.id);
+                    console.log('DEBUG: Button classes:', button.className);
+                    console.log('DEBUG: Button has view-btn class:', button.classList.contains('view-btn'));
                     
                     // Exclude modal buttons
-                    if (button.id === 'printRequestBtn' || button.id === 'handoverRequestBtn') return;
-                    
-                    e.preventDefault();
-                    
-                    // Get data from button attributes (use button, not this, since we're using event delegation)
-                    const data = button.dataset;
-                    currentRequestId = data.requestId || data['request-id'];
-                    currentStatus = data.status;
-                    
-                    // Debug logging
-                    console.log('Button clicked - Data attributes:', data);
-                    console.log('Current Request ID:', currentRequestId);
-                    console.log('Current Status:', currentStatus);
-                    console.log('When needed from data:', data['when-needed']);
-                    console.log('All data attributes:', Object.keys(data));
-                    console.log('Debug when needed:', data['debug-when-needed']);
-                    
-                    try {
-                        // Store request ID
-                        const editRequestId = document.getElementById('editRequestId');
-                        if (editRequestId) editRequestId.value = currentRequestId;
-                        
-                        // Populate view modal with request data
-                        // Set current date
-                        document.getElementById('modalCurrentDate').textContent = new Date().toLocaleDateString('en-US', { 
-                            year: 'numeric', month: 'long', day: 'numeric' 
-                        });
-                        
-                        // Set patient information
-                        document.getElementById('modalPatientName').textContent = data.patientName || data['patient-name'] || '';
-                        document.getElementById('modalPatientDetails').textContent = `${data.patientAge || data['patient-age'] || ''}, ${data.patientGender || data['patient-gender'] || ''}`;
-                        
-                        // Set request details
-                        document.getElementById('modalDiagnosis').value = data.patientDiagnosis || data['patient-diagnosis'] || '';
-                        document.getElementById('modalBloodType').textContent = data.bloodType || data['blood-type'] || '';
-                        document.getElementById('modalRH').textContent = data.rhFactor || data['rh-factor'] || '';
-                        document.getElementById('modalUnits').textContent = data.units || '';
-                        
-                        // Set when needed from dataset flags/values (dataset converts to camelCase)
-                        const whenNeededRaw = data.whenNeeded || data['when-needed'];
-                        const isAsapRaw = data.isAsap ?? data['is-asap'];
-                        const isAsapFlag = (isAsapRaw === true || isAsapRaw === 'true' || isAsapRaw === 1 || isAsapRaw === '1');
-                        console.log('Modal when_needed data:', whenNeededRaw, 'is_asap raw:', isAsapRaw, 'flag:', isAsapFlag);
-                        const asapRadio = document.getElementById('modalAsap');
-                        const schedRadio = document.getElementById('modalScheduled');
-                        const schedInput = document.getElementById('modalScheduledDate');
-
-                        // Reset controls first to avoid stale state from previous row
-                        if (asapRadio) asapRadio.checked = false;
-                        if (schedRadio) schedRadio.checked = false;
-                        if (schedInput) schedInput.value = '';
-
-                        // Helper: robustly parse various date formats into date input value (YYYY-MM-DD)
-                        const toDatetimeLocal = (raw) => {
-                            if (!raw) return '';
-                            let d;
-                            // If raw is only a date (YYYY-MM-DD), create local midnight
-                            if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-                                d = new Date(raw + 'T00:00:00');
-                            } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) { // mm/dd/yyyy
-                                const [m, v, y] = raw.split('/');
-                                d = new Date(parseInt(y,10), parseInt(m,10)-1, parseInt(v,10), 0, 0, 0);
-                            } else {
-                                d = new Date(raw);
-                            }
-                            if (isNaN(d.getTime())) return '';
-                            const pad = (n) => String(n).padStart(2, '0');
-                            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-                        };
-
-                        if (isAsapFlag) {
-                            if (asapRadio) asapRadio.checked = true;
-                            // Even if ASAP, still display the stored when_needed from DB if provided
-                            const localVal = toDatetimeLocal(whenNeededRaw);
-                            if (localVal && schedInput) schedInput.value = localVal;
-                        } else {
-                            // Not ASAP: mark scheduled and populate if available
-                            if (schedRadio) schedRadio.checked = true;
-                            const localVal = toDatetimeLocal(whenNeededRaw);
-                            if (localVal && schedInput) schedInput.value = localVal;
-                        }
-                        
-                        // Set hospital and physician
-                        document.getElementById('modalHospital').value = '<?php echo $_SESSION['user_first_name'] ?? ''; ?>';
-                        document.getElementById('modalPhysician').value = data.physicianName || data['physician-name'] || data['physician_name'] || '<?php echo $_SESSION['user_surname'] ?? ''; ?>';
-                        
-                        // Set approval info from DB columns (approved_by, approved_date)
-                        (function(){
-                            const approvedBy = data.approvedBy || data['approved-by'] || data['approved_by'] || '';
-                            const approvedDateRaw = data.approvedDate || data['approved-date'] || data['approved_date'] || '';
-                            let approvedDateText = '';
-                            if (approvedDateRaw) {
-                                const d = new Date(approvedDateRaw);
-                                if (!isNaN(d.getTime())) {
-                                    approvedDateText = d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) + ` at ` + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                                }
-                            }
-                            document.getElementById('modalApprovedBy').value = approvedBy && approvedDateText ? `Approved by ${approvedBy} - ${approvedDateText}` : approvedBy || approvedDateText || '';
-                        })();
-
-                        // Update modal status badge text/color based on DB status (modal-only rules)
-                        const statusBadge = document.getElementById('modalStatusBadge');
-                    if (statusBadge) {
-                        // reset base classes and keep size/padding
-                        statusBadge.classList.remove('bg-success', 'bg-primary', 'bg-warning', 'text-dark', 'bg-danger', 'bg-secondary');
-                        let badgeText = currentStatus;
-                        let badgeClass = 'bg-secondary';
-
-                        if (currentStatus === 'Pending') {
-                            badgeText = 'Pending';
-                            badgeClass = 'bg-warning text-dark';
-                        } else if (
-                            currentStatus === 'Approved' ||
-                            currentStatus === 'Accepted' ||
-                            currentStatus === 'Confirmed'
-                        ) {
-                            // Approved-like: show blue Approved
-                            badgeText = 'Approved';
-                            badgeClass = 'bg-primary';
-                        } else if (currentStatus === 'Printed') {
-                            // Show "Approved" badge for Printed status (matching table display)
-                            badgeText = 'Approved';
-                            badgeClass = 'bg-primary';
-                        } else if (currentStatus === 'Handed_over') {
-                            // Show actual word for handover
-                            badgeText = 'Handed Over';
-                            badgeClass = 'bg-primary';
-                        } else if (currentStatus === 'Declined') {
-                            badgeText = 'Declined';
-                            badgeClass = 'bg-danger';
-                        } else if (currentStatus === 'Completed') {
-                            badgeText = 'Completed';
-                            badgeClass = 'bg-success';
-                        }
-
-                        statusBadge.textContent = badgeText;
-                        // preserve fs-6 px-3 py-2, add computed color classes
-                        badgeClass.split(' ').forEach(cls => statusBadge.classList.add(cls));
+                    if (button.id === 'printRequestBtn' || button.id === 'handoverRequestBtn') {
+                        console.log('DEBUG: Modal button clicked, returning');
+                        return;
                     }
-
-                    // Show/hide handover and approval sections based on status
-                    const handoverInfo = document.getElementById('handoverInfo');
-                    const approvalInstructions = document.getElementById('approvalInstructions');
-                    const handoverInstructions = document.getElementById('handoverInstructions');
-                    const approvalSection = document.getElementById('approvalSection');
-                    const approvalSeparator = document.getElementById('approvalSeparator');
-                    const approvalText = approvalInstructions ? approvalInstructions.querySelector('p') : null;
                     
-                    if (currentStatus === 'Handed_over' || currentStatus === 'Completed') {
-                        // Handed over or Completed: show handover details & success notice, hide approval section
-                        handoverInfo.style.display = 'block';
-                        approvalInstructions.style.display = 'none';
-                        handoverInstructions.style.display = 'block';
-                        if (approvalSection) approvalSection.style.display = 'none';
-                        if (approvalSeparator) approvalSeparator.style.display = 'none';
-
-                        // Populate handover information
-                        // Handover fields from DB (handed_over_by, handed_over_date) and physician_name for received by
-                        const handedBy = data.handedOverBy || data['handed-over-by'] || data['handed_over_by'] || '';
-                        const handedDateRaw = data.handedOverDate || data['handed-over-date'] || data['handed_over_date'] || '';
-                        let handedDateText = '';
-                        if (handedDateRaw) {
-                            const hd = new Date(handedDateRaw);
-                            if (!isNaN(hd.getTime())) {
-                                handedDateText = hd.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-                            }
+                    console.log('DEBUG: Processing view button click');
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Get all data attributes from button
+                    const data = {};
+                    Array.from(button.attributes).forEach(attr => {
+                        if (attr.name.startsWith('data-')) {
+                            const key = attr.name.replace('data-', '').replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+                            data[key] = attr.value;
+                            data[attr.name.replace('data-', '')] = attr.value;
                         }
-                        document.getElementById('modalHandedOverBy').value = handedBy || handedDateText ? `(${handedBy}${handedBy && handedDateText ? ' - ' : (handedDateText ? '' : '')}${handedDateText})` : '';
-                        const receiver = data.physicianName || data['physician-name'] || data['physician_name'] || '';
-                        document.getElementById('modalReceivedBy').value = receiver ? `(${receiver}${handedDateText ? ' - ' + handedDateText : ''})` : (handedDateText ? `(${handedDateText})` : '');
-                    } else if (
-                        currentStatus === 'Approved' ||
-                        currentStatus === 'Accepted' ||
-                        currentStatus === 'Confirmed' ||
-                        currentStatus === 'Printed'
-                    ) {
-                        // Approved-like states: show only approval section, hide handover
-                        handoverInfo.style.display = 'none';
-                        approvalInstructions.style.display = 'block';
-                        if (approvalInstructions) {
-                            approvalInstructions.classList.remove('alert-danger');
-                            if (!approvalInstructions.classList.contains('alert-info')) {
-                                approvalInstructions.classList.add('alert-info');
-                            }
-                        }
-                        if (approvalText) {
-                            if (currentStatus === 'Printed') {
-                                approvalText.textContent = 'The request has been printed. Please wait while an administrator confirms the receipt and the blood is prepared for delivery to your hospital.';
-                            } else {
-                                approvalText.textContent = "The blood request has been approved. Please print the receipt and provide it to the patient's representative for claiming at PRC.";
-                            }
-                        }
-                        handoverInstructions.style.display = 'none';
-                        if (approvalSection) approvalSection.style.display = 'block';
-                        if (approvalSeparator) approvalSeparator.style.display = 'block';
-                        const declineSection = document.getElementById('declineSection');
-                        if (declineSection) declineSection.style.display = 'none';
-                    } else if (currentStatus === 'Declined') {
-                        // Declined: show decline details, hide approval/handover
-                        handoverInfo.style.display = 'none';
-                        handoverInstructions.style.display = 'none';
-                        if (approvalSection) approvalSection.style.display = 'none';
-                        if (approvalSeparator) approvalSeparator.style.display = 'none';
-                        const declineSection = document.getElementById('declineSection');
-                        if (declineSection) declineSection.style.display = 'block';
-                        // Switch info alert to danger and set copy
-                        if (approvalInstructions) {
-                            approvalInstructions.classList.remove('alert-info');
-                            approvalInstructions.classList.add('alert-danger');
-                            if (approvalText) {
-                                approvalText.textContent = "The blood request has been declined. Kindly inform the patient's representative to coordinate with PRC for assistance.";
-                            }
-                            approvalInstructions.style.display = 'block';
-                        }
-                        // Populate decline details from button data attributes
-                        const trigger = document.querySelector(`button.view-btn[data-request-id="${currentRequestId}"], button.print-btn[data-request-id="${currentRequestId}"]`);
-                        const declineReason = trigger ? (trigger.getAttribute('data-decline-reason') || '') : '';
-                        const declinedBy = trigger ? (trigger.getAttribute('data-declined-by') || '') : '';
-                        const declinedDateRaw = trigger ? (trigger.getAttribute('data-declined-date') || '') : '';
-                        let declinedDateText = '';
-                        if (declinedDateRaw) {
-                            const dd = new Date(declinedDateRaw);
-                            if (!isNaN(dd.getTime())) {
-                                declinedDateText = dd.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) + (dd.toLocaleTimeString ? ' at ' + dd.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '');
-                            }
-                        }
-                        const declinedByField = document.getElementById('modalDeclinedBy');
-                        const declineReasonField = document.getElementById('modalDeclineReason');
-                        if (declinedByField) {
-                            declinedByField.value = declinedBy && declinedDateText ? `Declined by ${declinedBy} - ${declinedDateText}` : (declinedBy || (declinedDateText ? `(${declinedDateText})` : ''));
-                        }
-                        if (declineReasonField) {
-                            declineReasonField.value = declineReason;
-                        }
+                    });
+                    
+                    // Also get from dataset for compatibility
+                    Object.assign(data, button.dataset);
+                    
+                    const requestId = data.requestId || data['request-id'] || button.getAttribute('data-request-id');
+                    const status = data.status || button.getAttribute('data-status');
+                    
+                    console.log('DEBUG: Table handler - Extracted Request ID:', requestId);
+                    console.log('DEBUG: Table handler - Extracted Status:', status);
+                    console.log('DEBUG: Table handler - All button data attributes:', data);
+                    
+                    // Use the shared modal population function
+                    populateAndOpenModal(data, requestId, status);
+            });
+            }
+        }
+        
+        // Extract modal population logic to a reusable function
+        function populateAndOpenModal(data, requestId, status) {
+            console.log('DEBUG: populateAndOpenModal called with:', { requestId, status });
+            
+            try {
+                currentRequestId = requestId;
+                currentStatus = status;
+                
+                // Store request ID
+                const editRequestId = document.getElementById('editRequestId');
+                if (editRequestId) editRequestId.value = requestId;
+                
+                // Populate view modal with request data
+                const modalCurrentDate = document.getElementById('modalCurrentDate');
+                if (modalCurrentDate) {
+                    modalCurrentDate.textContent = new Date().toLocaleDateString('en-US', { 
+                        year: 'numeric', month: 'long', day: 'numeric' 
+                    });
+                }
+                
+                // Set patient information
+                const modalPatientName = document.getElementById('modalPatientName');
+                const modalPatientDetails = document.getElementById('modalPatientDetails');
+                if (modalPatientName) modalPatientName.textContent = data.patientName || data['patient-name'] || '';
+                if (modalPatientDetails) modalPatientDetails.textContent = `${data.patientAge || data['patient-age'] || ''}, ${data.patientGender || data['patient-gender'] || ''}`;
+                
+                // Set request details
+                const modalDiagnosis = document.getElementById('modalDiagnosis');
+                const modalBloodType = document.getElementById('modalBloodType');
+                const modalRH = document.getElementById('modalRH');
+                const modalUnits = document.getElementById('modalUnits');
+                
+                if (modalDiagnosis) modalDiagnosis.value = data.patientDiagnosis || data['patient-diagnosis'] || '';
+                if (modalBloodType) modalBloodType.textContent = data.bloodType || data['blood-type'] || '';
+                if (modalRH) modalRH.textContent = data.rhFactor || data['rh-factor'] || '';
+                if (modalUnits) modalUnits.textContent = data.units || '';
+                
+                // Set when needed
+                const whenNeededRaw = data.whenNeeded || data['when-needed'];
+                const isAsapRaw = data.isAsap ?? data['is-asap'];
+                const isAsapFlag = (isAsapRaw === true || isAsapRaw === 'true' || isAsapRaw === 1 || isAsapRaw === '1');
+                const asapRadio = document.getElementById('modalAsap');
+                const schedRadio = document.getElementById('modalScheduled');
+                const schedInput = document.getElementById('modalScheduledDate');
+                
+                if (asapRadio) asapRadio.checked = false;
+                if (schedRadio) schedRadio.checked = false;
+                if (schedInput) schedInput.value = '';
+                
+                const toDatetimeLocal = (raw) => {
+                    if (!raw) return '';
+                    let d;
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+                        d = new Date(raw + 'T00:00:00');
+                    } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+                        const [m, v, y] = raw.split('/');
+                        d = new Date(parseInt(y,10), parseInt(m,10)-1, parseInt(v,10), 0, 0, 0);
                     } else {
-                        // Other statuses: default behavior
-                        handoverInfo.style.display = 'none';
-                        approvalInstructions.style.display = (currentStatus === 'Pending') ? 'none' : 'block';
-                        if (approvalInstructions) {
-                            approvalInstructions.classList.remove('alert-danger');
-                            if (!approvalInstructions.classList.contains('alert-info')) {
-                                approvalInstructions.classList.add('alert-info');
-                            }
+                        d = new Date(raw);
+                    }
+                    if (isNaN(d.getTime())) return '';
+                    const pad = (n) => String(n).padStart(2, '0');
+                    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                };
+                
+                if (isAsapFlag) {
+                    if (asapRadio) asapRadio.checked = true;
+                    const localVal = toDatetimeLocal(whenNeededRaw);
+                    if (localVal && schedInput) schedInput.value = localVal;
+                } else {
+                    if (schedRadio) schedRadio.checked = true;
+                    const localVal = toDatetimeLocal(whenNeededRaw);
+                    if (localVal && schedInput) schedInput.value = localVal;
+                }
+                
+                // Set hospital and physician
+                const hospitalValue = <?php echo json_encode($_SESSION['user_first_name'] ?? ''); ?>;
+                const modalHospital = document.getElementById('modalHospital');
+                if (modalHospital) modalHospital.value = hospitalValue;
+                
+                const physicianValue = data.physicianName || data['physician-name'] || data['physician_name'] || <?php echo json_encode($_SESSION['user_surname'] ?? ''); ?>;
+                const modalPhysician = document.getElementById('modalPhysician');
+                if (modalPhysician) modalPhysician.value = physicianValue;
+                
+                // Set approval info
+                const approvedBy = data.approvedBy || data['approved-by'] || data['approved_by'] || '';
+                const approvedDateRaw = data.approvedDate || data['approved-date'] || data['approved_date'] || '';
+                let approvedDateText = '';
+                if (approvedDateRaw) {
+                    const d = new Date(approvedDateRaw);
+                    if (!isNaN(d.getTime())) {
+                        approvedDateText = d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) + ` at ` + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                    }
+                }
+                const modalApprovedBy = document.getElementById('modalApprovedBy');
+                if (modalApprovedBy) {
+                    modalApprovedBy.value = approvedBy && approvedDateText ? `Approved by ${approvedBy} - ${approvedDateText}` : approvedBy || approvedDateText || '';
+                }
+                
+                // Update status badge
+                const statusBadge = document.getElementById('modalStatusBadge');
+                if (statusBadge) {
+                    statusBadge.classList.remove('bg-success', 'bg-primary', 'bg-warning', 'text-dark', 'bg-danger', 'bg-secondary');
+                    let badgeText = status;
+                    let badgeClass = 'bg-secondary';
+                    
+                    if (status === 'Pending') {
+                        badgeText = 'Pending';
+                        badgeClass = 'bg-warning text-dark';
+                    } else if (status === 'Approved' || status === 'Accepted' || status === 'Confirmed') {
+                        badgeText = 'Approved';
+                        badgeClass = 'bg-primary';
+                    } else if (status === 'Printed') {
+                        badgeText = 'Approved';
+                        badgeClass = 'bg-primary';
+                    } else if (status === 'Handed_over') {
+                        badgeText = 'Handed Over';
+                        badgeClass = 'bg-primary';
+                    } else if (status === 'Declined') {
+                        badgeText = 'Declined';
+                        badgeClass = 'bg-danger';
+                    } else if (status === 'Completed') {
+                        badgeText = 'Completed';
+                        badgeClass = 'bg-success';
+                    }
+                    
+                    statusBadge.textContent = badgeText;
+                    badgeClass.split(' ').forEach(cls => statusBadge.classList.add(cls));
+                }
+                
+                // Show/hide sections based on status
+                const handoverInfo = document.getElementById('handoverInfo');
+                const approvalInstructions = document.getElementById('approvalInstructions');
+                const handoverInstructions = document.getElementById('handoverInstructions');
+                const approvalSection = document.getElementById('approvalSection');
+                const approvalSeparator = document.getElementById('approvalSeparator');
+                const approvalText = approvalInstructions ? approvalInstructions.querySelector('p') : null;
+                
+                if (status === 'Handed_over' || status === 'Completed') {
+                    if (handoverInfo) handoverInfo.style.display = 'block';
+                    if (approvalInstructions) approvalInstructions.style.display = 'none';
+                    if (handoverInstructions) handoverInstructions.style.display = 'block';
+                    if (approvalSection) approvalSection.style.display = 'none';
+                    if (approvalSeparator) approvalSeparator.style.display = 'none';
+                    
+                    const handedBy = data.handedOverBy || data['handed-over-by'] || data['handed_over_by'] || '';
+                    const handedDateRaw = data.handedOverDate || data['handed-over-date'] || data['handed_over_date'] || '';
+                    let handedDateText = '';
+                    if (handedDateRaw) {
+                        const hd = new Date(handedDateRaw);
+                        if (!isNaN(hd.getTime())) {
+                            handedDateText = hd.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
                         }
-                        if (approvalText && approvalInstructions.style.display === 'block') {
+                    }
+                    let handedOverText = '';
+                    if (handedBy || handedDateText) {
+                        if (handedBy && handedDateText) {
+                            handedOverText = `(${handedBy} - ${handedDateText})`;
+                        } else if (handedBy) {
+                            handedOverText = `(${handedBy})`;
+                        } else if (handedDateText) {
+                            handedOverText = `(${handedDateText})`;
+                        }
+                    }
+                    const modalHandedOverBy = document.getElementById('modalHandedOverBy');
+                    if (modalHandedOverBy) modalHandedOverBy.value = handedOverText;
+                    
+                    const receiver = data.physicianName || data['physician-name'] || data['physician_name'] || '';
+                    let receivedByText = '';
+                    if (receiver) {
+                        receivedByText = handedDateText ? `(${receiver} - ${handedDateText})` : `(${receiver})`;
+                    } else if (handedDateText) {
+                        receivedByText = `(${handedDateText})`;
+                    }
+                    const modalReceivedBy = document.getElementById('modalReceivedBy');
+                    if (modalReceivedBy) modalReceivedBy.value = receivedByText;
+                } else if (status === 'Approved' || status === 'Accepted' || status === 'Confirmed' || status === 'Printed') {
+                    if (handoverInfo) handoverInfo.style.display = 'none';
+                    if (approvalInstructions) approvalInstructions.style.display = 'block';
+                    if (approvalInstructions) {
+                        approvalInstructions.classList.remove('alert-danger');
+                        if (!approvalInstructions.classList.contains('alert-info')) {
+                            approvalInstructions.classList.add('alert-info');
+                        }
+                    }
+                    if (approvalText) {
+                        if (status === 'Printed') {
+                            approvalText.textContent = 'The request has been printed. Please wait while an administrator confirms the receipt and the blood is prepared for delivery to your hospital.';
+                        } else {
                             approvalText.textContent = "The blood request has been approved. Please print the receipt and provide it to the patient's representative for claiming at PRC.";
                         }
-                        handoverInstructions.style.display = 'none';
-                        if (approvalSection) approvalSection.style.display = (currentStatus === 'Pending') ? 'none' : 'block';
-                        if (approvalSeparator) approvalSeparator.style.display = (currentStatus === 'Pending') ? 'none' : 'block';
-                        const declineSection = document.getElementById('declineSection');
-                        if (declineSection) declineSection.style.display = 'none';
                     }
-
-                    // Show/hide buttons based on current status
-                    const printBtn = document.getElementById('printRequestBtn');
-                    const handoverBtn = document.getElementById('handoverRequestBtn');
-                    
-                    console.log('Button visibility check - Current Status:', currentStatus);
-                    console.log('Print button element:', printBtn);
-                    console.log('Handover button element:', handoverBtn);
-                    
-                    if (printBtn && handoverBtn) {
-                        // Set request ID in both buttons
-                        printBtn.setAttribute('data-request-id', currentRequestId);
-                        handoverBtn.setAttribute('data-request-id', currentRequestId);
-                        
-                        // Show print button for Approved, Accepted, or Confirmed status
-                        if (currentStatus === 'Approved' || currentStatus === 'Accepted' || currentStatus === 'Confirmed') {
-                            console.log('Showing print button for status:', currentStatus);
-                            printBtn.style.display = 'inline-block';
-                            handoverBtn.style.display = 'none';
-                        } else if (currentStatus === 'Printed') {
-                            // Printed: view only, no action buttons
-                            printBtn.style.display = 'none';
-                            handoverBtn.style.display = 'none';
-                        } else if (currentStatus === 'Handed_over') {
-                            // Handed_over: allow confirm arrival
-                            handoverBtn.style.display = 'inline-block';
-                            printBtn.style.display = 'none';
-                        } else {
-                            // Hide both buttons for other statuses
-                            console.log('Hiding both buttons for status:', currentStatus);
-                            printBtn.style.display = 'none';
-                            handoverBtn.style.display = 'none';
+                    if (handoverInstructions) handoverInstructions.style.display = 'none';
+                    if (approvalSection) approvalSection.style.display = 'block';
+                    if (approvalSeparator) approvalSeparator.style.display = 'block';
+                    const declineSection = document.getElementById('declineSection');
+                    if (declineSection) declineSection.style.display = 'none';
+                } else if (status === 'Declined') {
+                    if (handoverInfo) handoverInfo.style.display = 'none';
+                    if (handoverInstructions) handoverInstructions.style.display = 'none';
+                    if (approvalSection) approvalSection.style.display = 'none';
+                    if (approvalSeparator) approvalSeparator.style.display = 'none';
+                    const declineSection = document.getElementById('declineSection');
+                    if (declineSection) declineSection.style.display = 'block';
+                    if (approvalInstructions) {
+                        approvalInstructions.classList.remove('alert-info');
+                        approvalInstructions.classList.add('alert-danger');
+                        if (approvalText) {
+                            approvalText.textContent = "The blood request has been declined. Kindly inform the patient's representative to coordinate with PRC for assistance.";
                         }
-                    } else {
-                        console.error('Print or handover button not found!');
+                        approvalInstructions.style.display = 'block';
                     }
-
-                    // Show the view modal
-                    const modal = document.getElementById('bloodReorderModal');
-                    if (modal) {
-                        const bsModal = new bootstrap.Modal(modal);
-                        bsModal.show();
-                        
-                        // Store the request ID globally for debugging
-                        window.currentModalRequestId = currentRequestId;
-                        console.log('Modal opened with request ID:', currentRequestId);
-                        
-                        // Double-check button visibility after modal is shown
-                        setTimeout(() => {
-                            const printBtn = document.getElementById('printRequestBtn');
-                            const handoverBtn = document.getElementById('handoverRequestBtn');
-                            console.log('Post-modal button check - Print:', printBtn?.style.display, 'Handover:', handoverBtn?.style.display);
-                        }, 100);
+                    const trigger = document.querySelector(`button.view-btn[data-request-id="${requestId}"], button.print-btn[data-request-id="${requestId}"]`);
+                    const declineReason = trigger ? (trigger.getAttribute('data-decline-reason') || '') : '';
+                    const declinedBy = trigger ? (trigger.getAttribute('data-declined-by') || '') : '';
+                    const declinedDateRaw = trigger ? (trigger.getAttribute('data-declined-date') || '') : '';
+                    let declinedDateText = '';
+                    if (declinedDateRaw) {
+                        const dd = new Date(declinedDateRaw);
+                        if (!isNaN(dd.getTime())) {
+                            declinedDateText = dd.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) + (dd.toLocaleTimeString ? ' at ' + dd.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '');
+                        }
                     }
-                } catch (error) {
-                    console.error('Error displaying view modal:', error);
+                    const declinedByField = document.getElementById('modalDeclinedBy');
+                    const declineReasonField = document.getElementById('modalDeclineReason');
+                    if (declinedByField) {
+                        declinedByField.value = declinedBy && declinedDateText ? `Declined by ${declinedBy} - ${declinedDateText}` : (declinedBy || (declinedDateText ? `(${declinedDateText})` : ''));
+                    }
+                    if (declineReasonField) {
+                        declineReasonField.value = declineReason;
+                    }
+                } else {
+                    if (handoverInfo) handoverInfo.style.display = 'none';
+                    if (approvalInstructions) approvalInstructions.style.display = (status === 'Pending') ? 'none' : 'block';
+                    if (approvalInstructions) {
+                        approvalInstructions.classList.remove('alert-danger');
+                        if (!approvalInstructions.classList.contains('alert-info')) {
+                            approvalInstructions.classList.add('alert-info');
+                        }
+                    }
+                    if (approvalText && approvalInstructions && approvalInstructions.style.display === 'block') {
+                        approvalText.textContent = "The blood request has been approved. Please print the receipt and provide it to the patient's representative for claiming at PRC.";
+                    }
+                    if (handoverInstructions) handoverInstructions.style.display = 'none';
+                    if (approvalSection) approvalSection.style.display = (status === 'Pending') ? 'none' : 'block';
+                    if (approvalSeparator) approvalSeparator.style.display = (status === 'Pending') ? 'none' : 'block';
+                    const declineSection = document.getElementById('declineSection');
+                    if (declineSection) declineSection.style.display = 'none';
                 }
-            });
+                
+                // Show/hide buttons based on status
+                const printBtn = document.getElementById('printRequestBtn');
+                const handoverBtn = document.getElementById('handoverRequestBtn');
+                
+                if (printBtn && handoverBtn) {
+                    printBtn.setAttribute('data-request-id', requestId);
+                    handoverBtn.setAttribute('data-request-id', requestId);
+                    
+                    if (status === 'Approved' || status === 'Accepted' || status === 'Confirmed') {
+                        printBtn.style.display = 'inline-block';
+                        handoverBtn.style.display = 'none';
+                    } else if (status === 'Printed') {
+                        printBtn.style.display = 'none';
+                        handoverBtn.style.display = 'none';
+                    } else if (status === 'Handed_over') {
+                        handoverBtn.style.display = 'inline-block';
+                        printBtn.style.display = 'none';
+                    } else {
+                        printBtn.style.display = 'none';
+                        handoverBtn.style.display = 'none';
+                    }
+                }
+                
+                // Open modal
+                const modal = document.getElementById('bloodReorderModal');
+                if (modal) {
+                    const bsModal = new bootstrap.Modal(modal);
+                    bsModal.show();
+                    window.currentModalRequestId = requestId;
+                    console.log('DEBUG: Modal opened successfully');
+                } else {
+                    console.error('DEBUG: Modal element not found!');
+                }
+            } catch (error) {
+                console.error('DEBUG: Error in populateAndOpenModal:', error);
+                console.error('DEBUG: Error stack:', error.stack);
+            }
         }
         
         // Attach handlers on initial load
         attachButtonHandlers();
         
+        // Use document-level event delegation (runs in capture phase to catch clicks first)
+        console.log('DEBUG: Attaching document-level event delegation for view buttons (capture phase)');
+        document.addEventListener('click', function(e) {
+            // Check if click is on a view button or icon inside a view button
+            let button = e.target.closest('.view-btn');
+            
+            // If clicking on icon, find the button
+            if (!button && (e.target.tagName === 'I' || e.target.classList.contains('fa-eye') || e.target.classList.contains('fas'))) {
+                button = e.target.closest('button.view-btn');
+            }
+            
+            console.log('DEBUG: Document handler (capture) - clicked element:', e.target);
+            console.log('DEBUG: Document handler (capture) - found button:', button);
+            
+            // Only process if it's a table view button (no ID means it's a table button, not modal button)
+            if (button && !button.id && button.classList.contains('view-btn')) {
+                // Check if button is in the request table
+                const isInTable = button.closest('#requestTable') || button.closest('table tbody');
+                console.log('DEBUG: Document handler (capture) - isInTable:', isInTable);
+                
+                if (isInTable) {
+                    console.log('DEBUG: ===== DOCUMENT HANDLER: View button clicked in table =====');
+                    console.log('DEBUG: Button element:', button);
+                    console.log('DEBUG: Button classes:', button.className);
+                    
+                    // Prevent default and stop propagation to avoid double handling
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Get all data attributes from button
+                    const data = {};
+                    Array.from(button.attributes).forEach(attr => {
+                        if (attr.name.startsWith('data-')) {
+                            const key = attr.name.replace('data-', '').replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+                            data[key] = attr.value;
+                            data[attr.name.replace('data-', '')] = attr.value;
+                        }
+                    });
+                    
+                    const requestId = data.requestId || data['request-id'] || button.getAttribute('data-request-id');
+                    const status = data.status || button.getAttribute('data-status');
+                    
+                    console.log('DEBUG: Extracted Request ID:', requestId);
+                    console.log('DEBUG: Extracted Status:', status);
+                    console.log('DEBUG: All button data attributes:', data);
+                    
+                    // Call the modal population function
+                    populateAndOpenModal(data, requestId, status);
+                }
+            }
+        }, true); // Use capture phase to run before table handler
+        
         // Re-attach handlers when table is updated (for filtered/search results)
         document.addEventListener('tableUpdated', function() {
             // Handlers are already attached via event delegation, so no need to re-attach
             // But we can log for debugging
-            console.log('Table updated event received');
+            console.log('DEBUG: Table updated event received');
         });
 
-        // Handle Print button click
-        document.getElementById('printRequestBtn').addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
+        // Handle Print button click - use event delegation for dynamically loaded buttons
+        document.addEventListener('click', function(e) {
+            // Check if click is on the button or any of its children (like icons)
+            // closest() will find the button even if clicking on child elements
+            const printBtn = e.target.closest('#printRequestBtn');
             
-            console.log('Print button clicked - Current Request ID:', currentRequestId);
-            
-            // Get request ID from multiple sources
-            let requestId = currentRequestId || this.getAttribute('data-request-id') || window.currentModalRequestId;
-            
-            // If still no request ID, try to get it from the original button that opened the modal
-            if (!requestId) {
-                const originalButton = document.querySelector('.print-btn[data-request-id]');
-                if (originalButton) {
-                    requestId = originalButton.getAttribute('data-request-id');
-                }
-            }
-            
-            if (!requestId) {
-                console.error('No request ID available for printing');
-                alert('No request selected for printing.');
-                return;
-            }
-
-            console.log('Opening print page with request ID:', requestId);
-            // Open print page in new tab - don't close the modal
-            window.open(`../../src/views/forms/print-blood-request.php?request_id=${requestId}`, '_blank');
-        });
-
-        // Handle Hand Over button click
-        document.getElementById('handoverRequestBtn').addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            // Get request ID from multiple sources
-            let requestId = currentRequestId || this.getAttribute('data-request-id') || window.currentModalRequestId;
-            
-            if (!requestId) {
-                alert('No request selected for handover.');
-                return;
-            }
-
-            // Show loading state
-            const originalText = this.innerHTML;
-            this.disabled = true;
-            this.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Processing...';
-
-            // Update status to 'Completed'
-            fetch(`${SUPABASE_URL}/rest/v1/blood_requests?request_id=eq.${requestId}`, {
-                method: 'PATCH',
-                headers: {
-                    'apikey': SUPABASE_KEY,
-                    'Authorization': `Bearer ${SUPABASE_KEY}`,
-                    'Content-Type': 'application/json',
-                    'Prefer': 'return=minimal'
-                },
-                body: JSON.stringify({
-                    status: 'Completed'
-                })
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.text().then(text => {
-                        throw new Error(`Error ${response.status}: ${text}`);
-                    });
-                }
-                return response.text();
-            })
-            .then(result => {
-                console.log('Request handed over successfully:', result);
-                // Show proper modal instead of alert
-                const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
-                const body = document.getElementById('actionResultBody');
-                if (body) {
-                    body.textContent = 'Request has been marked as completed (handed over) successfully!';
-                }
-                msgModal.show();
+            if (printBtn) {
+                e.preventDefault();
+                e.stopPropagation();
                 
-                // Close view modal and refresh after dismissal
-                const currentView = bootstrap.Modal.getInstance(document.getElementById('bloodReorderModal'));
-                if (currentView) currentView.hide();
-                const modalEl = document.getElementById('actionResultModal');
-                modalEl.addEventListener('hidden.bs.modal', () => window.location.reload(), { once: true });
-            })
-            .catch(error => {
-                console.error('Error handing over request:', error);
-                const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
-                const body = document.getElementById('actionResultBody');
-                if (body) {
-                    body.textContent = 'Error handing over request: ' + error.message;
+                console.log('Print button clicked - Current Request ID:', currentRequestId);
+                console.log('Print button element:', printBtn);
+                console.log('Print button data-request-id:', printBtn.getAttribute('data-request-id'));
+                
+                // Get request ID from multiple sources
+                let requestId = printBtn.getAttribute('data-request-id') || currentRequestId || window.currentModalRequestId;
+                
+                // If still no request ID, try to get it from the original button that opened the modal
+                if (!requestId) {
+                    const originalButton = document.querySelector('.print-btn[data-request-id]');
+                    if (originalButton) {
+                        requestId = originalButton.getAttribute('data-request-id');
+                    }
                 }
-                msgModal.show();
-            })
-            .finally(() => {
-                // Restore button state
-                this.disabled = false;
-                this.innerHTML = originalText;
-            });
+                
+                if (!requestId) {
+                    console.error('No request ID available for printing');
+                    alert('No request selected for printing.');
+                    return;
+                }
+
+                console.log('Opening print page with request ID:', requestId);
+                // Open print page in new tab - don't close the modal
+                window.open(`../../src/views/forms/print-blood-request.php?request_id=${requestId}`, '_blank');
+            }
+        });
+
+        // Handle Hand Over button click - use event delegation for dynamically loaded buttons
+        document.addEventListener('click', function(e) {
+            // Check if click is on the button or any of its children (like icons)
+            // closest() will find the button even if clicking on child elements
+            const handoverBtn = e.target.closest('#handoverRequestBtn');
+            
+            if (handoverBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                console.log('Handover button clicked - Current Request ID:', currentRequestId);
+                console.log('Handover button element:', handoverBtn);
+                console.log('Handover button data-request-id:', handoverBtn.getAttribute('data-request-id'));
+                
+                // Get request ID from multiple sources
+                let requestId = handoverBtn.getAttribute('data-request-id') || currentRequestId || window.currentModalRequestId;
+                
+                if (!requestId) {
+                    alert('No request selected for handover.');
+                    return;
+                }
+
+                // Show loading state
+                const originalText = handoverBtn.innerHTML;
+                handoverBtn.disabled = true;
+                handoverBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Processing...';
+
+                // Update status to 'Completed'
+                fetch(`${SUPABASE_URL}/rest/v1/blood_requests?request_id=eq.${requestId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': `Bearer ${SUPABASE_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify({
+                        status: 'Completed'
+                    })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.text().then(text => {
+                            throw new Error(`Error ${response.status}: ${text}`);
+                        });
+                    }
+                    return response.text();
+                })
+                .then(result => {
+                    console.log('Request handed over successfully:', result);
+                    // Show proper modal instead of alert
+                    const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
+                    const body = document.getElementById('actionResultBody');
+                    if (body) {
+                        body.textContent = 'Request has been marked as completed (handed over) successfully!';
+                    }
+                    msgModal.show();
+                    
+                    // Close view modal and refresh after dismissal
+                    const currentView = bootstrap.Modal.getInstance(document.getElementById('bloodReorderModal'));
+                    if (currentView) currentView.hide();
+                    const modalEl = document.getElementById('actionResultModal');
+                    modalEl.addEventListener('hidden.bs.modal', () => window.location.reload(), { once: true });
+                })
+                .catch(error => {
+                    console.error('Error handing over request:', error);
+                    const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
+                    const body = document.getElementById('actionResultBody');
+                    if (body) {
+                        body.textContent = 'Error handing over request: ' + error.message;
+                    }
+                    msgModal.show();
+                })
+                .finally(() => {
+                    // Restore button state
+                    handoverBtn.disabled = false;
+                    handoverBtn.innerHTML = originalText;
+                });
+            }
         });
 
         // Listen for print completion messages from print page
