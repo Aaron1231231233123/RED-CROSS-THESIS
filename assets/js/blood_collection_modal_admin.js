@@ -155,27 +155,45 @@ class BloodCollectionModal {
         this.currentStep = 1;
         this.isSubmitting = false;
         
-        // If physical_exam_id is missing, try to resolve it
-        if (!this.bloodCollectionData.physical_exam_id && this.bloodCollectionData.donor_id) {
+        // If physical_exam_id is missing or empty, try to resolve it
+        const hasPhysicalExamId = this.bloodCollectionData.physical_exam_id && 
+                                  String(this.bloodCollectionData.physical_exam_id).trim() !== '';
+        
+        if (!hasPhysicalExamId && this.bloodCollectionData.donor_id) {
             try {
+                console.log('[Admin] Attempting to resolve physical_exam_id for donor:', this.bloodCollectionData.donor_id);
                 const resp = await fetch(`../../assets/php_func/admin/get_physical_exam_details_admin.php?donor_id=${encodeURIComponent(this.bloodCollectionData.donor_id)}`);
                 if (resp.ok) {
                     const data = await resp.json();
                     if (data?.success && data?.data?.physical_exam_id) {
                         this.bloodCollectionData.physical_exam_id = data.data.physical_exam_id;
                         console.log('[Admin] Resolved physical_exam_id:', this.bloodCollectionData.physical_exam_id);
+                    } else {
+                        console.warn('[Admin] No physical_exam_id found in response:', data);
                     }
+                } else {
+                    console.warn('[Admin] Failed to fetch physical_exam_id, HTTP status:', resp.status);
                 }
             } catch (e) {
                 console.warn('[Admin] Failed to resolve physical_exam_id:', e);
             }
+        } else if (hasPhysicalExamId) {
+            console.log('[Admin] Using provided physical_exam_id:', this.bloodCollectionData.physical_exam_id);
         }
         
         // Seed hidden fields
         const donorInput = document.querySelector('input[name="donor_id"]');
         const peInput = document.querySelector('input[name="physical_exam_id"]');
-        if (donorInput && this.bloodCollectionData.donor_id) donorInput.value = this.bloodCollectionData.donor_id;
-        if (peInput && this.bloodCollectionData.physical_exam_id) peInput.value = this.bloodCollectionData.physical_exam_id;
+        if (donorInput && this.bloodCollectionData.donor_id) {
+            donorInput.value = this.bloodCollectionData.donor_id;
+            console.log('[Admin] Set donor_id hidden field:', this.bloodCollectionData.donor_id);
+        }
+        if (peInput && this.bloodCollectionData.physical_exam_id) {
+            peInput.value = this.bloodCollectionData.physical_exam_id;
+            console.log('[Admin] Set physical_exam_id hidden field:', this.bloodCollectionData.physical_exam_id);
+        } else if (peInput) {
+            console.warn('[Admin] physical_exam_id is missing or empty, hidden field not set');
+        }
 
         // Generate new serial number
         this.generateUnitSerialNumber();
@@ -426,8 +444,26 @@ class BloodCollectionModal {
         for (let [k, v] of fd.entries()) data[k] = v;
         // Admin: force success (no status step)
         data.is_successful = true;
-        if (this.bloodCollectionData?.physical_exam_id) data.physical_exam_id = this.bloodCollectionData.physical_exam_id;
-        if (this.bloodCollectionData?.donor_id) data.donor_id = this.bloodCollectionData.donor_id;
+        
+        // Get physical_exam_id from form data first, then fallback to bloodCollectionData
+        const peInput = document.querySelector('input[name="physical_exam_id"]');
+        if (peInput && peInput.value) {
+            data.physical_exam_id = peInput.value;
+            console.log('[Admin] Got physical_exam_id from form input:', data.physical_exam_id);
+        } else if (this.bloodCollectionData?.physical_exam_id) {
+            data.physical_exam_id = this.bloodCollectionData.physical_exam_id;
+            console.log('[Admin] Got physical_exam_id from bloodCollectionData:', data.physical_exam_id);
+        }
+        
+        // Get donor_id from form data first, then fallback to bloodCollectionData
+        const donorInput = document.querySelector('input[name="donor_id"]');
+        if (donorInput && donorInput.value) {
+            data.donor_id = donorInput.value;
+        } else if (this.bloodCollectionData?.donor_id) {
+            data.donor_id = this.bloodCollectionData.donor_id;
+        }
+        
+        console.log('[Admin] Form data prepared:', { ...data, physical_exam_id: data.physical_exam_id ? 'present' : 'missing' });
         return data;
     }
 
@@ -442,8 +478,41 @@ class BloodCollectionModal {
         Object.entries(map).forEach(([id, val]) => { const el = document.getElementById(id); if (el) el.textContent = val; });
     }
 
-    submitForm() {
+    async submitForm() {
         if (this.isSubmitting) return;
+        
+        // Ensure physical_exam_id is resolved before submission
+        if (!this.bloodCollectionData.physical_exam_id && this.bloodCollectionData.donor_id) {
+            console.log('[Admin] physical_exam_id missing, attempting to resolve before submission...');
+            try {
+                const resp = await fetch(`../../assets/php_func/admin/get_physical_exam_details_admin.php?donor_id=${encodeURIComponent(this.bloodCollectionData.donor_id)}`);
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data?.success && data?.data?.physical_exam_id) {
+                        this.bloodCollectionData.physical_exam_id = data.data.physical_exam_id;
+                        // Update the hidden input field
+                        const peInput = document.querySelector('input[name="physical_exam_id"]');
+                        if (peInput) {
+                            peInput.value = this.bloodCollectionData.physical_exam_id;
+                            console.log('[Admin] Set physical_exam_id in hidden field before submission:', this.bloodCollectionData.physical_exam_id);
+                        }
+                    } else {
+                        console.error('[Admin] Could not resolve physical_exam_id for donor:', this.bloodCollectionData.donor_id);
+                        alert('Error: Could not find physical examination record for this donor. Please ensure the physical examination has been completed.');
+                        return;
+                    }
+                } else {
+                    console.error('[Admin] Failed to fetch physical_exam_id, HTTP status:', resp.status);
+                    alert('Error: Failed to retrieve physical examination data. Please try again.');
+                    return;
+                }
+            } catch (e) {
+                console.error('[Admin] Error resolving physical_exam_id:', e);
+                alert('Error: Could not retrieve physical examination data. Please try again.');
+                return;
+            }
+        }
+        
         const data = this.getFormData();
         
         // Validate time format (HH:MM from type="time" input)
@@ -458,8 +527,8 @@ class BloodCollectionModal {
         // Required keys
         const required = ['blood_bag_type','unit_serial_number','physical_exam_id','start_time','end_time'];
         for (const k of required) {
-            if (!data[k]) { 
-                console.error('[Admin] Missing required field:', k);
+            if (!data[k] || (typeof data[k] === 'string' && data[k].trim() === '')) { 
+                console.error('[Admin] Missing required field:', k, 'Value:', data[k]);
                 alert(`Missing required field: ${k}`); 
                 return; 
             }

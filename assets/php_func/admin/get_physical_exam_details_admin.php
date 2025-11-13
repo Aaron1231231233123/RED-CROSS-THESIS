@@ -50,22 +50,52 @@ try {
         curl_close($eligCurl);
 
         $eligRow = null;
+        $physicalExamIdFromEligibility = null;
         if ($eligCode === 200 && $eligResp) {
             $eligArr = json_decode($eligResp, true);
             if (!empty($eligArr)) {
                 $eligRow = $eligArr[0];
-                // If eligibility already carries a physical_exam_id, return it as-is (preferred fast path)
+                // If eligibility has physical_exam_id, use it to fetch full PE record
                 if (isset($eligRow['physical_exam_id']) && $eligRow['physical_exam_id']) {
-                    echo json_encode(['success' => true, 'data' => $eligRow]);
+                    $physicalExamIdFromEligibility = $eligRow['physical_exam_id'];
+                }
+            }
+        }
+
+        // Fetch full physical examination record by physical_exam_id if we have it from eligibility
+        if ($physicalExamIdFromEligibility) {
+            $peByIdCurl = curl_init();
+            curl_setopt_array($peByIdCurl, [
+                CURLOPT_URL => SUPABASE_URL . '/rest/v1/physical_examination?physical_exam_id=eq.' . urlencode($physicalExamIdFromEligibility) . '&select=*',
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    'apikey: ' . SUPABASE_API_KEY,
+                    'Authorization: Bearer ' . SUPABASE_API_KEY,
+                    'Accept: application/json'
+                ]
+            ]);
+            $peByIdResp = curl_exec($peByIdCurl);
+            $peByIdCode = curl_getinfo($peByIdCurl, CURLINFO_HTTP_CODE);
+            curl_close($peByIdCurl);
+            
+            if ($peByIdCode === 200 && $peByIdResp) {
+                $peByIdArr = json_decode($peByIdResp, true);
+                if (!empty($peByIdArr)) {
+                    $peRow = $peByIdArr[0];
+                    // If eligibility row had body_weight but PE row does not, prefer the eligibility weight
+                    if ($eligRow && isset($eligRow['body_weight']) && !isset($peRow['body_weight'])) {
+                        $peRow['body_weight'] = $eligRow['body_weight'];
+                    }
+                    echo json_encode(['success' => true, 'data' => $peRow]);
                     exit;
                 }
             }
         }
 
-        // Otherwise, fetch latest physical examination by donor and merge body_weight from eligibility if available
+        // Otherwise, fetch latest physical examination by donor with ALL fields
         $peCurl = curl_init();
         curl_setopt_array($peCurl, [
-            CURLOPT_URL => SUPABASE_URL . '/rest/v1/physical_examination?donor_id=eq.' . urlencode($donorId) . '&select=physical_exam_id,screening_id,body_weight&order=updated_at.desc,created_at.desc&limit=1',
+            CURLOPT_URL => SUPABASE_URL . '/rest/v1/physical_examination?donor_id=eq.' . urlencode($donorId) . '&select=*&order=updated_at.desc,created_at.desc&limit=1',
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER => [
                 'apikey: ' . SUPABASE_API_KEY,
@@ -109,7 +139,7 @@ try {
                 $screeningId = $sfArr[0]['screening_id'];
                 $peBySfCurl = curl_init();
                 curl_setopt_array($peBySfCurl, [
-                    CURLOPT_URL => SUPABASE_URL . '/rest/v1/physical_examination?screening_id=eq.' . urlencode($screeningId) . '&select=physical_exam_id,screening_id,body_weight&order=updated_at.desc,created_at.desc&limit=1',
+                    CURLOPT_URL => SUPABASE_URL . '/rest/v1/physical_examination?screening_id=eq.' . urlencode($screeningId) . '&select=*&order=updated_at.desc,created_at.desc&limit=1',
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_HTTPHEADER => [
                         'apikey: ' . SUPABASE_API_KEY,

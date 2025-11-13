@@ -798,7 +798,7 @@ window.openPhysicalExaminationForm = function(donorId) {
         });
 };
 
-// Function to open physical examination view (read-only mode)
+// Function to open physical examination view (read-only mode) - Uses compact summary modal
 window.openPhysicalExaminationView = function(donorId) {
     console.log('[Admin] Opening physical examination view for donor:', donorId);
     
@@ -808,16 +808,101 @@ window.openPhysicalExaminationView = function(donorId) {
         .then(data => {
             if (data.success && data.data) {
                 const examData = data.data;
-                // Open physical examination modal in view mode
-                if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
-                    // Pass a flag to indicate view mode
-                    examData.viewMode = true;
-                    window.physicalExaminationModalAdmin.openModal(examData);
+                // Check if we actually have physical examination data (not just null)
+                if (!examData || Object.keys(examData).length === 0) {
+                    console.warn('[Admin] Physical examination data is empty for donor:', donorId);
+                    alert('No physical examination found for this donor');
+                    return;
+                }
+                console.log('[Admin] Physical examination data loaded:', examData);
+                
+                // Use the compact summary modal instead of the form modal
+                const summaryModal = document.getElementById('staffPhysicianAccountSummaryModal');
+                if (summaryModal) {
+                    // Populate the compact summary modal with data
+                    if (examData.blood_pressure) {
+                        const bpEl = document.getElementById('summary-view-blood-pressure');
+                        if (bpEl) bpEl.textContent = examData.blood_pressure;
+                    }
+                    
+                    if (examData.pulse_rate) {
+                        const pulseEl = document.getElementById('summary-view-pulse-rate');
+                        if (pulseEl) pulseEl.textContent = examData.pulse_rate;
+                    }
+                    
+                    if (examData.body_temp) {
+                        const tempEl = document.getElementById('summary-view-body-temp');
+                        if (tempEl) tempEl.textContent = examData.body_temp;
+                    }
+                    
+                    if (examData.gen_appearance) {
+                        const genAppEl = document.getElementById('summary-view-gen-appearance');
+                        if (genAppEl) genAppEl.textContent = examData.gen_appearance;
+                    }
+                    
+                    if (examData.skin) {
+                        const skinEl = document.getElementById('summary-view-skin');
+                        if (skinEl) skinEl.textContent = examData.skin;
+                    }
+                    
+                    if (examData.heent) {
+                        const heentEl = document.getElementById('summary-view-heent');
+                        if (heentEl) heentEl.textContent = examData.heent;
+                    }
+                    
+                    if (examData.heart_and_lungs) {
+                        const heartLungsEl = document.getElementById('summary-view-heart-lungs');
+                        if (heartLungsEl) heartLungsEl.textContent = examData.heart_and_lungs;
+                    }
+                    
+                    if (examData.remarks) {
+                        const remarksEl = document.getElementById('summary-view-remarks');
+                        if (remarksEl) remarksEl.textContent = examData.remarks;
+                    }
+                    
+                    // Populate physician name if available
+                    if (examData.physician) {
+                        const physicianNameEl = document.getElementById('summary-physician-name');
+                        const physicianSigEl = document.getElementById('summary-view-physician-signature');
+                        if (physicianNameEl) physicianNameEl.textContent = examData.physician;
+                        if (physicianSigEl) physicianSigEl.textContent = examData.physician;
+                    }
+                    
+                    // Update examination date if available
+                    if (examData.created_at || examData.updated_at) {
+                        const examDate = examData.updated_at || examData.created_at;
+                        if (examDate) {
+                            try {
+                                const dateObj = new Date(examDate);
+                                const formattedDate = dateObj.toLocaleDateString('en-US', { 
+                                    year: 'numeric', 
+                                    month: 'long', 
+                                    day: 'numeric' 
+                                });
+                                const dateEl = summaryModal.querySelector('.report-date');
+                                if (dateEl) dateEl.textContent = formattedDate;
+                            } catch (e) {
+                                console.warn('[Admin] Could not format examination date:', e);
+                            }
+                        }
+                    }
+                    
+                    // Open the compact summary modal
+                    const modal = bootstrap.Modal.getOrCreateInstance(summaryModal, { backdrop: 'static', keyboard: false });
+                    modal.show();
+                    console.log('[Admin] Opened compact physical examination summary modal');
                 } else {
-                    console.error('[Admin] physicalExaminationModalAdmin not available');
-                    alert('Physical examination modal not available');
+                    console.error('[Admin] Compact summary modal not found, falling back to form modal');
+                    // Fallback to form modal if compact modal doesn't exist
+                    if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
+                        examData.viewMode = true;
+                        window.physicalExaminationModalAdmin.openModal(examData);
+                    } else {
+                        alert('Physical examination modal not available');
+                    }
                 }
             } else {
+                console.warn('[Admin] API returned unsuccessful response:', data);
                 alert('No physical examination found for this donor');
             }
         })

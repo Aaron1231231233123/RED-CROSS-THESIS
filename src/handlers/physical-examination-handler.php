@@ -204,7 +204,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($_SESSION['role_id'] === 1) {
                     // Admin (role_id 1) - Direct to blood collection
                     error_log("Admin role: Redirecting to blood collection form");
-                header('Location: ../views/forms/blood-collection-form.php');
+                    $physical_exam_id = $_SESSION['physical_examination_id'] ?? null;
+                    $donor_id = $_SESSION['donor_id'] ?? null;
+                    $redirect_url = '../views/forms/blood-collection-form.php';
+                    if ($donor_id) {
+                        $redirect_url .= '?donor_id=' . urlencode($donor_id);
+                        if ($physical_exam_id) {
+                            $redirect_url .= '&physical_exam_id=' . urlencode($physical_exam_id);
+                        }
+                    }
+                    header('Location: ' . $redirect_url);
                 } else {
                     error_log("Staff role: Redirecting to appropriate donor list");
                     

@@ -51,6 +51,10 @@ class PhysicalExaminationModalAdmin {
         // Step indicator clicks - Admin specific
         document.addEventListener('click', (e) => {
             if (e.target.closest('#physicalExaminationModalAdmin .physical-step')) {
+                // Prevent step navigation in view mode
+                if (this.isReadonly) {
+                    return;
+                }
                 const stepElement = e.target.closest('.physical-step');
                 const step = parseInt(stepElement.dataset.step);
                 if (step <= this.currentStep) {
@@ -61,38 +65,217 @@ class PhysicalExaminationModalAdmin {
     }
     
     async openModal(screeningData) {
-        this.screeningData = screeningData;
-        this.resetForm();
-        this.isReadonly = false;
+        // Check if this is view mode (when physical examination data is passed)
+        const isViewMode = screeningData && (screeningData.viewMode === true || screeningData.physical_exam_id || (screeningData.blood_pressure && screeningData.pulse_rate));
         
-        // Pre-populate donor information
-        if (screeningData) {
-            document.getElementById('physical-donor-id-admin').value = screeningData.donor_form_id || '';
-            document.getElementById('physical-screening-id-admin').value = screeningData.screening_id || '';
+        if (isViewMode) {
+            // VIEW MODE: Show summary of existing physical examination
+            this.isReadonly = true;
+            this.screeningData = screeningData;
             
-            // Populate summary basics
-            this.populateInitialScreeningSummary(screeningData);
+            // Populate form with existing data
+            this.populateFormFromData(screeningData);
+            
+            // Update summary with actual data
+            this.updateSummaryFromData(screeningData);
+            
+            const modalEl = document.getElementById('physicalExaminationModalAdmin');
+            if (!modalEl) {
+                console.error('[PE ADMIN] Modal element not found!');
+                return;
+            }
+            
+            // Show via Bootstrap
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
+            modal.show();
+            
+            // Go directly to step 3 (summary/review)
+            this.currentStep = 3;
+            this.updateProgressIndicator();
+            this.showStep(3);
+            
+            // Hide form inputs and make them readonly
+            this.setReadonlyMode(true);
+            
+            // Hide navigation buttons in view mode
+            this.updateNavigationButtons();
+            
+            console.log('[PE ADMIN] Opened in VIEW MODE with data:', screeningData);
+        } else {
+            // EDIT MODE: Show form for new/existing physical examination
+            this.screeningData = screeningData;
+            this.resetForm();
+            this.isReadonly = false;
+            
+            // Pre-populate donor information
+            if (screeningData) {
+                document.getElementById('physical-donor-id-admin').value = screeningData.donor_form_id || screeningData.donor_id || '';
+                document.getElementById('physical-screening-id-admin').value = screeningData.screening_id || '';
+                
+                // If we have existing physical exam data, populate it
+                if (screeningData.physical_exam_id || screeningData.blood_pressure) {
+                    this.populateFormFromData(screeningData);
+                }
+                
+                // Populate summary basics
+                this.populateInitialScreeningSummary(screeningData);
+            }
+            
+            const modalEl = document.getElementById('physicalExaminationModalAdmin');
+            
+            if (!modalEl) {
+                console.error('[PE ADMIN DEBUG] Modal element not found!');
+                return;
+            }
+            
+            // Show via Bootstrap
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
+            
+            modal.show();
+            
+            this.currentStep = 1;
+            this.updateProgressIndicator();
+            this.showStep(1);
+            
+            // Make sure form is editable
+            this.setReadonlyMode(false);
+        }
+    }
+    
+    populateFormFromData(data) {
+        // Populate blood pressure
+        if (data.blood_pressure) {
+            this.parseAndSetBloodPressure(data.blood_pressure);
         }
         
-        const modalEl = document.getElementById('physicalExaminationModalAdmin');
-        
-        if (!modalEl) {
-            console.error('[PE ADMIN DEBUG] Modal element not found!');
-            return;
+        // Populate other vital signs
+        if (data.pulse_rate) {
+            const pulseInput = document.getElementById('physical-pulse-rate-admin');
+            if (pulseInput) pulseInput.value = data.pulse_rate;
         }
         
-        // Show via Bootstrap
-        const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
+        if (data.body_temp) {
+            const tempInput = document.getElementById('physical-body-temp-admin');
+            if (tempInput) tempInput.value = data.body_temp;
+        }
         
-        modal.show();
+        // Populate examination findings
+        if (data.gen_appearance) {
+            const genAppInput = document.getElementById('physical-gen-appearance-admin');
+            if (genAppInput) genAppInput.value = data.gen_appearance;
+        }
         
-        this.currentStep = 1;
-        this.updateProgressIndicator();
-        this.showStep(1);
+        if (data.skin) {
+            const skinInput = document.getElementById('physical-skin-admin');
+            if (skinInput) skinInput.value = data.skin;
+        }
         
-        // Add event listener to track when modal is actually shown
-        modalEl.addEventListener('shown.bs.modal', () => {
-        }, { once: true });
+        if (data.heent) {
+            const heentInput = document.getElementById('physical-heent-admin');
+            if (heentInput) heentInput.value = data.heent;
+        }
+        
+        if (data.heart_and_lungs) {
+            const heartLungsInput = document.getElementById('physical-heart-lungs-admin');
+            if (heartLungsInput) heartLungsInput.value = data.heart_and_lungs;
+        }
+        
+        // Set donor and screening IDs
+        if (data.donor_id) {
+            const donorInput = document.getElementById('physical-donor-id-admin');
+            if (donorInput) donorInput.value = data.donor_id;
+        }
+        
+        if (data.screening_id) {
+            const screeningInput = document.getElementById('physical-screening-id-admin');
+            if (screeningInput) screeningInput.value = data.screening_id;
+        }
+    }
+    
+    updateSummaryFromData(data) {
+        // Update vital signs in summary
+        const bpValue = data.blood_pressure || '-';
+        const pulseRate = data.pulse_rate || '-';
+        const bodyTemp = data.body_temp || '-';
+        
+        const bpEl = document.getElementById('summary-blood-pressure-admin');
+        const pulseEl = document.getElementById('summary-pulse-rate-admin');
+        const tempEl = document.getElementById('summary-body-temp-admin');
+        
+        if (bpEl) bpEl.textContent = bpValue;
+        if (pulseEl) pulseEl.textContent = pulseRate;
+        if (tempEl) tempEl.textContent = bodyTemp;
+        
+        // Update examination findings in summary
+        const genAppEl = document.getElementById('summary-gen-appearance-admin');
+        const skinEl = document.getElementById('summary-skin-admin');
+        const heentEl = document.getElementById('summary-heent-admin');
+        const heartLungsEl = document.getElementById('summary-heart-lungs-admin');
+        
+        if (genAppEl) genAppEl.textContent = data.gen_appearance || '-';
+        if (skinEl) skinEl.textContent = data.skin || '-';
+        if (heentEl) heentEl.textContent = data.heent || '-';
+        if (heartLungsEl) heartLungsEl.textContent = data.heart_and_lungs || '-';
+        
+        // Update physician name if available
+        if (data.physician) {
+            const physicianEl = document.getElementById('summary-interviewer-admin');
+            if (physicianEl) physicianEl.textContent = data.physician;
+        }
+        
+        // Update blood bag type if available
+        if (data.blood_bag_type) {
+            const bloodBagEl = document.getElementById('summary-blood-bag-admin');
+            if (bloodBagEl) bloodBagEl.textContent = data.blood_bag_type;
+        }
+    }
+    
+    setReadonlyMode(readonly) {
+        const modal = document.getElementById('physicalExaminationModalAdmin');
+        if (!modal) return;
+        
+        // Get all form inputs, selects, and textareas
+        const formElements = modal.querySelectorAll('input, select, textarea');
+        
+        formElements.forEach(element => {
+            if (readonly) {
+                element.disabled = true;
+                element.readOnly = true;
+                element.style.backgroundColor = '#f8f9fa';
+                element.style.cursor = 'not-allowed';
+            } else {
+                element.disabled = false;
+                element.readOnly = false;
+                element.style.backgroundColor = '';
+                element.style.cursor = '';
+            }
+        });
+        
+        // Hide step indicators in view mode
+        const stepIndicators = modal.querySelectorAll('.physical-step');
+        stepIndicators.forEach(step => {
+            if (readonly) {
+                step.style.display = 'none';
+            } else {
+                step.style.display = 'block';
+            }
+        });
+        
+        // Hide progress line in view mode
+        const progressLine = modal.querySelector('.physical-progress-line');
+        if (progressLine) {
+            progressLine.style.display = readonly ? 'none' : 'block';
+        }
+        
+        // Update modal title
+        const modalTitle = modal.querySelector('.modal-title');
+        if (modalTitle) {
+            if (readonly) {
+                modalTitle.innerHTML = '<i class="fas fa-stethoscope me-2"></i>Physical Examination Summary';
+            } else {
+                modalTitle.innerHTML = '<i class="fas fa-stethoscope me-2"></i>Physical Examination Form - Admin';
+            }
+        }
     }
     
     populateInitialScreeningSummary(screeningData) {
@@ -182,6 +365,10 @@ class PhysicalExaminationModalAdmin {
     }
     
     nextStep() {
+        // Prevent navigation in view mode
+        if (this.isReadonly) {
+            return;
+        }
         
         if (this.validateCurrentStep()) {
             if (this.currentStep < this.totalSteps) {
@@ -197,6 +384,10 @@ class PhysicalExaminationModalAdmin {
     }
     
     prevStep() {
+        // Prevent navigation in view mode
+        if (this.isReadonly) {
+            return;
+        }
         
         if (this.currentStep > 1) {
             this.currentStep--;
@@ -206,6 +397,10 @@ class PhysicalExaminationModalAdmin {
     }
     
     goToStep(step) {
+        // Prevent navigation in view mode
+        if (this.isReadonly) {
+            return;
+        }
         
         if (step >= 1 && step <= this.currentStep && step <= this.totalSteps) {
             this.currentStep = step;
@@ -224,12 +419,22 @@ class PhysicalExaminationModalAdmin {
         const stepContents = document.querySelectorAll('#physicalExaminationModalAdmin .physical-step-content');
         stepContents.forEach(content => {
             content.classList.remove('active');
+            content.style.display = 'none';
         });
         
         // Show current step
         const currentStepEl = document.getElementById(`physical-step-${step}-admin`);
         if (currentStepEl) {
             currentStepEl.classList.add('active');
+            currentStepEl.style.display = 'block';
+        }
+        
+        // In view mode, hide steps 1 and 2 completely
+        if (this.isReadonly && step === 3) {
+            const step1 = document.getElementById('physical-step-1-admin');
+            const step2 = document.getElementById('physical-step-2-admin');
+            if (step1) step1.style.display = 'none';
+            if (step2) step2.style.display = 'none';
         }
         
         // Update navigation buttons
@@ -240,12 +445,26 @@ class PhysicalExaminationModalAdmin {
         const prevBtn = document.querySelector('#physicalExaminationModalAdmin .physical-prev-btn-admin');
         const nextBtn = document.querySelector('#physicalExaminationModalAdmin .physical-next-btn-admin');
         const submitBtn = document.querySelector('#physicalExaminationModalAdmin .physical-submit-btn-admin');
+        const deferBtn = document.querySelector('#physicalExaminationModalAdmin .physical-defer-btn-admin');
         
-        if (prevBtn) prevBtn.style.display = this.currentStep === 1 ? 'none' : 'inline-block';
-        if (nextBtn) nextBtn.style.display = this.currentStep === 3 ? 'none' : 'inline-block'; // Step 3 is final
-        
-        if (submitBtn) {
-            submitBtn.style.display = this.currentStep === 3 ? 'inline-block' : 'none'; // Step 3 is final
+        if (this.isReadonly) {
+            // In view mode, hide all navigation buttons except close (handled by Bootstrap)
+            if (prevBtn) prevBtn.style.display = 'none';
+            if (nextBtn) nextBtn.style.display = 'none';
+            if (submitBtn) submitBtn.style.display = 'none';
+            if (deferBtn) deferBtn.style.display = 'none';
+        } else {
+            // In edit mode, show appropriate buttons
+            if (prevBtn) prevBtn.style.display = this.currentStep === 1 ? 'none' : 'inline-block';
+            if (nextBtn) nextBtn.style.display = this.currentStep === 3 ? 'none' : 'inline-block'; // Step 3 is final
+            
+            if (submitBtn) {
+                submitBtn.style.display = this.currentStep === 3 ? 'inline-block' : 'none'; // Step 3 is final
+            }
+            
+            if (deferBtn) {
+                deferBtn.style.display = this.currentStep === 3 ? 'inline-block' : 'none'; // Show defer on review step
+            }
         }
     }
     
@@ -323,11 +542,15 @@ class PhysicalExaminationModalAdmin {
             const combinedValue = `${systolic}/${diastolic}`;
             if (hiddenField) {
                 hiddenField.value = combinedValue;
+                console.log('[PE ADMIN] Updated blood pressure hidden field:', combinedValue);
+            } else {
+                console.error('[PE ADMIN] Blood pressure hidden field not found!');
             }
         } else {
             if (hiddenField) {
                 hiddenField.value = '';
             }
+            console.warn('[PE ADMIN] Blood pressure values incomplete - systolic:', systolic, 'diastolic:', diastolic);
         }
     }
     
@@ -416,6 +639,28 @@ class PhysicalExaminationModalAdmin {
         // Ensure blood pressure is updated before submission
         this.updateBloodPressure();
         
+        // Double-check blood pressure is set correctly
+        const bpHiddenField = document.getElementById('physical-blood-pressure-admin');
+        const bpSystolic = document.getElementById('physical-blood-pressure-systolic-admin')?.value || '';
+        const bpDiastolic = document.getElementById('physical-blood-pressure-diastolic-admin')?.value || '';
+        
+        // If hidden field is empty but we have both values, combine them
+        if ((!bpHiddenField?.value || bpHiddenField.value.trim() === '') && bpSystolic && bpDiastolic) {
+            const combinedBP = `${bpSystolic}/${bpDiastolic}`;
+            if (bpHiddenField) {
+                bpHiddenField.value = combinedBP;
+                console.log('[PE ADMIN] Combined BP values into hidden field:', combinedBP);
+            }
+        }
+        
+        // Verify blood pressure value before submission
+        const finalBPValue = bpHiddenField?.value || '';
+        if (!finalBPValue || finalBPValue.trim() === '') {
+            this.showToast('Blood pressure is required. Please enter both systolic and diastolic values.', 'error');
+            return;
+        }
+        console.log('[PE ADMIN] Final blood pressure value to submit:', finalBPValue);
+        
         // Get form field values
         const fields = [
             { name: 'blood_pressure', id: 'physical-blood-pressure-admin' },
@@ -431,7 +676,9 @@ class PhysicalExaminationModalAdmin {
             const element = document.getElementById(field.id);
             if (element && element.value) {
                 formData.append(field.name, element.value);
+                console.log(`[PE ADMIN] Added ${field.name}:`, element.value);
             } else {
+                console.warn(`[PE ADMIN] Field ${field.name} (${field.id}) is missing or empty`);
             }
         });
         
@@ -480,7 +727,6 @@ class PhysicalExaminationModalAdmin {
     }
     
     closeModal() {
-        
         const modalEl = document.getElementById('physicalExaminationModalAdmin');
         if (modalEl) {
             const modal = bootstrap.Modal.getInstance(modalEl);
@@ -488,6 +734,10 @@ class PhysicalExaminationModalAdmin {
                 modal.hide();
             }
         }
+        
+        // Reset readonly state when closing
+        this.isReadonly = false;
+        this.setReadonlyMode(false);
     }
     
     showToast(message, type = 'info') {

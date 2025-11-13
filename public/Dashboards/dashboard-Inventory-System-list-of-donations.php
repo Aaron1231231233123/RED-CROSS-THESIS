@@ -3010,6 +3010,10 @@ function getCacheStats() {
     // Medical History approval/decline modals
     include_once '../../src/views/modals/medical-history-approval-modals.php';
     include_once '../../src/views/modals/physical-examination-modal-admin.php'; // Admin-specific modal
+    // Compact Physical Examination Summary Modal (for view mode)
+    if (file_exists('../../src/views/modals/staff-physician-account-summary-modal.php')) {
+        include_once '../../src/views/modals/staff-physician-account-summary-modal.php';
+    }
     // Interviewer confirmation modals
     include_once '../../src/views/modals/interviewer-confirmation-modals.php';
     // Admin screening modal (admin-specific)
@@ -3704,7 +3708,7 @@ function getCacheStats() {
             // Handle proceed to blood collection button
             const proceedToBloodCollectionBtn = document.getElementById('proceedToBloodCollectionBtn');
             if (proceedToBloodCollectionBtn) {
-                proceedToBloodCollectionBtn.addEventListener('click', function() {
+                proceedToBloodCollectionBtn.addEventListener('click', async function() {
                     // Get the current donor ID from the global context
                     const donorId = window.currentMedicalHistoryData?.donor_id;
                     if (donorId) {
@@ -3713,9 +3717,31 @@ function getCacheStats() {
                         if (modal) {
                             modal.hide();
                         }
-                        // Redirect to blood collection form
+                        
+                        // Fetch physical_exam_id before redirecting
+                        let physicalExamId = null;
+                        try {
+                            const resp = await fetch(`../../assets/php_func/admin/get_physical_exam_details_admin.php?donor_id=${encodeURIComponent(donorId)}`);
+                            if (resp.ok) {
+                                const data = await resp.json();
+                                if (data?.success && data?.data?.physical_exam_id) {
+                                    physicalExamId = data.data.physical_exam_id;
+                                    console.log('Found physical_exam_id:', physicalExamId);
+                                } else {
+                                    console.warn('No physical_exam_id found for donor:', donorId);
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Failed to fetch physical_exam_id:', e);
+                        }
+                        
+                        // Redirect to blood collection form with both donor_id and physical_exam_id
                         setTimeout(() => {
-                            window.location.href = `../../src/views/forms/blood-collection-form.php?donor_id=${encodeURIComponent(donorId)}`;
+                            let url = `../../src/views/forms/blood-collection-form.php?donor_id=${encodeURIComponent(donorId)}`;
+                            if (physicalExamId) {
+                                url += `&physical_exam_id=${encodeURIComponent(physicalExamId)}`;
+                            }
+                            window.location.href = url;
                         }, 300);
                     } else {
                         console.error('No donor ID found for blood collection');
@@ -7149,7 +7175,7 @@ function getCacheStats() {
         };
         window.editBloodCollection = async function(donorId) {
             console.log('Editing blood collection for donor:', donorId);
-            let physicalExamId = '';
+            let physicalExamId = null;
             try {
                 // Deterministically resolve physical_exam_id for this donor
                 const resp = await fetch(`../../assets/php_func/admin/get_physical_exam_details_admin.php?donor_id=${encodeURIComponent(donorId)}`);
@@ -7157,17 +7183,29 @@ function getCacheStats() {
                     const data = await resp.json();
                     if (data && data.success && data.data && data.data.physical_exam_id) {
                         physicalExamId = data.data.physical_exam_id;
+                        console.log('Resolved physical_exam_id:', physicalExamId);
+                    } else {
+                        console.warn('No physical_exam_id found in response for donor:', donorId);
                     }
+                } else {
+                    console.warn('Failed to fetch physical_exam_id, HTTP status:', resp.status);
                 }
-            } catch (e) { console.warn('Failed to resolve physical exam id', e); }
+            } catch (e) { 
+                console.warn('Failed to resolve physical exam id', e); 
+            }
             
             try {
                 // Try to open the blood collection modal if it exists
                 if (window.bloodCollectionModal && typeof window.bloodCollectionModal.openModal === 'function') {
-                    window.bloodCollectionModal.openModal({ 
-                        donor_id: donorId, 
-                        physical_exam_id: physicalExamId 
-                    });
+                    const modalData = { 
+                        donor_id: donorId
+                    };
+                    // Only include physical_exam_id if we successfully resolved it
+                    if (physicalExamId) {
+                        modalData.physical_exam_id = physicalExamId;
+                    }
+                    console.log('Opening modal with data:', modalData);
+                    window.bloodCollectionModal.openModal(modalData);
                     return;
                 }
             } catch (e) { console.warn('bloodCollectionModal.openModal not available, falling back', e); }

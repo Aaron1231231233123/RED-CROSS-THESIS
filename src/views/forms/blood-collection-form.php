@@ -45,14 +45,17 @@ if ($_SESSION['role_id'] != 1 && $_SESSION['role_id'] != 3) {
 // Check if donor_id exists in session
 if (!isset($_SESSION['donor_id'])) {
     // For staff directly accessing from the blood collection dashboard,
-    // the donor_id might be in POST but not yet in session
+    // the donor_id might be in POST or GET but not yet in session
     if (isset($_POST['donor_id']) && !empty($_POST['donor_id'])) {
         $_SESSION['donor_id'] = $_POST['donor_id'];
         error_log("Setting donor_id from POST for staff user: " . $_POST['donor_id']);
-    } 
+    } elseif (isset($_GET['donor_id']) && !empty($_GET['donor_id'])) {
+        $_SESSION['donor_id'] = $_GET['donor_id'];
+        error_log("Setting donor_id from GET for staff user: " . $_GET['donor_id']);
+    }
     // Only redirect if we still don't have donor_id after the checks
-    else {
-        error_log("Missing donor_id in session and POST data");
+    if (!isset($_SESSION['donor_id'])) {
+        error_log("Missing donor_id in session, POST, and GET data");
         header('Location: ../../../public/Dashboards/dashboard-Inventory-System.php');
         exit();
     }
@@ -1010,10 +1013,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount']) && isset($_
             <h3>VI. BLOOD COLLECTION (To be accomplished by the phlebotomist)</h3>
             
             <?php
-            // Add hidden input for physical_exam_id if it was passed from the dashboard
+            // Add hidden input for physical_exam_id if it was passed from the dashboard (POST or GET)
+            $physical_exam_id = null;
             if (isset($_POST['physical_exam_id']) && !empty($_POST['physical_exam_id'])) {
-                echo '<input type="hidden" name="physical_exam_id" value="' . htmlspecialchars($_POST['physical_exam_id']) . '">';
-                error_log("Including physical_exam_id from POST in form: " . $_POST['physical_exam_id']);
+                $physical_exam_id = $_POST['physical_exam_id'];
+                error_log("Including physical_exam_id from POST in form: " . $physical_exam_id);
+            } elseif (isset($_GET['physical_exam_id']) && !empty($_GET['physical_exam_id'])) {
+                $physical_exam_id = $_GET['physical_exam_id'];
+                error_log("Including physical_exam_id from GET in form: " . $physical_exam_id);
+            }
+            
+            if ($physical_exam_id) {
+                echo '<input type="hidden" name="physical_exam_id" value="' . htmlspecialchars($physical_exam_id) . '">';
             }
             ?>
             
