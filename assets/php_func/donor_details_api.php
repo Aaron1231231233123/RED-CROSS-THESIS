@@ -146,33 +146,68 @@ function fetchEligibilityRecord($eligibilityId) {
     global $donor_id;
     error_log("Processing eligibility record: $eligibilityId");
 
-    // If eligibility_id starts with "pending_", this is a pending donor without an eligibility record
+    // If eligibility_id starts with "pending_", check if there's an approved eligibility record first
     if ($eligibilityId && strpos($eligibilityId, 'pending_') === 0) {
-        error_log("Handling pending eligibility record");
-        // Try to derive blood type from latest screening form
-        $derivedBloodType = 'Pending';
+        error_log("Handling pending eligibility record - checking for approved eligibility first");
+        
+        // First, check if there's an approved eligibility record for this donor
         try {
-            $screeningData = fetchScreeningDataByDonorId($donor_id);
-            if (!empty($screeningData['blood_type'])) {
-                $derivedBloodType = $screeningData['blood_type'];
+            $ch = curl_init(SUPABASE_URL . '/rest/v1/eligibility?donor_id=eq.' . urlencode((string)$donor_id) . '&status=eq.approved&order=created_at.desc&limit=1');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Accept: application/json'
+            ]);
+            $resp = curl_exec($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($http === 200 && $resp) {
+                $arr = json_decode($resp, true) ?: [];
+                if (!empty($arr) && isset($arr[0]['eligibility_id'])) {
+                    // Found an approved eligibility record - use it instead of pending
+                    error_log("Found approved eligibility record: " . $arr[0]['eligibility_id'] . " - using it instead of pending");
+                    $eligibilityId = $arr[0]['eligibility_id'];
+                    // Continue to fetch the actual eligibility record below
+                } else {
+                    // No approved record found, continue with pending logic
+                    error_log("No approved eligibility record found, using pending status");
+                }
             }
         } catch (Exception $e) {
-            // ignore, keep Pending
+            error_log("Error checking for approved eligibility: " . $e->getMessage());
+            // Continue with pending logic on error
         }
-        return [
-            'eligibility_id' => $eligibilityId,
-            'status' => 'pending',
-            'blood_type' => $derivedBloodType,
-            'donation_type' => 'Pending',
-            'start_date' => date('Y-m-d'),
-            'end_date' => null,
-            'is_pending' => true,
-            // Explicitly set these fields to null for pending donors
-            'blood_bag_type' => null,
-            'amount_collected' => null, 
-            'donor_reaction' => null,
-            'management_done' => null
-        ];
+        
+        // If still pending (no approved record found), return pending status
+        if (strpos($eligibilityId, 'pending_') === 0) {
+            error_log("Handling pending eligibility record");
+            // Try to derive blood type from latest screening form
+            $derivedBloodType = 'Pending';
+            try {
+                $screeningData = fetchScreeningDataByDonorId($donor_id);
+                if (!empty($screeningData['blood_type'])) {
+                    $derivedBloodType = $screeningData['blood_type'];
+                }
+            } catch (Exception $e) {
+                // ignore, keep Pending
+            }
+            return [
+                'eligibility_id' => $eligibilityId,
+                'status' => 'pending',
+                'blood_type' => $derivedBloodType,
+                'donation_type' => 'Pending',
+                'start_date' => date('Y-m-d'),
+                'end_date' => null,
+                'is_pending' => true,
+                // Explicitly set these fields to null for pending donors
+                'blood_bag_type' => null,
+                'amount_collected' => null, 
+                'donor_reaction' => null,
+                'management_done' => null
+            ];
+        }
     }
     
     // If eligibility_id starts with "declined_", this is a declined donor from physical examination

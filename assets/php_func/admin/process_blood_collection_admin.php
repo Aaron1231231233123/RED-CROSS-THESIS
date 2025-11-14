@@ -29,6 +29,214 @@ if (stripos($contentType, 'application/json') !== false) {
     }
 }
 
+/**
+ * Check if all processes are complete and update/create eligibility record with 'approved' status
+ */
+function checkAndUpdateEligibilityToApproved($donor_id, $physical_exam_id, $bloodCollectionData) {
+    error_log("Blood Collection Admin - Checking if all processes complete for donor: " . $donor_id);
+    
+    $headers = [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY,
+        'Accept: application/json',
+        'Content-Type: application/json'
+    ];
+    
+    // 1. Check Medical History - should be approved
+    $medicalHistoryApproved = false;
+    try {
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/medical_history?donor_id=eq.' . urlencode((string)$donor_id) . '&select=medical_approval&order=created_at.desc&limit=1');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        $resp = curl_exec($ch);
+        $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($http === 200 && $resp) {
+            $arr = json_decode($resp, true) ?: [];
+            if (!empty($arr) && isset($arr[0]['medical_approval'])) {
+                $approval = strtolower(trim((string)$arr[0]['medical_approval']));
+                $medicalHistoryApproved = ($approval === 'approved');
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Blood Collection Admin - Error checking medical history: " . $e->getMessage());
+    }
+    
+    // 2. Check Screening - should be passed (no disapproval_reason)
+    $screeningPassed = false;
+    $screening_id = null;
+    try {
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?donor_form_id=eq.' . urlencode((string)$donor_id) . '&select=screening_id,disapproval_reason&order=created_at.desc&limit=1');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        $resp = curl_exec($ch);
+        $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($http === 200 && $resp) {
+            $arr = json_decode($resp, true) ?: [];
+            if (!empty($arr)) {
+                $screening_id = $arr[0]['screening_id'] ?? null;
+                $disapproval = trim((string)($arr[0]['disapproval_reason'] ?? ''));
+                $screeningPassed = (empty($disapproval));
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Blood Collection Admin - Error checking screening: " . $e->getMessage());
+    }
+    
+    // 3. Check Physical Examination - should be accepted
+    $physicalExamAccepted = false;
+    $medical_history_id = null;
+    try {
+        $ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?physical_exam_id=eq.' . urlencode((string)$physical_exam_id) . '&select=remarks,medical_history_id&limit=1');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        $resp = curl_exec($ch);
+        $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($http === 200 && $resp) {
+            $arr = json_decode($resp, true) ?: [];
+            if (!empty($arr)) {
+                $remarks = strtolower(trim((string)($arr[0]['remarks'] ?? '')));
+                $physicalExamAccepted = ($remarks === 'accepted');
+                $medical_history_id = $arr[0]['medical_history_id'] ?? null;
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Blood Collection Admin - Error checking physical exam: " . $e->getMessage());
+    }
+    
+    // 4. Blood Collection - already successful (passed as parameter)
+    $bloodCollectionSuccessful = true; // We're in this function because is_successful === true
+    
+    error_log("Blood Collection Admin - Process status check - Medical History: " . ($medicalHistoryApproved ? 'Approved' : 'Not Approved') . 
+              ", Screening: " . ($screeningPassed ? 'Passed' : 'Not Passed') . 
+              ", Physical Exam: " . ($physicalExamAccepted ? 'Accepted' : 'Not Accepted') . 
+              ", Blood Collection: Successful");
+    
+    // If all processes are complete, create/update eligibility with 'approved' status
+    if ($medicalHistoryApproved && $screeningPassed && $physicalExamAccepted && $bloodCollectionSuccessful) {
+        error_log("Blood Collection Admin - All processes complete! Creating/updating eligibility with 'approved' status");
+        
+        $blood_collection_id = $bloodCollectionData['blood_collection_id'] ?? null;
+        if (!$blood_collection_id && is_array($bloodCollectionData) && isset($bloodCollectionData[0]['blood_collection_id'])) {
+            $blood_collection_id = $bloodCollectionData[0]['blood_collection_id'];
+        }
+        
+        // Get additional data needed for eligibility
+        $blood_type = null;
+        $donation_type = null;
+        if ($screening_id) {
+            try {
+                $ch = curl_init(SUPABASE_URL . '/rest/v1/screening_form?screening_id=eq.' . urlencode((string)$screening_id) . '&select=blood_type,donation_type&limit=1');
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+                $resp = curl_exec($ch);
+                $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if ($http === 200 && $resp) {
+                    $arr = json_decode($resp, true) ?: [];
+                    if (!empty($arr)) {
+                        $blood_type = $arr[0]['blood_type'] ?? null;
+                        $donation_type = $arr[0]['donation_type'] ?? null;
+                    }
+                }
+            } catch (Exception $e) {
+                error_log("Blood Collection Admin - Error fetching screening data: " . $e->getMessage());
+            }
+        }
+        
+        // Check if eligibility record already exists
+        $existingEligibility = null;
+        try {
+            $ch = curl_init(SUPABASE_URL . '/rest/v1/eligibility?donor_id=eq.' . urlencode((string)$donor_id) . '&order=created_at.desc&limit=1');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            $resp = curl_exec($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($http === 200 && $resp) {
+                $arr = json_decode($resp, true) ?: [];
+                if (!empty($arr)) {
+                    $existingEligibility = $arr[0];
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Blood Collection Admin - Error checking existing eligibility: " . $e->getMessage());
+        }
+        
+        // Prepare eligibility data
+        $eligibilityData = [
+            'donor_id' => $donor_id,
+            'medical_history_id' => $medical_history_id,
+            'screening_id' => $screening_id,
+            'physical_exam_id' => $physical_exam_id,
+            'blood_collection_id' => $blood_collection_id,
+            'status' => 'approved',
+            'updated_at' => (new DateTime())->format('c')
+        ];
+        
+        if ($blood_type) $eligibilityData['blood_type'] = $blood_type;
+        if ($donation_type) $eligibilityData['donation_type'] = $donation_type;
+        
+        // Add blood collection details if available
+        if (isset($bloodCollectionData['blood_bag_type'])) $eligibilityData['blood_bag_type'] = $bloodCollectionData['blood_bag_type'];
+        if (isset($bloodCollectionData['amount_taken'])) $eligibilityData['amount_collected'] = $bloodCollectionData['amount_taken'];
+        if (isset($bloodCollectionData['unit_serial_number'])) $eligibilityData['unit_serial_number'] = $bloodCollectionData['unit_serial_number'];
+        if (isset($bloodCollectionData['start_time'])) $eligibilityData['collection_start_time'] = $bloodCollectionData['start_time'];
+        if (isset($bloodCollectionData['end_time'])) $eligibilityData['collection_end_time'] = $bloodCollectionData['end_time'];
+        
+        // Set start_date and end_date (3 months from now)
+        $startDate = new DateTime();
+        $endDate = clone $startDate;
+        $endDate->modify('+3 months');
+        $eligibilityData['start_date'] = $startDate->format('Y-m-d\TH:i:s.000\Z');
+        $eligibilityData['end_date'] = $endDate->format('Y-m-d\TH:i:s.000\Z');
+        
+        if ($existingEligibility && isset($existingEligibility['eligibility_id'])) {
+            // Update existing eligibility record
+            $eligibility_id = $existingEligibility['eligibility_id'];
+            error_log("Blood Collection Admin - Updating existing eligibility record: " . $eligibility_id);
+            
+            $ch = curl_init(SUPABASE_URL . '/rest/v1/eligibility?eligibility_id=eq.' . urlencode((string)$eligibility_id));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($eligibilityData));
+            $resp = curl_exec($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($http === 200 || $http === 204) {
+                error_log("Blood Collection Admin - Successfully updated eligibility to 'approved' status");
+            } else {
+                error_log("Blood Collection Admin - Failed to update eligibility. HTTP: " . $http . ", Response: " . $resp);
+            }
+        } else {
+            // Create new eligibility record
+            error_log("Blood Collection Admin - Creating new eligibility record with 'approved' status");
+            $eligibilityData['created_at'] = (new DateTime())->format('c');
+            
+            $ch = curl_init(SUPABASE_URL . '/rest/v1/eligibility');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($eligibilityData));
+            $resp = curl_exec($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($http === 201 || $http === 200) {
+                error_log("Blood Collection Admin - Successfully created eligibility with 'approved' status");
+            } else {
+                error_log("Blood Collection Admin - Failed to create eligibility. HTTP: " . $http . ", Response: " . $resp);
+            }
+        }
+    } else {
+        error_log("Blood Collection Admin - Not all processes complete yet. Skipping eligibility update.");
+    }
+}
+
 try {
     // Log incoming request for debugging
     error_log("Blood Collection Admin - Incoming POST data: " . json_encode($_POST));
@@ -501,7 +709,10 @@ try {
             throw new Exception('Failed to update blood collection' . ($detail ? (': ' . substr($detail, 0, 600)) : ''));
         }
 
-        // Note: Eligibility records are automatically created by database triggers
+        // Check if all processes are complete and update eligibility to approved
+        if ($is_successful === true && $donor_id) {
+            checkAndUpdateEligibilityToApproved($donor_id, $physical_exam_id, json_decode($resp, true));
+        }
 
         echo json_encode([
             'success' => true,
@@ -554,7 +765,11 @@ try {
             throw new Exception('Failed to create blood collection' . ($detail ? (': ' . substr($detail, 0, 600)) : ''));
         }
 
-        // Note: Eligibility records are automatically created by database triggers
+        // Check if all processes are complete and update eligibility to approved
+        if ($is_successful === true && $donor_id) {
+            $createdData = json_decode($resp, true);
+            checkAndUpdateEligibilityToApproved($donor_id, $physical_exam_id, $createdData);
+        }
 
         // Invalidate cache to ensure status updates immediately
         try {

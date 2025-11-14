@@ -444,6 +444,19 @@ window.AdminDonorModal = (function() {
                         if (phlebStatusLower.includes('declined') || phlebStatusLower.includes('defer') || phlebStatusLower.includes('refused') || phlebStatusLower.includes('not approved')) {
                             return { status: 'Declined/Not Approved', stage: 'Blood Collection', color: 'danger' };
                         }
+                        
+                        // Check if all processes are complete
+                        const isMedicalHistoryComplete = interviewerMedicalLower.includes('approved') || interviewerMedicalLower.includes('completed');
+                        const isScreeningPassed = interviewerScreeningLower.includes('passed') || interviewerScreeningLower.includes('approved');
+                        const isPhysicalExamAccepted = physicianPhysicalLower.includes('accepted') || physicianPhysicalLower.includes('approved');
+                        const isBloodCollectionSuccessful = phlebStatusLower.includes('successful') || phlebStatusLower.includes('approved');
+                        
+                        // If all processes are complete, show Approved
+                        if (isMedicalHistoryComplete && isScreeningPassed && isPhysicalExamAccepted && isBloodCollectionSuccessful) {
+                            return { status: 'Approved', stage: 'All Stages', color: 'success' };
+                        }
+                        
+                        // Check eligibility status from database
                         if (statusLower === 'approved' || statusLower === 'eligible') {
                             return { status: 'Approved', stage: 'All Stages', color: 'success' };
                         }

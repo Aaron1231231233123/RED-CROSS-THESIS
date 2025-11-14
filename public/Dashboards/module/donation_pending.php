@@ -138,9 +138,9 @@ try {
             $examIds = array_values(array_filter($physicalExamIdByDonorId));
             if (!empty($examIds)) {
                 if ($perfMode) {
-                    $collectionResponse = supabaseRequest("blood_collection?physical_exam_id=in.(" . implode(',', $examIds) . ")&select=physical_exam_id,needs_review,status,created_at&order=created_at.desc");
+                    $collectionResponse = supabaseRequest("blood_collection?physical_exam_id=in.(" . implode(',', $examIds) . ")&select=physical_exam_id,needs_review,status,is_successful,created_at&order=created_at.desc");
                 } else {
-                    $collectionResponse = supabaseRequest("blood_collection?select=physical_exam_id,needs_review,status,start_time,created_at&order=created_at.desc");
+                    $collectionResponse = supabaseRequest("blood_collection?select=physical_exam_id,needs_review,status,is_successful,start_time,created_at&order=created_at.desc");
                 }
                 if (isset($collectionResponse['data']) && is_array($collectionResponse['data'])) {
                     foreach ($collectionResponse['data'] as $row) {
@@ -148,6 +148,7 @@ try {
                             $collectionByPhysicalExamId[$row['physical_exam_id']] = [
                                 'needs_review' => isset($row['needs_review']) ? (bool)$row['needs_review'] : null,
                                 'status' => $row['status'] ?? null,
+                                'is_successful' => isset($row['is_successful']) ? (bool)$row['is_successful'] : null,
                                 'created_at' => $row['created_at'] ?? null
                             ];
                         }
@@ -330,6 +331,43 @@ try {
                     }
                 }
                 
+                // Check if blood collection is complete and successful
+                $isBloodCollectionSuccessful = false;
+                $physicalExamId = $physicalExamIdByDonorId[$donorId] ?? null;
+                if ($physicalExamId && isset($collectionByPhysicalExamId[$physicalExamId])) {
+                    $collection = $collectionByPhysicalExamId[$physicalExamId];
+                    // Check if collection is successful - prioritize is_successful field, fallback to status field
+                    if (isset($collection['is_successful']) && ($collection['is_successful'] === true || $collection['is_successful'] === 'true' || $collection['is_successful'] === 1)) {
+                        $isBloodCollectionSuccessful = true;
+                    } else {
+                        $collectionStatus = strtolower(trim((string)($collection['status'] ?? '')));
+                        $isBloodCollectionSuccessful = ($collectionStatus === 'successful' || $collectionStatus === 'approved');
+                    }
+                }
+                
+                // Check if donor has approved eligibility record
+                $hasApprovedEligibility = false;
+                if (isset($eligibilityBatch['data']) && is_array($eligibilityBatch['data'])) {
+                    foreach ($eligibilityBatch['data'] as $elig) {
+                        if (!empty($elig['donor_id']) && $elig['donor_id'] == $donorId) {
+                            $eligStatus = strtolower(trim((string)($elig['status'] ?? '')));
+                            if ($eligStatus === 'approved' || $eligStatus === 'eligible') {
+                                $hasApprovedEligibility = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // If blood collection is successful OR donor has approved eligibility, skip this donor (they should be in approved list)
+                if ($isBloodCollectionSuccessful || $hasApprovedEligibility) {
+                    if (in_array($donorId, [195, 200, 211, 1887, 2514, 3203, 3204, 3205, 3208, 781])) {
+                        error_log("DEBUG - Donor $donorId: Skipped from pending - Blood Collection Successful: " . var_export($isBloodCollectionSuccessful, true) . 
+                                 ", Has Approved Eligibility: " . var_export($hasApprovedEligibility, true));
+                    }
+                    continue; // Skip this donor - they should be in approved list, not pending
+                }
+                
                 // Apply new workflow logic
                 if ($isMedicalHistoryCompleted && $isScreeningPassed && $isPhysicalExamApproved) {
                     // All phases complete -> Pending (Collection)
@@ -347,6 +385,8 @@ try {
                     error_log("DEBUG - Donor $donorId: MH Completed = " . var_export($isMedicalHistoryCompleted, true) . 
                              ", Screening Passed = " . var_export($isScreeningPassed, true) . 
                              ", PE Approved = " . var_export($isPhysicalExamApproved, true) . 
+                             ", BC Successful = " . var_export($isBloodCollectionSuccessful, true) . 
+                             ", Has Approved Eligibility = " . var_export($hasApprovedEligibility, true) . 
                              ", Status = $statusLabel");
                 }
                 

@@ -156,7 +156,12 @@ switch ($action) {
             if (isset($eligibilityResp['data']) && is_array($eligibilityResp['data'])) {
                 foreach ($eligibilityResp['data'] as $e) {
                     if (!empty($e['donor_id'])) {
-                        $eligibilityMap[$e['donor_id']] = true; // Track presence for "Returning" type
+                        // Store full eligibility record for status checking
+                        $eligibilityMap[$e['donor_id']] = [
+                            'eligibility_id' => $e['eligibility_id'] ?? '',
+                            'status' => $e['status'] ?? '',
+                            'has_eligibility' => true // Track presence for "Returning" type
+                        ];
                         // Track approved donors separately
                         if (!empty($e['status']) && strtolower($e['status']) === 'approved') {
                             $approvedDonorsMap[$e['donor_id']] = [
@@ -212,7 +217,7 @@ switch ($action) {
                 if (!$donorId) continue;
                 
                 // Determine donor type
-                $donorType = isset($eligibilityMap[$donorId]) ? 'Returning' : 'New';
+                $donorType = (isset($eligibilityMap[$donorId]) && isset($eligibilityMap[$donorId]['has_eligibility'])) ? 'Returning' : 'New';
                 
                 // Check if this donor is approved
                 $isApproved = isset($approvedDonorsMap[$donorId]);
@@ -233,16 +238,39 @@ switch ($action) {
                     $isScreeningPassed = isset($screening) && empty($screening['disapproval_reason']);
                     $isPhysicalExamApproved = isset($physical) && !empty($physical['remarks']) && !in_array($physical['remarks'], ['Temporarily Deferred', 'Permanently Deferred', 'Declined', 'Refused']);
                     
-                    if ($isMedicalHistoryCompleted && $isScreeningPassed && $isPhysicalExamApproved) {
-                        $statusText = 'Pending (Collection)';
-                    } else if ($isMedicalHistoryCompleted && $isScreeningPassed) {
-                        $statusText = 'Pending (Examination)';
-                    } else {
-                        $statusText = 'Pending (Screening)';
+                    // Check if blood collection is successful
+                    $isBloodCollectionSuccessful = false;
+                    // Check eligibility for approved status or blood collection success
+                    if (isset($eligibilityMap[$donorId])) {
+                        $eligRecord = $eligibilityMap[$donorId];
+                        $eligStatus = strtolower(trim((string)($eligRecord['status'] ?? '')));
+                        if ($eligStatus === 'approved' || $eligStatus === 'eligible') {
+                            $isBloodCollectionSuccessful = true; // If eligibility is approved, collection must be successful
+                        }
                     }
                     
-                    // Determine eligibility_id for pending donors
-                    $eligibilityId = 'pending_' . $donorId;
+                    // If all processes including blood collection are complete, mark as Approved
+                    if ($isMedicalHistoryCompleted && $isScreeningPassed && $isPhysicalExamApproved && $isBloodCollectionSuccessful) {
+                        $statusText = 'Approved';
+                        // Try to get real eligibility_id if available
+                        if (isset($eligibilityMap[$donorId]) && !empty($eligibilityMap[$donorId]['eligibility_id'])) {
+                            $eligibilityId = $eligibilityMap[$donorId]['eligibility_id'];
+                        } else {
+                            $eligibilityId = 'pending_' . $donorId;
+                        }
+                    } else if ($isMedicalHistoryCompleted && $isScreeningPassed && $isPhysicalExamApproved) {
+                        $statusText = 'Pending (Collection)';
+                        // Determine eligibility_id for pending donors
+                        $eligibilityId = 'pending_' . $donorId;
+                    } else if ($isMedicalHistoryCompleted && $isScreeningPassed) {
+                        $statusText = 'Pending (Examination)';
+                        // Determine eligibility_id for pending donors
+                        $eligibilityId = 'pending_' . $donorId;
+                    } else {
+                        $statusText = 'Pending (Screening)';
+                        // Determine eligibility_id for pending donors
+                        $eligibilityId = 'pending_' . $donorId;
+                    }
                 }
                 
                 // Handle registration channel display
