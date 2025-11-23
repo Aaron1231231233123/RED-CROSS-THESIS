@@ -881,10 +881,12 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             max-width: 1200px;
             width: 90%;
             max-height: 90vh;
-            overflow-y: auto;
+            overflow: hidden;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             transform: translateY(-20px);
             transition: transform 0.3s ease;
+            display: flex;
+            flex-direction: column;
         }
 
         .medical-history-modal.show .medical-modal-content {
@@ -899,6 +901,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0;
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
 
         .medical-modal-header h3 {
@@ -929,6 +935,56 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
 
         .medical-modal-body {
             padding: 30px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            flex: 1;
+            min-height: 0;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        /* Custom scrollbar for medical modal body */
+        .medical-modal-body::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .medical-modal-body::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        .medical-modal-body::-webkit-scrollbar-thumb {
+            background: #b22222;
+            border-radius: 4px;
+        }
+        
+        .medical-modal-body::-webkit-scrollbar-thumb:hover {
+            background: #8b0000;
+        }
+        
+        #medicalHistoryModalContent {
+            max-height: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        /* Smooth scrolling for medical history content */
+        #medicalHistoryModalContent::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        #medicalHistoryModalContent::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        #medicalHistoryModalContent::-webkit-scrollbar-thumb {
+            background: #b22222;
+            border-radius: 4px;
+        }
+        
+        #medicalHistoryModalContent::-webkit-scrollbar-thumb:hover {
+            background: #8b0000;
         }
 
         /* Physical Examination Progress Indicator - Matching Screening Modal */
@@ -2151,6 +2207,253 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         #screeningFormModal .screening-review-value { color:#212529; font-weight:600; }
 
         @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+        
+        /* ========================================
+           MODAL NAVIGATION SIDEBAR STYLES
+           ======================================== */
+        .modal-nav-sidebar {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 180px;
+            background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+            border-right: 2px solid #dee2e6;
+            z-index: 1061;
+            padding: 0;
+            overflow-y: auto;
+            box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+        }
+        
+        .modal-nav-sidebar.hidden {
+            transform: translateX(-100%);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            animation: none !important;
+            transition: none !important;
+        }
+        
+        .modal-nav-sidebar:not(.hidden) {
+            visibility: visible;
+            pointer-events: auto;
+            animation: slideInLeft 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        @keyframes slideInLeft {
+            from {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .modal-nav-header {
+            display: flex;
+            align-items: center;
+            padding: 1.5rem;
+            background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+            color: white;
+            border-bottom: none;
+            border-radius: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .modal-nav-header-icon {
+            font-size: 24px;
+            color: white;
+            margin-right: 0.75rem;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        .modal-nav-header-text {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .modal-nav-header-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: white;
+            margin-bottom: 1px;
+            line-height: 1.2;
+        }
+        
+        .modal-nav-header-subtitle {
+            font-size: 9px;
+            color: rgba(255,255,255,0.85);
+            font-weight: 400;
+            letter-spacing: 0.3px;
+            line-height: 1.2;
+        }
+        
+        .modal-nav-items {
+            padding: 0.75rem 0.5rem;
+        }
+        
+        .modal-nav-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 12px;
+            margin-bottom: 6px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            color: #495057;
+            font-size: 13px;
+            font-weight: 500;
+            text-decoration: none;
+        }
+        
+        .modal-nav-item:hover {
+            background: linear-gradient(135deg, rgba(178,34,34,0.1) 0%, rgba(139,0,0,0.1) 100%);
+            color: #b22222;
+            transform: translateX(5px);
+        }
+        
+        .modal-nav-item.active {
+            background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(178,34,34,0.3);
+        }
+        
+        .modal-nav-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 70%;
+            background: white;
+            border-radius: 0 4px 4px 0;
+        }
+        
+        .modal-nav-item.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            pointer-events: none;
+            background: rgba(0, 0, 0, 0.05);
+        }
+        
+        .modal-nav-item.disabled:hover {
+            background: rgba(0, 0, 0, 0.05);
+            transform: none;
+            color: #495057;
+        }
+        
+        .modal-nav-item.hidden {
+            display: none !important;
+        }
+        
+        .modal-nav-item-icon {
+            margin-right: 10px;
+            font-size: 15px;
+            width: 18px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        
+        .modal-content-with-nav {
+            margin-left: 180px;
+            transition: margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+            animation: fadeInContent 0.4s ease;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+        
+        .modal-content-with-nav.no-nav {
+            margin-left: 0;
+        }
+        
+        @keyframes fadeInContent {
+            from {
+                opacity: 0;
+                transform: translateX(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 1200px) {
+            .modal-nav-sidebar {
+                width: 160px;
+            }
+            .modal-content-with-nav {
+                margin-left: 160px;
+            }
+            .modal-nav-header {
+                padding: 1.25rem;
+            }
+            .modal-nav-header-icon {
+                font-size: 20px;
+                width: 40px;
+                height: 40px;
+                margin-right: 0.6rem;
+            }
+            .modal-nav-header-title {
+                font-size: 11px;
+            }
+            .modal-nav-header-subtitle {
+                font-size: 8px;
+            }
+            .modal-nav-items {
+                padding: 0.625rem 0.4rem;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .modal-nav-sidebar {
+                width: 150px;
+            }
+            .modal-content-with-nav {
+                margin-left: 150px;
+            }
+            .modal-nav-header {
+                padding: 1rem;
+            }
+            .modal-nav-header-icon {
+                font-size: 18px;
+                width: 36px;
+                height: 36px;
+                margin-right: 0.5rem;
+            }
+            .modal-nav-header-title {
+                font-size: 10px;
+                letter-spacing: 0.3px;
+            }
+            .modal-nav-header-subtitle {
+                font-size: 7px;
+            }
+            .modal-nav-item {
+                padding: 8px 10px;
+                font-size: 12px;
+            }
+            .modal-nav-items {
+                padding: 0.5rem 0.4rem;
+            }
+        }
     </style>
 </head>
 <body class="light-mode">
@@ -2681,16 +2984,47 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
 
     <!-- Medical History Modal -->
     <div class="medical-history-modal" id="medicalHistoryModal">
-        <div class="medical-modal-content">
-            <div class="medical-modal-header">
-                <h3><i class="fas fa-file-medical me-2"></i>Medical History Review & Approval</h3>
-                <button type="button" class="medical-close-btn" onclick="closeMedicalHistoryModal()">
-                    <i class="fas fa-times"></i>
-                </button>
+        <div class="medical-modal-content" style="position: relative; overflow: hidden;">
+            <!-- Navigation Sidebar -->
+            <div class="modal-nav-sidebar" id="medicalHistoryNavSidebar">
+                <div class="modal-nav-header">
+                    <i class="fas fa-user-md modal-nav-header-icon"></i>
+                    <div class="modal-nav-header-text">
+                        <div class="modal-nav-header-title">PHYSICIAN</div>
+                        <div class="modal-nav-header-subtitle">Workflow</div>
+                    </div>
+                </div>
+                <div class="modal-nav-items">
+                    <div class="modal-nav-item active" id="navPhysicianMedicalHistory" data-nav="medical-history">
+                        <i class="fas fa-file-medical modal-nav-item-icon"></i>
+                        <span>Medical History</span>
+                    </div>
+                    <div class="modal-nav-item" id="navPhysicianInitialScreening" data-nav="initial-screening">
+                        <i class="fas fa-clipboard-list modal-nav-item-icon"></i>
+                        <span>Initial Screening</span>
+                    </div>
+                    <div class="modal-nav-item" id="navPhysicianPhysicalExam" data-nav="physical-examination">
+                        <i class="fas fa-stethoscope modal-nav-item-icon"></i>
+                        <span>Physical Examination</span>
+                    </div>
+                    <div class="modal-nav-item" id="navPhysicianDonorProfile" data-nav="donor-profile">
+                        <i class="fas fa-user modal-nav-item-icon"></i>
+                        <span>Donor Profile</span>
+                    </div>
+                </div>
             </div>
-            <div class="medical-modal-body">
-                <div id="medicalHistoryModalContent">
-                    <!-- Content will be loaded dynamically -->
+            
+            <div class="modal-content-with-nav" id="medicalHistoryModalContentWrapper">
+                <div class="medical-modal-header">
+                    <h3><i class="fas fa-file-medical me-2"></i>Medical History Review & Approval</h3>
+                    <button type="button" class="medical-close-btn" onclick="closeMedicalHistoryModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="medical-modal-body">
+                    <div id="medicalHistoryModalContent">
+                        <!-- Content will be loaded dynamically -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -2949,30 +3283,67 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             try {
                 const reopenProfile = function(){
                     try {
-                        // Don't reopen if we're in the middle of an approve process
-                        if (window.__suppressReturnToProfile || window.__screeningApproveActive || window.__physApproveActive) { 
+                        console.log('[MODAL DEBUG] reopenProfile() called');
+                        console.log('[MODAL DEBUG] __suppressReturnToProfile:', window.__suppressReturnToProfile);
+                        console.log('[MODAL DEBUG] __screeningApproveActive:', window.__screeningApproveActive);
+                        console.log('[MODAL DEBUG] __physApproveActive:', window.__physApproveActive);
+                        console.log('[MODAL DEBUG] __sidebarNavigationActive:', window.__sidebarNavigationActive);
+                        console.log('[MODAL DEBUG] __preventDonorProfileOpen:', window.__preventDonorProfileOpen);
+                        
+                        // Don't reopen if we're in the middle of an approve process, sidebar navigation, or explicitly prevented
+                        if (window.__suppressReturnToProfile || window.__screeningApproveActive || window.__physApproveActive || window.__sidebarNavigationActive || window.__preventDonorProfileOpen) { 
+                            console.log('[MODAL DEBUG] reopenProfile() BLOCKED - sidebar navigation, approve process, or prevent flag active');
                             window.__suppressReturnToProfile = false; 
                             return; 
                         }
+                        console.log('[MODAL DEBUG] reopenProfile() PROCEEDING - opening donor profile');
                         const dpEl = document.getElementById('donorProfileModal');
-                        if (!dpEl) return;
+                        if (!dpEl) {
+                            console.log('[MODAL DEBUG] reopenProfile() FAILED - donorProfileModal element not found');
+                            return;
+                        }
                         const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
                         dp.show();
+                        console.log('[MODAL DEBUG] reopenProfile() SUCCESS - donor profile modal shown');
                         // After showing, force-refresh the modal content so latest DB values are displayed
                         setTimeout(() => { try { refreshDonorProfileModal(); } catch(_) {} }, 100);
-                    } catch(_) {}
+                    } catch(e) {
+                        console.error('[MODAL DEBUG] reopenProfile() ERROR:', e);
+                    }
                 };
                 // Screening modal (Bootstrap)
                 const sEl = document.getElementById('screeningFormModal');
                 if (sEl && !sEl.__returnHooked) {
                     sEl.__returnHooked = true;
-                    sEl.addEventListener('hidden.bs.modal', function(){ reopenProfile(); });
+                    sEl.addEventListener('hidden.bs.modal', function(){ 
+                        console.log('[MODAL DEBUG] Screening modal hidden.bs.modal event fired');
+                        console.log('[MODAL DEBUG] __sidebarNavigationActive:', window.__sidebarNavigationActive);
+                        console.log('[MODAL DEBUG] __preventDonorProfileOpen:', window.__preventDonorProfileOpen);
+                        // Check if sidebar navigation is active or donor profile opening is prevented before reopening profile
+                        if (!window.__sidebarNavigationActive && !window.__preventDonorProfileOpen) {
+                            console.log('[MODAL DEBUG] Sidebar navigation NOT active and prevent flag not set, calling reopenProfile()');
+                            reopenProfile(); 
+                        } else {
+                            console.log('[MODAL DEBUG] Sidebar navigation or prevent flag IS active, BLOCKING reopenProfile()');
+                        }
+                    });
                     // Also hook the top-right close button explicitly
                     const xBtn = sEl.querySelector('.btn-close');
                     if (xBtn && !xBtn.__returnHooked) {
                         xBtn.__returnHooked = true;
                         xBtn.addEventListener('click', function(){
-                            setTimeout(reopenProfile, 200);
+                            console.log('[MODAL DEBUG] Screening modal close button clicked');
+                            console.log('[MODAL DEBUG] __sidebarNavigationActive:', window.__sidebarNavigationActive);
+                            console.log('[MODAL DEBUG] __preventDonorProfileOpen:', window.__preventDonorProfileOpen);
+                            // Check if sidebar navigation is active or donor profile opening is prevented before reopening profile
+                            setTimeout(function() {
+                                if (!window.__sidebarNavigationActive && !window.__preventDonorProfileOpen) {
+                                    console.log('[MODAL DEBUG] Sidebar navigation NOT active and prevent flag not set (after delay), calling reopenProfile()');
+                                    reopenProfile();
+                                } else {
+                                    console.log('[MODAL DEBUG] Sidebar navigation or prevent flag IS active (after delay), BLOCKING reopenProfile()');
+                                }
+                            }, 200);
                         });
                     }
                 }
@@ -3222,7 +3593,26 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
 
         // Donor Profile Modal Functions
         function openDonorProfileModal(screeningData) {
+            console.log('[DONOR PROFILE DEBUG] openDonorProfileModal() called');
+            console.log('[DONOR PROFILE DEBUG] screeningData:', screeningData);
+            console.log('[DONOR PROFILE DEBUG] __sidebarNavigationActive:', window.__sidebarNavigationActive);
+            console.log('[DONOR PROFILE DEBUG] __preventDonorProfileOpen:', window.__preventDonorProfileOpen);
+            console.log('[DONOR PROFILE DEBUG] __explicitDonorProfileOpen:', window.__explicitDonorProfileOpen);
+            console.log('[DONOR PROFILE DEBUG] isOpeningDonorProfile:', window.isOpeningDonorProfile);
+            console.log('[DONOR PROFILE DEBUG] Stack trace:', new Error().stack);
             
+            // CRITICAL: If sidebar navigation is active and we're NOT explicitly opening donor profile, block it
+            // Only allow if explicitly called from sidebar donor profile button (check caller)
+            if (window.__sidebarNavigationActive && !window.__explicitDonorProfileOpen) {
+                console.log('[DONOR PROFILE DEBUG] BLOCKED - Sidebar navigation active and NOT explicit donor profile open');
+                return;
+            }
+            
+            // CRITICAL: If we're preventing donor profile from opening (e.g., during modal transitions), block it
+            if (window.__preventDonorProfileOpen) {
+                console.log('[DONOR PROFILE DEBUG] BLOCKED - __preventDonorProfileOpen flag is set');
+                return;
+            }
             
             // Prevent multiple instances
             if (window.isOpeningDonorProfile) {
@@ -3245,8 +3635,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             
             // Get donor ID from screening data
             const donorId = screeningData.donor_form_id;
+            console.log('[DONOR PROFILE DEBUG] Extracted donor ID from screening data:', donorId);
             if (!donorId) {
-                
+                console.error('[DONOR PROFILE DEBUG] ERROR: No donor ID found in screening data!');
+                console.error('[DONOR PROFILE DEBUG] Full screening data:', screeningData);
                 alert("Error: No donor ID found. Please try again.");
                 window.isOpeningDonorProfile = false;
                 return;
@@ -4312,9 +4704,12 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         }
         
         function openMedicalHistoryModal(donorId) {
+            console.log('[MH DEBUG] openMedicalHistoryModal() called with donorId:', donorId);
+            console.log('[MH DEBUG] __sidebarNavigationActive:', window.__sidebarNavigationActive);
+            
             // Prevent multiple instances
             if (window.isOpeningMedicalHistory) {
-                
+                console.log('[MH DEBUG] Already opening medical history, returning early');
                 return;
             }
             window.isOpeningMedicalHistory = true;
@@ -4348,7 +4743,17 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             } catch(_) {}
 
             // Hide donor profile without cleanup, then show MH above it
+            // BUT: If sidebar navigation is active, prevent donor profile from reopening
             try {
+                if (window.__sidebarNavigationActive) {
+                    console.log('[MH DEBUG] Sidebar navigation active - preventing donor profile from opening');
+                    // Set a flag to prevent donor profile from opening
+                    window.__preventDonorProfileOpen = true;
+                    // Clear this flag after modal is fully shown
+                    setTimeout(() => {
+                        window.__preventDonorProfileOpen = false;
+                    }, 3000);
+                }
                 window.skipDonorProfileCleanup = true;
                 const donorProfileEl = document.getElementById('donorProfileModal');
                 const dpModal = bootstrap.Modal.getInstance(donorProfileEl) || new bootstrap.Modal(donorProfileEl);
@@ -4364,7 +4769,11 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             
             // Show the custom modal (like physical examination modal)
             mhElement.style.display = 'flex';
-            setTimeout(() => mhElement.classList.add('show'), 10);
+            setTimeout(() => {
+                mhElement.classList.add('show');
+                // Update active nav item when modal is shown
+                updatePhysicianActiveNavItem('navPhysicianMedicalHistory');
+            }, 10);
             
             // Show loading state in modal content
             const modalContent = document.getElementById('medicalHistoryModalContent');
@@ -4382,16 +4791,59 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         }
         
         function closeMedicalHistoryModal() {
+            console.log('[MODAL DEBUG] closeMedicalHistoryModal() called');
+            // Check if sidebar navigation is active - if so, don't reopen donor profile
+            const isSidebarNav = window.__sidebarNavigationActive;
+            console.log('[MODAL DEBUG] isSidebarNav:', isSidebarNav);
+            console.log('[MODAL DEBUG] __sidebarNavigationActive:', window.__sidebarNavigationActive);
             
             const mhElement = document.getElementById('medicalHistoryModal');
+            if (!mhElement) {
+                console.error('[MODAL DEBUG] Medical History modal element not found');
+                return;
+            }
             
             // First, hide the modal content
+            console.log('[MODAL DEBUG] Hiding Medical History modal...');
             mhElement.classList.remove('show');
             
             // Wait for the fade-out animation to complete
             setTimeout(() => {
                 mhElement.style.display = 'none';
                 window.isOpeningMedicalHistory = false;
+                console.log('[MODAL DEBUG] Medical History modal hidden');
+                console.log('[MODAL DEBUG] Checking if should reopen donor profile...');
+                console.log('[MODAL DEBUG] isSidebarNav:', isSidebarNav);
+                console.log('[MODAL DEBUG] __sidebarNavigationActive:', window.__sidebarNavigationActive);
+                
+                // Only reopen donor profile if NOT navigating via sidebar
+                if (!isSidebarNav && !window.__sidebarNavigationActive) {
+                    console.log('[MODAL DEBUG] Sidebar navigation NOT active, checking if should reopen donor profile');
+                    // Check if donor profile should be reopened (only if it was open before)
+                    const dpEl = document.getElementById('donorProfileModal');
+                    if (dpEl && window.lastDonorProfileContext) {
+                        console.log('[MODAL DEBUG] Donor profile element and context found, reopening...');
+                        setTimeout(() => {
+                            // Final check: ensure both flags are not set before reopening
+                            if (!window.__sidebarNavigationActive && !window.__preventDonorProfileOpen) {
+                                console.log('[MODAL DEBUG] Final check passed, opening donor profile');
+                                try {
+                                    const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
+                                    dp.show();
+                                    console.log('[MODAL DEBUG] Donor profile reopened successfully');
+                                } catch(e) {
+                                    console.error('[MODAL DEBUG] Error reopening donor profile:', e);
+                                }
+                            } else {
+                                console.log('[MODAL DEBUG] Final check FAILED - sidebar navigation or prevent flag active, NOT reopening donor profile');
+                            }
+                        }, 200);
+                    } else {
+                        console.log('[MODAL DEBUG] Donor profile element or context not found, NOT reopening');
+                    }
+                } else {
+                    console.log('[MODAL DEBUG] Sidebar navigation IS active, NOT reopening donor profile');
+                }
                 
                 // Reset any form state or validation errors
                 const form = mhElement.querySelector('form');
@@ -4433,16 +4885,24 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 } catch(_) {}
                 
                 // Return to Donor Profile modal unless explicitly prevented (e.g., proceeding to Initial Screening)
+                // CRITICAL: Check ALL flags that prevent donor profile from opening
                 try {
                     const prevented = !!window.__preventReturnToProfile;
+                    const sidebarNavActive = !!window.__sidebarNavigationActive;
+                    const preventDonorProfileOpen = !!window.__preventDonorProfileOpen;
+                    
                     // Reset flag for next time
                     window.__preventReturnToProfile = false;
-                    if (!prevented) {
+                    
+                    // Only reopen donor profile if NONE of the prevention flags are set
+                    if (!prevented && !sidebarNavActive && !preventDonorProfileOpen) {
                         const dpEl = document.getElementById('donorProfileModal');
                         if (dpEl) {
                             const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
                             dp.show();
                         }
+                    } else {
+                        console.log('[MODAL DEBUG] Donor profile reopening BLOCKED - prevented:', prevented, 'sidebarNavActive:', sidebarNavActive, 'preventDonorProfileOpen:', preventDonorProfileOpen);
                     }
                 } catch(_) {}
             }, 300);
@@ -6313,6 +6773,704 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         };
     } catch(_) {}
 })();
+
+// ========================================
+// SIDEBAR NAVIGATION HANDLERS
+// ========================================
+
+// Helper function to update active nav items
+function updatePhysicianActiveNavItem(navItemId) {
+    console.log('[NAV DEBUG] updatePhysicianActiveNavItem() called with navItemId:', navItemId);
+    // Remove active class from all nav items
+    const allNavItems = document.querySelectorAll('.modal-nav-item');
+    console.log('[NAV DEBUG] Found', allNavItems.length, 'nav items to process');
+    allNavItems.forEach(item => {
+        if (item.classList.contains('active')) {
+            console.log('[NAV DEBUG] Removing active class from:', item.id);
+        }
+        item.classList.remove('active');
+    });
+    
+    // Add active class to the specified item
+    const navItem = document.getElementById(navItemId);
+    if (navItem) {
+        navItem.classList.add('active');
+        console.log('[NAV DEBUG] Added active class to:', navItemId);
+    } else {
+        console.error('[NAV DEBUG] Nav item NOT found:', navItemId);
+    }
+}
+
+// Update active nav item when modals are shown
+(function() {
+    // Initial Screening Modal
+    const screeningModal = document.getElementById('screeningFormModal');
+    if (screeningModal) {
+        screeningModal.addEventListener('shown.bs.modal', function() {
+            console.log('[MODAL DEBUG] Initial Screening modal shown.bs.modal event fired');
+            updatePhysicianActiveNavItem('navScreeningInitialScreening');
+            // Ensure content loads - renderSummary should be available now
+            setTimeout(() => {
+                if (typeof window.renderSummary === 'function') {
+                    console.log('[MODAL DEBUG] Calling window.renderSummary() to load content...');
+                    window.renderSummary();
+                } else {
+                    console.warn('[MODAL DEBUG] window.renderSummary() still not available');
+                }
+            }, 200);
+        });
+    }
+    
+    // Physical Examination Modal
+    const physicalExamModal = document.getElementById('physicalExaminationModal');
+    if (physicalExamModal) {
+        physicalExamModal.addEventListener('shown.bs.modal', function() {
+            console.log('[MODAL DEBUG] Physical Examination modal shown.bs.modal event fired');
+            updatePhysicianActiveNavItem('navPEPhysicalExam');
+        });
+        
+        // Prevent donor profile from opening when PE modal closes via sidebar navigation
+        physicalExamModal.addEventListener('hidden.bs.modal', function() {
+            console.log('[MODAL DEBUG] Physical Examination modal hidden.bs.modal event fired');
+            console.log('[MODAL DEBUG] __sidebarNavigationActive:', window.__sidebarNavigationActive);
+            console.log('[MODAL DEBUG] __preventDonorProfileOpen:', window.__preventDonorProfileOpen);
+            // If sidebar navigation is active or donor profile opening is prevented, don't reopen donor profile
+            if (window.__sidebarNavigationActive || window.__preventDonorProfileOpen) {
+                console.log('[MODAL DEBUG] Sidebar navigation or prevent flag IS active, NOT reopening donor profile');
+                return;
+            }
+            console.log('[MODAL DEBUG] Sidebar navigation NOT active, allowing normal flow');
+            // Otherwise, let the normal flow handle it
+        });
+    }
+    
+    // Donor Profile Modal
+    const donorProfileModal = document.getElementById('donorProfileModal');
+    if (donorProfileModal) {
+        donorProfileModal.addEventListener('shown.bs.modal', function() {
+            console.log('[MODAL DEBUG] Donor Profile modal shown.bs.modal event fired');
+            console.log('[MODAL DEBUG] __sidebarNavigationActive:', window.__sidebarNavigationActive);
+            // Only update nav item if this was intentionally opened (not via sidebar navigation to another modal)
+            if (!window.__sidebarNavigationActive) {
+                console.log('[MODAL DEBUG] Donor profile intentionally opened, updating nav item');
+                // Update all donor profile nav items (they all point to the same modal)
+                const activeNav = document.querySelector('.modal-nav-item[data-nav="donor-profile"].active');
+                if (!activeNav) {
+                    // Find which sidebar is visible and update that one
+                    const mhSidebar = document.getElementById('medicalHistoryNavSidebar');
+                    const peSidebar = document.getElementById('physicalExamNavSidebar');
+                    const screeningSidebar = document.getElementById('physicianScreeningNavSidebar');
+                    
+                    if (mhSidebar && !mhSidebar.classList.contains('hidden')) {
+                        updatePhysicianActiveNavItem('navPhysicianDonorProfile');
+                    } else if (peSidebar && !peSidebar.classList.contains('hidden')) {
+                        updatePhysicianActiveNavItem('navPEDonorProfile');
+                    } else if (screeningSidebar && !screeningSidebar.classList.contains('hidden')) {
+                        updatePhysicianActiveNavItem('navScreeningDonorProfile');
+                    }
+                }
+            } else {
+                console.log('[MODAL DEBUG] Donor profile opened during sidebar navigation - NOT updating nav item');
+            }
+        });
+    }
+    
+})();
+
+// Get current screening data
+function getCurrentScreeningData() {
+    console.log('[HELPER DEBUG] getCurrentScreeningData() called');
+    // Try to get screening data from context
+    if (window.lastDonorProfileContext && window.lastDonorProfileContext.screeningData) {
+        console.log('[HELPER DEBUG] Found screening data from lastDonorProfileContext:', window.lastDonorProfileContext.screeningData);
+        return window.lastDonorProfileContext.screeningData;
+    }
+    
+    // Try to construct screening data from available donor ID
+    const donorId = getCurrentPhysicianDonorId();
+    if (donorId) {
+        const constructedData = {
+            donor_form_id: donorId,
+            screening_id: null // Will be populated if available
+        };
+        console.log('[HELPER DEBUG] Constructed screening data from donor ID:', constructedData);
+        return constructedData;
+    }
+    
+    console.warn('[HELPER DEBUG] No screening data found, returning null');
+    return null;
+}
+
+// Get current donor ID
+function getCurrentPhysicianDonorId() {
+    console.log('[HELPER DEBUG] getCurrentPhysicianDonorId() called');
+    // Try multiple sources for donor ID
+    let donorId = window.currentDonorId;
+    console.log('[HELPER DEBUG] window.currentDonorId:', donorId);
+    
+    if (!donorId) {
+        // Try from medical history modal
+        const mhInput = document.querySelector('#medicalHistoryModalContent input[name="donor_id"]');
+        if (mhInput) {
+            donorId = mhInput.value;
+            console.log('[HELPER DEBUG] Found donor ID from Medical History modal:', donorId);
+        }
+    }
+    
+    if (!donorId) {
+        // Try from screening modal
+        const screeningInput = document.querySelector('#screeningFormModal input[name="donor_id"]');
+        if (screeningInput) {
+            donorId = screeningInput.value;
+            console.log('[HELPER DEBUG] Found donor ID from Screening modal:', donorId);
+        }
+    }
+    
+    if (!donorId) {
+        // Try from physical examination modal
+        const peInput = document.querySelector('#physical-donor-id');
+        if (peInput) {
+            donorId = peInput.value;
+            console.log('[HELPER DEBUG] Found donor ID from Physical Examination modal:', donorId);
+        }
+    }
+    
+    if (!donorId && window.lastDonorProfileContext) {
+        donorId = window.lastDonorProfileContext.donorId;
+        console.log('[HELPER DEBUG] Found donor ID from lastDonorProfileContext:', donorId);
+    }
+    
+    console.log('[HELPER DEBUG] Final donor ID returned:', donorId);
+    return donorId;
+}
+
+// Navigation from Medical History to Initial Screening
+const navPhysicianInitialScreening = document.getElementById('navPhysicianInitialScreening');
+if (navPhysicianInitialScreening) {
+    navPhysicianInitialScreening.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[SIDEBAR DEBUG] navPhysicianInitialScreening clicked');
+        
+        // CRITICAL: Set ALL flags IMMEDIATELY to prevent any donor profile opening
+        window.__sidebarNavigationActive = true;
+        window.__preventDonorProfileOpen = true;
+        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
+        console.log('[SIDEBAR DEBUG] __preventDonorProfileOpen set to TRUE');
+        
+        const donorId = getCurrentPhysicianDonorId();
+        console.log('[SIDEBAR DEBUG] Retrieved donor ID:', donorId);
+        if (donorId) {
+            // Store donor ID in global context
+            window.currentDonorId = donorId;
+            window.lastDonorProfileContext = { 
+                donorId: donorId, 
+                screeningData: { donor_form_id: donorId } 
+            };
+            console.log('[SIDEBAR DEBUG] Stored donor ID in context:', window.currentDonorId);
+            
+            // Close any open donor profile modal FIRST to prevent conflicts
+            try {
+                const dpEl = document.getElementById('donorProfileModal');
+                if (dpEl) {
+                    const dpModal = bootstrap.Modal.getInstance(dpEl);
+                    if (dpModal && dpModal._isShown) {
+                        console.log('[SIDEBAR DEBUG] Closing donor profile modal before opening Initial Screening...');
+                        dpModal.hide();
+                    }
+                }
+            } catch(err) {
+                console.warn('[SIDEBAR DEBUG] Error closing donor profile:', err);
+            }
+            
+            console.log('[SIDEBAR DEBUG] Closing Medical History modal...');
+            closeMedicalHistoryModal();
+            
+            setTimeout(() => {
+                console.log('[SIDEBAR DEBUG] Attempting to open Initial Screening modal...');
+                const screeningModal = document.getElementById('screeningFormModal');
+                if (screeningModal) {
+                    console.log('[SIDEBAR DEBUG] Screening modal element found');
+                    
+                    // Set donor ID in the screening form BEFORE opening
+                    const screeningForm = document.getElementById('screeningForm');
+                    if (screeningForm) {
+                        const donorIdInput = screeningForm.querySelector('input[name="donor_id"]');
+                        if (donorIdInput) {
+                            donorIdInput.value = donorId;
+                            console.log('[SIDEBAR DEBUG] Set donor ID in form input:', donorId);
+                        } else {
+                            console.warn('[SIDEBAR DEBUG] Donor ID input not found in form');
+                        }
+                    } else {
+                        console.warn('[SIDEBAR DEBUG] Screening form not found');
+                    }
+                    
+                    // Get or create modal instance
+                    let modalInstance = bootstrap.Modal.getInstance(screeningModal);
+                    if (!modalInstance) {
+                        modalInstance = new bootstrap.Modal(screeningModal);
+                        console.log('[SIDEBAR DEBUG] Created new Bootstrap modal instance');
+                    } else {
+                        console.log('[SIDEBAR DEBUG] Using existing Bootstrap modal instance');
+                    }
+                    
+                    // Ensure content loads when modal is shown
+                    const oneTimeShown = function() {
+                        console.log('[SIDEBAR DEBUG] Screening modal shown event fired');
+                        screeningModal.removeEventListener('shown.bs.modal', oneTimeShown);
+                        // Trigger content load if renderSummary function exists (check both local and window)
+                        setTimeout(() => {
+                            if (typeof window.renderSummary === 'function') {
+                                console.log('[SIDEBAR DEBUG] window.renderSummary function found, calling it...');
+                                window.renderSummary();
+                            } else if (typeof renderSummary === 'function') {
+                                console.log('[SIDEBAR DEBUG] renderSummary function found (local scope), calling it...');
+                                renderSummary();
+                            } else {
+                                console.warn('[SIDEBAR DEBUG] renderSummary function NOT found (neither window nor local)');
+                            }
+                        }, 200);
+                    };
+                    screeningModal.addEventListener('shown.bs.modal', oneTimeShown, { once: true });
+                    
+                    console.log('[SIDEBAR DEBUG] Calling modalInstance.show()...');
+                    modalInstance.show();
+                    updatePhysicianActiveNavItem('navScreeningInitialScreening');
+                    console.log('[SIDEBAR DEBUG] Active nav item updated to navScreeningInitialScreening');
+                    
+                    // Clear flags after modal is fully shown and stable (extended duration)
+                    setTimeout(() => {
+                        console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
+                        window.__sidebarNavigationActive = false;
+                        window.__preventDonorProfileOpen = false;
+                    }, 3000);
+                } else {
+                    console.error('[SIDEBAR DEBUG] Screening modal element NOT found!');
+                    window.__sidebarNavigationActive = false;
+                    window.__preventDonorProfileOpen = false;
+                }
+            }, 300);
+        } else {
+            console.error('[SIDEBAR DEBUG] No donor ID found, clearing flags');
+            window.__sidebarNavigationActive = false;
+            window.__preventDonorProfileOpen = false;
+        }
+    });
+}
+
+// Navigation from Medical History to Physical Examination
+const navPhysicianPhysicalExam = document.getElementById('navPhysicianPhysicalExam');
+if (navPhysicianPhysicalExam) {
+    navPhysicianPhysicalExam.addEventListener('click', function() {
+        // Set flags to prevent donor profile from opening on modal close
+        window.__sidebarNavigationActive = true;
+        window.__preventDonorProfileOpen = true;
+        console.log('[SIDEBAR DEBUG] navPhysicianPhysicalExam clicked');
+        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
+        console.log('[SIDEBAR DEBUG] __preventDonorProfileOpen set to TRUE');
+        
+        const screeningData = getCurrentScreeningData();
+        if (screeningData && screeningData.donor_form_id) {
+            closeMedicalHistoryModal();
+            setTimeout(() => {
+                if (window.physicalExaminationModal && typeof window.physicalExaminationModal.open === 'function') {
+                    window.physicalExaminationModal.open(screeningData);
+                } else {
+                    // Fallback: use Bootstrap modal
+                    const peModal = document.getElementById('physicalExaminationModal');
+                    if (peModal) {
+                        const modal = bootstrap.Modal.getOrCreateInstance(peModal, { 
+                            backdrop: 'static', 
+                            keyboard: false 
+                        });
+                        modal.show();
+                    }
+                }
+                updatePhysicianActiveNavItem('navPEPhysicalExam');
+                
+                // Clear flags after modal is shown (extended duration to cover all close events)
+                setTimeout(() => {
+                    console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
+                    window.__sidebarNavigationActive = false;
+                    window.__preventDonorProfileOpen = false;
+                }, 3000);
+            }, 300);
+        } else {
+            window.__sidebarNavigationActive = false;
+            window.__preventDonorProfileOpen = false;
+        }
+    });
+}
+
+// Navigation from Medical History to Donor Profile
+const navPhysicianDonorProfile = document.getElementById('navPhysicianDonorProfile');
+if (navPhysicianDonorProfile) {
+    navPhysicianDonorProfile.addEventListener('click', function() {
+        console.log('[SIDEBAR DEBUG] navPhysicianDonorProfile clicked - INTENTIONAL donor profile open');
+        // Set flag to prevent donor profile from opening on modal close
+        window.__sidebarNavigationActive = true;
+        // Set explicit flag to allow donor profile opening
+        window.__explicitDonorProfileOpen = true;
+        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
+        console.log('[SIDEBAR DEBUG] __explicitDonorProfileOpen set to TRUE');
+        
+        const screeningData = getCurrentScreeningData();
+        console.log('[SIDEBAR DEBUG] Retrieved screening data:', screeningData);
+        if (screeningData) {
+            console.log('[SIDEBAR DEBUG] Closing Medical History modal...');
+            closeMedicalHistoryModal();
+            setTimeout(() => {
+                console.log('[SIDEBAR DEBUG] Explicitly opening donor profile modal...');
+                // Explicitly open donor profile - this is intentional
+                openDonorProfileModal(screeningData);
+                updatePhysicianActiveNavItem('navPhysicianDonorProfile');
+                console.log('[SIDEBAR DEBUG] Active nav item updated to navPhysicianDonorProfile');
+                
+                // Clear flags after modal is shown (extended duration to cover all close events)
+                setTimeout(() => {
+                    console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
+                    window.__sidebarNavigationActive = false;
+                    window.__explicitDonorProfileOpen = false;
+                }, 3000);
+            }, 300);
+        } else {
+            console.error('[SIDEBAR DEBUG] No screening data found, clearing flags');
+            window.__sidebarNavigationActive = false;
+            window.__explicitDonorProfileOpen = false;
+        }
+    });
+}
+
+// Navigation from Initial Screening to Medical History
+const navScreeningMedicalHistory = document.getElementById('navScreeningMedicalHistory');
+if (navScreeningMedicalHistory) {
+    navScreeningMedicalHistory.addEventListener('click', function() {
+        // Set flags to prevent donor profile from opening on modal close
+        window.__sidebarNavigationActive = true;
+        window.__preventDonorProfileOpen = true;
+        console.log('[SIDEBAR DEBUG] navScreeningMedicalHistory clicked');
+        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
+        console.log('[SIDEBAR DEBUG] __preventDonorProfileOpen set to TRUE');
+        
+        const donorId = getCurrentPhysicianDonorId();
+        if (donorId) {
+            const screeningModalEl = document.getElementById('screeningFormModal');
+            const screeningModal = screeningModalEl ? bootstrap.Modal.getInstance(screeningModalEl) : null;
+            if (screeningModal) screeningModal.hide();
+            
+            setTimeout(() => {
+                openMedicalHistoryModal(donorId);
+                updatePhysicianActiveNavItem('navPhysicianMedicalHistory');
+                
+                // Clear flags after modal is fully shown and stable (extended duration)
+                setTimeout(() => {
+                    console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
+                    window.__sidebarNavigationActive = false;
+                    window.__preventDonorProfileOpen = false;
+                }, 3000);
+            }, 300);
+        } else {
+            window.__sidebarNavigationActive = false;
+            window.__preventDonorProfileOpen = false;
+        }
+    });
+}
+
+// Navigation from Initial Screening to Physical Examination
+const navScreeningPhysicalExam = document.getElementById('navScreeningPhysicalExam');
+if (navScreeningPhysicalExam) {
+    navScreeningPhysicalExam.addEventListener('click', function() {
+        console.log('[SIDEBAR DEBUG] navScreeningPhysicalExam clicked');
+        // Set flags to prevent donor profile from opening on modal close
+        window.__sidebarNavigationActive = true;
+        window.__preventDonorProfileOpen = true;
+        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
+        console.log('[SIDEBAR DEBUG] __preventDonorProfileOpen set to TRUE');
+        
+        const screeningData = getCurrentScreeningData();
+        console.log('[SIDEBAR DEBUG] Retrieved screening data:', screeningData);
+        if (screeningData && screeningData.donor_form_id) {
+            const screeningModalEl = document.getElementById('screeningFormModal');
+            const screeningModal = screeningModalEl ? bootstrap.Modal.getInstance(screeningModalEl) : null;
+            if (screeningModal) {
+                console.log('[SIDEBAR DEBUG] Hiding Initial Screening modal...');
+                screeningModal.hide();
+            } else {
+                console.warn('[SIDEBAR DEBUG] Initial Screening modal instance not found');
+            }
+            
+            setTimeout(() => {
+                console.log('[SIDEBAR DEBUG] Attempting to open Physical Examination modal...');
+                if (window.physicalExaminationModal && typeof window.physicalExaminationModal.open === 'function') {
+                    console.log('[SIDEBAR DEBUG] Using physicalExaminationModal.open() method');
+                    window.physicalExaminationModal.open(screeningData);
+                } else {
+                    console.log('[SIDEBAR DEBUG] Using Bootstrap modal fallback');
+                    // Fallback: use Bootstrap modal
+                    const peModal = document.getElementById('physicalExaminationModal');
+                    if (peModal) {
+                        const modal = bootstrap.Modal.getOrCreateInstance(peModal, { 
+                            backdrop: 'static', 
+                            keyboard: false 
+                        });
+                        modal.show();
+                        console.log('[SIDEBAR DEBUG] Physical Examination modal shown via Bootstrap');
+                    } else {
+                        console.error('[SIDEBAR DEBUG] Physical Examination modal element NOT found!');
+                    }
+                }
+                updatePhysicianActiveNavItem('navPEPhysicalExam');
+                console.log('[SIDEBAR DEBUG] Active nav item updated to navPEPhysicalExam');
+                
+                // Clear flags after modal is shown (extended duration to cover all close events)
+                setTimeout(() => {
+                    console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
+                    window.__sidebarNavigationActive = false;
+                    window.__preventDonorProfileOpen = false;
+                }, 3000);
+            }, 300);
+        } else {
+            console.error('[SIDEBAR DEBUG] No valid screening data found, clearing flags');
+            window.__sidebarNavigationActive = false;
+            window.__preventDonorProfileOpen = false;
+        }
+    });
+}
+
+// Navigation from Initial Screening to Donor Profile
+const navScreeningDonorProfile = document.getElementById('navScreeningDonorProfile');
+if (navScreeningDonorProfile) {
+    navScreeningDonorProfile.addEventListener('click', function() {
+        console.log('[SIDEBAR DEBUG] navScreeningDonorProfile clicked - INTENTIONAL donor profile open');
+        // Set flag to prevent donor profile from opening on modal close
+        window.__sidebarNavigationActive = true;
+        // Set explicit flag to allow donor profile opening
+        window.__explicitDonorProfileOpen = true;
+        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
+        console.log('[SIDEBAR DEBUG] __explicitDonorProfileOpen set to TRUE');
+        
+        const screeningData = getCurrentScreeningData();
+        console.log('[SIDEBAR DEBUG] Retrieved screening data:', screeningData);
+        if (screeningData) {
+            const screeningModalEl = document.getElementById('screeningFormModal');
+            const screeningModal = screeningModalEl ? bootstrap.Modal.getInstance(screeningModalEl) : null;
+            if (screeningModal) {
+                console.log('[SIDEBAR DEBUG] Hiding Initial Screening modal...');
+                screeningModal.hide();
+            } else {
+                console.warn('[SIDEBAR DEBUG] Initial Screening modal instance not found');
+            }
+            
+            setTimeout(() => {
+                console.log('[SIDEBAR DEBUG] Explicitly opening donor profile modal...');
+                // Explicitly open donor profile - this is intentional
+                openDonorProfileModal(screeningData);
+                updatePhysicianActiveNavItem('navScreeningDonorProfile');
+                console.log('[SIDEBAR DEBUG] Active nav item updated to navScreeningDonorProfile');
+                
+                // Clear flags after modal is shown (extended duration to cover all close events)
+                setTimeout(() => {
+                    console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
+                    window.__sidebarNavigationActive = false;
+                    window.__explicitDonorProfileOpen = false;
+                }, 3000);
+            }, 300);
+        } else {
+            console.error('[SIDEBAR DEBUG] No screening data found, clearing flags');
+            window.__sidebarNavigationActive = false;
+            window.__explicitDonorProfileOpen = false;
+        }
+    });
+}
+
+// Navigation from Physical Examination to Medical History
+const navPEMedicalHistory = document.getElementById('navPEMedicalHistory');
+if (navPEMedicalHistory) {
+    navPEMedicalHistory.addEventListener('click', function() {
+        console.log('[SIDEBAR DEBUG] navPEMedicalHistory clicked');
+        // Set flags to prevent donor profile from opening on modal close
+        window.__sidebarNavigationActive = true;
+        window.__preventDonorProfileOpen = true;
+        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
+        console.log('[SIDEBAR DEBUG] __preventDonorProfileOpen set to TRUE');
+        
+        const donorId = getCurrentPhysicianDonorId();
+        console.log('[SIDEBAR DEBUG] Retrieved donor ID:', donorId);
+        if (donorId) {
+            const peModalEl = document.getElementById('physicalExaminationModal');
+            const peModal = peModalEl ? bootstrap.Modal.getInstance(peModalEl) : null;
+            if (peModal) {
+                console.log('[SIDEBAR DEBUG] Hiding Physical Examination modal...');
+                peModal.hide();
+            } else {
+                console.warn('[SIDEBAR DEBUG] Physical Examination modal instance not found');
+            }
+            
+            setTimeout(() => {
+                console.log('[SIDEBAR DEBUG] Opening Medical History modal...');
+                openMedicalHistoryModal(donorId);
+                updatePhysicianActiveNavItem('navPhysicianMedicalHistory');
+                console.log('[SIDEBAR DEBUG] Active nav item updated to navPhysicianMedicalHistory');
+                
+                // Clear flags after modal is shown (extended duration to cover all close events)
+                setTimeout(() => {
+                    console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
+                    window.__sidebarNavigationActive = false;
+                    window.__preventDonorProfileOpen = false;
+                }, 3000);
+            }, 300);
+        } else {
+            console.error('[SIDEBAR DEBUG] No donor ID found, clearing flags');
+            window.__sidebarNavigationActive = false;
+            window.__preventDonorProfileOpen = false;
+        }
+    });
+}
+
+// Navigation from Physical Examination to Initial Screening
+const navPEInitialScreening = document.getElementById('navPEInitialScreening');
+if (navPEInitialScreening) {
+    navPEInitialScreening.addEventListener('click', function() {
+        console.log('[SIDEBAR DEBUG] navPEInitialScreening clicked');
+        // Set flags to prevent donor profile from opening on modal close
+        window.__sidebarNavigationActive = true;
+        window.__preventDonorProfileOpen = true;
+        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
+        console.log('[SIDEBAR DEBUG] __preventDonorProfileOpen set to TRUE');
+        
+        const donorId = getCurrentPhysicianDonorId();
+        console.log('[SIDEBAR DEBUG] Retrieved donor ID:', donorId);
+        if (donorId) {
+            // Store donor ID in global context
+            window.currentDonorId = donorId;
+            window.lastDonorProfileContext = { 
+                donorId: donorId, 
+                screeningData: { donor_form_id: donorId } 
+            };
+            console.log('[SIDEBAR DEBUG] Stored donor ID in context:', window.currentDonorId);
+            
+            const peModalEl = document.getElementById('physicalExaminationModal');
+            const peModal = peModalEl ? bootstrap.Modal.getInstance(peModalEl) : null;
+            if (peModal) {
+                console.log('[SIDEBAR DEBUG] Hiding Physical Examination modal...');
+                peModal.hide();
+            } else {
+                console.warn('[SIDEBAR DEBUG] Physical Examination modal instance not found');
+            }
+            
+            setTimeout(() => {
+                console.log('[SIDEBAR DEBUG] Attempting to open Initial Screening modal...');
+                const screeningModal = document.getElementById('screeningFormModal');
+                if (screeningModal) {
+                    console.log('[SIDEBAR DEBUG] Screening modal element found');
+                    // Set donor ID in the screening form BEFORE opening
+                    const screeningForm = document.getElementById('screeningForm');
+                    if (screeningForm) {
+                        const donorIdInput = screeningForm.querySelector('input[name="donor_id"]');
+                        if (donorIdInput) {
+                            donorIdInput.value = donorId;
+                            console.log('[SIDEBAR DEBUG] Set donor ID in form input:', donorId);
+                        } else {
+                            console.warn('[SIDEBAR DEBUG] Donor ID input not found in form');
+                        }
+                    } else {
+                        console.warn('[SIDEBAR DEBUG] Screening form not found');
+                    }
+                    
+                    // Open the screening modal
+                    const modalInstance = bootstrap.Modal.getInstance(screeningModal) || new bootstrap.Modal(screeningModal);
+                    console.log('[SIDEBAR DEBUG] Bootstrap modal instance obtained');
+                    
+                    // Ensure content loads when modal is shown
+                    const oneTimeShown = function() {
+                        console.log('[SIDEBAR DEBUG] Screening modal shown event fired');
+                        screeningModal.removeEventListener('shown.bs.modal', oneTimeShown);
+                        // Trigger content load if renderSummary function exists (check both local and window)
+                        setTimeout(() => {
+                            if (typeof window.renderSummary === 'function') {
+                                console.log('[SIDEBAR DEBUG] window.renderSummary function found, calling it...');
+                                window.renderSummary();
+                            } else if (typeof renderSummary === 'function') {
+                                console.log('[SIDEBAR DEBUG] renderSummary function found (local scope), calling it...');
+                                renderSummary();
+                            } else {
+                                console.warn('[SIDEBAR DEBUG] renderSummary function NOT found (neither window nor local)');
+                            }
+                        }, 200);
+                    };
+                    screeningModal.addEventListener('shown.bs.modal', oneTimeShown, { once: true });
+                    
+                    console.log('[SIDEBAR DEBUG] Calling modalInstance.show()...');
+                    modalInstance.show();
+                    updatePhysicianActiveNavItem('navScreeningInitialScreening');
+                    console.log('[SIDEBAR DEBUG] Active nav item updated to navScreeningInitialScreening');
+                    
+                    // Clear flags after modal is shown (extended duration to cover all close events)
+                    setTimeout(() => {
+                        console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
+                        window.__sidebarNavigationActive = false;
+                        window.__preventDonorProfileOpen = false;
+                    }, 3000);
+                } else {
+                    console.error('[SIDEBAR DEBUG] Screening modal element NOT found!');
+                    window.__sidebarNavigationActive = false;
+                    window.__preventDonorProfileOpen = false;
+                }
+            }, 300);
+        } else {
+            console.error('[SIDEBAR DEBUG] No donor ID found, clearing flags');
+            window.__sidebarNavigationActive = false;
+            window.__preventDonorProfileOpen = false;
+        }
+    });
+}
+
+// Navigation from Physical Examination to Donor Profile
+const navPEDonorProfile = document.getElementById('navPEDonorProfile');
+if (navPEDonorProfile) {
+    navPEDonorProfile.addEventListener('click', function() {
+        console.log('[SIDEBAR DEBUG] navPEDonorProfile clicked - INTENTIONAL donor profile open');
+        // Set flag to prevent donor profile from opening on modal close
+        window.__sidebarNavigationActive = true;
+        // Set explicit flag to allow donor profile opening
+        window.__explicitDonorProfileOpen = true;
+        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
+        console.log('[SIDEBAR DEBUG] __explicitDonorProfileOpen set to TRUE');
+        
+        const screeningData = getCurrentScreeningData();
+        console.log('[SIDEBAR DEBUG] Retrieved screening data:', screeningData);
+        if (screeningData) {
+            const peModalEl = document.getElementById('physicalExaminationModal');
+            const peModal = peModalEl ? bootstrap.Modal.getInstance(peModalEl) : null;
+            if (peModal) {
+                console.log('[SIDEBAR DEBUG] Hiding Physical Examination modal...');
+                peModal.hide();
+            } else {
+                console.warn('[SIDEBAR DEBUG] Physical Examination modal instance not found');
+            }
+            
+            setTimeout(() => {
+                console.log('[SIDEBAR DEBUG] Explicitly opening donor profile modal...');
+                // Explicitly open donor profile - this is intentional
+                openDonorProfileModal(screeningData);
+                updatePhysicianActiveNavItem('navPEDonorProfile');
+                console.log('[SIDEBAR DEBUG] Active nav item updated to navPEDonorProfile');
+                
+                // Clear flags after modal is shown (extended duration to cover all close events)
+                setTimeout(() => {
+                    console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
+                    window.__sidebarNavigationActive = false;
+                    window.__explicitDonorProfileOpen = false;
+                }, 3000);
+            }, 300);
+        } else {
+            console.error('[SIDEBAR DEBUG] No screening data found, clearing flags');
+            window.__sidebarNavigationActive = false;
+            window.__explicitDonorProfileOpen = false;
+        }
+    });
+}
 </script>
 <?php
 // Flush output buffer

@@ -92,19 +92,46 @@
 
 <!-- Declaration Form Modal -->
 <div class="modal fade" id="declarationFormModal" tabindex="-1" aria-labelledby="declarationFormModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;">
-                <h5 class="modal-title" id="declarationFormModalLabel">
-                    <i class="fas fa-file-alt me-2"></i>
-                    Declaration Form
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+    <div class="modal-dialog modal-xl" style="max-width: 90%; margin: 1.75rem auto;">
+        <div class="modal-content" style="position: relative; overflow: hidden;">
+            <!-- Navigation Sidebar (always visible for Declaration Form) -->
+            <div class="modal-nav-sidebar" id="declarationFormNavSidebar">
+                <div class="modal-nav-header">
+                    <i class="fas fa-user-md modal-nav-header-icon"></i>
+                    <div class="modal-nav-header-text">
+                        <div class="modal-nav-header-title">INTERVIEWER</div>
+                        <div class="modal-nav-header-subtitle">Workflow</div>
+                    </div>
+                </div>
+                <div class="modal-nav-items">
+                    <div class="modal-nav-item" id="navMedicalHistoryFromDeclaration" data-nav="medical-history">
+                        <i class="fas fa-file-medical modal-nav-item-icon"></i>
+                        <span>Medical History</span>
+                    </div>
+                    <div class="modal-nav-item" id="navInitialScreeningFromDeclaration" data-nav="initial-screening">
+                        <i class="fas fa-clipboard-list modal-nav-item-icon"></i>
+                        <span>Initial Screening</span>
+                    </div>
+                    <div class="modal-nav-item disabled" id="navDeclarationFormFromDeclaration" data-nav="declaration-form">
+                        <i class="fas fa-file-alt modal-nav-item-icon"></i>
+                        <span>Declaration Form</span>
+                    </div>
+                </div>
             </div>
-            <div class="modal-body" id="declarationFormModalContent">
-                <div class="d-flex justify-content-center">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
+            
+            <div class="modal-content-with-nav" id="declarationFormModalContentWrapper">
+                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;">
+                    <h5 class="modal-title" id="declarationFormModalLabel">
+                        <i class="fas fa-file-alt me-2"></i>
+                        Declaration Form
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="declarationFormModalContent">
+                    <div class="d-flex justify-content-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
                     </div>
                 </div>
             </div>

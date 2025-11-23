@@ -1,21 +1,51 @@
 <!-- Screening Form Modal (Physician Copy) -->
 <div class="modal fade" id="screeningFormModal" tabindex="-1" aria-labelledby="screeningFormModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-lg modal-dialog-centered" style="max-width: 900px;">
-        <div class="modal-content screening-modal-content" style="position: relative; z-index: 1066; pointer-events: auto;">
-            <div class="modal-header screening-modal-header">
-                <div class="d-flex align-items-center">
-                    <div class="screening-modal-icon me-3">
-                        <i class="fas fa-clipboard-list fa-2x text-white"></i>
-                    </div>
-                    <div>
-                        <h5 class="modal-title mb-0" id="screeningFormModalLabel">Initial Screening Form</h5>
-                        <small class="text-white-50">To be filled up by the interviewer</small>
+        <div class="modal-content screening-modal-content" style="position: relative; z-index: 1066; pointer-events: auto; overflow: hidden;">
+            <!-- Navigation Sidebar -->
+            <div class="modal-nav-sidebar" id="physicianScreeningNavSidebar">
+                <div class="modal-nav-header">
+                    <i class="fas fa-user-md modal-nav-header-icon"></i>
+                    <div class="modal-nav-header-text">
+                        <div class="modal-nav-header-title">PHYSICIAN</div>
+                        <div class="modal-nav-header-subtitle">Workflow</div>
                     </div>
                 </div>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <div class="modal-nav-items">
+                    <div class="modal-nav-item" id="navScreeningMedicalHistory" data-nav="medical-history">
+                        <i class="fas fa-file-medical modal-nav-item-icon"></i>
+                        <span>Medical History</span>
+                    </div>
+                    <div class="modal-nav-item active" id="navScreeningInitialScreening" data-nav="initial-screening">
+                        <i class="fas fa-clipboard-list modal-nav-item-icon"></i>
+                        <span>Initial Screening</span>
+                    </div>
+                    <div class="modal-nav-item" id="navScreeningPhysicalExam" data-nav="physical-examination">
+                        <i class="fas fa-stethoscope modal-nav-item-icon"></i>
+                        <span>Physical Examination</span>
+                    </div>
+                    <div class="modal-nav-item" id="navScreeningDonorProfile" data-nav="donor-profile">
+                        <i class="fas fa-user modal-nav-item-icon"></i>
+                        <span>Donor Profile</span>
+                    </div>
+                </div>
             </div>
             
-            <!-- Summary Only - No Progress Indicator for Physician View -->
+            <div class="modal-content-with-nav" id="physicianScreeningModalContentWrapper">
+                <div class="modal-header screening-modal-header">
+                    <div class="d-flex align-items-center">
+                        <div class="screening-modal-icon me-3">
+                            <i class="fas fa-clipboard-list fa-2x text-white"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title mb-0" id="screeningFormModalLabel">Initial Screening Form</h5>
+                            <small class="text-white-50">To be filled up by the interviewer</small>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                
+                <!-- Summary Only - No Progress Indicator for Physician View -->
             
             <div class="modal-body screening-modal-body" style="max-height: 70vh; overflow-y: auto; padding: 1.5rem;">
                 <form id="screeningForm">
@@ -36,6 +66,7 @@
                 <div style="display: flex; gap: 8px;">
                     <!-- Approved button removed -->
                 </div>
+            </div>
             </div>
         </div>
     </div>
@@ -81,13 +112,21 @@
 
         // Render-only: fetch latest screening/physical data and generate summary
         function renderSummary(){
+            console.log('[SCREENING DEBUG] renderSummary() called');
             try {
                 const donorInput = formEl.querySelector('input[name="donor_id"]');
                 const donorId = (donorInput && donorInput.value) ||
                                 (window.currentDonorData && window.currentDonorData.donor_id) ||
                                 (window.lastDonorProfileContext && window.lastDonorProfileContext.donorId) || '';
-                if (donorInput && !donorInput.value && donorId) donorInput.value = donorId;
-                if (!donorId) return;
+                console.log('[SCREENING DEBUG] Donor ID resolved:', donorId);
+                if (donorInput && !donorInput.value && donorId) {
+                    donorInput.value = donorId;
+                    console.log('[SCREENING DEBUG] Set donor ID in input field');
+                }
+                if (!donorId) {
+                    console.warn('[SCREENING DEBUG] No donor ID found, returning early');
+                    return;
+                }
                 const tryFetch = (url) => fetch(url).then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)));
                 tryFetch(`../api/get-physician-screening-form-data.php?donor_id=${encodeURIComponent(donorId)}`)
                     .then(data => {
@@ -190,10 +229,15 @@
             } catch(_) {}
         }
 
+        // Expose renderSummary globally so it can be called from sidebar navigation
+        window.renderSummary = renderSummary;
+        console.log('[SCREENING DEBUG] renderSummary exposed to window.renderSummary');
+        
         // Bind once when modal exists
         if (modalEl) {
             // When shown, render summary
             modalEl.addEventListener('shown.bs.modal', function(){
+                console.log('[SCREENING DEBUG] Screening modal shown.bs.modal event fired, calling renderSummary()');
                 renderSummary();
             });
 

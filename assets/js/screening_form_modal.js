@@ -14,6 +14,18 @@ document.addEventListener('DOMContentLoaded', function() {
     function cleanupModalBackdrops() {
         // Only remove backdrops if no other modals are open
         const otherModals = document.querySelectorAll('.modal.show:not(#screeningFormModal)');
+        
+        // Check specifically for important modals that should prevent cleanup
+        const medicalHistoryModal = document.getElementById('medicalHistoryModal');
+        const declarationFormModal = document.getElementById('declarationFormModal');
+        const isMedicalHistoryOpen = medicalHistoryModal && medicalHistoryModal.classList.contains('show');
+        const isDeclarationFormOpen = declarationFormModal && declarationFormModal.classList.contains('show');
+        
+        if (isMedicalHistoryOpen || isDeclarationFormOpen) {
+            console.log('[Screening Modal] Skipping backdrop cleanup - other important modal is open');
+            return;
+        }
+        
         if (otherModals.length === 0) {
             // Remove all modal backdrops
             const backdrops = document.querySelectorAll('.modal-backdrop');
@@ -53,8 +65,82 @@ document.addEventListener('DOMContentLoaded', function() {
             initializeScreeningForm();
             screeningModal.__screeningInit = true;
         }
-        resetToStep(1);
+        
+        // Determine which stage to restore
+        let stageToRestore = 1;
+        
+        // Check if coming from Declaration Form (stage 3)
+        if (window.__navigatingFromDeclaration || window.__cameFromDeclarationForm) {
+            stageToRestore = 3;
+            window.__cameFromDeclarationForm = false; // Reset flag
+        } 
+        // Check if there's a stored stage for this donor
+        else if (window.currentScreeningStage && window.currentDonorId) {
+            const storedStage = window.currentScreeningStage[window.currentDonorId];
+            if (storedStage && storedStage >= 1 && storedStage <= 3) {
+                stageToRestore = storedStage;
+            }
+        }
+        
+        // Wait for prefill to complete, then check form data if no stored stage
+        setTimeout(() => {
+            // If no stored stage and not from declaration, determine from filled data
+            if (stageToRestore === 1 && !window.__cameFromDeclarationForm) {
+                stageToRestore = determineLastFilledStage();
+            }
+            
+            // Restore the stage
+            resetToStep(stageToRestore);
+            
+            // If restoring to stage 3, generate review content
+            if (stageToRestore === 3) {
+                setTimeout(() => {
+                    if (typeof generateReviewContent === 'function') {
+                        generateReviewContent();
+                    }
+                }, 200);
+            }
+        }, 300); // Wait longer for prefill to complete
     });
+    
+    // Function to determine the last filled stage based on form data
+    function determineLastFilledStage() {
+        const modal = document.getElementById('screeningFormModal');
+        if (!modal) return 1;
+        
+        // Check stage 2 data (Basic Info) - if all required fields are filled, user was on stage 2 or 3
+        const bodyWeightInput = modal.querySelector('#bodyWeightInput');
+        const specificGravityInput = modal.querySelector('#specificGravityInput');
+        const bloodTypeSelect = modal.querySelector('select[name="blood-type"]');
+        
+        const hasStage2Data = bodyWeightInput && bodyWeightInput.value && 
+            specificGravityInput && specificGravityInput.value &&
+            bloodTypeSelect && bloodTypeSelect.value;
+        
+        if (hasStage2Data) {
+            // If stage 2 has data, user was at least on stage 2
+            // Check if they might have been on stage 3 (review) - this would be the case
+            // if they submitted or went to declaration form, but we'll default to stage 2
+            // since stage 3 is only reached after submission
+            return 2;
+        }
+        
+        // Check stage 1 data (Donation Type)
+        const inhouseRadio = modal.querySelector('#inhouseDonationTypeRadio');
+        const mobilePlaceInput = modal.querySelector('#mobilePlaceInput');
+        const mobileOrganizerInput = modal.querySelector('#mobileOrganizerInput');
+        
+        const hasStage1Data = (inhouseRadio && inhouseRadio.checked) || 
+            (mobilePlaceInput && mobilePlaceInput.value && mobilePlaceInput.value.trim()) ||
+            (mobileOrganizerInput && mobileOrganizerInput.value && mobileOrganizerInput.value.trim());
+        
+        if (hasStage1Data) {
+            return 1; // Stage 1 has data
+        }
+        
+        // Default to stage 1
+        return 1;
+    }
 
     function initializeScreeningForm() {
         // Get all the necessary elements
@@ -435,6 +521,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function resetToStep(step) {
         currentStep = step;
+        
+        // Store the current stage for this donor
+        if (window.currentDonorId) {
+            if (!window.currentScreeningStage) {
+                window.currentScreeningStage = {};
+            }
+            window.currentScreeningStage[window.currentDonorId] = step;
+        }
+        
         updateStepDisplay();
         updateProgressBar();
         updateButtons();
@@ -449,6 +544,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (step < 1 || step > totalSteps) return;
         
         currentStep = step;
+        
+        // Store the current stage for this donor
+        if (window.currentDonorId) {
+            if (!window.currentScreeningStage) {
+                window.currentScreeningStage = {};
+            }
+            window.currentScreeningStage[window.currentDonorId] = step;
+        }
+        
         updateStepDisplay();
         updateProgressBar();
         updateButtons();
@@ -1007,6 +1111,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Show declaration form modal with confirmation (no data submission yet)
+        // Store that user was on stage 3 (review) when submitting
+        if (window.currentDonorId) {
+            if (!window.currentScreeningStage) {
+                window.currentScreeningStage = {};
+            }
+            window.currentScreeningStage[window.currentDonorId] = 3;
+        }
+        
         if (window.showDeclarationFormModal) {
             window.showDeclarationFormModal(window.currentDonorData.donor_id);
         } else {

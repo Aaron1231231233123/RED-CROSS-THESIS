@@ -1514,14 +1514,30 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             border: none;
             border-radius: 15px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: modalFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.96);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
         }
 
-        .screening-modal-header {
+        /* Uniform padding for all modal headers */
+        .screening-modal-header,
+        #medicalHistoryModal .modal-header,
+        #declarationFormModal .modal-header {
             background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
             color: white;
             border-radius: 15px 15px 0 0;
             padding: 1.5rem;
             border-bottom: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
 
         .screening-modal-icon {
@@ -1546,6 +1562,46 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             border-radius: 0 0 15px 15px;
             padding: 1.5rem;
         }
+        
+        /* Button Animations */
+        #screeningFormModal .btn {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(0);
+        }
+        
+        #screeningFormModal .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        #screeningFormModal .btn:active {
+            transform: translateY(0);
+        }
+        
+        #screeningFormModal .btn-danger {
+            background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+            border: none;
+        }
+        
+        #screeningFormModal .btn-danger:hover {
+            background: linear-gradient(135deg, #8b0000 0%, #6b0000 100%);
+            box-shadow: 0 4px 12px rgba(178, 34, 34, 0.4);
+        }
+        
+        #screeningFormModal .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+            border: none;
+        }
+        
+        #screeningFormModal .btn-success:hover {
+            background: linear-gradient(135deg, #1e7e34 0%, #155724 100%);
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+        }
+        
+        #screeningFormModal .btn-outline-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+        }
 
         /* Progress Indicator */
         .screening-progress-container {
@@ -1568,7 +1624,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             flex-direction: column;
             align-items: center;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: scale(1);
+        }
+        
+        .screening-step:hover {
+            transform: scale(1.05);
         }
 
         .screening-step-number {
@@ -1582,8 +1643,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             justify-content: center;
             font-weight: bold;
             font-size: 16px;
-            transition: all 0.3s ease;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             margin-bottom: 8px;
+            transform: scale(1);
+        }
+        
+        .screening-step-number:hover {
+            transform: scale(1.1);
         }
 
         .screening-step-label {
@@ -1598,6 +1664,21 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
         .screening-step.completed .screening-step-number {
             background: #b22222;
             color: white;
+            transform: scale(1.15);
+            box-shadow: 0 4px 12px rgba(178, 34, 34, 0.4);
+            animation: pulseStep 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        @keyframes pulseStep {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.2);
+            }
+            100% {
+                transform: scale(1.15);
+            }
         }
 
         .screening-step.active .screening-step-label,
@@ -1619,25 +1700,37 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
 
         .screening-progress-fill {
             height: 100%;
-            background: #b22222;
+            background: linear-gradient(90deg, #b22222 0%, #8b0000 100%);
             width: 0%;
-            transition: width 0.5s ease;
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 2px 4px rgba(178, 34, 34, 0.3);
         }
 
         /* Step Content */
         .screening-step-content {
             display: none;
             padding: 30px;
-            animation: fadeIn 0.3s ease;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .screening-step-content.active {
             display: block;
+            opacity: 1;
+            transform: translateY(0);
+            animation: slideInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .screening-step-title {
@@ -1672,7 +1765,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             border: 2px solid #e9ecef;
             border-radius: 8px;
             font-size: 14px;
-            transition: all 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             background: white;
         }
 
@@ -1680,6 +1773,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             outline: none;
             border-color: #b22222;
             box-shadow: 0 0 0 3px rgba(178, 34, 34, 0.1);
+            transform: translateY(-1px);
+        }
+        
+        .screening-input:hover {
+            border-color: #ced4da;
         }
 
         .screening-input-group {
@@ -2779,22 +2877,49 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
 
     <!-- Medical History Modal -->
     <div class="modal fade" id="medicalHistoryModal" tabindex="-1" aria-labelledby="medicalHistoryModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;">
-                    <h5 class="modal-title" id="medicalHistoryModalLabel">
-                        <i class="fas fa-clipboard-list me-2"></i>
-                        Medical History Form
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body" id="medicalHistoryModalContent">
-                    <div class="d-flex justify-content-center">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
+        <div class="modal-dialog modal-xl" style="max-width: 90%; margin: 1.75rem auto;">
+            <div class="modal-content" style="position: relative; overflow: hidden;">
+                <!-- Navigation Sidebar (initially hidden) -->
+                <div class="modal-nav-sidebar hidden" id="medicalHistoryNavSidebar">
+                    <div class="modal-nav-header">
+                        <i class="fas fa-user-md modal-nav-header-icon"></i>
+                        <div class="modal-nav-header-text">
+                            <div class="modal-nav-header-title">INTERVIEWER</div>
+                            <div class="modal-nav-header-subtitle">Workflow</div>
                         </div>
                     </div>
-                    <input type="hidden" id="modalSelectedAction" name="modalSelectedAction" value="">
+                    <div class="modal-nav-items">
+                        <div class="modal-nav-item active" id="navMedicalHistory" data-nav="medical-history">
+                            <i class="fas fa-file-medical modal-nav-item-icon"></i>
+                            <span>Medical History</span>
+                        </div>
+                        <div class="modal-nav-item" id="navInitialScreening" data-nav="initial-screening">
+                            <i class="fas fa-clipboard-list modal-nav-item-icon"></i>
+                            <span>Initial Screening</span>
+                        </div>
+                        <div class="modal-nav-item hidden" id="navDeclarationFormFromMedicalHistory" data-nav="declaration-form">
+                            <i class="fas fa-file-alt modal-nav-item-icon"></i>
+                            <span>Declaration Form</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-content-with-nav no-nav" id="medicalHistoryModalContentWrapper">
+                    <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;">
+                        <h5 class="modal-title" id="medicalHistoryModalLabel">
+                            <i class="fas fa-clipboard-list me-2"></i>
+                            Medical History Form
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body" id="medicalHistoryModalContent">
+                        <div class="d-flex justify-content-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                        <input type="hidden" id="modalSelectedAction" name="modalSelectedAction" value="">
+                    </div>
                 </div>
             </div>
         </div>
@@ -2802,16 +2927,46 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
 
     <!-- Declaration Form Modal -->
     <div class="modal fade" id="declarationFormModal" tabindex="-1" aria-labelledby="declarationFormModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;">
-                    <h5 class="modal-title" id="declarationFormModalLabel">Declaration Form</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="modal-dialog modal-xl" style="max-width: 90%; margin: 1.75rem auto;">
+            <div class="modal-content" style="position: relative; overflow: hidden;">
+                <!-- Navigation Sidebar (always visible for Declaration Form) -->
+                <div class="modal-nav-sidebar" id="declarationFormNavSidebar">
+                    <div class="modal-nav-header">
+                        <i class="fas fa-user-md modal-nav-header-icon"></i>
+                        <div class="modal-nav-header-text">
+                            <div class="modal-nav-header-title">INTERVIEWER</div>
+                            <div class="modal-nav-header-subtitle">Workflow</div>
+                        </div>
+                    </div>
+                    <div class="modal-nav-items">
+                        <div class="modal-nav-item" id="navMedicalHistoryFromDeclaration" data-nav="medical-history">
+                            <i class="fas fa-file-medical modal-nav-item-icon"></i>
+                            <span>Medical History</span>
+                        </div>
+                        <div class="modal-nav-item" id="navInitialScreeningFromDeclaration" data-nav="initial-screening">
+                            <i class="fas fa-clipboard-list modal-nav-item-icon"></i>
+                            <span>Initial Screening</span>
+                        </div>
+                        <div class="modal-nav-item disabled" id="navDeclarationFormFromDeclaration" data-nav="declaration-form">
+                            <i class="fas fa-file-alt modal-nav-item-icon"></i>
+                            <span>Declaration Form</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="modal-body" id="declarationFormModalContent">
-                    <div class="d-flex justify-content-center">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
+                
+                <div class="modal-content-with-nav" id="declarationFormModalContentWrapper">
+                    <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;">
+                        <h5 class="modal-title" id="declarationFormModalLabel">
+                            <i class="fas fa-file-alt me-2"></i>
+                            Declaration Form
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body" id="declarationFormModalContent">
+                        <div class="d-flex justify-content-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2997,13 +3152,37 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     console.log('[BACKDROP DEBUG] cleanupModalBackdrops called');
                     console.log('[BACKDROP DEBUG] Stack trace:', new Error().stack);
                     
+                    // Check if we're in the middle of navigation - if so, skip cleanup
+                    if (window.__navigatingFromDeclaration) {
+                        console.log('[BACKDROP DEBUG] ⚠️ Navigation in progress - SKIPPING backdrop cleanup');
+                        return;
+                    }
+                    
                     // Check if medical history modal is open - if so, DON'T remove backdrops
                     const medicalHistoryModal = document.getElementById('medicalHistoryModal');
                     const isMedicalHistoryOpen = medicalHistoryModal && medicalHistoryModal.classList.contains('show');
                     
+                    // Check if declaration form modal is open
+                    const declarationFormModal = document.getElementById('declarationFormModal');
+                    const isDeclarationFormOpen = declarationFormModal && declarationFormModal.classList.contains('show');
+                    
+                    // Check if screening form modal is open
+                    const screeningFormModal = document.getElementById('screeningFormModal');
+                    const isScreeningFormOpen = screeningFormModal && screeningFormModal.classList.contains('show');
+                    
                     if (isMedicalHistoryOpen) {
                         console.log('[BACKDROP DEBUG] ⚠️ Medical History modal is open - SKIPPING backdrop cleanup');
                         return; // Don't remove backdrops if medical history modal is open
+                    }
+                    
+                    if (isDeclarationFormOpen) {
+                        console.log('[BACKDROP DEBUG] ⚠️ Declaration Form modal is open - SKIPPING backdrop cleanup');
+                        return; // Don't remove backdrops if declaration form modal is open
+                    }
+                    
+                    if (isScreeningFormOpen) {
+                        console.log('[BACKDROP DEBUG] ⚠️ Screening Form modal is open - SKIPPING backdrop cleanup');
+                        return; // Don't remove backdrops if screening form modal is open
                     }
                     
                     // Check if any other modals are open
@@ -3895,7 +4074,16 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             // Deprecated duplicate renderer removed. Use the unified renderer defined later in the file.
             
             // Function to proceed to medical history modal
-            function proceedToMedicalHistoryModal() {
+            window.proceedToMedicalHistoryModal = function(skipModalClosing = false) {
+                // Close declaration modal first if it's open (unless we're navigating)
+                if (!skipModalClosing && !window.__navigatingFromDeclaration) {
+                    const declarationModalEl = document.getElementById('declarationFormModal');
+                    const declarationModal = declarationModalEl ? bootstrap.Modal.getInstance(declarationModalEl) : null;
+                    if (declarationModal && declarationModalEl.classList.contains('show')) {
+                        declarationModal.hide();
+                    }
+                }
+                
                 // Hide the deferral status modal first
                 const modalEl = document.getElementById('deferralStatusModal');
                 const modalInstance = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
@@ -3924,6 +4112,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 
                 // Reset modal content to loading state
                 modalContent.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+                
+                // Hide navbar initially (will be shown after confirmation if needed)
+                hideMedicalHistoryNavbar();
                 
                 // Show the modal with backdrop
                 console.log('[BACKDROP DEBUG] ===== OPENING MEDICAL HISTORY MODAL =====');
@@ -4054,7 +4245,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     .catch(error => {
                         modalContent.innerHTML = '<div class="alert alert-danger"><h6>Error Loading Form</h6><p>Unable to load the medical history form. Please try again.</p><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>';
                     });
-            }
+            };
+            
 
             // Helper function to get proceed button
             function getProceedButton() {
@@ -4086,10 +4278,20 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     if (el) {
                         el.addEventListener('hidden.bs.modal', function() {
                             console.log('[BACKDROP DEBUG] Modal hidden:', id);
-                            // Check if medical history modal is still open before cleaning
+                            // Check if any important modals are still open before cleaning
                             const medicalHistoryModal = document.getElementById('medicalHistoryModal');
-                            if (medicalHistoryModal && medicalHistoryModal.classList.contains('show')) {
-                                console.log('[BACKDROP DEBUG] ⚠️ Medical History modal is still open - SKIPPING cleanup for', id);
+                            const declarationFormModal = document.getElementById('declarationFormModal');
+                            const screeningFormModal = document.getElementById('screeningFormModal');
+                            
+                            const isMedicalHistoryOpen = medicalHistoryModal && medicalHistoryModal.classList.contains('show');
+                            const isDeclarationFormOpen = declarationFormModal && declarationFormModal.classList.contains('show');
+                            const isScreeningFormOpen = screeningFormModal && screeningFormModal.classList.contains('show');
+                            
+                            if (isMedicalHistoryOpen || isDeclarationFormOpen || isScreeningFormOpen) {
+                                console.log('[BACKDROP DEBUG] ⚠️ Important modal is still open - SKIPPING cleanup for', id);
+                                if (isMedicalHistoryOpen) console.log('[BACKDROP DEBUG]   - Medical History modal is open');
+                                if (isDeclarationFormOpen) console.log('[BACKDROP DEBUG]   - Declaration Form modal is open');
+                                if (isScreeningFormOpen) console.log('[BACKDROP DEBUG]   - Screening Form modal is open');
                                 return;
                             }
                             cleanupModalBackdrops();
@@ -4768,6 +4970,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                     if (alreadyConfirmed) {
                                         // Reset the flag and open screening immediately
                                         try { window.__mhConfirmed = false; } catch (_) {}
+                                        // Show navbar in Medical History modal before opening Initial Screening
+                                        showMedicalHistoryNavbar();
                                         showScreeningFormModal(donorId);
                                     } else if (confirmModalEl && confirmBtn && window.bootstrap) {
                                         // Rebind click to avoid duplicate handlers
@@ -4776,6 +4980,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                         newBtn.addEventListener('click', function() {
                                             const cm = window.bootstrap.Modal.getInstance(confirmModalEl) || new window.bootstrap.Modal(confirmModalEl);
                                             cm.hide();
+                                            // Show navbar in Medical History modal before opening Initial Screening
+                                            showMedicalHistoryNavbar();
                                             // Only now open the Initial Screening modal
                                             showScreeningFormModal(donorId);
                                         });
@@ -4783,10 +4989,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                         cm.show();
                                     } else {
                                         // Fallback directly to screening when modal not available
+                                        showMedicalHistoryNavbar();
                                         showScreeningFormModal(donorId);
                                     }
                                 } catch (_) {
                                     // Fallback on any error
+                                    showMedicalHistoryNavbar();
                                     showScreeningFormModal(donorId);
                                 }
                             } else {
@@ -4837,25 +5045,51 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
         }
         
         // Function to show screening form modal
-        function showScreeningFormModal(donorId) {
+        function showScreeningFormModal(donorId, skipModalClosing = false) {
             //console.log('Showing screening form modal for donor ID:', donorId);
             
+            // Store donor ID
+            window.currentDonorId = donorId;
+            
+            // If we're navigating from another modal, skip the closing logic
+            if (skipModalClosing || window.__navigatingFromDeclaration) {
+                console.log('[NAV DEBUG] Skipping modal closing, opening Initial Screening directly...');
+                openScreeningModal();
+                return;
+            }
+            
+            // Close declaration modal first if it's open
+            const declarationModalEl = document.getElementById('declarationFormModal');
+            const declarationModal = declarationModalEl ? bootstrap.Modal.getInstance(declarationModalEl) : null;
+            if (declarationModal && declarationModalEl.classList.contains('show')) {
+                declarationModal.hide();
+                declarationModalEl.addEventListener('hidden.bs.modal', function onHidden() {
+                    declarationModalEl.removeEventListener('hidden.bs.modal', onHidden);
+                    closeOtherModalsAndOpenScreening();
+                }, { once: true });
+                return;
+            }
+            
             // Close medical history modal first if it's open
-            const medicalHistoryModalEl = document.getElementById('medicalHistoryModal');
-            if (medicalHistoryModalEl) {
-                const medicalHistoryModal = bootstrap.Modal.getInstance(medicalHistoryModalEl);
-                if (medicalHistoryModal) {
-                    medicalHistoryModal.hide();
-                    // Wait for modal to fully close before opening next modal
-                    medicalHistoryModalEl.addEventListener('hidden.bs.modal', function onHidden() {
-                        medicalHistoryModalEl.removeEventListener('hidden.bs.modal', onHidden);
+            closeOtherModalsAndOpenScreening();
+            
+            function closeOtherModalsAndOpenScreening() {
+                const medicalHistoryModalEl = document.getElementById('medicalHistoryModal');
+                if (medicalHistoryModalEl) {
+                    const medicalHistoryModal = bootstrap.Modal.getInstance(medicalHistoryModalEl);
+                    if (medicalHistoryModal && medicalHistoryModalEl.classList.contains('show')) {
+                        medicalHistoryModal.hide();
+                        // Wait for modal to fully close before opening next modal
+                        medicalHistoryModalEl.addEventListener('hidden.bs.modal', function onHidden() {
+                            medicalHistoryModalEl.removeEventListener('hidden.bs.modal', onHidden);
+                            openScreeningModal();
+                        }, { once: true });
+                    } else {
                         openScreeningModal();
-                    }, { once: true });
+                    }
                 } else {
                     openScreeningModal();
                 }
-            } else {
-                openScreeningModal();
             }
             
             function openScreeningModal() {
@@ -4881,6 +5115,16 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     donorIdInput.value = donorId;
                 }
                 
+                // Ensure sidebar is visible and nav item is active
+                setTimeout(() => {
+                    const sidebar = document.getElementById('screeningFormNavSidebar');
+                    if (sidebar) {
+                        sidebar.classList.remove('hidden');
+                    }
+                    updateActiveNavItem('navInitialScreeningFromScreening');
+                    console.log('[NAV DEBUG] Initial Screening modal opened with sidebar visible');
+                }, 300);
+                
                 // Initialize the screening form
                 if (window.initializeScreeningForm) {
                     window.initializeScreeningForm(donorId);
@@ -4888,11 +5132,394 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             }
         }
         
-        // Function to show declaration form modal
-        window.showDeclarationFormModal = function(donorId) {
-            //console.log('Showing declaration form modal for donor ID:', donorId);
+        // Function to show navbar in Medical History modal
+        function showMedicalHistoryNavbar() {
+            const navbar = document.getElementById('medicalHistoryNavSidebar');
+            const contentWrapper = document.getElementById('medicalHistoryModalContentWrapper');
+            if (navbar && contentWrapper) {
+                navbar.classList.remove('hidden');
+                contentWrapper.classList.remove('no-nav');
+                contentWrapper.classList.add('modal-content-with-nav');
+            }
+        }
+        
+        // Function to hide navbar in Medical History modal
+        function hideMedicalHistoryNavbar() {
+            const navbar = document.getElementById('medicalHistoryNavSidebar');
+            const contentWrapper = document.getElementById('medicalHistoryModalContentWrapper');
+            if (navbar && contentWrapper) {
+                navbar.classList.add('hidden');
+                contentWrapper.classList.remove('modal-content-with-nav');
+                contentWrapper.classList.add('no-nav');
+            }
+        }
+        
+        // Function to update active nav item
+        function updateActiveNavItem(activeNavId) {
+            // Remove active class from all nav items
+            document.querySelectorAll('.modal-nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
             
-            // Show confirmation modal first
+            // Add active class to the specified nav item
+            const activeItem = document.getElementById(activeNavId);
+            if (activeItem) {
+                activeItem.classList.add('active');
+            }
+        }
+        
+        // Initialize navigation handlers when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Handle navigation from Medical History modal
+            const navInitialScreening = document.getElementById('navInitialScreening');
+            if (navInitialScreening) {
+                navInitialScreening.addEventListener('click', function() {
+                    const donorIdInput = document.querySelector('#modalMedicalHistoryForm input[name="donor_id"]');
+                    const donorId = donorIdInput ? donorIdInput.value : window.currentDonorId;
+                    if (donorId) {
+                        showScreeningFormModal(donorId);
+                    }
+                });
+            }
+            
+            const navDeclarationFormFromMedicalHistory = document.getElementById('navDeclarationFormFromMedicalHistory');
+            if (navDeclarationFormFromMedicalHistory) {
+                navDeclarationFormFromMedicalHistory.addEventListener('click', function() {
+                    const donorIdInput = document.querySelector('#modalMedicalHistoryForm input[name="donor_id"]');
+                    const donorId = donorIdInput ? donorIdInput.value : window.currentDonorId;
+                    if (donorId) {
+                        // Close medical history modal
+                        const medicalHistoryModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModal'));
+                        if (medicalHistoryModal) {
+                            medicalHistoryModal.hide();
+                        }
+                        
+                        // Open declaration form modal (skip confirmation when from sidebar)
+                        setTimeout(() => {
+                            if (typeof window.showDeclarationFormModal === 'function') {
+                                window.showDeclarationFormModal(donorId, false); // false = no confirmation modal
+                            } else if (typeof window.proceedToDeclarationForm === 'function') {
+                                window.proceedToDeclarationForm(donorId);
+                            }
+                        }, 300);
+                    }
+                });
+            }
+            
+            // Handle navigation from Initial Screening modal to Medical History
+            const navMedicalHistoryFromScreening = document.getElementById('navMedicalHistoryFromScreening');
+            if (navMedicalHistoryFromScreening) {
+                navMedicalHistoryFromScreening.addEventListener('click', function() {
+                    const donorIdInput = document.querySelector('#screeningFormModal input[name="donor_id"]');
+                    const donorId = donorIdInput ? donorIdInput.value : window.currentDonorId;
+                    if (donorId) {
+                        // Store donor ID for the medical history modal
+                        window.currentDonorId = donorId;
+                        
+                        // Close screening modal
+                        const screeningModal = bootstrap.Modal.getInstance(document.getElementById('screeningFormModal'));
+                        if (screeningModal) {
+                            screeningModal.hide();
+                        }
+                        
+                        // Open medical history modal directly with navbar visible (skip confirmation)
+                        setTimeout(() => {
+                            // Call proceedToMedicalHistoryModal directly to skip confirmation
+                            if (typeof window.proceedToMedicalHistoryModal === 'function') {
+                                window.proceedToMedicalHistoryModal();
+                            } else if (typeof proceedToMedicalHistoryModal === 'function') {
+                                proceedToMedicalHistoryModal();
+                            }
+                            
+                            // Show navbar after modal opens
+                            setTimeout(() => {
+                                showMedicalHistoryNavbar();
+                                updateActiveNavItem('navMedicalHistory');
+                            }, 400);
+                        }, 300);
+                    }
+                });
+            }
+            
+            // Handle navigation from Initial Screening modal to Declaration Form
+            const navDeclarationFormFromScreening = document.getElementById('navDeclarationFormFromScreening');
+            if (navDeclarationFormFromScreening) {
+                navDeclarationFormFromScreening.addEventListener('click', function() {
+                    const donorIdInput = document.querySelector('#screeningFormModal input[name="donor_id"]');
+                    const donorId = donorIdInput ? donorIdInput.value : window.currentDonorId;
+                    if (donorId) {
+                        // Store donor ID
+                        window.currentDonorId = donorId;
+                        
+                        // Close screening modal
+                        const screeningModal = bootstrap.Modal.getInstance(document.getElementById('screeningFormModal'));
+                        if (screeningModal) {
+                            screeningModal.hide();
+                        }
+                        
+                        // Open declaration form modal (skip confirmation when from sidebar)
+                        setTimeout(() => {
+                            if (typeof window.showDeclarationFormModal === 'function') {
+                                window.showDeclarationFormModal(donorId, false); // false = no confirmation modal
+                            } else if (typeof window.proceedToDeclarationForm === 'function') {
+                                window.proceedToDeclarationForm(donorId);
+                            }
+                        }, 300);
+                    }
+                });
+            }
+            
+            // Update active nav item when modals are shown
+            const medicalHistoryModal = document.getElementById('medicalHistoryModal');
+            if (medicalHistoryModal) {
+                medicalHistoryModal.addEventListener('shown.bs.modal', function() {
+                    // Ensure navbar is hidden initially (unless it should be visible)
+                    const navbar = document.getElementById('medicalHistoryNavSidebar');
+                    if (navbar) {
+                        // Only show navbar if it's explicitly meant to be visible
+                        // Otherwise, ensure it's hidden to prevent flash
+                        if (!navbar.classList.contains('hidden')) {
+                            updateActiveNavItem('navMedicalHistory');
+                        } else {
+                            // Explicitly ensure it's hidden (in case of any timing issues)
+                            navbar.classList.add('hidden');
+                        }
+                    }
+                });
+                
+                // Hide navbar when modal is closed
+                medicalHistoryModal.addEventListener('hidden.bs.modal', function() {
+                    // Reset navbar state when modal is closed
+                    hideMedicalHistoryNavbar();
+                });
+            }
+            
+            const screeningFormModal = document.getElementById('screeningFormModal');
+            if (screeningFormModal) {
+                screeningFormModal.addEventListener('shown.bs.modal', function() {
+                    updateActiveNavItem('navInitialScreeningFromScreening');
+                });
+            }
+            
+            // Handle navigation from Declaration Form modal
+            const navMedicalHistoryFromDeclaration = document.getElementById('navMedicalHistoryFromDeclaration');
+            if (navMedicalHistoryFromDeclaration) {
+                navMedicalHistoryFromDeclaration.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    console.log('[NAV DEBUG] Navigating from Declaration Form to Medical History');
+                    
+                    // Try to get donor ID from multiple sources
+                    let donorId = window.currentDonorId;
+                    if (!donorId) {
+                        const donorIdInput = document.querySelector('#modalDeclarationForm input[name="donor_id"]');
+                        if (donorIdInput) {
+                            donorId = donorIdInput.value;
+                            console.log('[NAV DEBUG] Found donor ID from form input:', donorId);
+                        }
+                    }
+                    if (!donorId) {
+                        const donorIdInput = document.querySelector('#declarationFormModalContent input[name="donor_id"]');
+                        if (donorIdInput) {
+                            donorId = donorIdInput.value;
+                            console.log('[NAV DEBUG] Found donor ID from content area:', donorId);
+                        }
+                    }
+                    
+                    if (donorId) {
+                        // Store donor ID
+                        window.currentDonorId = donorId;
+                        console.log('[NAV DEBUG] Stored donor ID:', donorId);
+                        
+                        // Set flag to prevent cleanup during navigation
+                        window.__navigatingFromDeclaration = true;
+                        
+                        // Close declaration modal and wait for it to fully close
+                        const declarationModalEl = document.getElementById('declarationFormModal');
+                        const declarationModal = declarationModalEl ? bootstrap.Modal.getInstance(declarationModalEl) : null;
+                        
+                        if (declarationModal && declarationModalEl.classList.contains('show')) {
+                            console.log('[NAV DEBUG] Closing Declaration Form modal...');
+                            declarationModal.hide();
+                            
+                            // Wait for modal to fully close before opening next modal
+                            declarationModalEl.addEventListener('hidden.bs.modal', function onHidden() {
+                                declarationModalEl.removeEventListener('hidden.bs.modal', onHidden);
+                                console.log('[NAV DEBUG] Declaration Form modal fully closed, opening Medical History...');
+                                
+                                // Open medical history modal with skipModalClosing flag
+                                if (typeof window.proceedToMedicalHistoryModal === 'function') {
+                                    window.proceedToMedicalHistoryModal(true);
+                                }
+                                
+                                // Show navbar after modal opens
+                                setTimeout(() => {
+                                    showMedicalHistoryNavbar();
+                                    updateActiveNavItem('navMedicalHistory');
+                                    console.log('[NAV DEBUG] Medical History modal opened with navbar');
+                                }, 300);
+                                
+                                // Clear navigation flag after a delay
+                                setTimeout(() => { 
+                                    window.__navigatingFromDeclaration = false; 
+                                    console.log('[NAV DEBUG] Navigation flag cleared');
+                                }, 1000);
+                            }, { once: true });
+                        } else {
+                            console.log('[NAV DEBUG] Declaration Form modal not open, proceeding directly...');
+                            // Modal not open, proceed directly with skipModalClosing flag
+                            if (typeof window.proceedToMedicalHistoryModal === 'function') {
+                                window.proceedToMedicalHistoryModal(true);
+                            }
+                            setTimeout(() => {
+                                showMedicalHistoryNavbar();
+                                updateActiveNavItem('navMedicalHistory');
+                            }, 300);
+                            setTimeout(() => { 
+                                window.__navigatingFromDeclaration = false; 
+                                console.log('[NAV DEBUG] Navigation flag cleared');
+                            }, 1000);
+                        }
+                    } else {
+                        console.error('[NAV DEBUG] Donor ID not found for navigation from Declaration Form to Medical History');
+                    }
+                });
+            }
+            
+            const navInitialScreeningFromDeclaration = document.getElementById('navInitialScreeningFromDeclaration');
+            if (navInitialScreeningFromDeclaration) {
+                navInitialScreeningFromDeclaration.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    console.log('[NAV DEBUG] Navigating from Declaration Form to Initial Screening');
+                    
+                    // Try to get donor ID from multiple sources
+                    let donorId = window.currentDonorId;
+                    if (!donorId) {
+                        const donorIdInput = document.querySelector('#modalDeclarationForm input[name="donor_id"]');
+                        if (donorIdInput) {
+                            donorId = donorIdInput.value;
+                            console.log('[NAV DEBUG] Found donor ID from form input:', donorId);
+                        }
+                    }
+                    if (!donorId) {
+                        const donorIdInput = document.querySelector('#declarationFormModalContent input[name="donor_id"]');
+                        if (donorIdInput) {
+                            donorId = donorIdInput.value;
+                            console.log('[NAV DEBUG] Found donor ID from content area:', donorId);
+                        }
+                    }
+                    
+                    if (donorId) {
+                        // Store donor ID
+                        window.currentDonorId = donorId;
+                        console.log('[NAV DEBUG] Stored donor ID:', donorId);
+                        
+                        // Set flags to prevent cleanup and indicate coming from Declaration Form
+                        window.__navigatingFromDeclaration = true;
+                        window.__cameFromDeclarationForm = true; // Flag to restore to stage 3
+                        
+                        // Close declaration modal and wait for it to fully close
+                        const declarationModalEl = document.getElementById('declarationFormModal');
+                        const declarationModal = declarationModalEl ? bootstrap.Modal.getInstance(declarationModalEl) : null;
+                        
+                        if (declarationModal && declarationModalEl.classList.contains('show')) {
+                            console.log('[NAV DEBUG] Closing Declaration Form modal...');
+                            declarationModal.hide();
+                            
+                            // Wait for modal to fully close before opening next modal
+                            declarationModalEl.addEventListener('hidden.bs.modal', function onHidden() {
+                                declarationModalEl.removeEventListener('hidden.bs.modal', onHidden);
+                                console.log('[NAV DEBUG] Declaration Form modal fully closed, opening Initial Screening...');
+                                
+                                // Open initial screening modal with skipModalClosing flag
+                                showScreeningFormModal(donorId, true);
+                                
+                                // Clear navigation flags after a delay
+                                setTimeout(() => { 
+                                    window.__navigatingFromDeclaration = false; 
+                                    console.log('[NAV DEBUG] Navigation flag cleared');
+                                }, 1000);
+                            }, { once: true });
+                        } else {
+                            console.log('[NAV DEBUG] Declaration Form modal not open, proceeding directly...');
+                            // Modal not open, proceed directly with skipModalClosing flag
+                            showScreeningFormModal(donorId, true);
+                            setTimeout(() => { 
+                                window.__navigatingFromDeclaration = false; 
+                                console.log('[NAV DEBUG] Navigation flag cleared');
+                            }, 1000);
+                        }
+                    } else {
+                        console.error('[NAV DEBUG] Donor ID not found for navigation from Declaration Form to Initial Screening');
+                    }
+                });
+            }
+            
+            // Update active nav item when declaration modal is shown
+            const declarationFormModal = document.getElementById('declarationFormModal');
+            if (declarationFormModal) {
+                declarationFormModal.addEventListener('shown.bs.modal', function() {
+                    // Ensure Declaration Form nav item is disabled in this modal
+                    const navDeclarationFormFromDeclaration = document.getElementById('navDeclarationFormFromDeclaration');
+                    if (navDeclarationFormFromDeclaration && !navDeclarationFormFromDeclaration.classList.contains('disabled')) {
+                        navDeclarationFormFromDeclaration.classList.add('disabled');
+                    }
+                    
+                    // Now that Declaration Form modal is open, show Declaration Form nav items in other modals
+                    showDeclarationFormNavItem();
+                });
+            }
+        });
+        
+        // Function to show Declaration Form nav item in all modals (after Declaration Form has been opened)
+        function showDeclarationFormNavItem() {
+            // Show in Medical History modal
+            const navDeclarationFormMH = document.getElementById('navDeclarationFormFromMedicalHistory');
+            if (navDeclarationFormMH) {
+                navDeclarationFormMH.classList.remove('hidden');
+            }
+            
+            // Show in Initial Screening modal
+            const navDeclarationFormIS = document.getElementById('navDeclarationFormFromScreening');
+            if (navDeclarationFormIS) {
+                navDeclarationFormIS.classList.remove('hidden');
+            }
+        }
+        
+        // Function to hide Declaration Form nav item in all modals
+        function hideDeclarationFormNavItem() {
+            // Hide in Medical History modal
+            const navDeclarationFormMH = document.getElementById('navDeclarationFormFromMedicalHistory');
+            if (navDeclarationFormMH) {
+                navDeclarationFormMH.classList.add('hidden');
+            }
+            
+            // Hide in Initial Screening modal
+            const navDeclarationFormIS = document.getElementById('navDeclarationFormFromScreening');
+            if (navDeclarationFormIS) {
+                navDeclarationFormIS.classList.add('hidden');
+            }
+        }
+        
+        // Function to show declaration form modal
+        // showConfirmation: true = show confirmation modal (from submit button), false = skip confirmation (from sidebar)
+        window.showDeclarationFormModal = function(donorId, showConfirmation = true) {
+            //console.log('Showing declaration form modal for donor ID:', donorId, 'showConfirmation:', showConfirmation);
+            // Store donor ID for navigation
+            window.currentDonorId = donorId;
+            
+            // Don't show Declaration Form nav items yet - only after the modal is actually opened
+            
+            // If showConfirmation is false (sidebar navigation), go directly to declaration form
+            if (!showConfirmation) {
+                proceedToDeclarationForm(donorId);
+                return;
+            }
+            
+            // Show confirmation modal first (only when called from submit button)
             const confirmationModalHtml = `
                 <div class="modal fade" id="screeningToDeclarationConfirmationModal" tabindex="-1" aria-labelledby="screeningToDeclarationConfirmationModalLabel" aria-hidden="true">
                     <div class="modal-dialog modal-dialog-centered">
@@ -4927,12 +5554,17 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             // Add event listener to remove modal from DOM after it's hidden
             document.getElementById('screeningToDeclarationConfirmationModal').addEventListener('hidden.bs.modal', function () {
                 this.remove();
-            });
+            }, { once: true });
         };
         
-        // Function to proceed to declaration form after confirmation
+        // Function to proceed to declaration form (opens directly)
         window.proceedToDeclarationForm = function(donorId) {
-            // Close confirmation modal
+            // Store donor ID for navigation
+            window.currentDonorId = donorId;
+            
+            // Don't show Declaration Form nav items yet - only after the modal is actually opened
+            
+            // Close confirmation modal if it exists (for backward compatibility)
             const confirmationModal = bootstrap.Modal.getInstance(document.getElementById('screeningToDeclarationConfirmationModal'));
             if (confirmationModal) {
                 confirmationModal.hide();
@@ -4940,6 +5572,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             
             const declarationModal = new bootstrap.Modal(document.getElementById('declarationFormModal'));
             const modalContent = document.getElementById('declarationFormModalContent');
+            
+            // Show Declaration Form nav items in other modals now that Declaration Form is being opened
+            showDeclarationFormNavItem();
             
             // Reset modal content to loading state
             modalContent.innerHTML = `
@@ -4967,6 +5602,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 .then(data => {
                     //console.log('Declaration form content loaded successfully');
                     modalContent.innerHTML = data;
+                    
+                    // Ensure donor ID is stored from the form
+                    const donorIdInput = document.querySelector('#modalDeclarationForm input[name="donor_id"]');
+                    if (donorIdInput && donorIdInput.value) {
+                        window.currentDonorId = donorIdInput.value;
+                    }
                     
                     // Ensure print function is available globally
                     window.printDeclaration = function() {
@@ -5485,6 +6126,32 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             pointer-events: auto;
             border: none;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+        
+        /* Declaration Form Modal Animations */
+        #declarationFormModal .modal-content {
+            position: relative;
+            z-index: 1057 !important;
+            pointer-events: auto;
+            border: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        #declarationFormModal .modal-content-with-nav {
+            animation: fadeInContent 0.4s ease;
         }
         
         #screeningFormModal .modal-body {
@@ -5507,6 +6174,311 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             position: relative;
             z-index: 1060 !important;
             pointer-events: auto;
+        }
+        
+        /* Navigation Sidebar Styles */
+        .modal-nav-sidebar {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 180px;
+            background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+            border-right: 2px solid #dee2e6;
+            z-index: 1061;
+            padding: 0;
+            overflow-y: auto;
+            box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+        }
+        
+        .modal-nav-sidebar.hidden {
+            transform: translateX(-100%);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            animation: none !important;
+            transition: none !important;
+        }
+        
+        /* Only apply animation when sidebar is visible (not hidden) */
+        .modal-nav-sidebar:not(.hidden) {
+            visibility: visible;
+            pointer-events: auto;
+            animation: slideInLeft 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        @keyframes slideInLeft {
+            from {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .modal-nav-header {
+            display: flex;
+            align-items: center;
+            padding: 1.5rem;
+            background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+            color: white;
+            border-bottom: none;
+            border-radius: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .modal-nav-header-icon {
+            font-size: 18px;
+            color: white;
+            margin-right: 0.6rem;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        
+        .modal-nav-header-text {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .modal-nav-header-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: white;
+            margin-bottom: 1px;
+            line-height: 1.2;
+        }
+        
+        .modal-nav-header-subtitle {
+            font-size: 9px;
+            color: rgba(255,255,255,0.85);
+            font-weight: 400;
+            letter-spacing: 0.3px;
+            line-height: 1.2;
+        }
+        
+        .modal-nav-items {
+            padding: 0.75rem 0.5rem;
+        }
+        
+        /* Legacy support for old structure */
+        .modal-nav-section {
+            margin-bottom: 30px;
+            padding: 0 15px;
+        }
+        
+        .modal-nav-section-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #6c757d;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        .modal-nav-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 12px;
+            margin-bottom: 6px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            color: #495057;
+            font-size: 13px;
+            font-weight: 500;
+            text-decoration: none;
+        }
+        
+        .modal-nav-item:hover {
+            background: linear-gradient(135deg, rgba(178,34,34,0.1) 0%, rgba(139,0,0,0.1) 100%);
+            color: #b22222;
+            transform: translateX(5px);
+        }
+        
+        .modal-nav-item.active {
+            background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(178,34,34,0.3);
+        }
+        
+        .modal-nav-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 70%;
+            background: white;
+            border-radius: 0 4px 4px 0;
+        }
+        
+        .modal-nav-item.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            pointer-events: none;
+            background: rgba(0, 0, 0, 0.05);
+        }
+        
+        .modal-nav-item.disabled:hover {
+            background: rgba(0, 0, 0, 0.05);
+            transform: none;
+            color: #495057;
+        }
+        
+        .modal-nav-item.hidden {
+            display: none !important;
+        }
+        
+        .modal-nav-item-icon {
+            margin-right: 10px;
+            font-size: 15px;
+            width: 18px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        
+        .modal-nav-connector {
+            position: absolute;
+            left: 30px;
+            width: 2px;
+            background: #b22222;
+            z-index: 0;
+        }
+        
+        .modal-nav-connector-top {
+            top: 0;
+            height: 20px;
+        }
+        
+        .modal-nav-connector-bottom {
+            bottom: 0;
+            height: 20px;
+        }
+        
+        .modal-nav-circle {
+            position: absolute;
+            left: 25px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #b22222;
+            border: 3px solid white;
+            z-index: 1;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .modal-nav-circle.top {
+            top: -6px;
+        }
+        
+        .modal-nav-circle.bottom {
+            bottom: -6px;
+        }
+        
+        .modal-content-with-nav {
+            margin-left: 180px;
+            transition: margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+            animation: fadeInContent 0.4s ease;
+        }
+        
+        .modal-content-with-nav.no-nav {
+            margin-left: 0;
+        }
+        
+        @keyframes fadeInContent {
+            from {
+                opacity: 0;
+                transform: translateX(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 1200px) {
+            .modal-nav-sidebar {
+                width: 160px;
+            }
+            .modal-content-with-nav {
+                margin-left: 160px;
+            }
+            .modal-nav-header {
+                padding: 1.25rem;
+            }
+            .screening-modal-header,
+            #medicalHistoryModal .modal-header,
+            #declarationFormModal .modal-header {
+                padding: 1.25rem;
+            }
+            .modal-nav-header-icon {
+                font-size: 16px;
+                width: 32px;
+                height: 32px;
+                margin-right: 0.5rem;
+            }
+            .modal-nav-header-title {
+                font-size: 11px;
+            }
+            .modal-nav-header-subtitle {
+                font-size: 8px;
+            }
+            .modal-nav-items {
+                padding: 0.625rem 0.4rem;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .modal-nav-sidebar {
+                width: 150px;
+            }
+            .modal-content-with-nav {
+                margin-left: 150px;
+            }
+            .modal-nav-header {
+                padding: 1rem;
+            }
+            .screening-modal-header,
+            #medicalHistoryModal .modal-header,
+            #declarationFormModal .modal-header {
+                padding: 1rem;
+            }
+            .modal-nav-header-icon {
+                font-size: 14px;
+                width: 28px;
+                height: 28px;
+                margin-right: 0.4rem;
+            }
+            .modal-nav-header-title {
+                font-size: 10px;
+                letter-spacing: 0.3px;
+            }
+            .modal-nav-header-subtitle {
+                font-size: 7px;
+            }
+            .modal-nav-item {
+                padding: 8px 10px;
+                font-size: 12px;
+            }
+            .modal-nav-items {
+                padding: 0.5rem 0.4rem;
+            }
         }
     </style>
 

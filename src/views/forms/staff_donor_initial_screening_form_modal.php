@@ -1,8 +1,34 @@
 <!-- Screening Form Modal -->
 <div class="modal fade" id="screeningFormModal" tabindex="-1" aria-labelledby="screeningFormModalLabel" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-lg" style="max-width: 800px; margin: 1.75rem auto;">
-        <div class="modal-content screening-modal-content" style="position: relative; z-index: 1060; pointer-events: auto;">
-            <div class="modal-header screening-modal-header">
+    <div class="modal-dialog modal-lg" style="max-width: 85%; margin: 1.75rem auto;">
+        <div class="modal-content screening-modal-content" style="position: relative; z-index: 1060; pointer-events: auto; overflow: hidden;">
+            <!-- Navigation Sidebar (always visible for Initial Screening) -->
+            <div class="modal-nav-sidebar" id="screeningFormNavSidebar">
+                <div class="modal-nav-header">
+                    <i class="fas fa-user-md modal-nav-header-icon"></i>
+                    <div class="modal-nav-header-text">
+                        <div class="modal-nav-header-title">INTERVIEWER</div>
+                        <div class="modal-nav-header-subtitle">Workflow</div>
+                    </div>
+                </div>
+                <div class="modal-nav-items">
+                    <div class="modal-nav-item" id="navMedicalHistoryFromScreening" data-nav="medical-history">
+                        <i class="fas fa-file-medical modal-nav-item-icon"></i>
+                        <span>Medical History</span>
+                    </div>
+                    <div class="modal-nav-item active" id="navInitialScreeningFromScreening" data-nav="initial-screening">
+                        <i class="fas fa-clipboard-list modal-nav-item-icon"></i>
+                        <span>Initial Screening</span>
+                    </div>
+                    <div class="modal-nav-item hidden" id="navDeclarationFormFromScreening" data-nav="declaration-form">
+                        <i class="fas fa-file-alt modal-nav-item-icon"></i>
+                        <span>Declaration Form</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-content-with-nav" id="screeningFormModalContentWrapper">
+                <div class="modal-header screening-modal-header">
                 <div class="d-flex align-items-center">
                     <div class="screening-modal-icon me-3">
                         <i class="fas fa-clipboard-list fa-2x text-white"></i>
@@ -221,6 +247,7 @@
                         <i class="fas fa-check me-1"></i>Submit Screening
                     </button>
                 </div>
+            </div>
             </div>
         </div>
     </div>

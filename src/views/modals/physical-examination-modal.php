@@ -9,13 +9,43 @@
 <!-- Physical Examination Modal -->
 <div class="modal fade" id="physicalExaminationModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg" style="max-width:1100px; width:95%;">
-        <div class="modal-content" style="border: none; border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-bottom: none;">
-                <h5 class="modal-title"><i class="fas fa-stethoscope me-2"></i>Physical Examination Form</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="modal-content" style="border: none; border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden; position: relative;">
+            <!-- Navigation Sidebar -->
+            <div class="modal-nav-sidebar" id="physicalExamNavSidebar">
+                <div class="modal-nav-header">
+                    <i class="fas fa-user-md modal-nav-header-icon"></i>
+                    <div class="modal-nav-header-text">
+                        <div class="modal-nav-header-title">PHYSICIAN</div>
+                        <div class="modal-nav-header-subtitle">Workflow</div>
+                    </div>
+                </div>
+                <div class="modal-nav-items">
+                    <div class="modal-nav-item" id="navPEMedicalHistory" data-nav="medical-history">
+                        <i class="fas fa-file-medical modal-nav-item-icon"></i>
+                        <span>Medical History</span>
+                    </div>
+                    <div class="modal-nav-item" id="navPEInitialScreening" data-nav="initial-screening">
+                        <i class="fas fa-clipboard-list modal-nav-item-icon"></i>
+                        <span>Initial Screening</span>
+                    </div>
+                    <div class="modal-nav-item active" id="navPEPhysicalExam" data-nav="physical-examination">
+                        <i class="fas fa-stethoscope modal-nav-item-icon"></i>
+                        <span>Physical Examination</span>
+                    </div>
+                    <div class="modal-nav-item" id="navPEDonorProfile" data-nav="donor-profile">
+                        <i class="fas fa-user modal-nav-item-icon"></i>
+                        <span>Donor Profile</span>
+                    </div>
+                </div>
             </div>
+            
+            <div class="modal-content-with-nav" id="physicalExamModalContentWrapper">
+                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-bottom: none;">
+                    <h5 class="modal-title"><i class="fas fa-stethoscope me-2"></i>Physical Examination Form</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
 
-            <!-- Progress Indicator -->
+                <!-- Progress Indicator -->
             <div class="physical-progress-container">
             <div class="physical-progress-steps">
                 <div class="physical-step active" data-step="1">
@@ -377,6 +407,7 @@
                 </div>
             </div>
             </form>
+            </div>
         </div>
     </div>
 </div>
