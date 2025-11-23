@@ -308,12 +308,11 @@ class PhysicalExaminationModal {
         // When PE modal closes (X button or otherwise), return to donor profile modal
         const onHidden = () => {
             try {
-                // Don't reopen if we're in a success/approval flow
-                if (window.__suppressReturnToProfile || window.__peSuccessActive) {
+                // CRITICAL: Don't reopen if we're in a success/approval flow, sidebar navigation, or explicitly prevented
+                if (window.__suppressReturnToProfile || window.__peSuccessActive || window.__sidebarNavigationActive || window.__preventDonorProfileOpen) {
                     window.__suppressReturnToProfile = false;
                     return;
                 }
-                
                 const dpEl = document.getElementById('donorProfileModal');
                 if (dpEl) {
                     
@@ -328,8 +327,6 @@ class PhysicalExaminationModal {
                         try {
                             if (window.lastDonorProfileContext && typeof refreshDonorProfileModal === 'function') {
                                 refreshDonorProfileModal(window.lastDonorProfileContext);
-                            } else {
-                                console.warn('[PE MODAL] No context or refreshDonorProfileModal function not found');
                             }
                         } catch(e) {
                             console.error('[PE MODAL] Error refreshing donor profile:', e);
@@ -1361,8 +1358,8 @@ class PhysicalExaminationModal {
             } catch(_) { resolve(); }
         });
     }
-    // Simplified redirect to donor profile (no reload)
-    redirectToDonorProfile(donorId, screeningData) {
+    // Simplified redirect - check if approved, if so go to summary, otherwise donor profile
+    async redirectToDonorProfile(donorId, screeningData) {
         try { 
             window.__peSuccessActive = false; 
             window.__mhSuccessActive = false; // Clear medical history success state
@@ -1395,7 +1392,7 @@ class PhysicalExaminationModal {
             } catch(_) {}
         }
         
-        // Hide PE modal, then show donor profile directly
+        // Hide PE modal first
         try { window.__peRedirecting = true; } catch(_) {}
         try {
             const pe = document.getElementById('physicalExaminationModal');
@@ -1404,15 +1401,49 @@ class PhysicalExaminationModal {
                 try { inst.hide(); } catch(_) {}
             }
         } catch(_) {}
-        setTimeout(() => {
-            const dpEl = document.getElementById('donorProfileModal');
-            if (!dpEl) return;
-            const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
-            dp.show();
-            // Refresh content after show
-            setTimeout(() => { try { refreshDonorProfileModal(ctx); } catch(_) {} }, 120);
-            try { window.__peRedirecting = false; } catch(_) {}
-        }, 120);
+        
+        // Check if physical examination is approved/accepted
+        try {
+            const apiCall = typeof makeApiCall === 'function' ? makeApiCall : async (url, options) => {
+                const response = await fetch(url, options);
+                return await response.json();
+            };
+            
+            const peData = await apiCall(`../../public/api/get-physical-examination.php?donor_id=${donorId}&_=${Date.now()}`);
+            
+            // Check if physical examination is approved (remarks === 'Accepted' or status indicates approval)
+            const isApproved = peData && peData.success && peData.physical_exam && 
+                              (peData.physical_exam.remarks === 'Accepted' || 
+                               peData.physical_exam.status === 'Approved' ||
+                               peData.physical_exam.status === 'approved');
+            
+            setTimeout(() => {
+                if (isApproved && typeof openPhysicalExaminationSummaryModal === 'function') {
+                    // Redirect to summary modal if approved
+                    openPhysicalExaminationSummaryModal(donorId);
+                } else {
+                    // Otherwise redirect to donor profile
+                    const dpEl = document.getElementById('donorProfileModal');
+                    if (!dpEl) return;
+                    const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
+                    dp.show();
+                    // Refresh content after show
+                    setTimeout(() => { try { refreshDonorProfileModal(ctx); } catch(_) {} }, 120);
+                }
+                try { window.__peRedirecting = false; } catch(_) {}
+            }, 120);
+        } catch(error) {
+            // If check fails, default to donor profile
+            setTimeout(() => {
+                const dpEl = document.getElementById('donorProfileModal');
+                if (!dpEl) return;
+                const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
+                dp.show();
+                // Refresh content after show
+                setTimeout(() => { try { refreshDonorProfileModal(ctx); } catch(_) {} }, 120);
+                try { window.__peRedirecting = false; } catch(_) {}
+            }, 120);
+        }
     }
     
     forceShowDonorProfileElement() {

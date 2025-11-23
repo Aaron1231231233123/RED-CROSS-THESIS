@@ -33,9 +33,10 @@ function fbr_build_filtered_rows($filters, $user_id, $limit = 150, $q = '') {
                 // Don't filter by status
                 continue;
             } elseif ($statusLower === 'approved') {
-                // Include both Approved and Printed as "Approved"
+                // Include Approved, Printed, and Handed_over as "Approved"
                 $dbStatuses[] = 'Approved';
                 $dbStatuses[] = 'Printed';
+                $dbStatuses[] = 'Handed_over';
             } else {
                 $dbStatuses[] = ucfirst($statusLower);
             }

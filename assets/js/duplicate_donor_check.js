@@ -431,6 +431,56 @@ class DuplicateDonorChecker {
             
             ${reasonSection}
             
+            ${!duplicateData.has_eligibility_history ? `
+                <div class="alert alert-info border-start border-3 border-info mt-3">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-info-circle me-2 fs-4"></i>
+                        <div class="flex-grow-1">
+                            <strong>${duplicateData.donation_stage ? `Donor Stage: ${duplicateData.donation_stage}` : 'New Donor - No Donation History'}</strong><br>
+                            <small>${duplicateData.donation_stage ? duplicateData.reason || `This donor was in the ${duplicateData.donation_stage} stage.` : 'This donor is registered but has not completed any donation process yet.'}</small>
+                        </div>
+                    </div>
+                </div>
+            ` : ''}
+            
+            ${duplicateData.temporary_deferred ? `
+                <div class="alert alert-warning border-start border-3 border-warning mt-3">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-clock me-2 fs-4"></i>
+                        <div class="flex-grow-1">
+                            <strong>Temporary Deferral Active</strong><br>
+                            <small>Deferral Period: ${duplicateData.temporary_deferred_text || duplicateData.temporary_deferred}</small>
+                            ${duplicateData.temporary_deferred_days_remaining !== null && duplicateData.temporary_deferred_days_remaining > 0 ? `
+                                <br><small class="text-muted">${duplicateData.temporary_deferred_days_remaining} day(s) remaining</small>
+                            ` : duplicateData.temporary_deferred_days_remaining === 0 ? `
+                                <br><small class="text-success">Deferral period has ended - re-evaluation needed</small>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            ` : ''}
+            
+            ${duplicateData.has_eligibility_history ? `
+                <div class="row mt-3 mb-3">
+                    <div class="col-md-6">
+                        <div class="card border-0 bg-light">
+                            <div class="card-body text-center">
+                                <h3 class="text-danger mb-0">${duplicateData.total_donations || 0}</h3>
+                                <small class="text-muted">Total Donations</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-0 bg-light">
+                            <div class="card-body text-center">
+                                <h3 class="text-primary mb-0">${duplicateData.total_eligibility_records || 0}</h3>
+                                <small class="text-muted">Total Records</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ` : ''}
+            
             <div class="alert ${duplicateData.can_donate_today ? 'alert-success' : 'alert-warning'} border-0 mt-3 mb-3">
                 <i class="fas fa-${duplicateData.can_donate_today ? 'check-circle' : 'clock'} me-2"></i>
                 <strong>${duplicateData.suggestion}</strong>
@@ -457,7 +507,7 @@ class DuplicateDonorChecker {
                     </div>
                 </div>
                 
-                <div class="contact-item d-flex align-items-center">
+                <div class="contact-item d-flex align-items-center mb-2">
                     <div class="contact-icon me-3">
                         <i class="fas fa-calendar text-danger"></i>
                     </div>
@@ -466,6 +516,18 @@ class DuplicateDonorChecker {
                         <strong class="contact-value">${duplicateData.time_description}</strong>
                     </div>
                 </div>
+                
+                ${duplicateData.latest_donation_date ? `
+                    <div class="contact-item d-flex align-items-center">
+                        <div class="contact-icon me-3">
+                            <i class="fas fa-tint text-danger"></i>
+                        </div>
+                        <div class="contact-details flex-grow-1">
+                            <small class="text-muted d-block">Last Donation</small>
+                            <strong class="contact-value">${this.formatDate(duplicateData.latest_donation_date)}</strong>
+                        </div>
+                    </div>
+                ` : ''}
             </div>
         `;
         

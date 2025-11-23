@@ -28,6 +28,13 @@ document.addEventListener('DOMContentLoaded', function(){
         document.addEventListener('click', function(ev){
             const btn = ev.target && (ev.target.closest ? ev.target.closest('.view-btn, .edit-btn') : null);
             if (!btn) return;
+            
+            // CRITICAL: Check if sidebar navigation is active - if so, don't open donor profile
+            // This prevents donor profile from opening when navigating between modals via sidebar
+            if (window.__sidebarNavigationActive || window.__preventDonorProfileOpen) {
+                return;
+            }
+            
             ev.preventDefault();
             ev.stopPropagation();
             try {

@@ -2,12 +2,12 @@
 // check_duplicate_donor.php
 // API endpoint to check for duplicate donors based on personal information
 
-// Enable error reporting for debugging
+// Enable error reporting for debugging (but don't display errors to avoid JSON corruption)
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0); // Don't display errors - they corrupt JSON
 ini_set('log_errors', 1);
 
-// Set content type to JSON
+// Set content type to JSON FIRST (before any output)
 header('Content-Type: application/json');
 
 // Handle CORS if needed
@@ -21,9 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
 header('Access-Control-Allow-Origin: *');
 
 try {
-    // Supabase Configuration - Direct connection
-    define("SUPABASE_URL", "https://nwakbxwglhxcpunrzstf.supabase.co");
-    define("SUPABASE_API_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53YWtieHdnbGh4Y3B1bnJ6c3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIyODA1NzIsImV4cCI6MjA1Nzg1NjU3Mn0.y4CIbDT2UQf2ieJTQukuJRRzspSZPehSgNKivBwpvc4");
+    // Include database connection configuration
+    require_once __DIR__ . '/../conn/db_conn.php';
     
     // Check if Supabase constants are properly set
     if (empty(SUPABASE_URL) || empty(SUPABASE_API_KEY)) {
@@ -73,7 +72,7 @@ try {
     $query_string = implode('&', $query_conditions);
     
     // First, get matching donors from donor_form table (using correct column names)
-    $donors_url = SUPABASE_URL . "/rest/v1/donor_form?select=donor_id,surname,first_name,middle_name,birthdate,age,sex,mobile,email,submitted_at&" . $query_string;
+    $donors_url = SUPABASE_URL . "/rest/v1/donor_form?select=donor_id,prc_donor_number,surname,first_name,middle_name,birthdate,age,sex,mobile,email,submitted_at&" . $query_string;
     
     $curl = curl_init();
     curl_setopt_array($curl, [
@@ -151,20 +150,28 @@ try {
         exit;
     }
     
-    // Now check which of these donors have eligibility records
-    $donors_with_eligibility = [];
+    // Now check eligibility records for each matching donor
+    // We'll process ALL matching donors, whether they have eligibility or not
+    $processed_donors = [];
     
     foreach ($matching_donors as $donor) {
         $donor_id = $donor['donor_id'];
         
-        // Check if this donor has any eligibility records (include disapproval_reason)
-        $eligibility_url = SUPABASE_URL . "/rest/v1/eligibility?select=eligibility_id,status,disapproval_reason,created_at,start_date,end_date&donor_id=eq." . $donor_id . "&order=created_at.desc&limit=1";
+        // Initialize donor data
+        $donor['total_donations'] = 0;
+        $donor['total_eligibility_records'] = 0;
+        $donor['latest_eligibility'] = null;
+        $donor['all_eligibility_records'] = [];
+        $donor['has_eligibility'] = false;
+        
+        // Get ALL eligibility records to count total donations
+        $all_eligibility_url = SUPABASE_URL . "/rest/v1/eligibility?select=eligibility_id,status,disapproval_reason,created_at,start_date,end_date,temporary_deferred,collection_successful&donor_id=eq." . $donor_id . "&order=created_at.desc";
         
         $curl = curl_init();
         curl_setopt_array($curl, [
-            CURLOPT_URL => $eligibility_url,
+            CURLOPT_URL => $all_eligibility_url,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 5,
+            CURLOPT_TIMEOUT => 10,
             CURLOPT_HTTPHEADER => [
                 "apikey: " . SUPABASE_API_KEY,
                 "Authorization: Bearer " . SUPABASE_API_KEY,
@@ -177,22 +184,52 @@ try {
         curl_close($curl);
         
         if ($eligibility_http_code === 200) {
-            $eligibility_records = json_decode($eligibility_response, true);
+            $all_eligibility_records = json_decode($eligibility_response, true);
             
-            if (is_array($eligibility_records) && !empty($eligibility_records)) {
-                $latest_eligibility = $eligibility_records[0];
+            if (is_array($all_eligibility_records) && !empty($all_eligibility_records)) {
+                // Count total donations (successful collections)
+                $total_donations = 0;
+                foreach ($all_eligibility_records as $record) {
+                    if (isset($record['collection_successful']) && $record['collection_successful'] === true) {
+                        $total_donations++;
+                    }
+                }
                 
-                // Add eligibility information to donor data
+                // Get the latest eligibility record
+                $latest_eligibility = $all_eligibility_records[0];
+                
+                // Add all eligibility information to donor data
                 $donor['latest_eligibility'] = $latest_eligibility;
-                $donors_with_eligibility[] = $donor;
+                $donor['all_eligibility_records'] = $all_eligibility_records;
+                $donor['total_donations'] = $total_donations;
+                $donor['total_eligibility_records'] = count($all_eligibility_records);
+                $donor['has_eligibility'] = true;
             }
         }
+        
+        // Add donor to processed list (whether they have eligibility or not)
+        $processed_donors[] = $donor;
     }
     
-    // Prepare response
-    if (!empty($donors_with_eligibility)) {
-        // Found duplicate donor(s) with eligibility records
-        $duplicate_data = $donors_with_eligibility[0]; // Get the first (most recent) match
+    // Sort donors: those with eligibility first, then by submitted_at
+    usort($processed_donors, function($a, $b) {
+        // First priority: donors with eligibility records
+        if ($a['has_eligibility'] && !$b['has_eligibility']) {
+            return -1;
+        }
+        if (!$a['has_eligibility'] && $b['has_eligibility']) {
+            return 1;
+        }
+        // Second priority: most recently submitted
+        $a_time = strtotime($a['submitted_at'] ?? '1970-01-01');
+        $b_time = strtotime($b['submitted_at'] ?? '1970-01-01');
+        return $b_time - $a_time;
+    });
+    
+    // Prepare response - use the first (most relevant) donor
+    if (!empty($processed_donors)) {
+        // Found duplicate donor(s) - use the first one (prioritizes those with eligibility)
+        $duplicate_data = $processed_donors[0];
         
         // Calculate how long ago the donor was registered using submitted_at
         $submitted_at = $duplicate_data['submitted_at'] ?? null;
@@ -219,6 +256,62 @@ try {
             $full_name .= " " . $duplicate_data['middle_name'];
         }
         
+        // Get donation statistics
+        $total_donations = $duplicate_data['total_donations'] ?? 0;
+        $total_eligibility_records = $duplicate_data['total_eligibility_records'] ?? 0;
+        $has_eligibility = $duplicate_data['has_eligibility'] ?? false;
+        
+        // Check for temporary_deferred in latest eligibility (only if eligibility exists)
+        $temporary_deferred = null;
+        $temporary_deferred_days_remaining = null;
+        $temporary_deferred_text = null;
+        
+        if ($has_eligibility && isset($duplicate_data['latest_eligibility'])) {
+            $temporary_deferred = $duplicate_data['latest_eligibility']['temporary_deferred'] ?? null;
+        }
+        
+        // Parse temporary_deferred if it exists
+        if (!empty($temporary_deferred)) {
+            $temporary_deferred_text = $temporary_deferred;
+            
+            // Calculate days remaining from end_date if available
+            $end_date = $duplicate_data['latest_eligibility']['end_date'] ?? null;
+            if ($end_date) {
+                $end_timestamp = strtotime($end_date);
+                $current_timestamp = time();
+                $days_remaining = ceil(($end_timestamp - $current_timestamp) / (60 * 60 * 24));
+                
+                if ($days_remaining > 0) {
+                    $temporary_deferred_days_remaining = $days_remaining;
+                } else {
+                    $temporary_deferred_days_remaining = 0; // Deferral period has ended
+                }
+            } else {
+                // Try to parse from temporary_deferred text (format: "X months Y days" or "X days")
+                if (preg_match('/(\d+)\s*(?:month|months)/', $temporary_deferred, $month_matches)) {
+                    $months = intval($month_matches[1]);
+                }
+                if (preg_match('/(\d+)\s*(?:day|days)/', $temporary_deferred, $day_matches)) {
+                    $days = intval($day_matches[1]);
+                }
+                
+                // If we have the created_at date, calculate end date
+                if (isset($duplicate_data['latest_eligibility']['created_at'])) {
+                    $created_at = strtotime($duplicate_data['latest_eligibility']['created_at']);
+                    $total_days = (isset($months) ? $months * 30 : 0) + (isset($days) ? $days : 0);
+                    $end_timestamp = $created_at + ($total_days * 24 * 60 * 60);
+                    $current_timestamp = time();
+                    $days_remaining = ceil(($end_timestamp - $current_timestamp) / (60 * 60 * 24));
+                    
+                    if ($days_remaining > 0) {
+                        $temporary_deferred_days_remaining = $days_remaining;
+                    } else {
+                        $temporary_deferred_days_remaining = 0;
+                    }
+                }
+            }
+        }
+        
         // Determine status message with intelligent suggestions
         $status_message = "Active donor";
         $alert_type = "warning";
@@ -226,7 +319,114 @@ try {
         $reason = "";
         $can_donate_today = false;
         
-        if (isset($duplicate_data['latest_eligibility']['status'])) {
+        // If donor has no eligibility records, check their progress stage
+        $donation_stage = null;
+        if (!$has_eligibility) {
+            $donor_id = $duplicate_data['donor_id'];
+            
+            // Check if donor has physical_examination record
+            $physical_exam_url = SUPABASE_URL . "/rest/v1/physical_examination?select=physical_exam_id,created_at&donor_id=eq." . $donor_id . "&order=created_at.desc&limit=1";
+            
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => $physical_exam_url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 5,
+                CURLOPT_HTTPHEADER => [
+                    "apikey: " . SUPABASE_API_KEY,
+                    "Authorization: Bearer " . SUPABASE_API_KEY,
+                    "Content-Type: application/json"
+                ],
+            ]);
+            
+            $physical_response = curl_exec($curl);
+            $physical_http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+            curl_close($curl);
+            
+            if ($physical_http_code === 200) {
+                $physical_records = json_decode($physical_response, true);
+                
+                if (is_array($physical_records) && !empty($physical_records)) {
+                    $physical_exam = $physical_records[0];
+                    $physical_exam_id = $physical_exam['physical_exam_id'];
+                    
+                    // Check if this physical_exam has a blood_collection record
+                    $blood_collection_url = SUPABASE_URL . "/rest/v1/blood_collection?select=blood_collection_id,created_at&physical_exam_id=eq." . urlencode($physical_exam_id) . "&order=created_at.desc&limit=1";
+                    
+                    $curl = curl_init();
+                    curl_setopt_array($curl, [
+                        CURLOPT_URL => $blood_collection_url,
+                        CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_TIMEOUT => 5,
+                        CURLOPT_HTTPHEADER => [
+                            "apikey: " . SUPABASE_API_KEY,
+                            "Authorization: Bearer " . SUPABASE_API_KEY,
+                            "Content-Type: application/json"
+                        ],
+                    ]);
+                    
+                    $blood_response = curl_exec($curl);
+                    $blood_http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+                    curl_close($curl);
+                    
+                    if ($blood_http_code === 200) {
+                        $blood_records = json_decode($blood_response, true);
+                        
+                        if (is_array($blood_records) && !empty($blood_records)) {
+                            // Donor has reached blood collection stage
+                            $donation_stage = "Collection of Blood";
+                            $status_message = "Registered Donor - Blood Collection Stage";
+                            $alert_type = "info";
+                            $suggestion = "This donor was in the Collection of Blood stage.";
+                            $can_donate_today = true;
+                            $reason = "This data was in the Collection of Blood stage.";
+                        } else {
+                            // Donor has physical exam but no blood collection
+                            $donation_stage = "Physical Examination";
+                            $status_message = "Registered Donor - Physical Examination Stage";
+                            $alert_type = "info";
+                            $suggestion = "This donor was in the Physical Examination stage.";
+                            $can_donate_today = true;
+                            $reason = "This data was in the Physical Examination stage.";
+                        }
+                    } else {
+                        // Error checking blood collection, but we know they have physical exam
+                        $donation_stage = "Physical Examination";
+                        $status_message = "Registered Donor - Physical Examination Stage";
+                        $alert_type = "info";
+                        $suggestion = "This donor was in the Physical Examination stage. They may proceed with donation screening.";
+                        $can_donate_today = true;
+                        $reason = "This data was in the Physical Examination stage.";
+                    }
+                } else {
+                    // No physical examination - donor is in interview stage
+                    $donation_stage = "Interview";
+                    $status_message = "Registered Donor - Interview Stage";
+                    $alert_type = "info";
+                    $suggestion = "This donor was in the Interview stage.";
+                    $can_donate_today = true;
+                    $reason = "This data was in the Interview Stage.";
+                }
+            } else {
+                // Error checking physical exam - assume interview stage
+                $donation_stage = "Interview";
+                $status_message = "Registered Donor - Interview Stage";
+                $alert_type = "info";
+                $suggestion = "This donor was in the Interview stage. They may proceed with donation screening.";
+                $can_donate_today = true;
+                $reason = "This data was in the Interview Stage.";
+            }
+            
+            // Fallback if stage wasn't determined
+            if ($donation_stage === null) {
+                $donation_stage = "Interview";
+                $status_message = "Registered Donor (No Donation History)";
+                $alert_type = "info";
+                $suggestion = "This donor is registered but has no donation history.";
+                $can_donate_today = true;
+                $reason = "Donor registered but has not yet completed any donation process.";
+            }
+        } else if (isset($duplicate_data['latest_eligibility']['status'])) {
             $status = strtolower($duplicate_data['latest_eligibility']['status']);
             $disapproval_reason = $duplicate_data['latest_eligibility']['disapproval_reason'] ?? '';
             $end_date = $duplicate_data['latest_eligibility']['end_date'] ?? null;
@@ -238,74 +438,103 @@ try {
                 $days_since_donation = floor((time() - $last_donation) / (60 * 60 * 24));
             }
             
-                         switch ($status) {
-                case 'eligible':
-                    $status_message = "Ready to donate";
-                    $alert_type = "success";
-                    $can_donate_today = true;
-                    $suggestion = "This donor is cleared and ready to donate today.";
-                    break;
-                    
-                case 'ineligible':
-                    $status_message = "Recently donated";
+            // Check if temporary_deferred exists (this takes priority)
+            if (!empty($temporary_deferred)) {
+                if ($temporary_deferred_days_remaining !== null && $temporary_deferred_days_remaining > 0) {
+                    $status_message = "Temporarily Deferred";
                     $alert_type = "warning";
-                    $reason = $disapproval_reason ?: "Recent donation within waiting period";
+                    $reason = "Temporary deferral: " . $temporary_deferred_text;
+                    $can_donate_today = false;
                     
-                    if ($days_since_donation >= 56) { // 8 weeks
-                        $suggestion = "Waiting period completed. Donor may be eligible now.";
-                        $can_donate_today = true;
-                    } else {
-                        $weeks_remaining = ceil((56 - $days_since_donation) / 7);
-                        $days_remaining = 56 - $days_since_donation;
-                        $suggestion = "Must wait $days_remaining more day(s) ($weeks_remaining week(s)) before next donation.";
-                    }
-                    break;
-                    
-                case 'approved':
-                    // This means they passed physical exam but need to check donation timing
-                    if ($days_since_donation >= 56) {
-                        $status_message = "Approved & ready";
+                    $suggestion = "Donor is temporarily deferred. Deferral period: {$temporary_deferred_text}. {$temporary_deferred_days_remaining} day(s) remaining before re-evaluation.";
+                } else if ($temporary_deferred_days_remaining === 0) {
+                    $status_message = "Deferral Period Ended";
+                    $alert_type = "info";
+                    $reason = "Temporary deferral period has ended: " . $temporary_deferred_text;
+                    $can_donate_today = false; // Still needs medical re-evaluation
+                    $suggestion = "Temporary deferral period has ended. Donor may be eligible for re-evaluation. Contact medical staff.";
+                } else {
+                    $status_message = "Temporarily Deferred";
+                    $alert_type = "warning";
+                    $reason = "Temporary deferral: " . $temporary_deferred_text;
+                    $can_donate_today = false;
+                    $suggestion = "Donor is temporarily deferred: {$temporary_deferred_text}. Contact medical staff for re-evaluation.";
+                }
+            }
+            
+            // Only process status switch if temporary_deferred is not set (to avoid overriding)
+            if (empty($temporary_deferred)) {
+                switch ($status) {
+                    case 'eligible':
+                        $status_message = "Ready to donate";
                         $alert_type = "success";
                         $can_donate_today = true;
-                        $suggestion = "Donor passed medical screening and is ready to donate.";
-                    } else {
-                        $status_message = "Approved but waiting";
+                        $suggestion = "This donor is cleared and ready to donate today.";
+                        break;
+                        
+                    case 'ineligible':
+                        $status_message = "Recently donated";
                         $alert_type = "warning";
-                        $weeks_remaining = ceil((56 - $days_since_donation) / 7);
-                        $days_remaining = 56 - $days_since_donation;
-                        $reason = "Passed medical exam but recently donated";
-                        $suggestion = "Wait $days_remaining more day(s) ($weeks_remaining week(s)) before next donation.";
-                    }
-                    break;
-                    
-                case 'deferred':
-                    $status_message = "Temporarily deferred";
-                    $alert_type = "warning";
-                    $reason = $disapproval_reason ?: "Medical deferral";
-                    
-                    if ($end_date && strtotime($end_date) <= time()) {
-                        $suggestion = "Deferral period ended. Contact medical staff for re-evaluation.";
-                        $can_donate_today = false; // Still needs medical clearance
-                    } else if ($end_date) {
-                        $days_remaining = ceil((strtotime($end_date) - time()) / (60 * 60 * 24));
-                        $suggestion = "Deferral ends in $days_remaining day(s). Medical re-evaluation required.";
-                    } else {
-                        $suggestion = "Contact medical staff for deferral review.";
-                    }
-                    break;
-                    
-                case 'refused':
-                    $status_message = "Donation refused";
-                    $alert_type = "danger";
-                    $reason = $disapproval_reason ?: "Medical refusal";
-                    $suggestion = "Contact medical director before proceeding.";
-                    break;
-                    
-                default:
-                    $status_message = "Registered donor";
-                    $alert_type = "info";
-                    $suggestion = "Review complete donor history before proceeding.";
-                    $reason = "Unknown status - requires review";
+                        $reason = $disapproval_reason ?: "Recent donation within waiting period";
+                        
+                        if ($days_since_donation >= 56) { // 8 weeks
+                            $suggestion = "Waiting period completed. Donor may be eligible now.";
+                            $can_donate_today = true;
+                        } else {
+                            $weeks_remaining = ceil((56 - $days_since_donation) / 7);
+                            $days_remaining = 56 - $days_since_donation;
+                            $suggestion = "Donor recently donated. Not eligible to donate for $days_remaining day(s).";
+                        }
+                        break;
+                        
+                    case 'approved':
+                        // This means they passed physical exam but need to check donation timing
+                        if ($days_since_donation >= 56) {
+                            $status_message = "Approved & ready";
+                            $alert_type = "success";
+                            $can_donate_today = true;
+                            $suggestion = "Donor passed medical screening and is ready to donate.";
+                        } else {
+                            $status_message = "Approved but waiting";
+                            $alert_type = "warning";
+                            $weeks_remaining = ceil((56 - $days_since_donation) / 7);
+                            $days_remaining = 56 - $days_since_donation;
+                            $reason = "Passed medical exam but recently donated";
+                            $suggestion = "Donor recently donated. Not eligible to donate for $days_remaining day(s).";
+                        }
+                        break;
+                        
+                    case 'deferred':
+                    case 'temporary deferred':
+                    case 'temporarily deferred':
+                        $status_message = "Temporarily deferred";
+                        $alert_type = "warning";
+                        $reason = $disapproval_reason ?: "Medical deferral";
+                        
+                        if ($end_date && strtotime($end_date) <= time()) {
+                            $suggestion = "Deferral period ended. Contact medical staff for re-evaluation.";
+                            $can_donate_today = false; // Still needs medical clearance
+                        } else if ($end_date) {
+                            $days_remaining = ceil((strtotime($end_date) - time()) / (60 * 60 * 24));
+                            $suggestion = "Deferral ends in $days_remaining day(s). Medical re-evaluation required.";
+                        } else {
+                            $suggestion = "Contact medical staff for deferral review.";
+                        }
+                        break;
+                        
+                    case 'refused':
+                        $status_message = "Donation refused";
+                        $alert_type = "danger";
+                        $reason = $disapproval_reason ?: "Medical refusal";
+                        $suggestion = "Contact medical director before proceeding.";
+                        break;
+                        
+                    default:
+                        $status_message = "Registered donor";
+                        $alert_type = "info";
+                        $suggestion = "Review complete donor history before proceeding.";
+                        $reason = "Unknown status - requires review";
+                }
             }
         }
         
@@ -315,6 +544,7 @@ try {
             'message' => 'Duplicate donor found',
             'data' => [
                 'donor_id' => $duplicate_data['donor_id'],
+                'prc_donor_number' => $duplicate_data['prc_donor_number'] ?? null,
                 'full_name' => $full_name,
                 'birthdate' => $duplicate_data['birthdate'],
                 'age' => $duplicate_data['age'],
@@ -329,15 +559,26 @@ try {
                 'reason' => $reason,
                 'suggestion' => $suggestion,
                 'can_donate_today' => $can_donate_today,
-                'total_matches' => count($donors_with_eligibility)
+                'total_matches' => count($processed_donors),
+                'has_eligibility_history' => $has_eligibility,
+                'donation_stage' => $donation_stage ?? null,
+                // New donation statistics
+                'total_donations' => $total_donations,
+                'total_eligibility_records' => $total_eligibility_records,
+                'temporary_deferred' => $temporary_deferred,
+                'temporary_deferred_text' => $temporary_deferred_text,
+                'temporary_deferred_days_remaining' => $temporary_deferred_days_remaining,
+                'deferral_end_date' => $duplicate_data['latest_eligibility']['end_date'] ?? null,
+                'latest_donation_date' => $duplicate_data['latest_eligibility']['created_at'] ?? null
             ]
         ]);
     } else {
-        // No duplicates with eligibility records found
+        // This should not happen since we already checked for matching donors above
+        // But keeping as fallback
         echo json_encode([
             'status' => 'success',
             'duplicate_found' => false,
-            'message' => 'No existing donor with donation history found',
+            'message' => 'No existing donor found',
             'data' => null
         ]);
     }

@@ -8,16 +8,46 @@
 
 <!-- Staff Physician Account Summary Modal -->
 <div class="modal fade" id="staffPhysicianAccountSummaryModal" tabindex="-1" aria-hidden="true" style="z-index: 1065;">
-    <div class="modal-dialog modal-lg" style="max-width:1100px; width:95%; z-index: 1066;">
-        <div class="modal-content" style="border: none; border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden; z-index: 1067;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-bottom: none;">
-                <h5 class="modal-title"><i class="fas fa-stethoscope me-2"></i>Physical Examination Summary</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+    <div class="modal-dialog modal-lg" style="max-width:1200px; width:95%; z-index: 1066;">
+        <div class="modal-content" style="border: none; border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden; z-index: 1067; position: relative;">
+            <!-- Navigation Sidebar -->
+            <div class="modal-nav-sidebar" id="summaryNavSidebar">
+                <div class="modal-nav-header">
+                    <i class="fas fa-user-md modal-nav-header-icon"></i>
+                    <div class="modal-nav-header-text">
+                        <div class="modal-nav-header-title">PHYSICIAN</div>
+                        <div class="modal-nav-header-subtitle">Workflow</div>
+                    </div>
+                </div>
+                <div class="modal-nav-items">
+                    <div class="modal-nav-item" id="navSummaryMedicalHistory" data-nav="medical-history">
+                        <i class="fas fa-file-medical modal-nav-item-icon"></i>
+                        <span>Medical History</span>
+                    </div>
+                    <div class="modal-nav-item" id="navSummaryInitialScreening" data-nav="initial-screening">
+                        <i class="fas fa-clipboard-list modal-nav-item-icon"></i>
+                        <span>Initial Screening</span>
+                    </div>
+                    <div class="modal-nav-item active" id="navSummaryPhysicalExam" data-nav="physical-examination-summary">
+                        <i class="fas fa-stethoscope modal-nav-item-icon"></i>
+                        <span>Physical Examination</span>
+                    </div>
+                    <div class="modal-nav-item" id="navSummaryDonorProfile" data-nav="donor-profile">
+                        <i class="fas fa-user modal-nav-item-icon"></i>
+                        <span>Donor Profile</span>
+                    </div>
+                </div>
             </div>
-
-            <!-- No Progress Indicator - Direct to Summary -->
             
-            <div class="modal-body" style="padding: 30px;">
+            <div class="modal-content-with-nav" style="margin-left: 180px;">
+                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-bottom: none;">
+                    <h5 class="modal-title"><i class="fas fa-stethoscope me-2"></i>Physical Examination Summary</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <!-- No Progress Indicator - Direct to Summary -->
+                
+                <div class="modal-body" style="padding: 30px;">
                 <div class="examination-report">
                     <!-- Header Section -->
                     <div class="report-header">
@@ -163,11 +193,12 @@
                 </div>
             </div>
 
-            <!-- No Action Buttons - Only Close -->
-            <div class="modal-footer" style="background-color: #f8f9fa; border-top: 1px solid #dee2e6;">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-2"></i>Close
-                </button>
+                <!-- No Action Buttons - Only Close -->
+                <div class="modal-footer" style="background-color: #f8f9fa; border-top: 1px solid #dee2e6;">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>Close
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -366,43 +397,33 @@
     const modalEl = document.getElementById('staffPhysicianAccountSummaryModal');
     if (!modalEl) return;
     
-    // When summary modal closes, return to donor profile modal
+    // When summary modal closes, return to donor profile modal (unless sidebar navigation is active)
     const onSummaryHidden = () => {
-        console.log('[SUMMARY MODAL] Staff Physician Account Summary modal hidden.bs.modal event fired');
         try {
-            // Don't reopen if we're in a success/approval flow
-            if (window.__suppressReturnToProfile || window.__peSuccessActive) {
-                console.log('[SUMMARY MODAL] Suppressing return to profile (success flow active)');
+            // Don't reopen if we're in a success/approval flow, sidebar navigation, or explicitly prevented
+            if (window.__suppressReturnToProfile || window.__peSuccessActive || window.__sidebarNavigationActive || window.__preventDonorProfileOpen) {
                 window.__suppressReturnToProfile = false;
                 return;
             }
             
             const dpEl = document.getElementById('donorProfileModal');
             if (dpEl) {
-                console.log('[SUMMARY MODAL] Found donor profile modal, reopening...');
-                
                 // Clear any hide prevention flags
                 try { window.allowDonorProfileHide = false; } catch(_) {}
                 
                 const dp = bootstrap.Modal.getOrCreateInstance(dpEl, { backdrop: 'static', keyboard: false });
                 dp.show();
-                console.log('[SUMMARY MODAL] Called dp.show()');
                 
                 // Refresh with last context if available
                 setTimeout(() => {
                     try {
                         if (window.lastDonorProfileContext && typeof refreshDonorProfileModal === 'function') {
-                            console.log('[SUMMARY MODAL] Refreshing donor profile with context');
                             refreshDonorProfileModal(window.lastDonorProfileContext);
-                        } else {
-                            console.warn('[SUMMARY MODAL] No context or refreshDonorProfileModal function not found');
                         }
                     } catch(e) {
                         console.error('[SUMMARY MODAL] Error refreshing donor profile:', e);
                     }
                 }, 100);
-            } else {
-                console.error('[SUMMARY MODAL] Donor profile modal element not found!');
             }
             
             // Clean backdrops only if no other modals are open
@@ -423,7 +444,6 @@
     
     // Attach the listener
     modalEl.addEventListener('hidden.bs.modal', onSummaryHidden);
-    console.log('[SUMMARY MODAL] Attached hidden.bs.modal listener for return to donor profile');
 })();
 </script>
 

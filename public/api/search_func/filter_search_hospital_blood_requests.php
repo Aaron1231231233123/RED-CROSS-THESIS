@@ -208,9 +208,19 @@ if (!empty($rows)) {
         }
         
         ?>
-        <tr>
+        <tr class="table-row" data-row-index="<?php echo $rowNum - 1; ?>">
             <td><?php echo $rowNum++; ?></td>
-            <td><?php echo $requestId; ?></td>
+            <td><?php 
+                // Display 14 characters of request_reference, skipping "REQ-" prefix
+                $request_ref = $request['request_reference'] ?? '';
+                if (!empty($request_ref)) {
+                    // Skip "REQ-" (4 characters) and take next 14 characters
+                    $display_ref = substr($request_ref, 4, 14);
+                    echo htmlspecialchars($display_ref);
+                } else {
+                    echo $requestId;
+                }
+            ?></td>
             <td><?php echo $bloodType . ($rhFactor === 'Positive' ? '+' : '-'); ?></td>
             <td><?php echo $units . ' Bags'; ?></td>
             <td><?php echo $whenNeededFormatted; ?></td>

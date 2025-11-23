@@ -43,53 +43,106 @@ function generateRequestReference($request_id, $date) {
     return generateRedCrossID('blood_request', $request_id, $date);
 }
 
-// Function to update request status to 'Printed' and set request_reference
+// Function to generate UUID v4
+function generateUUID() {
+    return sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+        mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+        mt_rand(0, 0xffff),
+        mt_rand(0, 0x0fff) | 0x4000,
+        mt_rand(0, 0x3fff) | 0x8000,
+        mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+    );
+}
+
+// Function to update request status to 'Printed' and generate receipt_no
 function updateRequestStatusToPrinted($request_id) {
+    // First, fetch the request to get request_reference from database
     $ch = curl_init();
-    
     $headers = [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ];
+    
+    $fetch_url = SUPABASE_URL . '/rest/v1/blood_requests?request_id=eq.' . $request_id . '&select=request_reference';
+    curl_setopt($ch, CURLOPT_URL, $fetch_url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    
+    if ($http_code !== 200) {
+        curl_close($ch);
+        error_log("Failed to fetch request data. HTTP Code: " . $http_code);
+        return false;
+    }
+    
+    $request_data = json_decode($response, true);
+    curl_close($ch);
+    
+    if (empty($request_data) || !isset($request_data[0])) {
+        error_log("Request not found or request_reference missing for request ID: " . $request_id);
+        return false;
+    }
+    
+    // Get request_reference from database (it should already be there from submission)
+    $request_reference = $request_data[0]['request_reference'] ?? null;
+    
+    if (!$request_reference) {
+        error_log("Warning: request_reference not found in database for request ID: " . $request_id);
+    }
+    
+    // Generate UUID for receipt_no
+    $receipt_no = generateUUID();
+    
+    // Update status to 'Printed' and set receipt_no
+    $ch = curl_init();
+    $update_headers = [
         'apikey: ' . SUPABASE_API_KEY,
         'Authorization: Bearer ' . SUPABASE_API_KEY,
         'Content-Type: application/json',
         'Prefer: return=minimal'
     ];
     
-    // Generate request reference
-    $request_reference = generateRequestReference($request_id, date('Y-m-d'));
-    
     $update_data = json_encode([
         'status' => 'Printed',
-        'request_reference' => $request_reference,
+        'receipt_no' => $receipt_no,
         'last_updated' => date('Y-m-d H:i:s')
     ]);
     
-    $url = SUPABASE_URL . '/rest/v1/blood_requests?request_id=eq.' . $request_id;
+    $update_url = SUPABASE_URL . '/rest/v1/blood_requests?request_id=eq.' . $request_id;
     
-    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_URL, $update_url);
     curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
     curl_setopt($ch, CURLOPT_POSTFIELDS, $update_data);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $update_headers);
     
-    $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $update_response = curl_exec($ch);
+    $update_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     
-    return $http_code === 200 || $http_code === 204;
+    if ($update_http_code === 200 || $update_http_code === 204) {
+        error_log("Successfully updated request ID {$request_id} with receipt_no: {$receipt_no}");
+        return true;
+    } else {
+        error_log("Failed to update request status. HTTP Code: " . $update_http_code);
+        return false;
+    }
 }
 
 // Check if this is a print action (when user actually prints)
 $is_print_action = isset($_GET['print']) && $_GET['print'] === 'true';
 
 if ($is_print_action) {
-    // Update status to 'Printed' when actually printing
+    // Update status to 'Printed' and generate receipt_no when actually printing
     $status_updated = updateRequestStatusToPrinted($request_id);
     if (!$status_updated) {
         error_log("Failed to update status to Printed for request ID: " . $request_id);
     }
 }
 
-// Fetch request details from Supabase or DB
+// Fetch request details from Supabase or DB (including receipt_no if it was just generated)
 $ch = curl_init();
 $headers = [
     'apikey: ' . SUPABASE_API_KEY,
@@ -302,7 +355,7 @@ $current_date = date('F d, Y');
         <div class="receipt-info">
             <div class="info-row">
                 <div class="info-label">Receipt No.:</div>
-                <div class="info-value"><?php echo h($request['receipt_no'] ?? 'PRC-BR-' . date('Y') . '-' . str_pad($request['request_id'], 5, '0', STR_PAD_LEFT)); ?></div>
+                <div class="info-value"><?php echo h($request['receipt_no'] ?? 'Not yet generated'); ?></div>
             </div>
             <div class="info-row">
                 <div class="info-label">Request ID:</div>
@@ -374,7 +427,7 @@ $current_date = date('F d, Y');
             </div>
             <div class="info-row">
                 <div class="info-label">Request Reference No.:</div>
-                <div class="info-value"><?php echo h($request['request_reference'] ?? generateRequestReference($request['request_id'], date('Y-m-d'))); ?></div>
+                <div class="info-value"><?php echo h($request['request_reference'] ?? 'N/A'); ?></div>
             </div>
         </div>
 

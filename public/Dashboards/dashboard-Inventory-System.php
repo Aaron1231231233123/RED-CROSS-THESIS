@@ -1104,9 +1104,14 @@ h6 {
         <div class="dashboard-home-header bg-light p-3 border-bottom">
             <div class="d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Blood Donor Management System</h4>
-                <button class="btn btn-danger" onclick="showConfirmationModal()">
-                    <i class="fas fa-plus me-2"></i>Register Donor
-                </button>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-danger" onclick="openQRRegistration()" title="Generate QR Code for Donor Registration">
+                        <i class="fas fa-qrcode me-2"></i>Generate QR Code
+                    </button>
+                    <button class="btn btn-danger" onclick="showConfirmationModal()">
+                        <i class="fas fa-plus me-2"></i>Register Donor
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -2982,6 +2987,13 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     console.error('Admin donor registration modal not available yet');
                     alert('Registration modal is still loading. Please try again in a moment.');
                 }
+            };
+            
+            // Function to open QR Registration page
+            window.openQRRegistration = function() {
+                const qrRegistrationUrl = '../../src/views/forms/qr-registration.php';
+                // Open in a new window/tab
+                window.open(qrRegistrationUrl, 'QRRegistration', 'width=1200,height=800,scrollbars=yes,resizable=yes');
             };
         });
     </script>

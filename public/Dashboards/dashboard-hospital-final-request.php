@@ -314,6 +314,31 @@ $hospital_location = $_SESSION['hospital_location'] ?? ($_SESSION['hospital_name
             border-color: #dee2e6;
         }
 
+        /* Highlight missing required fields */
+        .form-control.is-invalid,
+        .form-select.is-invalid {
+            border-color: #dc3545 !important;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath d='m5.8 3.6 .4.4.4-.4m0 4.8-.4-.4-.4.4'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right calc(0.375em + 0.1875rem) center;
+            background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+            padding-right: calc(1.5em + 0.75rem);
+        }
+        
+        .form-control.is-invalid:focus,
+        .form-select.is-invalid:focus {
+            border-color: #dc3545 !important;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+        }
+        
+        .invalid-feedback {
+            display: block;
+            width: 100%;
+            margin-top: 0.25rem;
+            font-size: 0.875em;
+            color: #dc3545;
+        }
+
         /* Sidebar Active State */
         .dashboard-home-sidebar a.active, 
         .dashboard-home-sidebar a:hover {
@@ -448,7 +473,7 @@ $hospital_location = $_SESSION['hospital_location'] ?? ($_SESSION['hospital_name
         /* Summary Cards */
         .summary-cards {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(3, 1fr);
              gap: 20px;
              margin-bottom: 30px;
         }
@@ -456,28 +481,90 @@ $hospital_location = $_SESSION['hospital_location'] ?? ($_SESSION['hospital_name
         .summary-card {
              background: white;
              border-radius: 8px;
-             padding: 24px;
+             padding: 32px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
              text-align: center;
              display: flex;
              flex-direction: column;
              align-items: center;
              justify-content: center;
-             min-height: 120px;
+             min-height: 150px;
+             transition: all 0.3s ease;
         }
         
         .summary-card-title {
              color: #941022;
-             font-size: 0.95rem;
+             font-size: 1.2rem;
              font-weight: 600;
-             margin-bottom: 12px;
+             margin-bottom: 16px;
         }
         
         .summary-card-number {
              color: #941022;
-             font-size: 2rem;
+             font-size: 3rem;
              font-weight: bold;
              margin: 0;
+        }
+        
+        /* Highlight animation for recently changed status */
+        .summary-card.highlight-approval {
+            animation: highlightPulse 2s ease-in-out;
+            border: 3px solid #28a745;
+            box-shadow: 0 0 20px rgba(40, 167, 69, 0.5);
+        }
+        
+        .summary-card.highlight-increase {
+            animation: highlightIncrease 2s ease-in-out infinite;
+            border: 3px solid #dc3545;
+            box-shadow: 0 0 20px rgba(220, 53, 69, 0.5);
+            background-color: rgba(220, 53, 69, 0.05);
+        }
+        
+        .summary-card-number.increased {
+            animation: numberPulse 1s ease-in-out infinite;
+            color: #dc3545 !important;
+        }
+        
+        @keyframes highlightPulse {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 20px rgba(40, 167, 69, 0.5);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 0 30px rgba(40, 167, 69, 0.8);
+            }
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 20px rgba(40, 167, 69, 0.5);
+            }
+        }
+        
+        @keyframes highlightIncrease {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 20px rgba(220, 53, 69, 0.5);
+                background-color: rgba(220, 53, 69, 0.05);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 0 30px rgba(220, 53, 69, 0.8);
+                background-color: rgba(220, 53, 69, 0.1);
+            }
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 20px rgba(220, 53, 69, 0.5);
+                background-color: rgba(220, 53, 69, 0.05);
+            }
+        }
+        
+        @keyframes numberPulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.2);
+            }
         }
         
         /* Content Section */
@@ -529,6 +616,15 @@ $hospital_location = $_SESSION['hospital_location'] ?? ($_SESSION['hospital_name
 th {
     cursor: pointer;
     position: relative;
+}
+
+/* Action column should not be sortable */
+th:last-child {
+    cursor: default !important;
+}
+
+th:last-child .sort-indicator {
+    display: none !important;
 }
 
 .sort-indicator {
@@ -705,19 +801,15 @@ th {
 
         <!-- Summary Cards -->
         <div class="summary-cards">
-            <div class="summary-card">
+            <div class="summary-card" id="pendingCard">
                 <div class="summary-card-title">Pending Requests</div>
                 <div class="summary-card-number"><?php echo $summary_stats['pending']; ?></div>
             </div>
-            <div class="summary-card">
+            <div class="summary-card" id="approvedCard">
                 <div class="summary-card-title">Approved Requests</div>
                 <div class="summary-card-number"><?php echo $summary_stats['approved']; ?></div>
             </div>
-            <div class="summary-card">
-                <div class="summary-card-title">Declined Requests</div>
-                <div class="summary-card-number"><?php echo $summary_stats['declined']; ?></div>
-            </div>
-            <div class="summary-card">
+            <div class="summary-card" id="completedCard">
                 <div class="summary-card-title">Completed Requests</div>
                 <div class="summary-card-number"><?php echo $summary_stats['completed']; ?></div>
             </div>
@@ -725,12 +817,12 @@ th {
 
         <!-- Filter and Search Bar -->
         <div class="filter-search-bar">
-            <select class="filter-dropdown">
-                <option>All Status</option>
-                <option>Pending</option>
-                <option>Approved</option>
-                <option>Declined</option>
-                <option>Completed</option>
+            <select class="filter-dropdown" id="statusFilterDropdown">
+                <option value="All Status">All Status</option>
+                <option value="Pending">Pending</option>
+                <option value="Approved">Approved</option>
+                <option value="Declined">Declined</option>
+                <option value="Completed">Completed</option>
             </select>
             <div class="search-input-wrapper">
                 <input type="text" class="search-input" placeholder="Search requests..." id="requestSearchBar">
@@ -768,7 +860,17 @@ th {
                         ?>
                         <tr class="table-row" data-row-index="<?php echo $rowNum - 1; ?>">
                             <td><?php echo $rowNum++; ?></td>
-                            <td><?php echo htmlspecialchars($request['request_id']); ?></td>
+                            <td><?php 
+                                // Display 14 characters of request_reference, skipping "REQ-" prefix
+                                $request_ref = $request['request_reference'] ?? '';
+                                if (!empty($request_ref)) {
+                                    // Skip "REQ-" (4 characters) and take next 14 characters
+                                    $display_ref = substr($request_ref, 4, 14);
+                                    echo htmlspecialchars($display_ref);
+                                } else {
+                                    echo htmlspecialchars($request['request_id']);
+                                }
+                            ?></td>
                             <td><?php echo htmlspecialchars($request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-')); ?></td>
                             <td><?php echo htmlspecialchars($request['units_requested'] . ' Bags'); ?></td>
                             <td><?php 
@@ -1079,7 +1181,10 @@ th {
                     </div>
                     <div id="scheduleDateTime" class="mb-3 d-none">
                         <label class="form-label">Scheduled Date & Time</label>
-                        <input type="datetime-local" class="form-control" name="scheduled_datetime">
+                        <input type="datetime-local" class="form-control" name="scheduled_datetime" id="scheduled_datetime">
+                        <div class="invalid-feedback" id="datetime-error" style="display: none;">
+                            The selected date and time cannot be in the past. Please select a future date and time.
+                        </div>
                     </div>
 
                     <!-- Additional Information (hidden in step UI; shown in summary only) -->
@@ -1330,29 +1435,428 @@ th {
 
     <script>
         // Configure one-time per-account notification for Handed_over (handled in external module)
+        <?php
+        // Ensure all variables are set to prevent PHP warnings
+        $user_id_js = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'guest';
+        $handed_over_ids_js = isset($handed_over_ids) ? $handed_over_ids : [];
+        $recently_approved_js = isset($recently_approved) ? $recently_approved : false;
+        $supabase_url_js = defined('SUPABASE_URL') ? SUPABASE_URL : '';
+        $supabase_key_js = defined('SUPABASE_API_KEY') ? SUPABASE_API_KEY : '';
+        ?>
         window.HandedOverNotifyConfig = {
-            userId: <?php echo json_encode($_SESSION['user_id'] ?? 'guest'); ?>,
-            handedOverIds: <?php echo json_encode($handed_over_ids); ?>,
+            userId: <?php echo json_encode($user_id_js); ?>,
+            handedOverIds: <?php echo json_encode($handed_over_ids_js); ?>,
             modalSelector: '#printSuccessModal',
             viewButtonSelector: '#printSuccessModal .btn-primary',
             buildViewUrl: (id) => `../../src/views/forms/print-blood-request.php?request_id=${id}`
         };
         // Define Supabase constants
-        const SUPABASE_URL = '<?php echo SUPABASE_URL; ?>';
-        const SUPABASE_KEY = '<?php echo SUPABASE_API_KEY; ?>';
+        const SUPABASE_URL = <?php echo json_encode($supabase_url_js); ?>;
+        const SUPABASE_KEY = <?php echo json_encode($supabase_key_js); ?>;
+        
+        // Check for recently approved requests and highlight
+        const recentlyApproved = <?php echo json_encode($recently_approved_js); ?>;
+        let lastCheckedApprovalTime = null;
+        
+        // Cache-based determiner using localStorage
+        const CACHE_KEY = 'blood_requests_summary_cache_' + <?php echo json_encode($user_id_js); ?>;
+        const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache duration
+        
+        // Initialize cache with current counts
+        function initializeCache() {
+            const currentCounts = {
+                pending: <?php echo json_encode($summary_stats['pending'] ?? 0); ?>,
+                approved: <?php echo json_encode($summary_stats['approved'] ?? 0); ?>,
+                completed: <?php echo json_encode($summary_stats['completed'] ?? 0); ?>,
+                lastCheck: Date.now(),
+                lastTimestamps: {
+                    latestPending: null,
+                    latestApproved: null,
+                    latestCompleted: null
+                }
+            };
+            
+            try {
+                localStorage.setItem(CACHE_KEY, JSON.stringify(currentCounts));
+            } catch (e) {
+                console.warn('localStorage not available, using in-memory cache');
+            }
+            
+            return currentCounts;
+        }
+        
+        // Get cached data
+        function getCachedData() {
+            try {
+                const cached = localStorage.getItem(CACHE_KEY);
+                if (cached) {
+                    const data = JSON.parse(cached);
+                    // Check if cache is still valid
+                    if (Date.now() - data.lastCheck < CACHE_DURATION) {
+                        return data;
+                    }
+                }
+            } catch (e) {
+                console.warn('Error reading cache:', e);
+            }
+            return null;
+        }
+        
+        // Update cache with new data
+        function updateCache(counts, timestamps) {
+            const cacheData = {
+                pending: counts.pending,
+                approved: counts.approved,
+                completed: counts.completed,
+                lastCheck: Date.now(),
+                lastTimestamps: timestamps
+            };
+            
+            try {
+                localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+            } catch (e) {
+                console.warn('Error updating cache:', e);
+            }
+            
+            return cacheData;
+        }
+        
+        // Store initial counts for comparison
+        let previousCounts = initializeCache();
+        
+        function checkForSummaryUpdates() {
+            // Fetch current summary statistics with timestamp fields
+            const userId = <?php echo json_encode($_SESSION['user_id'] ?? ''); ?>;
+            fetch(SUPABASE_URL + '/rest/v1/blood_requests?user_id=eq.' + encodeURIComponent(userId) + '&select=status,requested_on,approved_date,handed_over_date,last_updated&order=last_updated.desc', {
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': 'Bearer ' + SUPABASE_KEY
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data || !Array.isArray(data)) return;
+                
+                // Get cached data for comparison
+                const cachedData = getCachedData() || previousCounts;
+                
+                // Calculate current counts and track latest timestamps
+                const currentCounts = {
+                    pending: 0,
+                    approved: 0,
+                    completed: 0
+                };
+                
+                const latestTimestamps = {
+                    latestPending: cachedData.lastTimestamps?.latestPending || null,
+                    latestApproved: cachedData.lastTimestamps?.latestApproved || null,
+                    latestCompleted: cachedData.lastTimestamps?.latestCompleted || null
+                };
+                
+                // Track the most recent last_updated for any status change detection
+                let latestLastUpdated = null;
+                
+                data.forEach(request => {
+                    const status = request.status || '';
+                    const requestedOn = request.requested_on || null;
+                    const approvedDate = request.approved_date || null;
+                    const handedOverDate = request.handed_over_date || null;
+                    const lastUpdated = request.last_updated || null;
+                    
+                    // Track latest last_updated for any status change
+                    if (lastUpdated && (!latestLastUpdated || lastUpdated > latestLastUpdated)) {
+                        latestLastUpdated = lastUpdated;
+                    }
+                    
+                    if (status === 'Pending') {
+                        currentCounts.pending++;
+                        // Track the most recent pending request timestamp (use last_updated as fallback)
+                        const pendingTimestamp = requestedOn || lastUpdated;
+                        if (pendingTimestamp && (!latestTimestamps.latestPending || pendingTimestamp > latestTimestamps.latestPending)) {
+                            latestTimestamps.latestPending = pendingTimestamp;
+                        }
+                    } else if (status === 'Approved' || status === 'Printed' || status === 'Handed_over') {
+                        currentCounts.approved++;
+                        // Track the most recent approved request timestamp (use last_updated as fallback if approved_date is null)
+                        const approvedTimestamp = approvedDate || lastUpdated;
+                        if (approvedTimestamp && (!latestTimestamps.latestApproved || approvedTimestamp > latestTimestamps.latestApproved)) {
+                            latestTimestamps.latestApproved = approvedTimestamp;
+                        }
+                    } else if (status === 'Completed') {
+                        currentCounts.completed++;
+                        // Track the most recent completed request timestamp (use last_updated as fallback)
+                        const completedTimestamp = handedOverDate || lastUpdated;
+                        if (completedTimestamp && (!latestTimestamps.latestCompleted || completedTimestamp > latestTimestamps.latestCompleted)) {
+                            latestTimestamps.latestCompleted = completedTimestamp;
+                        }
+                    }
+                });
+                
+                // Compare with cached data to detect NEW changes
+                const now = Date.now();
+                const recentThreshold = 10 * 60 * 1000; // 10 minutes threshold (more lenient)
+                
+                // Check for pending increases
+                if (currentCounts.pending > cachedData.pending) {
+                    // Check if the latest pending timestamp is new (not in cache)
+                    const latestPendingTime = latestTimestamps.latestPending ? new Date(latestTimestamps.latestPending).getTime() : 0;
+                    const cachedPendingTime = cachedData.lastTimestamps?.latestPending ? new Date(cachedData.lastTimestamps.latestPending).getTime() : 0;
+                    
+                    // Highlight if timestamp is newer OR if count increased (detect any new pending)
+                    if (latestPendingTime > cachedPendingTime || latestPendingTime === 0) {
+                        // Check if it's recent enough, or if it's a new timestamp we haven't seen
+                        if ((latestPendingTime > cachedPendingTime && (now - latestPendingTime) <= recentThreshold) || 
+                            (latestPendingTime === 0 && cachedPendingTime === 0)) {
+                            highlightCardIncrease('pendingCard', currentCounts.pending);
+                        } else {
+                            updateCardCount('pendingCard', currentCounts.pending);
+                        }
+                    } else {
+                        updateCardCount('pendingCard', currentCounts.pending);
+                    }
+                } else if (currentCounts.pending !== cachedData.pending) {
+                    // Count changed but didn't increase (edge case)
+                    updateCardCount('pendingCard', currentCounts.pending);
+                }
+                
+                // Check for approved increases - this is the key one for status changes
+                if (currentCounts.approved > cachedData.approved) {
+                    const latestApprovedTime = latestTimestamps.latestApproved ? new Date(latestTimestamps.latestApproved).getTime() : 0;
+                    const cachedApprovedTime = cachedData.lastTimestamps?.latestApproved ? new Date(cachedData.lastTimestamps.latestApproved).getTime() : 0;
+                    
+                    // Always highlight if count increased - this catches manual DB changes and normal approvals
+                    // The count increase itself is the indicator that something changed
+                    const timeSinceLastCheck = now - (cachedData.lastCheck || 0);
+                    const isRecentCheck = timeSinceLastCheck <= recentThreshold;
+                    
+                    // Highlight if count increased and it's been checked recently (within threshold)
+                    // OR if the timestamp is newer (catches new approvals with timestamps)
+                    if (isRecentCheck || latestApprovedTime > cachedApprovedTime) {
+                        highlightCardIncrease('approvedCard', currentCounts.approved);
+                    } else {
+                        // Still update the count even if not recent
+                        updateCardCount('approvedCard', currentCounts.approved);
+                    }
+                } else if (currentCounts.approved < cachedData.approved) {
+                    // Count decreased - remove highlight and return to normal
+                    removeCardHighlight('approvedCard', currentCounts.approved);
+                } else if (currentCounts.approved !== cachedData.approved) {
+                    updateCardCount('approvedCard', currentCounts.approved);
+                }
+                
+                // Check for completed increases
+                if (currentCounts.completed > cachedData.completed) {
+                    const latestCompletedTime = latestTimestamps.latestCompleted ? new Date(latestTimestamps.latestCompleted).getTime() : 0;
+                    const cachedCompletedTime = cachedData.lastTimestamps?.latestCompleted ? new Date(cachedData.lastTimestamps.latestCompleted).getTime() : 0;
+                    
+                    // Always highlight if count increased - this catches status changes to Completed
+                    // The count increase itself is the indicator that something changed
+                    const timeSinceLastCheck = now - (cachedData.lastCheck || 0);
+                    const isRecentCheck = timeSinceLastCheck <= recentThreshold;
+                    
+                    // Always highlight when count increased - catches all status changes to Completed
+                    // This handles manual DB changes and normal status transitions
+                    if (isRecentCheck || latestCompletedTime > cachedCompletedTime || currentCounts.completed > cachedData.completed) {
+                        highlightCardIncrease('completedCard', currentCounts.completed);
+                    } else {
+                        // Still update the count even if not recent
+                        updateCardCount('completedCard', currentCounts.completed);
+                    }
+                } else if (currentCounts.completed < cachedData.completed) {
+                    // Count decreased - remove highlight
+                    removeCardHighlight('completedCard', currentCounts.completed);
+                } else if (currentCounts.completed === cachedData.completed) {
+                    // Count reverted back to original - remove highlight if it exists
+                    const completedCard = document.getElementById('completedCard');
+                    if (completedCard && completedCard.classList.contains('highlight-increase')) {
+                        removeCardHighlight('completedCard', currentCounts.completed);
+                    }
+                } else if (currentCounts.completed !== cachedData.completed) {
+                    updateCardCount('completedCard', currentCounts.completed);
+                }
+                
+                // Update cache with new data
+                previousCounts = updateCache(currentCounts, latestTimestamps);
+            })
+            .catch(error => {
+                console.error('Error checking for summary updates:', error);
+            });
+        }
+        
+        // Helper function to update card count without highlighting
+        function updateCardCount(cardId, newCount) {
+            const card = document.getElementById(cardId);
+            if (card) {
+                const numberElement = card.querySelector('.summary-card-number');
+                if (numberElement) {
+                    numberElement.textContent = newCount;
+                }
+            }
+        }
+        
+        // Helper function to remove highlight when count decreases
+        function removeCardHighlight(cardId, newCount) {
+            const card = document.getElementById(cardId);
+            if (card) {
+                // Remove highlight classes
+                card.classList.remove('highlight-increase');
+                const numberElement = card.querySelector('.summary-card-number');
+                if (numberElement) {
+                    numberElement.classList.remove('increased');
+                    numberElement.textContent = newCount;
+                    // Reset color to original
+                    numberElement.style.color = '';
+                }
+            }
+        }
+        
+        function highlightCardIncrease(cardId, newCount) {
+            const card = document.getElementById(cardId);
+            if (!card) return;
+            
+            const numberElement = card.querySelector('.summary-card-number');
+            if (!numberElement) return;
+            
+            // Remove any existing highlight first
+            card.classList.remove('highlight-increase');
+            numberElement.classList.remove('increased');
+            
+            // Force reflow to restart animation
+            void card.offsetWidth;
+            
+            // Add highlight class
+            card.classList.add('highlight-increase');
+            
+            // Add increased class to number
+            numberElement.classList.add('increased');
+            
+            // Update the count
+            numberElement.textContent = newCount;
+            
+            // Keep the highlight persistent - don't remove it automatically
+            // The highlight will continue until the page is refreshed or manually cleared
+        }
+        
+        function checkForStatusChanges() {
+            // Fetch current requests to check for new approvals
+            const userId = <?php echo json_encode($_SESSION['user_id'] ?? ''); ?>;
+            fetch(SUPABASE_URL + '/rest/v1/blood_requests?user_id=eq.' + encodeURIComponent(userId) + '&status=eq.Approved&order=approved_date.desc&limit=1', {
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': 'Bearer ' + SUPABASE_KEY
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data && data.length > 0) {
+                    const latestApproval = data[0];
+                    if (latestApproval.approved_date) {
+                        const approvedTime = latestApproval.approved_date;
+                        
+                        // Only highlight if this is a new approval (different from last checked)
+                        if (lastCheckedApprovalTime !== approvedTime) {
+                            const approvedTimeStamp = new Date(approvedTime).getTime();
+                            const now = new Date().getTime();
+                            const timeDiff = (now - approvedTimeStamp) / 1000; // seconds
+                            
+                            // If approved within last 60 seconds
+                            if (timeDiff <= 60) {
+                                const approvedCard = document.getElementById('approvedCard');
+                                if (approvedCard) {
+                                    approvedCard.classList.add('highlight-approval');
+                                    
+                                    // Update the count if needed
+                                    const currentCount = parseInt(approvedCard.querySelector('.summary-card-number').textContent) || 0;
+                                    const newCount = <?php echo json_encode($summary_stats['approved'] ?? 0); ?>;
+                                    if (newCount > currentCount) {
+                                        approvedCard.querySelector('.summary-card-number').textContent = newCount;
+                                    }
+                                    
+                                    // Remove highlight after animation
+                                    setTimeout(() => {
+                                        approvedCard.classList.remove('highlight-approval');
+                                    }, 2000);
+                                }
+                                
+                                lastCheckedApprovalTime = approvedTime;
+                            }
+                        }
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error checking for status changes:', error);
+            });
+        }
         
         document.addEventListener("DOMContentLoaded", function () {
+            // Highlight Approved card if a request was recently approved on page load
+            if (recentlyApproved) {
+                const approvedCard = document.getElementById('approvedCard');
+                if (approvedCard) {
+                    approvedCard.classList.add('highlight-approval');
+                    
+                    // Remove highlight after animation completes
+                    setTimeout(() => {
+                        approvedCard.classList.remove('highlight-approval');
+                    }, 2000);
+                }
+            }
+            
+            // Check for status changes periodically (every 10 seconds)
+            setInterval(function() {
+                checkForStatusChanges();
+            }, 10000);
+            
+            // Check for summary updates periodically (every 10 seconds for faster detection)
+            setInterval(function() {
+                checkForSummaryUpdates();
+            }, 10000);
+            
+            // Initial checks after 2 seconds
+            setTimeout(checkForStatusChanges, 2000);
+            setTimeout(checkForSummaryUpdates, 2000);
+            
+            // Also add a manual refresh function that can be called
+            window.refreshSummaryCards = function() {
+                // Clear cache to force fresh check
+                try {
+                    localStorage.removeItem(CACHE_KEY);
+                } catch (e) {
+                    console.warn('Could not clear cache:', e);
+                }
+                previousCounts = initializeCache();
+                checkForSummaryUpdates();
+            };
+            
+            // Table sorting initialization
     let headers = document.querySelectorAll("th");
     
     if (!headers || headers.length === 0) return;
 
     headers.forEach((header, index) => {
-        // Exclude Status column (index 5) and Action column (last column, index 6)
-        // Only add sorting to columns: No., Request ID, Blood Type, Units Needed, Date Needed
-        const isStatusColumn = index === 5;
+                // Exclude Action column (last column, index 6)
+                // Add sorting to: No., Request ID, Blood Type, Units Needed, Date Needed, Status
         const isActionColumn = index === headers.length - 1;
         
-        if (!isStatusColumn && !isActionColumn && header) {
+                // Remove any existing sort indicators from Action column
+                if (isActionColumn && header) {
+                    const existingIndicator = header.querySelector(".sort-indicator");
+                    if (existingIndicator) {
+                        existingIndicator.remove();
+                    }
+                    // Remove cursor pointer style
+                    header.style.cursor = 'default';
+                    return; // Skip Action column completely
+                }
+                
+                if (!isActionColumn && header) {
+                    // Remove any existing sort indicators first
+                    const existingIndicator = header.querySelector(".sort-indicator");
+                    if (existingIndicator) {
+                        existingIndicator.remove();
+                    }
+                    
             // Create a single sorting indicator for each column
             let icon = document.createElement("span");
             icon.classList.add("sort-indicator");
@@ -1360,7 +1864,7 @@ th {
             header.appendChild(icon);
 
             // Add click event listener to sort the column
-            header.addEventListener("click", function () {
+                    header.addEventListener("click", function (e) {
                 sortTable(index, header);
             });
         }
@@ -1382,13 +1886,41 @@ function sortTable(columnIndex, header) {
     header.classList.toggle("desc", isAscending);
 
     // Determine the data type of the column
-    let type = (columnIndex === 2) ? "number" : 
-               (columnIndex === 5 || columnIndex === 6) ? "date" : "text";
+    // Column indices: 0=No., 1=Request ID, 2=Blood Type, 3=Units Needed, 4=Date Needed, 5=Status, 6=Action
+    let type = (columnIndex === 0 || columnIndex === 1) ? "number" : 
+               (columnIndex === 4) ? "date" : "text";
+
+    // Status order: Pending, Approved, Completed, Declined (and others)
+    const statusOrder = {
+        'Pending': 1,
+        'Approved': 2,
+        'Completed': 3,
+        'Declined': 4,
+        'Rescheduled': 5
+    };
 
     // Sort the rows
     rows.sort((rowA, rowB) => {
         let cellA = rowA.cells[columnIndex].textContent.trim();
         let cellB = rowB.cells[columnIndex].textContent.trim();
+        
+        // For Status column, extract badge text and use custom order
+        if (columnIndex === 5) {
+            const badgeA = rowA.cells[columnIndex].querySelector('.badge');
+            const badgeB = rowB.cells[columnIndex].querySelector('.badge');
+            if (badgeA) cellA = badgeA.textContent.trim();
+            if (badgeB) cellB = badgeB.textContent.trim();
+            
+            // Use custom status order
+            const orderA = statusOrder[cellA] || 999;
+            const orderB = statusOrder[cellB] || 999;
+            
+            if (orderA !== orderB) {
+                return isAscending ? orderA - orderB : orderB - orderA;
+            }
+            // If same order, fall back to alphabetical
+            return isAscending ? cellA.localeCompare(cellB) : cellB.localeCompare(cellA);
+        }
 
         if (type === 'number') {
             return isAscending ? parseInt(cellA) - parseInt(cellB) : parseInt(cellB) - parseInt(cellA);
@@ -1502,6 +2034,31 @@ document.addEventListener("DOMContentLoaded", function () {
                         const dateInput = scheduleDateTime.querySelector('input');
                         if (dateInput) {
                             dateInput.required = true;
+                            // Set minimum to current date/time
+                            const now = new Date();
+                            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                            dateInput.min = now.toISOString().slice(0, 16);
+                            
+                            // Add validation on change
+                            dateInput.addEventListener('change', function() {
+                                const selectedDateTime = new Date(this.value);
+                                const currentDateTime = new Date();
+                                const errorDiv = document.getElementById('datetime-error');
+                                
+                                // Clear previous validation
+                                this.classList.remove('is-invalid');
+                                if (errorDiv) {
+                                    errorDiv.style.display = 'none';
+                                }
+                                
+                                // Check if selected time is in the past
+                                if (selectedDateTime <= currentDateTime) {
+                                    this.classList.add('is-invalid');
+                                    if (errorDiv) {
+                                        errorDiv.style.display = 'block';
+                                    }
+                                }
+                            });
                         }
                     } else {
                         scheduleDateTime.style.opacity = 0;
@@ -1510,6 +2067,11 @@ document.addEventListener("DOMContentLoaded", function () {
                         if (dateInput) {
                             dateInput.required = false;
                             dateInput.value = '';
+                            dateInput.classList.remove('is-invalid');
+                            const errorDiv = document.getElementById('datetime-error');
+                            if (errorDiv) {
+                                errorDiv.style.display = 'none';
+                            }
                         }
                     }
                 }
@@ -1628,65 +2190,126 @@ document.addEventListener("DOMContentLoaded", function () {
             modalEl.querySelector('#reviewPhysician').textContent = phys;
         }
 
+        // Function to clear validation highlights
+        function clearValidationHighlights() {
+            modalEl.querySelectorAll('.is-invalid').forEach(el => {
+                el.classList.remove('is-invalid');
+            });
+            modalEl.querySelectorAll('.invalid-feedback').forEach(el => {
+                el.style.display = 'none';
+            });
+        }
+
         nextBtn?.addEventListener('click', function() {
+            // Clear previous validation highlights
+            clearValidationHighlights();
+            
             // Basic required validations per step
             if (current === 0) {
                 const requiredFields = [
-                    '[name="patient_first_name"]',
-                    '[name="patient_last_name"]',
-                    '[name="patient_age"]',
-                    '[name="patient_gender"]'
+                    { sel: '[name="patient_first_name"]', label: 'First Name' },
+                    { sel: '[name="patient_last_name"]', label: 'Surname' },
+                    { sel: '[name="patient_age"]', label: 'Age' },
+                    { sel: '[name="patient_gender"]', label: 'Gender' }
                 ];
-                for (const sel of requiredFields) {
-                    const el = modalEl.querySelector(sel);
+                const missingFields = [];
+                
+                for (const field of requiredFields) {
+                    const el = modalEl.querySelector(field.sel);
                     if (el && !el.value.trim()) {
-                        const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
-                        const body = document.getElementById('actionResultBody');
-                        if (body) { body.textContent = 'Please complete all required fields on this step before continuing.'; }
-                        msgModal.show();
-                        el.focus();
-                        return;
+                        el.classList.add('is-invalid');
+                        missingFields.push(field.label);
                     }
                 }
+                
                 // Validate diagnosis dropdown
                 const diagnosisSelect = modalEl.querySelector('#patient_diagnosis');
                 if (!diagnosisSelect || !diagnosisSelect.value) {
-                    const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
-                    const body = document.getElementById('actionResultBody');
-                    if (body) { body.textContent = 'Please select a diagnosis before continuing.'; }
-                    msgModal.show();
-                    diagnosisSelect?.focus();
-                    return;
+                    diagnosisSelect.classList.add('is-invalid');
+                    missingFields.push('Diagnosis');
                 }
+                
                 // If "Other" is selected, validate the other diagnosis input
-                if (diagnosisSelect.value === 'Other') {
+                if (diagnosisSelect && diagnosisSelect.value === 'Other') {
                     const otherInput = modalEl.querySelector('#other_diagnosis_input');
                     if (!otherInput || !otherInput.value.trim()) {
+                        otherInput.classList.add('is-invalid');
+                        missingFields.push('Diagnosis Details');
+                    }
+                }
+                
+                if (missingFields.length > 0) {
                         const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
                         const body = document.getElementById('actionResultBody');
-                        if (body) { body.textContent = 'Please specify the diagnosis details for "Other" option.'; }
-                        msgModal.show();
-                        otherInput?.focus();
-                        return;
+                    if (body) { 
+                        body.textContent = 'Please complete all required fields: ' + missingFields.join(', '); 
                     }
+                        msgModal.show();
+                    // Focus on first missing field
+                    const firstMissing = modalEl.querySelector('.is-invalid');
+                    if (firstMissing) firstMissing.focus();
+                        return;
                 }
             } else if (current === 1) {
                 const requiredFields = [
-                    '[name="patient_blood_type"]',
-                    '[name="rh_factor"]',
-                    '[name="units_requested"]',
-                    '#whenNeeded'
+                    { sel: '[name="patient_blood_type"]', label: 'Blood Type' },
+                    { sel: '[name="rh_factor"]', label: 'RH Factor' },
+                    { sel: '[name="units_requested"]', label: 'Number of Units' },
+                    { sel: '#whenNeeded', label: 'When Needed' }
                 ];
-                for (const sel of requiredFields) {
-                    const el = modalEl.querySelector(sel);
+                const missingFields = [];
+                
+                for (const field of requiredFields) {
+                    const el = modalEl.querySelector(field.sel);
                     if (el && (!el.value || !el.value.trim())) {
+                        el.classList.add('is-invalid');
+                        missingFields.push(field.label);
+                    }
+                }
+                
+                // Validate scheduled datetime if Scheduled is selected
+                const whenNeeded = modalEl.querySelector('#whenNeeded');
+                if (whenNeeded && whenNeeded.value === 'Scheduled') {
+                    const scheduledInput = modalEl.querySelector('#scheduled_datetime');
+                    if (scheduledInput) {
+                        if (!scheduledInput.value) {
+                            scheduledInput.classList.add('is-invalid');
+                            missingFields.push('Scheduled Date & Time');
+                        } else {
+                            // Validate that the selected date/time is not in the past
+                            const selectedDateTime = new Date(scheduledInput.value);
+                            const now = new Date();
+                            
+                            if (selectedDateTime <= now) {
+                                scheduledInput.classList.add('is-invalid');
+                                const errorDiv = document.getElementById('datetime-error');
+                                if (errorDiv) {
+                                    errorDiv.style.display = 'block';
+                                }
                         const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
                         const body = document.getElementById('actionResultBody');
-                        if (body) { body.textContent = 'Please complete all required fields on this step before continuing.'; }
+                                if (body) { 
+                                    body.textContent = 'The selected date and time cannot be in the past. Please select a future date and time.'; 
+                                }
                         msgModal.show();
-                        el.focus();
+                                scheduledInput.focus();
                         return;
                     }
+                        }
+                    }
+                }
+                
+                if (missingFields.length > 0) {
+                    const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
+                    const body = document.getElementById('actionResultBody');
+                    if (body) { 
+                        body.textContent = 'Please complete all required fields: ' + missingFields.join(', '); 
+                    }
+                    msgModal.show();
+                    // Focus on first missing field
+                    const firstMissing = modalEl.querySelector('.is-invalid');
+                    if (firstMissing) firstMissing.focus();
+                    return;
                 }
             }
             if (current < steps.length - 1) { current++; updateUI(); }
@@ -1698,6 +2321,9 @@ document.addEventListener("DOMContentLoaded", function () {
         modalEl.addEventListener('shown.bs.modal', function(){ 
             current = 0; 
             updateUI(); 
+            // Clear all validation highlights
+            clearValidationHighlights();
+            
             // Reset diagnosis handler state when modal opens
             const diagnosisSelect = modalEl.querySelector('#patient_diagnosis');
             const whenNeededSelect = modalEl.querySelector('#whenNeeded');
@@ -1726,6 +2352,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     if (dateInput) {
                         dateInput.value = '';
                         dateInput.required = false;
+                        dateInput.classList.remove('is-invalid');
+                        const errorDiv = document.getElementById('datetime-error');
+                        if (errorDiv) {
+                            errorDiv.style.display = 'none';
+                        }
                     }
                 }
             }
@@ -1846,43 +2477,39 @@ document.addEventListener("DOMContentLoaded", function () {
                         }
                     });
                     
-                    console.log('Submitting request data:', data);
-                    console.log('Valid fields in database:', validFields);
-                    console.log('FormData keys:', Array.from(formData.keys()));
-                    console.log('when_needed value:', data.when_needed);
-                    console.log('requested_on value:', data.requested_on);
-                    console.log('is_asap value:', data.is_asap);
-                    
-                    // Send data to server
-                    fetch('<?php echo SUPABASE_URL; ?>/rest/v1/blood_requests', {
+                    // Send data to server via API endpoint (which will generate request_reference)
+                    fetch('../api/submit-blood-request.php', {
                         method: 'POST',
                         headers: {
-                            'apikey': '<?php echo SUPABASE_API_KEY; ?>',
-                            'Authorization': 'Bearer <?php echo SUPABASE_API_KEY; ?>',
-                            'Content-Type': 'application/json',
-                            'Prefer': 'return=minimal'
+                            'Content-Type': 'application/json'
                         },
                         body: JSON.stringify(data)
                     })
                     .then(response => {
-                        console.log('Request response status:', response.status);
+                        return response.json().then(data => {
                         if (!response.ok) {
-                            return response.text().then(text => {
-                                console.error('Error response body:', text);
-                                // Try to parse as JSON to extract more details
-                                try {
-                                    const errorJson = JSON.parse(text);
-                                    throw new Error(`Error ${response.status}: ${errorJson.message || errorJson.error || text}`);
-                                } catch (jsonError) {
-                                    // If can't parse as JSON, use the raw text
-                                    throw new Error(`Error ${response.status}: ${text}`);
-                                }
-                            });
-                        }
-                        return response.text();
+                                throw new Error(data.message || `Error ${response.status}: ${JSON.stringify(data)}`);
+                            }
+                            return data;
+                        });
                     })
                     .then(result => {
-                        console.log('Request submitted successfully:', result);
+                        // Check if result has success property (from our API)
+                        if (!result.success) {
+                            throw new Error(result.message || 'Failed to submit request');
+                        }
+                        
+                        // Immediately highlight the pending card and update count
+                        const pendingCard = document.getElementById('pendingCard');
+                        if (pendingCard) {
+                            const numberElement = pendingCard.querySelector('.summary-card-number');
+                            if (numberElement) {
+                                const currentCount = parseInt(numberElement.textContent) || 0;
+                                const newCount = currentCount + 1;
+                                highlightCardIncrease('pendingCard', newCount);
+                                previousCounts.pending = newCount;
+                            }
+                        }
                         
                         // Close all open modals first (confirm modal and request modal)
                         const confirmModalInstance = bootstrap.Modal.getInstance(document.getElementById('confirmSubmitModal'));
@@ -2123,64 +2750,40 @@ document.addEventListener("DOMContentLoaded", function () {
         const requestTable = document.getElementById('requestTable');
         const tableContainer = requestTable ? requestTable.closest('table') : null;
         
-        console.log('DEBUG: Initializing button handlers');
-        console.log('DEBUG: requestTable:', requestTable);
-        console.log('DEBUG: tableContainer:', tableContainer);
-        
         function attachButtonHandlers() {
             // Remove old listeners by cloning (if needed) or use event delegation
             if (tableContainer) {
-                console.log('DEBUG: Attaching click handler to table container');
                 // Use event delegation - attach once to table container
                 tableContainer.addEventListener('click', function(e) {
                     // Skip if already handled by document handler
                     if (e._handledByDocument) {
-                        console.log('DEBUG: Event already handled by document handler, skipping');
                         return;
                     }
                     
-                    console.log('DEBUG: ===== CLICK DETECTED ON TABLE CONTAINER =====');
-                    console.log('DEBUG: Click target:', e.target);
-                    console.log('DEBUG: Click target tagName:', e.target.tagName);
-                    console.log('DEBUG: Click target classes:', e.target.className);
-                    console.log('DEBUG: Click target parentElement:', e.target.parentElement);
-                    console.log('DEBUG: Click target parentElement classes:', e.target.parentElement?.className);
-                    
                     // Check if clicked element is a view/print/handover button or inside one
                     let button = e.target.closest('.view-btn, .print-btn, .handover-btn');
-                    console.log('DEBUG: Found button via closest:', button);
                     
                     // If not found, check if target itself is a button
                     if (!button) {
                         if (e.target.classList.contains('view-btn') || e.target.classList.contains('print-btn') || e.target.classList.contains('handover-btn')) {
                             button = e.target;
-                            console.log('DEBUG: Target itself is a button');
                         }
                     }
                     
                     // Also check if clicking on icon inside button
                     if (!button && (e.target.tagName === 'I' || e.target.classList.contains('fa-eye') || e.target.classList.contains('fas'))) {
                         button = e.target.closest('button');
-                        console.log('DEBUG: Clicked on icon, found parent button:', button);
                     }
                     
                     if (!button) {
-                        console.log('DEBUG: No button found, returning');
                         return;
                     }
-                    
-                    console.log('DEBUG: Button found:', button);
-                    console.log('DEBUG: Button ID:', button.id);
-                    console.log('DEBUG: Button classes:', button.className);
-                    console.log('DEBUG: Button has view-btn class:', button.classList.contains('view-btn'));
                     
                     // Exclude modal buttons
                     if (button.id === 'printRequestBtn' || button.id === 'handoverRequestBtn') {
-                        console.log('DEBUG: Modal button clicked, returning');
                         return;
                     }
                     
-                    console.log('DEBUG: Processing view button click');
                     e.preventDefault();
                     e.stopPropagation();
                     
@@ -2200,10 +2803,6 @@ document.addEventListener("DOMContentLoaded", function () {
                     const requestId = data.requestId || data['request-id'] || button.getAttribute('data-request-id');
                     const status = data.status || button.getAttribute('data-status');
                     
-                    console.log('DEBUG: Table handler - Extracted Request ID:', requestId);
-                    console.log('DEBUG: Table handler - Extracted Status:', status);
-                    console.log('DEBUG: Table handler - All button data attributes:', data);
-                    
                     // Use the shared modal population function
                     populateAndOpenModal(data, requestId, status);
             });
@@ -2212,8 +2811,6 @@ document.addEventListener("DOMContentLoaded", function () {
         
         // Extract modal population logic to a reusable function
         function populateAndOpenModal(data, requestId, status) {
-            console.log('DEBUG: populateAndOpenModal called with:', { requestId, status });
-            
             try {
                 currentRequestId = requestId;
                 currentStatus = status;
@@ -2498,13 +3095,9 @@ document.addEventListener("DOMContentLoaded", function () {
                     const bsModal = new bootstrap.Modal(modal);
                     bsModal.show();
                     window.currentModalRequestId = requestId;
-                    console.log('DEBUG: Modal opened successfully');
-                } else {
-                    console.error('DEBUG: Modal element not found!');
                 }
             } catch (error) {
-                console.error('DEBUG: Error in populateAndOpenModal:', error);
-                console.error('DEBUG: Error stack:', error.stack);
+                // Error handled silently
             }
         }
         
@@ -2512,7 +3105,6 @@ document.addEventListener("DOMContentLoaded", function () {
         attachButtonHandlers();
         
         // Use document-level event delegation (runs in capture phase to catch clicks first)
-        console.log('DEBUG: Attaching document-level event delegation for view buttons (capture phase)');
         document.addEventListener('click', function(e) {
             // Check if click is on a view button or icon inside a view button
             let button = e.target.closest('.view-btn');
@@ -2522,20 +3114,12 @@ document.addEventListener("DOMContentLoaded", function () {
                 button = e.target.closest('button.view-btn');
             }
             
-            console.log('DEBUG: Document handler (capture) - clicked element:', e.target);
-            console.log('DEBUG: Document handler (capture) - found button:', button);
-            
             // Only process if it's a table view button (no ID means it's a table button, not modal button)
             if (button && !button.id && button.classList.contains('view-btn')) {
                 // Check if button is in the request table
                 const isInTable = button.closest('#requestTable') || button.closest('table tbody');
-                console.log('DEBUG: Document handler (capture) - isInTable:', isInTable);
                 
                 if (isInTable) {
-                    console.log('DEBUG: ===== DOCUMENT HANDLER: View button clicked in table =====');
-                    console.log('DEBUG: Button element:', button);
-                    console.log('DEBUG: Button classes:', button.className);
-                    
                     // Prevent default and stop propagation to avoid double handling
                     e.preventDefault();
                     e.stopPropagation();
@@ -2553,10 +3137,6 @@ document.addEventListener("DOMContentLoaded", function () {
                     const requestId = data.requestId || data['request-id'] || button.getAttribute('data-request-id');
                     const status = data.status || button.getAttribute('data-status');
                     
-                    console.log('DEBUG: Extracted Request ID:', requestId);
-                    console.log('DEBUG: Extracted Status:', status);
-                    console.log('DEBUG: All button data attributes:', data);
-                    
                     // Call the modal population function
                     populateAndOpenModal(data, requestId, status);
                 }
@@ -2566,8 +3146,6 @@ document.addEventListener("DOMContentLoaded", function () {
         // Re-attach handlers when table is updated (for filtered/search results)
         document.addEventListener('tableUpdated', function() {
             // Handlers are already attached via event delegation, so no need to re-attach
-            // But we can log for debugging
-            console.log('DEBUG: Table updated event received');
         });
 
         // Handle Print button click - use event delegation for dynamically loaded buttons
@@ -2579,10 +3157,6 @@ document.addEventListener("DOMContentLoaded", function () {
             if (printBtn) {
                 e.preventDefault();
                 e.stopPropagation();
-                
-                console.log('Print button clicked - Current Request ID:', currentRequestId);
-                console.log('Print button element:', printBtn);
-                console.log('Print button data-request-id:', printBtn.getAttribute('data-request-id'));
                 
                 // Get request ID from multiple sources
                 let requestId = printBtn.getAttribute('data-request-id') || currentRequestId || window.currentModalRequestId;
@@ -2596,12 +3170,10 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
                 
                 if (!requestId) {
-                    console.error('No request ID available for printing');
                     alert('No request selected for printing.');
                     return;
                 }
 
-                console.log('Opening print page with request ID:', requestId);
                 // Open print page in new tab - don't close the modal
                 window.open(`../../src/views/forms/print-blood-request.php?request_id=${requestId}`, '_blank');
             }
@@ -2616,10 +3188,6 @@ document.addEventListener("DOMContentLoaded", function () {
             if (handoverBtn) {
                 e.preventDefault();
                 e.stopPropagation();
-                
-                console.log('Handover button clicked - Current Request ID:', currentRequestId);
-                console.log('Handover button element:', handoverBtn);
-                console.log('Handover button data-request-id:', handoverBtn.getAttribute('data-request-id'));
                 
                 // Get request ID from multiple sources
                 let requestId = handoverBtn.getAttribute('data-request-id') || currentRequestId || window.currentModalRequestId;
@@ -2656,7 +3224,6 @@ document.addEventListener("DOMContentLoaded", function () {
                     return response.text();
                 })
                 .then(result => {
-                    console.log('Request handed over successfully:', result);
                     // Show proper modal instead of alert
                     const msgModal = new bootstrap.Modal(document.getElementById('actionResultModal'));
                     const body = document.getElementById('actionResultBody');
@@ -2691,8 +3258,6 @@ document.addEventListener("DOMContentLoaded", function () {
         // Listen for print completion messages from print page
         window.addEventListener('message', function(event) {
             if (event.data && event.data.type === 'print_completed') {
-                console.log('Print completed for request ID:', event.data.requestId);
-                
                 // Reload the page to update the data
                 window.location.reload();
                 

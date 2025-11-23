@@ -3148,13 +3148,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             // Backdrop cleanup utility to prevent stuck overlays (expose globally)
             window.cleanupModalBackdrops = function() {
                 try {
-                    // DEBUG: Log when cleanup is called
-                    console.log('[BACKDROP DEBUG] cleanupModalBackdrops called');
-                    console.log('[BACKDROP DEBUG] Stack trace:', new Error().stack);
-                    
                     // Check if we're in the middle of navigation - if so, skip cleanup
                     if (window.__navigatingFromDeclaration) {
-                        console.log('[BACKDROP DEBUG] ⚠️ Navigation in progress - SKIPPING backdrop cleanup');
                         return;
                     }
                     
@@ -3171,37 +3166,27 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     const isScreeningFormOpen = screeningFormModal && screeningFormModal.classList.contains('show');
                     
                     if (isMedicalHistoryOpen) {
-                        console.log('[BACKDROP DEBUG] ⚠️ Medical History modal is open - SKIPPING backdrop cleanup');
                         return; // Don't remove backdrops if medical history modal is open
                     }
                     
                     if (isDeclarationFormOpen) {
-                        console.log('[BACKDROP DEBUG] ⚠️ Declaration Form modal is open - SKIPPING backdrop cleanup');
                         return; // Don't remove backdrops if declaration form modal is open
                     }
                     
                     if (isScreeningFormOpen) {
-                        console.log('[BACKDROP DEBUG] ⚠️ Screening Form modal is open - SKIPPING backdrop cleanup');
                         return; // Don't remove backdrops if screening form modal is open
                     }
                     
                     // Check if any other modals are open
                     const openModals = document.querySelectorAll('.modal.show');
                     if (openModals.length > 0) {
-                        console.log('[BACKDROP DEBUG] ⚠️ Other modals are open (' + openModals.length + ') - SKIPPING backdrop cleanup');
-                        openModals.forEach(modal => {
-                            console.log('[BACKDROP DEBUG]   - Open modal:', modal.id);
-                        });
                         return; // Don't remove backdrops if any modals are open
                     }
                     
-                    console.log('[BACKDROP DEBUG] ✅ No modals open - proceeding with cleanup');
                     document.body.classList.remove('modal-open');
                     const backdrops = document.querySelectorAll('.modal-backdrop');
-                    console.log('[BACKDROP DEBUG] Found ' + backdrops.length + ' backdrop(s) to remove');
                     backdrops.forEach(el => {
                         if (el && el.parentNode) {
-                            console.log('[BACKDROP DEBUG] Removing backdrop:', el);
                             el.parentNode.removeChild(el);
                         }
                     });
@@ -3732,7 +3717,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                 physician = eligibility.physical_examination.physician;
                             }
                             
-                             console.log('Eligibility record:', eligibility);
                             assessmentRows += `
                                  <tr>
                                      <td class="text-center">${safe(examDate)}</td>
@@ -4117,7 +4101,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 hideMedicalHistoryNavbar();
                 
                 // Show the modal with backdrop
-                console.log('[BACKDROP DEBUG] ===== OPENING MEDICAL HISTORY MODAL =====');
                 medicalHistoryModal.show();
                 
                 // Monitor backdrop creation and removal
@@ -4132,7 +4115,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     const isModalOpen = medicalHistoryModalEl && medicalHistoryModalEl.classList.contains('show');
                     
                     if (!isModalOpen) {
-                        console.log('[BACKDROP DEBUG] Modal is not open, stopping backdrop checks');
                         if (backdropCheckInterval) {
                             clearInterval(backdropCheckInterval);
                             backdropCheckInterval = null;
@@ -4141,34 +4123,28 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     }
                     
                     let backdrop = document.querySelector('.modal-backdrop');
-                    console.log('[BACKDROP DEBUG] Check #' + backdropCheckCount + ' - Backdrop exists:', !!backdrop);
                     
                     if (!backdrop) {
-                        console.log('[BACKDROP DEBUG] ⚠️ Backdrop missing! Creating manually...');
                         backdrop = document.createElement('div');
                         backdrop.className = 'modal-backdrop fade show';
                         backdrop.style.zIndex = '1040';
                         backdrop.setAttribute('data-medical-history-backdrop', 'true'); // Mark it
                         document.body.appendChild(backdrop);
-                        console.log('[BACKDROP DEBUG] ✅ Backdrop created manually');
                     } else {
                         // Ensure backdrop is visible and has correct z-index
                         backdrop.classList.add('show');
                         backdrop.style.display = 'block';
                         backdrop.style.zIndex = '1040';
                         backdrop.setAttribute('data-medical-history-backdrop', 'true'); // Mark it
-                        console.log('[BACKDROP DEBUG] ✅ Backdrop exists and is visible');
                     }
                     
                     // Ensure body has modal-open class
                     if (!document.body.classList.contains('modal-open')) {
                         document.body.classList.add('modal-open');
-                        console.log('[BACKDROP DEBUG] ✅ Added modal-open class to body');
                     }
                     
                     // Stop checking after max attempts
                     if (backdropCheckCount >= maxBackdropChecks) {
-                        console.log('[BACKDROP DEBUG] Reached max checks, stopping interval');
                         if (backdropCheckInterval) {
                             clearInterval(backdropCheckInterval);
                             backdropCheckInterval = null;
@@ -4184,7 +4160,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 
                 // Stop checking when modal is closed
                 medicalHistoryModalEl.addEventListener('hidden.bs.modal', function() {
-                    console.log('[BACKDROP DEBUG] Medical History modal closed, stopping backdrop checks');
                     if (backdropCheckInterval) {
                         clearInterval(backdropCheckInterval);
                         backdropCheckInterval = null;
@@ -4277,7 +4252,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     const el = document.getElementById(id);
                     if (el) {
                         el.addEventListener('hidden.bs.modal', function() {
-                            console.log('[BACKDROP DEBUG] Modal hidden:', id);
                             // Check if any important modals are still open before cleaning
                             const medicalHistoryModal = document.getElementById('medicalHistoryModal');
                             const declarationFormModal = document.getElementById('declarationFormModal');
@@ -4288,10 +4262,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                             const isScreeningFormOpen = screeningFormModal && screeningFormModal.classList.contains('show');
                             
                             if (isMedicalHistoryOpen || isDeclarationFormOpen || isScreeningFormOpen) {
-                                console.log('[BACKDROP DEBUG] ⚠️ Important modal is still open - SKIPPING cleanup for', id);
-                                if (isMedicalHistoryOpen) console.log('[BACKDROP DEBUG]   - Medical History modal is open');
-                                if (isDeclarationFormOpen) console.log('[BACKDROP DEBUG]   - Declaration Form modal is open');
-                                if (isScreeningFormOpen) console.log('[BACKDROP DEBUG]   - Screening Form modal is open');
                                 return;
                             }
                             cleanupModalBackdrops();
@@ -5053,7 +5023,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             
             // If we're navigating from another modal, skip the closing logic
             if (skipModalClosing || window.__navigatingFromDeclaration) {
-                console.log('[NAV DEBUG] Skipping modal closing, opening Initial Screening directly...');
                 openScreeningModal();
                 return;
             }
@@ -5122,7 +5091,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         sidebar.classList.remove('hidden');
                     }
                     updateActiveNavItem('navInitialScreeningFromScreening');
-                    console.log('[NAV DEBUG] Initial Screening modal opened with sidebar visible');
                 }, 300);
                 
                 // Initialize the screening form
@@ -5308,29 +5276,24 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     e.preventDefault();
                     e.stopPropagation();
                     
-                    console.log('[NAV DEBUG] Navigating from Declaration Form to Medical History');
-                    
                     // Try to get donor ID from multiple sources
                     let donorId = window.currentDonorId;
                     if (!donorId) {
                         const donorIdInput = document.querySelector('#modalDeclarationForm input[name="donor_id"]');
                         if (donorIdInput) {
                             donorId = donorIdInput.value;
-                            console.log('[NAV DEBUG] Found donor ID from form input:', donorId);
                         }
                     }
                     if (!donorId) {
                         const donorIdInput = document.querySelector('#declarationFormModalContent input[name="donor_id"]');
                         if (donorIdInput) {
                             donorId = donorIdInput.value;
-                            console.log('[NAV DEBUG] Found donor ID from content area:', donorId);
                         }
                     }
                     
                     if (donorId) {
                         // Store donor ID
                         window.currentDonorId = donorId;
-                        console.log('[NAV DEBUG] Stored donor ID:', donorId);
                         
                         // Set flag to prevent cleanup during navigation
                         window.__navigatingFromDeclaration = true;
@@ -5340,13 +5303,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         const declarationModal = declarationModalEl ? bootstrap.Modal.getInstance(declarationModalEl) : null;
                         
                         if (declarationModal && declarationModalEl.classList.contains('show')) {
-                            console.log('[NAV DEBUG] Closing Declaration Form modal...');
                             declarationModal.hide();
                             
                             // Wait for modal to fully close before opening next modal
                             declarationModalEl.addEventListener('hidden.bs.modal', function onHidden() {
                                 declarationModalEl.removeEventListener('hidden.bs.modal', onHidden);
-                                console.log('[NAV DEBUG] Declaration Form modal fully closed, opening Medical History...');
                                 
                                 // Open medical history modal with skipModalClosing flag
                                 if (typeof window.proceedToMedicalHistoryModal === 'function') {
@@ -5357,17 +5318,14 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                 setTimeout(() => {
                                     showMedicalHistoryNavbar();
                                     updateActiveNavItem('navMedicalHistory');
-                                    console.log('[NAV DEBUG] Medical History modal opened with navbar');
                                 }, 300);
                                 
                                 // Clear navigation flag after a delay
                                 setTimeout(() => { 
                                     window.__navigatingFromDeclaration = false; 
-                                    console.log('[NAV DEBUG] Navigation flag cleared');
                                 }, 1000);
                             }, { once: true });
                         } else {
-                            console.log('[NAV DEBUG] Declaration Form modal not open, proceeding directly...');
                             // Modal not open, proceed directly with skipModalClosing flag
                             if (typeof window.proceedToMedicalHistoryModal === 'function') {
                                 window.proceedToMedicalHistoryModal(true);
@@ -5378,7 +5336,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                             }, 300);
                             setTimeout(() => { 
                                 window.__navigatingFromDeclaration = false; 
-                                console.log('[NAV DEBUG] Navigation flag cleared');
                             }, 1000);
                         }
                     } else {
@@ -5393,29 +5350,24 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     e.preventDefault();
                     e.stopPropagation();
                     
-                    console.log('[NAV DEBUG] Navigating from Declaration Form to Initial Screening');
-                    
                     // Try to get donor ID from multiple sources
                     let donorId = window.currentDonorId;
                     if (!donorId) {
                         const donorIdInput = document.querySelector('#modalDeclarationForm input[name="donor_id"]');
                         if (donorIdInput) {
                             donorId = donorIdInput.value;
-                            console.log('[NAV DEBUG] Found donor ID from form input:', donorId);
                         }
                     }
                     if (!donorId) {
                         const donorIdInput = document.querySelector('#declarationFormModalContent input[name="donor_id"]');
                         if (donorIdInput) {
                             donorId = donorIdInput.value;
-                            console.log('[NAV DEBUG] Found donor ID from content area:', donorId);
                         }
                     }
                     
                     if (donorId) {
                         // Store donor ID
                         window.currentDonorId = donorId;
-                        console.log('[NAV DEBUG] Stored donor ID:', donorId);
                         
                         // Set flags to prevent cleanup and indicate coming from Declaration Form
                         window.__navigatingFromDeclaration = true;
@@ -5426,13 +5378,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         const declarationModal = declarationModalEl ? bootstrap.Modal.getInstance(declarationModalEl) : null;
                         
                         if (declarationModal && declarationModalEl.classList.contains('show')) {
-                            console.log('[NAV DEBUG] Closing Declaration Form modal...');
                             declarationModal.hide();
                             
                             // Wait for modal to fully close before opening next modal
                             declarationModalEl.addEventListener('hidden.bs.modal', function onHidden() {
                                 declarationModalEl.removeEventListener('hidden.bs.modal', onHidden);
-                                console.log('[NAV DEBUG] Declaration Form modal fully closed, opening Initial Screening...');
                                 
                                 // Open initial screening modal with skipModalClosing flag
                                 showScreeningFormModal(donorId, true);
@@ -5440,16 +5390,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                 // Clear navigation flags after a delay
                                 setTimeout(() => { 
                                     window.__navigatingFromDeclaration = false; 
-                                    console.log('[NAV DEBUG] Navigation flag cleared');
                                 }, 1000);
                             }, { once: true });
                         } else {
-                            console.log('[NAV DEBUG] Declaration Form modal not open, proceeding directly...');
                             // Modal not open, proceed directly with skipModalClosing flag
                             showScreeningFormModal(donorId, true);
                             setTimeout(() => { 
                                 window.__navigatingFromDeclaration = false; 
-                                console.log('[NAV DEBUG] Navigation flag cleared');
                             }, 1000);
                         }
                     } else {

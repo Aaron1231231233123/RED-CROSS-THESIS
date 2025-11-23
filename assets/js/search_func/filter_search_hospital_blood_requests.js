@@ -1,5 +1,5 @@
 // Filter and search functionality for Hospital Blood Requests Dashboard
-// Adds filter dropdown and search functionality with loading modal
+// Adds filter dropdown in Status column header and search functionality with loading modal
 
 document.addEventListener('DOMContentLoaded', function(){
     const tbody = document.getElementById('requestTable');
@@ -14,95 +14,11 @@ document.addEventListener('DOMContentLoaded', function(){
     const filterSearchBar = document.querySelector('.filter-search-bar');
     if (!filterSearchBar) return;
 
-    // Replace the existing filter dropdown with enhanced version
-    const existingFilter = filterSearchBar.querySelector('.filter-dropdown');
+    // Get the search input
     const existingSearch = filterSearchBar.querySelector('#requestSearchBar');
     
-    // Create filter dropdown with checkboxes
-    const filterContainer = document.createElement('div');
-    filterContainer.className = 'dropdown';
-    filterContainer.innerHTML = `
-        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="fas fa-filter"></i> Filters
-        </button>
-        <div class="dropdown-menu p-3" style="min-width:280px;">
-            <div class="mb-2 fw-bold text-muted">Status</div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" value="All Status" id="fltStatusAll" checked aria-label="Filter by All Status">
-                <label class="form-check-label" for="fltStatusAll">All Status</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" value="Pending" id="fltStatusPending" aria-label="Filter by Pending status">
-                <label class="form-check-label" for="fltStatusPending">Pending</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" value="Approved" id="fltStatusApproved" aria-label="Filter by Approved status">
-                <label class="form-check-label" for="fltStatusApproved">Approved</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" value="Declined" id="fltStatusDeclined" aria-label="Filter by Declined status">
-                <label class="form-check-label" for="fltStatusDeclined">Declined</label>
-            </div>
-            <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" value="Completed" id="fltStatusCompleted" aria-label="Filter by Completed status">
-                <label class="form-check-label" for="fltStatusCompleted">Completed</label>
-            </div>
-            <div class="d-grid">
-                <button id="fltRunBloodRequests" class="btn btn-danger btn-sm">Apply</button>
-            </div>
-        </div>
-    `;
-
-    // Replace existing filter icon and dropdown
-    if (existingFilter) {
-        existingFilter.parentNode.replaceChild(filterContainer, existingFilter);
-    } else {
-        // Insert before search input
-        const filterIcon = filterSearchBar.querySelector('.filter-icon');
-        if (filterIcon) {
-            filterIcon.parentNode.insertBefore(filterContainer, filterIcon.nextSibling);
-        }
-    }
-
-    const dropdownMenu = filterContainer.querySelector('.dropdown-menu');
-    if (dropdownMenu) {
-        dropdownMenu.addEventListener('click', function(e){ 
-            e.stopPropagation(); 
-        });
-    }
-
-    const runBtn = filterContainer.querySelector('#fltRunBloodRequests');
-    if (runBtn) {
-        runBtn.addEventListener('click', function() {
-            applyFilters(true); // Show modal for filter Apply button
-        });
-    }
-
-    // Handle "All Status" checkbox - uncheck others when checked
-    const allStatusCheckbox = document.getElementById('fltStatusAll');
-    if (allStatusCheckbox) {
-        allStatusCheckbox.addEventListener('change', function() {
-            if (this.checked) {
-                // Uncheck all other status checkboxes
-                ['fltStatusPending', 'fltStatusApproved', 'fltStatusDeclined', 'fltStatusCompleted'].forEach(id => {
-                    const cb = document.getElementById(id);
-                    if (cb) cb.checked = false;
-                });
-            }
-        });
-    }
-
-    // Handle other checkboxes - uncheck "All Status" when any other is checked
-    ['fltStatusPending', 'fltStatusApproved', 'fltStatusDeclined', 'fltStatusCompleted'].forEach(id => {
-        const cb = document.getElementById(id);
-        if (cb) {
-            cb.addEventListener('change', function() {
-                if (this.checked && allStatusCheckbox) {
-                    allStatusCheckbox.checked = false;
-                }
-            });
-        }
-    });
+    // Get the status filter dropdown from the filter-search-bar
+    const statusFilterDropdown = document.getElementById('statusFilterDropdown');
 
     function rebindRowHandlers(){
         // Rebind view/print/handover button handlers
@@ -119,20 +35,22 @@ document.addEventListener('DOMContentLoaded', function(){
         }
     }
 
+    // Handle status filter dropdown change
+    if (statusFilterDropdown) {
+        statusFilterDropdown.addEventListener('change', function(e) {
+            e.stopPropagation(); // Prevent event bubbling
+            applyFilters(false); // Use spinner for status filter
+        });
+    }
+
     function applyFilters(showModal = false){
         const status = [];
         
-        // Check if "All Status" is selected
-        const allStatusChecked = allStatusCheckbox && allStatusCheckbox.checked;
-        
-        if (!allStatusChecked) {
-            // Collect checked status filters
-            if (document.getElementById('fltStatusPending')?.checked) status.push('Pending');
-            if (document.getElementById('fltStatusApproved')?.checked) status.push('Approved');
-            if (document.getElementById('fltStatusDeclined')?.checked) status.push('Declined');
-            if (document.getElementById('fltStatusCompleted')?.checked) status.push('Completed');
+        // Get selected status from dropdown in Status column header
+        if (statusFilterDropdown && statusFilterDropdown.value && statusFilterDropdown.value !== 'All Status') {
+            status.push(statusFilterDropdown.value);
         }
-        // If no status selected or "All Status" is checked, status array remains empty (shows all)
+        // If "All Status" is selected or no dropdown, status array remains empty (shows all)
 
         const qInput = existingSearch || document.getElementById('requestSearchBar');
         const q = qInput ? (qInput.value || '').trim() : '';
@@ -140,13 +58,13 @@ document.addEventListener('DOMContentLoaded', function(){
         // Show loading indicator based on source
         const searchSpinner = document.getElementById('searchLoadingSpinner');
         if (showModal) {
-            // Show modal for filter "Apply" button
+            // Show modal for filter "Apply" button (if needed in future)
             if (typeof FilterLoadingModal !== 'undefined') {
                 FilterLoadingModal.show();
             }
             if (searchSpinner) searchSpinner.style.display = 'none';
         } else {
-            // Show spinner in search bar for search input
+            // Show spinner in search bar for search input and status filter
             if (searchSpinner) searchSpinner.style.display = 'block';
             if (typeof FilterLoadingModal !== 'undefined') {
                 FilterLoadingModal.hide();

@@ -4319,6 +4319,9 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                                 modalEl.removeEventListener('shown.bs.modal', handleModalShown);
                             });
                             
+                            // Update active nav item when modal is shown
+                            updatePhysicianActiveNavItem('navSummaryPhysicalExam');
+                            
                             modal.show();
                         }
                     } else {
@@ -4330,6 +4333,136 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     alert('Error loading physical examination data. Please try again.');
                 });
         }
+        
+        // Summary Modal Sidebar Navigation Handlers
+        (function() {
+            // Navigation from Summary to Medical History
+            const navSummaryMedicalHistory = document.getElementById('navSummaryMedicalHistory');
+            if (navSummaryMedicalHistory) {
+                navSummaryMedicalHistory.addEventListener('click', function() {
+                    window.__sidebarNavigationActive = true;
+                    window.__preventDonorProfileOpen = true;
+                    
+                    const donorId = getCurrentPhysicianDonorId();
+                    if (donorId) {
+                        const summaryModalEl = document.getElementById('staffPhysicianAccountSummaryModal');
+                        const summaryModal = summaryModalEl ? bootstrap.Modal.getInstance(summaryModalEl) : null;
+                        if (summaryModal) {
+                            summaryModal.hide();
+                        }
+                        
+                        setTimeout(() => {
+                            openMedicalHistoryModal(donorId);
+                            updatePhysicianActiveNavItem('navPhysicianMedicalHistory');
+                            
+                            setTimeout(() => {
+                                window.__sidebarNavigationActive = false;
+                                window.__preventDonorProfileOpen = false;
+                            }, 5000);
+                        }, 300);
+                    } else {
+                        window.__sidebarNavigationActive = false;
+                        window.__preventDonorProfileOpen = false;
+                    }
+                });
+            }
+            
+            // Navigation from Summary to Initial Screening
+            const navSummaryInitialScreening = document.getElementById('navSummaryInitialScreening');
+            if (navSummaryInitialScreening) {
+                navSummaryInitialScreening.addEventListener('click', function() {
+                    window.__sidebarNavigationActive = true;
+                    window.__preventDonorProfileOpen = true;
+                    
+                    const donorId = getCurrentPhysicianDonorId();
+                    if (donorId) {
+                        window.currentDonorId = donorId;
+                        window.lastDonorProfileContext = { 
+                            donorId: donorId, 
+                            screeningData: { donor_form_id: donorId } 
+                        };
+                        
+                        const summaryModalEl = document.getElementById('staffPhysicianAccountSummaryModal');
+                        const summaryModal = summaryModalEl ? bootstrap.Modal.getInstance(summaryModalEl) : null;
+                        if (summaryModal) {
+                            summaryModal.hide();
+                        }
+                        
+                        setTimeout(() => {
+                            const screeningModal = document.getElementById('screeningFormModal');
+                            if (screeningModal) {
+                                const screeningForm = document.getElementById('screeningForm');
+                                if (screeningForm) {
+                                    const donorIdInput = screeningForm.querySelector('input[name="donor_id"]');
+                                    if (donorIdInput) {
+                                        donorIdInput.value = donorId;
+                                    }
+                                }
+                                
+                                const modalInstance = bootstrap.Modal.getInstance(screeningModal) || new bootstrap.Modal(screeningModal);
+                                
+                                const oneTimeShown = function() {
+                                    screeningModal.removeEventListener('shown.bs.modal', oneTimeShown);
+                                    setTimeout(() => {
+                                        if (typeof window.renderSummary === 'function') {
+                                            window.renderSummary();
+                                        } else if (typeof renderSummary === 'function') {
+                                            renderSummary();
+                                        }
+                                    }, 200);
+                                };
+                                screeningModal.addEventListener('shown.bs.modal', oneTimeShown, { once: true });
+                                
+                                modalInstance.show();
+                                updatePhysicianActiveNavItem('navScreeningInitialScreening');
+                                
+                                setTimeout(() => {
+                                    window.__sidebarNavigationActive = false;
+                                    window.__preventDonorProfileOpen = false;
+                                }, 5000);
+                            } else {
+                                window.__sidebarNavigationActive = false;
+                                window.__preventDonorProfileOpen = false;
+                            }
+                        }, 300);
+                    } else {
+                        window.__sidebarNavigationActive = false;
+                        window.__preventDonorProfileOpen = false;
+                    }
+                });
+            }
+            
+            // Navigation from Summary to Donor Profile
+            const navSummaryDonorProfile = document.getElementById('navSummaryDonorProfile');
+            if (navSummaryDonorProfile) {
+                navSummaryDonorProfile.addEventListener('click', function() {
+                    window.__sidebarNavigationActive = true;
+                    window.__explicitDonorProfileOpen = true;
+                    
+                    const screeningData = getCurrentScreeningData();
+                    if (screeningData) {
+                        const summaryModalEl = document.getElementById('staffPhysicianAccountSummaryModal');
+                        const summaryModal = summaryModalEl ? bootstrap.Modal.getInstance(summaryModalEl) : null;
+                        if (summaryModal) {
+                            summaryModal.hide();
+                        }
+                        
+                        setTimeout(() => {
+                            openDonorProfileModal(screeningData);
+                            updatePhysicianActiveNavItem('navPhysicianDonorProfile');
+                            
+                            setTimeout(() => {
+                                window.__sidebarNavigationActive = false;
+                                window.__explicitDonorProfileOpen = false;
+                            }, 5000);
+                        }, 300);
+                    } else {
+                        window.__sidebarNavigationActive = false;
+                        window.__explicitDonorProfileOpen = false;
+                    }
+                });
+            }
+        })();
         
         function bindProceedToPhysicalButton(screeningData) {
             const proceedBtn = document.getElementById('proceedToPhysicalBtn');
@@ -4752,7 +4885,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     // Clear this flag after modal is fully shown
                     setTimeout(() => {
                         window.__preventDonorProfileOpen = false;
-                    }, 3000);
+                    }, 5000);
                 }
                 window.skipDonorProfileCleanup = true;
                 const donorProfileEl = document.getElementById('donorProfileModal');
@@ -6821,25 +6954,27 @@ function updatePhysicianActiveNavItem(navItemId) {
         });
     }
     
+    // Physical Examination Summary Modal
+    const summaryModal = document.getElementById('staffPhysicianAccountSummaryModal');
+    if (summaryModal) {
+        summaryModal.addEventListener('shown.bs.modal', function() {
+            updatePhysicianActiveNavItem('navSummaryPhysicalExam');
+        });
+    }
+    
     // Physical Examination Modal
     const physicalExamModal = document.getElementById('physicalExaminationModal');
     if (physicalExamModal) {
         physicalExamModal.addEventListener('shown.bs.modal', function() {
-            console.log('[MODAL DEBUG] Physical Examination modal shown.bs.modal event fired');
             updatePhysicianActiveNavItem('navPEPhysicalExam');
         });
         
         // Prevent donor profile from opening when PE modal closes via sidebar navigation
         physicalExamModal.addEventListener('hidden.bs.modal', function() {
-            console.log('[MODAL DEBUG] Physical Examination modal hidden.bs.modal event fired');
-            console.log('[MODAL DEBUG] __sidebarNavigationActive:', window.__sidebarNavigationActive);
-            console.log('[MODAL DEBUG] __preventDonorProfileOpen:', window.__preventDonorProfileOpen);
             // If sidebar navigation is active or donor profile opening is prevented, don't reopen donor profile
             if (window.__sidebarNavigationActive || window.__preventDonorProfileOpen) {
-                console.log('[MODAL DEBUG] Sidebar navigation or prevent flag IS active, NOT reopening donor profile');
                 return;
             }
-            console.log('[MODAL DEBUG] Sidebar navigation NOT active, allowing normal flow');
             // Otherwise, let the normal flow handle it
         });
     }
@@ -6950,16 +7085,12 @@ if (navPhysicianInitialScreening) {
     navPhysicianInitialScreening.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        console.log('[SIDEBAR DEBUG] navPhysicianInitialScreening clicked');
         
         // CRITICAL: Set ALL flags IMMEDIATELY to prevent any donor profile opening
         window.__sidebarNavigationActive = true;
         window.__preventDonorProfileOpen = true;
-        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
-        console.log('[SIDEBAR DEBUG] __preventDonorProfileOpen set to TRUE');
         
         const donorId = getCurrentPhysicianDonorId();
-        console.log('[SIDEBAR DEBUG] Retrieved donor ID:', donorId);
         if (donorId) {
             // Store donor ID in global context
             window.currentDonorId = donorId;
@@ -6967,7 +7098,6 @@ if (navPhysicianInitialScreening) {
                 donorId: donorId, 
                 screeningData: { donor_form_id: donorId } 
             };
-            console.log('[SIDEBAR DEBUG] Stored donor ID in context:', window.currentDonorId);
             
             // Close any open donor profile modal FIRST to prevent conflicts
             try {
@@ -6975,22 +7105,17 @@ if (navPhysicianInitialScreening) {
                 if (dpEl) {
                     const dpModal = bootstrap.Modal.getInstance(dpEl);
                     if (dpModal && dpModal._isShown) {
-                        console.log('[SIDEBAR DEBUG] Closing donor profile modal before opening Initial Screening...');
                         dpModal.hide();
                     }
                 }
             } catch(err) {
-                console.warn('[SIDEBAR DEBUG] Error closing donor profile:', err);
             }
             
-            console.log('[SIDEBAR DEBUG] Closing Medical History modal...');
             closeMedicalHistoryModal();
             
             setTimeout(() => {
-                console.log('[SIDEBAR DEBUG] Attempting to open Initial Screening modal...');
                 const screeningModal = document.getElementById('screeningFormModal');
                 if (screeningModal) {
-                    console.log('[SIDEBAR DEBUG] Screening modal element found');
                     
                     // Set donor ID in the screening form BEFORE opening
                     const screeningForm = document.getElementById('screeningForm');
@@ -6998,61 +7123,47 @@ if (navPhysicianInitialScreening) {
                         const donorIdInput = screeningForm.querySelector('input[name="donor_id"]');
                         if (donorIdInput) {
                             donorIdInput.value = donorId;
-                            console.log('[SIDEBAR DEBUG] Set donor ID in form input:', donorId);
                         } else {
-                            console.warn('[SIDEBAR DEBUG] Donor ID input not found in form');
                         }
                     } else {
-                        console.warn('[SIDEBAR DEBUG] Screening form not found');
                     }
                     
                     // Get or create modal instance
                     let modalInstance = bootstrap.Modal.getInstance(screeningModal);
                     if (!modalInstance) {
                         modalInstance = new bootstrap.Modal(screeningModal);
-                        console.log('[SIDEBAR DEBUG] Created new Bootstrap modal instance');
                     } else {
-                        console.log('[SIDEBAR DEBUG] Using existing Bootstrap modal instance');
                     }
                     
                     // Ensure content loads when modal is shown
                     const oneTimeShown = function() {
-                        console.log('[SIDEBAR DEBUG] Screening modal shown event fired');
                         screeningModal.removeEventListener('shown.bs.modal', oneTimeShown);
                         // Trigger content load if renderSummary function exists (check both local and window)
                         setTimeout(() => {
                             if (typeof window.renderSummary === 'function') {
-                                console.log('[SIDEBAR DEBUG] window.renderSummary function found, calling it...');
                                 window.renderSummary();
                             } else if (typeof renderSummary === 'function') {
-                                console.log('[SIDEBAR DEBUG] renderSummary function found (local scope), calling it...');
                                 renderSummary();
                             } else {
-                                console.warn('[SIDEBAR DEBUG] renderSummary function NOT found (neither window nor local)');
                             }
                         }, 200);
                     };
                     screeningModal.addEventListener('shown.bs.modal', oneTimeShown, { once: true });
                     
-                    console.log('[SIDEBAR DEBUG] Calling modalInstance.show()...');
                     modalInstance.show();
                     updatePhysicianActiveNavItem('navScreeningInitialScreening');
-                    console.log('[SIDEBAR DEBUG] Active nav item updated to navScreeningInitialScreening');
                     
                     // Clear flags after modal is fully shown and stable (extended duration)
                     setTimeout(() => {
-                        console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
                         window.__sidebarNavigationActive = false;
                         window.__preventDonorProfileOpen = false;
-                    }, 3000);
+                    }, 5000);
                 } else {
-                    console.error('[SIDEBAR DEBUG] Screening modal element NOT found!');
                     window.__sidebarNavigationActive = false;
                     window.__preventDonorProfileOpen = false;
                 }
             }, 300);
         } else {
-            console.error('[SIDEBAR DEBUG] No donor ID found, clearing flags');
             window.__sidebarNavigationActive = false;
             window.__preventDonorProfileOpen = false;
         }
@@ -7066,36 +7177,80 @@ if (navPhysicianPhysicalExam) {
         // Set flags to prevent donor profile from opening on modal close
         window.__sidebarNavigationActive = true;
         window.__preventDonorProfileOpen = true;
-        console.log('[SIDEBAR DEBUG] navPhysicianPhysicalExam clicked');
-        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
-        console.log('[SIDEBAR DEBUG] __preventDonorProfileOpen set to TRUE');
         
-        const screeningData = getCurrentScreeningData();
-        if (screeningData && screeningData.donor_form_id) {
+        const donorId = getCurrentPhysicianDonorId();
+        if (donorId) {
             closeMedicalHistoryModal();
-            setTimeout(() => {
-                if (window.physicalExaminationModal && typeof window.physicalExaminationModal.open === 'function') {
-                    window.physicalExaminationModal.open(screeningData);
-                } else {
-                    // Fallback: use Bootstrap modal
-                    const peModal = document.getElementById('physicalExaminationModal');
-                    if (peModal) {
-                        const modal = bootstrap.Modal.getOrCreateInstance(peModal, { 
-                            backdrop: 'static', 
-                            keyboard: false 
-                        });
-                        modal.show();
-                    }
-                }
-                updatePhysicianActiveNavItem('navPEPhysicalExam');
-                
-                // Clear flags after modal is shown (extended duration to cover all close events)
-                setTimeout(() => {
-                    console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
-                    window.__sidebarNavigationActive = false;
-                    window.__preventDonorProfileOpen = false;
-                }, 3000);
-            }, 300);
+            
+            // Check physical examination status
+            const apiCall = typeof makeApiCall === 'function' ? makeApiCall : async (url, options) => {
+                const response = await fetch(url, options);
+                return await response.json();
+            };
+            
+            apiCall(`../../public/api/get-physical-examination.php?donor_id=${donorId}&_=${Date.now()}`)
+                .then(result => {
+                    // Check if physical examination is Pending
+                    // If no record exists, remarks is null/empty, or remarks === 'Pending', it's pending
+                    const isPending = !result || !result.success || !result.physical_exam || 
+                                    !result.physical_exam.remarks || 
+                                    result.physical_exam.remarks.trim() === '' ||
+                                    result.physical_exam.remarks === 'Pending';
+                    
+                    setTimeout(() => {
+                        if (isPending) {
+                            // If Pending, open Physical Examination FORM
+                            const screeningData = getCurrentScreeningData();
+                            if (window.physicalExaminationModal && typeof window.physicalExaminationModal.open === 'function') {
+                                window.physicalExaminationModal.open(screeningData);
+                            } else {
+                                const peModal = document.getElementById('physicalExaminationModal');
+                                if (peModal) {
+                                    const modal = bootstrap.Modal.getOrCreateInstance(peModal, { 
+                                        backdrop: 'static', 
+                                        keyboard: false 
+                                    });
+                                    modal.show();
+                                }
+                            }
+                            updatePhysicianActiveNavItem('navPEPhysicalExam');
+                        } else {
+                            // If NOT Pending (approved), open Physical Examination SUMMARY
+                            if (typeof openPhysicalExaminationSummaryModal === 'function') {
+                                openPhysicalExaminationSummaryModal(donorId);
+                            }
+                        }
+                        
+                        setTimeout(() => {
+                            window.__sidebarNavigationActive = false;
+                            window.__preventDonorProfileOpen = false;
+                        }, 5000);
+                    }, 300);
+                })
+                .catch(error => {
+                    // On error, default to opening the form
+                    const screeningData = getCurrentScreeningData();
+                    setTimeout(() => {
+                        if (window.physicalExaminationModal && typeof window.physicalExaminationModal.open === 'function') {
+                            window.physicalExaminationModal.open(screeningData);
+                        } else {
+                            const peModal = document.getElementById('physicalExaminationModal');
+                            if (peModal) {
+                                const modal = bootstrap.Modal.getOrCreateInstance(peModal, { 
+                                    backdrop: 'static', 
+                                    keyboard: false 
+                                });
+                                modal.show();
+                            }
+                        }
+                        updatePhysicianActiveNavItem('navPEPhysicalExam');
+                        
+                        setTimeout(() => {
+                            window.__sidebarNavigationActive = false;
+                            window.__preventDonorProfileOpen = false;
+                        }, 5000);
+                    }, 300);
+                });
         } else {
             window.__sidebarNavigationActive = false;
             window.__preventDonorProfileOpen = false;
@@ -7107,35 +7262,26 @@ if (navPhysicianPhysicalExam) {
 const navPhysicianDonorProfile = document.getElementById('navPhysicianDonorProfile');
 if (navPhysicianDonorProfile) {
     navPhysicianDonorProfile.addEventListener('click', function() {
-        console.log('[SIDEBAR DEBUG] navPhysicianDonorProfile clicked - INTENTIONAL donor profile open');
         // Set flag to prevent donor profile from opening on modal close
         window.__sidebarNavigationActive = true;
         // Set explicit flag to allow donor profile opening
         window.__explicitDonorProfileOpen = true;
-        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
-        console.log('[SIDEBAR DEBUG] __explicitDonorProfileOpen set to TRUE');
         
         const screeningData = getCurrentScreeningData();
-        console.log('[SIDEBAR DEBUG] Retrieved screening data:', screeningData);
         if (screeningData) {
-            console.log('[SIDEBAR DEBUG] Closing Medical History modal...');
             closeMedicalHistoryModal();
             setTimeout(() => {
-                console.log('[SIDEBAR DEBUG] Explicitly opening donor profile modal...');
                 // Explicitly open donor profile - this is intentional
                 openDonorProfileModal(screeningData);
                 updatePhysicianActiveNavItem('navPhysicianDonorProfile');
-                console.log('[SIDEBAR DEBUG] Active nav item updated to navPhysicianDonorProfile');
                 
                 // Clear flags after modal is shown (extended duration to cover all close events)
                 setTimeout(() => {
-                    console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
                     window.__sidebarNavigationActive = false;
                     window.__explicitDonorProfileOpen = false;
                 }, 3000);
             }, 300);
         } else {
-            console.error('[SIDEBAR DEBUG] No screening data found, clearing flags');
             window.__sidebarNavigationActive = false;
             window.__explicitDonorProfileOpen = false;
         }
@@ -7149,9 +7295,6 @@ if (navScreeningMedicalHistory) {
         // Set flags to prevent donor profile from opening on modal close
         window.__sidebarNavigationActive = true;
         window.__preventDonorProfileOpen = true;
-        console.log('[SIDEBAR DEBUG] navScreeningMedicalHistory clicked');
-        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
-        console.log('[SIDEBAR DEBUG] __preventDonorProfileOpen set to TRUE');
         
         const donorId = getCurrentPhysicianDonorId();
         if (donorId) {
@@ -7165,7 +7308,6 @@ if (navScreeningMedicalHistory) {
                 
                 // Clear flags after modal is fully shown and stable (extended duration)
                 setTimeout(() => {
-                    console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
                     window.__sidebarNavigationActive = false;
                     window.__preventDonorProfileOpen = false;
                 }, 3000);
@@ -7181,57 +7323,88 @@ if (navScreeningMedicalHistory) {
 const navScreeningPhysicalExam = document.getElementById('navScreeningPhysicalExam');
 if (navScreeningPhysicalExam) {
     navScreeningPhysicalExam.addEventListener('click', function() {
-        console.log('[SIDEBAR DEBUG] navScreeningPhysicalExam clicked');
         // Set flags to prevent donor profile from opening on modal close
         window.__sidebarNavigationActive = true;
         window.__preventDonorProfileOpen = true;
-        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
-        console.log('[SIDEBAR DEBUG] __preventDonorProfileOpen set to TRUE');
         
-        const screeningData = getCurrentScreeningData();
-        console.log('[SIDEBAR DEBUG] Retrieved screening data:', screeningData);
-        if (screeningData && screeningData.donor_form_id) {
+        const donorId = getCurrentPhysicianDonorId();
+        if (donorId) {
             const screeningModalEl = document.getElementById('screeningFormModal');
             const screeningModal = screeningModalEl ? bootstrap.Modal.getInstance(screeningModalEl) : null;
             if (screeningModal) {
-                console.log('[SIDEBAR DEBUG] Hiding Initial Screening modal...');
                 screeningModal.hide();
-            } else {
-                console.warn('[SIDEBAR DEBUG] Initial Screening modal instance not found');
             }
             
-            setTimeout(() => {
-                console.log('[SIDEBAR DEBUG] Attempting to open Physical Examination modal...');
-                if (window.physicalExaminationModal && typeof window.physicalExaminationModal.open === 'function') {
-                    console.log('[SIDEBAR DEBUG] Using physicalExaminationModal.open() method');
-                    window.physicalExaminationModal.open(screeningData);
-                } else {
-                    console.log('[SIDEBAR DEBUG] Using Bootstrap modal fallback');
-                    // Fallback: use Bootstrap modal
-                    const peModal = document.getElementById('physicalExaminationModal');
-                    if (peModal) {
-                        const modal = bootstrap.Modal.getOrCreateInstance(peModal, { 
-                            backdrop: 'static', 
-                            keyboard: false 
-                        });
-                        modal.show();
-                        console.log('[SIDEBAR DEBUG] Physical Examination modal shown via Bootstrap');
-                    } else {
-                        console.error('[SIDEBAR DEBUG] Physical Examination modal element NOT found!');
-                    }
-                }
-                updatePhysicianActiveNavItem('navPEPhysicalExam');
-                console.log('[SIDEBAR DEBUG] Active nav item updated to navPEPhysicalExam');
-                
-                // Clear flags after modal is shown (extended duration to cover all close events)
-                setTimeout(() => {
-                    console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
-                    window.__sidebarNavigationActive = false;
-                    window.__preventDonorProfileOpen = false;
-                }, 3000);
-            }, 300);
+            // Check physical examination status
+            const apiCall = typeof makeApiCall === 'function' ? makeApiCall : async (url, options) => {
+                const response = await fetch(url, options);
+                return await response.json();
+            };
+            
+            apiCall(`../../public/api/get-physical-examination.php?donor_id=${donorId}&_=${Date.now()}`)
+                .then(result => {
+                    // Check if physical examination is Pending
+                    // If no record exists, remarks is null/empty, or remarks === 'Pending', it's pending
+                    const isPending = !result || !result.success || !result.physical_exam || 
+                                    !result.physical_exam.remarks || 
+                                    result.physical_exam.remarks.trim() === '' ||
+                                    result.physical_exam.remarks === 'Pending';
+                    
+                    setTimeout(() => {
+                        if (isPending) {
+                            // If Pending, open Physical Examination FORM
+                            const screeningData = getCurrentScreeningData();
+                            if (window.physicalExaminationModal && typeof window.physicalExaminationModal.open === 'function') {
+                                window.physicalExaminationModal.open(screeningData);
+                            } else {
+                                const peModal = document.getElementById('physicalExaminationModal');
+                                if (peModal) {
+                                    const modal = bootstrap.Modal.getOrCreateInstance(peModal, { 
+                                        backdrop: 'static', 
+                                        keyboard: false 
+                                    });
+                                    modal.show();
+                                }
+                            }
+                            updatePhysicianActiveNavItem('navPEPhysicalExam');
+                        } else {
+                            // If NOT Pending (approved), open Physical Examination SUMMARY
+                            if (typeof openPhysicalExaminationSummaryModal === 'function') {
+                                openPhysicalExaminationSummaryModal(donorId);
+                            }
+                        }
+                        
+                        setTimeout(() => {
+                            window.__sidebarNavigationActive = false;
+                            window.__preventDonorProfileOpen = false;
+                        }, 5000);
+                    }, 300);
+                })
+                .catch(error => {
+                    // On error, default to opening the form
+                    const screeningData = getCurrentScreeningData();
+                    setTimeout(() => {
+                        if (window.physicalExaminationModal && typeof window.physicalExaminationModal.open === 'function') {
+                            window.physicalExaminationModal.open(screeningData);
+                        } else {
+                            const peModal = document.getElementById('physicalExaminationModal');
+                            if (peModal) {
+                                const modal = bootstrap.Modal.getOrCreateInstance(peModal, { 
+                                    backdrop: 'static', 
+                                    keyboard: false 
+                                });
+                                modal.show();
+                            }
+                        }
+                        updatePhysicianActiveNavItem('navPEPhysicalExam');
+                        
+                        setTimeout(() => {
+                            window.__sidebarNavigationActive = false;
+                            window.__preventDonorProfileOpen = false;
+                        }, 5000);
+                    }, 300);
+                });
         } else {
-            console.error('[SIDEBAR DEBUG] No valid screening data found, clearing flags');
             window.__sidebarNavigationActive = false;
             window.__preventDonorProfileOpen = false;
         }
@@ -7242,42 +7415,31 @@ if (navScreeningPhysicalExam) {
 const navScreeningDonorProfile = document.getElementById('navScreeningDonorProfile');
 if (navScreeningDonorProfile) {
     navScreeningDonorProfile.addEventListener('click', function() {
-        console.log('[SIDEBAR DEBUG] navScreeningDonorProfile clicked - INTENTIONAL donor profile open');
         // Set flag to prevent donor profile from opening on modal close
         window.__sidebarNavigationActive = true;
         // Set explicit flag to allow donor profile opening
         window.__explicitDonorProfileOpen = true;
-        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
-        console.log('[SIDEBAR DEBUG] __explicitDonorProfileOpen set to TRUE');
         
         const screeningData = getCurrentScreeningData();
-        console.log('[SIDEBAR DEBUG] Retrieved screening data:', screeningData);
         if (screeningData) {
             const screeningModalEl = document.getElementById('screeningFormModal');
             const screeningModal = screeningModalEl ? bootstrap.Modal.getInstance(screeningModalEl) : null;
             if (screeningModal) {
-                console.log('[SIDEBAR DEBUG] Hiding Initial Screening modal...');
                 screeningModal.hide();
-            } else {
-                console.warn('[SIDEBAR DEBUG] Initial Screening modal instance not found');
             }
             
             setTimeout(() => {
-                console.log('[SIDEBAR DEBUG] Explicitly opening donor profile modal...');
                 // Explicitly open donor profile - this is intentional
                 openDonorProfileModal(screeningData);
                 updatePhysicianActiveNavItem('navScreeningDonorProfile');
-                console.log('[SIDEBAR DEBUG] Active nav item updated to navScreeningDonorProfile');
                 
                 // Clear flags after modal is shown (extended duration to cover all close events)
                 setTimeout(() => {
-                    console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
                     window.__sidebarNavigationActive = false;
                     window.__explicitDonorProfileOpen = false;
                 }, 3000);
             }, 300);
         } else {
-            console.error('[SIDEBAR DEBUG] No screening data found, clearing flags');
             window.__sidebarNavigationActive = false;
             window.__explicitDonorProfileOpen = false;
         }
@@ -7288,40 +7450,29 @@ if (navScreeningDonorProfile) {
 const navPEMedicalHistory = document.getElementById('navPEMedicalHistory');
 if (navPEMedicalHistory) {
     navPEMedicalHistory.addEventListener('click', function() {
-        console.log('[SIDEBAR DEBUG] navPEMedicalHistory clicked');
         // Set flags to prevent donor profile from opening on modal close
         window.__sidebarNavigationActive = true;
         window.__preventDonorProfileOpen = true;
-        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
-        console.log('[SIDEBAR DEBUG] __preventDonorProfileOpen set to TRUE');
         
         const donorId = getCurrentPhysicianDonorId();
-        console.log('[SIDEBAR DEBUG] Retrieved donor ID:', donorId);
         if (donorId) {
             const peModalEl = document.getElementById('physicalExaminationModal');
             const peModal = peModalEl ? bootstrap.Modal.getInstance(peModalEl) : null;
             if (peModal) {
-                console.log('[SIDEBAR DEBUG] Hiding Physical Examination modal...');
                 peModal.hide();
-            } else {
-                console.warn('[SIDEBAR DEBUG] Physical Examination modal instance not found');
             }
             
             setTimeout(() => {
-                console.log('[SIDEBAR DEBUG] Opening Medical History modal...');
                 openMedicalHistoryModal(donorId);
                 updatePhysicianActiveNavItem('navPhysicianMedicalHistory');
-                console.log('[SIDEBAR DEBUG] Active nav item updated to navPhysicianMedicalHistory');
                 
                 // Clear flags after modal is shown (extended duration to cover all close events)
                 setTimeout(() => {
-                    console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
                     window.__sidebarNavigationActive = false;
                     window.__preventDonorProfileOpen = false;
                 }, 3000);
             }, 300);
         } else {
-            console.error('[SIDEBAR DEBUG] No donor ID found, clearing flags');
             window.__sidebarNavigationActive = false;
             window.__preventDonorProfileOpen = false;
         }
@@ -7332,15 +7483,11 @@ if (navPEMedicalHistory) {
 const navPEInitialScreening = document.getElementById('navPEInitialScreening');
 if (navPEInitialScreening) {
     navPEInitialScreening.addEventListener('click', function() {
-        console.log('[SIDEBAR DEBUG] navPEInitialScreening clicked');
         // Set flags to prevent donor profile from opening on modal close
         window.__sidebarNavigationActive = true;
         window.__preventDonorProfileOpen = true;
-        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
-        console.log('[SIDEBAR DEBUG] __preventDonorProfileOpen set to TRUE');
         
         const donorId = getCurrentPhysicianDonorId();
-        console.log('[SIDEBAR DEBUG] Retrieved donor ID:', donorId);
         if (donorId) {
             // Store donor ID in global context
             window.currentDonorId = donorId;
@@ -7348,78 +7495,60 @@ if (navPEInitialScreening) {
                 donorId: donorId, 
                 screeningData: { donor_form_id: donorId } 
             };
-            console.log('[SIDEBAR DEBUG] Stored donor ID in context:', window.currentDonorId);
             
             const peModalEl = document.getElementById('physicalExaminationModal');
             const peModal = peModalEl ? bootstrap.Modal.getInstance(peModalEl) : null;
             if (peModal) {
-                console.log('[SIDEBAR DEBUG] Hiding Physical Examination modal...');
                 peModal.hide();
             } else {
-                console.warn('[SIDEBAR DEBUG] Physical Examination modal instance not found');
             }
             
             setTimeout(() => {
-                console.log('[SIDEBAR DEBUG] Attempting to open Initial Screening modal...');
                 const screeningModal = document.getElementById('screeningFormModal');
                 if (screeningModal) {
-                    console.log('[SIDEBAR DEBUG] Screening modal element found');
                     // Set donor ID in the screening form BEFORE opening
                     const screeningForm = document.getElementById('screeningForm');
                     if (screeningForm) {
                         const donorIdInput = screeningForm.querySelector('input[name="donor_id"]');
                         if (donorIdInput) {
                             donorIdInput.value = donorId;
-                            console.log('[SIDEBAR DEBUG] Set donor ID in form input:', donorId);
                         } else {
-                            console.warn('[SIDEBAR DEBUG] Donor ID input not found in form');
                         }
                     } else {
-                        console.warn('[SIDEBAR DEBUG] Screening form not found');
                     }
                     
                     // Open the screening modal
                     const modalInstance = bootstrap.Modal.getInstance(screeningModal) || new bootstrap.Modal(screeningModal);
-                    console.log('[SIDEBAR DEBUG] Bootstrap modal instance obtained');
                     
                     // Ensure content loads when modal is shown
                     const oneTimeShown = function() {
-                        console.log('[SIDEBAR DEBUG] Screening modal shown event fired');
                         screeningModal.removeEventListener('shown.bs.modal', oneTimeShown);
                         // Trigger content load if renderSummary function exists (check both local and window)
                         setTimeout(() => {
                             if (typeof window.renderSummary === 'function') {
-                                console.log('[SIDEBAR DEBUG] window.renderSummary function found, calling it...');
                                 window.renderSummary();
                             } else if (typeof renderSummary === 'function') {
-                                console.log('[SIDEBAR DEBUG] renderSummary function found (local scope), calling it...');
                                 renderSummary();
                             } else {
-                                console.warn('[SIDEBAR DEBUG] renderSummary function NOT found (neither window nor local)');
                             }
                         }, 200);
                     };
                     screeningModal.addEventListener('shown.bs.modal', oneTimeShown, { once: true });
                     
-                    console.log('[SIDEBAR DEBUG] Calling modalInstance.show()...');
                     modalInstance.show();
                     updatePhysicianActiveNavItem('navScreeningInitialScreening');
-                    console.log('[SIDEBAR DEBUG] Active nav item updated to navScreeningInitialScreening');
                     
-                    // Clear flags after modal is shown (extended duration to cover all close events)
+                    // Clear flags after modal is shown (extended duration to cover all close events and delayed triggers)
                     setTimeout(() => {
-                        console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
                         window.__sidebarNavigationActive = false;
                         window.__preventDonorProfileOpen = false;
-                    }, 3000);
+                    }, 5000);
                 } else {
-                    console.error('[SIDEBAR DEBUG] Screening modal element NOT found!');
                     window.__sidebarNavigationActive = false;
                     window.__preventDonorProfileOpen = false;
                 }
             }, 300);
         } else {
-            console.error('[SIDEBAR DEBUG] No donor ID found, clearing flags');
             window.__sidebarNavigationActive = false;
             window.__preventDonorProfileOpen = false;
         }
@@ -7430,42 +7559,31 @@ if (navPEInitialScreening) {
 const navPEDonorProfile = document.getElementById('navPEDonorProfile');
 if (navPEDonorProfile) {
     navPEDonorProfile.addEventListener('click', function() {
-        console.log('[SIDEBAR DEBUG] navPEDonorProfile clicked - INTENTIONAL donor profile open');
         // Set flag to prevent donor profile from opening on modal close
         window.__sidebarNavigationActive = true;
         // Set explicit flag to allow donor profile opening
         window.__explicitDonorProfileOpen = true;
-        console.log('[SIDEBAR DEBUG] __sidebarNavigationActive set to TRUE');
-        console.log('[SIDEBAR DEBUG] __explicitDonorProfileOpen set to TRUE');
         
         const screeningData = getCurrentScreeningData();
-        console.log('[SIDEBAR DEBUG] Retrieved screening data:', screeningData);
         if (screeningData) {
             const peModalEl = document.getElementById('physicalExaminationModal');
             const peModal = peModalEl ? bootstrap.Modal.getInstance(peModalEl) : null;
             if (peModal) {
-                console.log('[SIDEBAR DEBUG] Hiding Physical Examination modal...');
                 peModal.hide();
-            } else {
-                console.warn('[SIDEBAR DEBUG] Physical Examination modal instance not found');
             }
             
             setTimeout(() => {
-                console.log('[SIDEBAR DEBUG] Explicitly opening donor profile modal...');
                 // Explicitly open donor profile - this is intentional
                 openDonorProfileModal(screeningData);
                 updatePhysicianActiveNavItem('navPEDonorProfile');
-                console.log('[SIDEBAR DEBUG] Active nav item updated to navPEDonorProfile');
                 
                 // Clear flags after modal is shown (extended duration to cover all close events)
                 setTimeout(() => {
-                    console.log('[SIDEBAR DEBUG] Clearing __sidebarNavigationActive flag (after 3000ms)');
                     window.__sidebarNavigationActive = false;
                     window.__explicitDonorProfileOpen = false;
                 }, 3000);
             }, 300);
         } else {
-            console.error('[SIDEBAR DEBUG] No screening data found, clearing flags');
             window.__sidebarNavigationActive = false;
             window.__explicitDonorProfileOpen = false;
         }

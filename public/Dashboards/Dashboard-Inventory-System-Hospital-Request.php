@@ -201,7 +201,7 @@ function fetchAllBloodRequests($limit = 50, $offset = 0, &$totalCount = null) {
     }
     
     // Narrow columns - fetch all records for proper sorting
-    $select = "request_id,hospital_admitted,patient_blood_type,rh_factor,units_requested,is_asap,requested_on,status,patient_name,patient_age,patient_gender,patient_diagnosis,physician_name,when_needed,handed_over_by,handed_over_date";
+    $select = "request_id,request_reference,hospital_admitted,patient_blood_type,rh_factor,units_requested,is_asap,requested_on,status,patient_name,patient_age,patient_gender,patient_diagnosis,physician_name,when_needed,handed_over_by,handed_over_date";
     $endpoint = "blood_requests?select=" . urlencode($select) . "&order=requested_on.desc&limit={$fetchLimit}&offset=0";
     $response = supabaseRequest($endpoint);
     if (!isset($response['data']) || empty($response['data'])) {
@@ -1670,7 +1670,17 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 data-request-id="<?php echo htmlspecialchars($request['request_id']); ?>"
                                 data-hospital-name="<?php echo htmlspecialchars($hospital_name); ?>">
                                 <td><?php echo $rowNum++; ?></td>
-                                <td><?php echo htmlspecialchars($request['request_id']); ?></td>
+                                <td><?php 
+                                    // Display 14 characters of request_reference, skipping "REQ-" prefix
+                                    $request_ref = $request['request_reference'] ?? '';
+                                    if (!empty($request_ref)) {
+                                        // Skip "REQ-" (4 characters) and take next 14 characters
+                                        $display_ref = substr($request_ref, 4, 14);
+                                        echo htmlspecialchars($display_ref);
+                                    } else {
+                                        echo htmlspecialchars($request['request_id']);
+                                    }
+                                ?></td>
                                 <td><?php echo htmlspecialchars($hospital_name); ?></td>
                                 <td><?php echo htmlspecialchars($blood_type_display); ?></td>
                                 <td><?php echo htmlspecialchars($request['units_requested']); ?></td>
