@@ -86,16 +86,22 @@ try {
     }
     
     // Build command with proper escaping for Windows
+    // IMPORTANT: Only capture stdout (JSON output), redirect stderr to error log
+    // This prevents debug messages from breaking JSON parsing
     if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-        // Windows: use full path and proper escaping
-        $command = escapeshellcmd($pythonExecutable) . ' ' . escapeshellarg($scriptPath) . ' 2>&1';
+        // Windows: capture stdout only, redirect stderr to error log
+        // Use 2>NUL to discard stderr, or 2>>error.log to log it
+        $command = escapeshellcmd($pythonExecutable) . ' ' . escapeshellarg($scriptPath) . ' 2>NUL';
     } else {
-        // Linux/Mac
-        $command = escapeshellcmd($pythonExecutable) . ' ' . escapeshellarg($scriptPath) . ' 2>&1';
+        // Linux/Mac: capture stdout only, redirect stderr to /dev/null or error log
+        $command = escapeshellcmd($pythonExecutable) . ' ' . escapeshellarg($scriptPath) . ' 2>/dev/null';
     }
     
     error_log("Executing Python command: $command");
     $output = shell_exec($command);
+    
+    // If we want to capture stderr for debugging, we can use proc_open instead
+    // But for now, stderr goes to error log (or is discarded)
     
     // Restore original directory
     chdir($originalDir);

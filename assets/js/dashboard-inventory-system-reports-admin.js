@@ -220,23 +220,24 @@
         console.log(`Critical types found: [${criticalTypes.join(', ')}]`);
         console.log(`Most critical: ${mostCritical}`);
         
-        // Update KPI display
-        document.getElementById('kpiDemand').textContent = totalDemand;
-        document.getElementById('kpiDonations').textContent = totalSupply;
+        // Update KPI display - Round to whole numbers for clean display
+        document.getElementById('kpiDemand').textContent = Math.round(totalDemand);
+        document.getElementById('kpiDonations').textContent = Math.round(totalSupply);
         
         const balanceElement = document.getElementById('kpiBalance');
-        balanceElement.textContent = totalBalance >= 0 ? `+${totalBalance}` : `${totalBalance}`;
-        balanceElement.style.color = totalBalance < 0 ? '#dc3545' : '#28a745';
+        const roundedBalance = Math.round(totalBalance);
+        balanceElement.textContent = roundedBalance >= 0 ? `+${roundedBalance}` : `${roundedBalance}`;
+        balanceElement.style.color = roundedBalance < 0 ? '#dc3545' : '#28a745';
         
-        // Update new KPIs from API response
+        // Update new KPIs from API response - Ensure whole numbers
         if (kpiData.target_stock_level !== undefined) {
             document.getElementById('kpiTargetStock').textContent = Math.round(kpiData.target_stock_level);
         }
         if (kpiData.expiring_weekly !== undefined) {
-            document.getElementById('kpiExpiringWeekly').textContent = kpiData.expiring_weekly;
+            document.getElementById('kpiExpiringWeekly').textContent = Math.round(kpiData.expiring_weekly);
         }
         if (kpiData.expiring_monthly !== undefined) {
-            document.getElementById('kpiExpiringMonthly').textContent = kpiData.expiring_monthly;
+            document.getElementById('kpiExpiringMonthly').textContent = Math.round(kpiData.expiring_monthly);
         }
         
         console.log(`=== KPI DEBUG END ===`);
@@ -393,9 +394,10 @@
     }
 
     function statusFor(balance){
-        if(balance <= -10) return {cls:'status-critical', label:'Critical', icon:'fa-xmark'};
-        if(balance < 0) return {cls:'status-low', label:'Low', icon:'fa-triangle-exclamation'};
-        return {cls:'status-surplus', label:'Surplus', icon:'fa-check'};
+        // Updated status labels: > 0 = Surplus (Green), = 0 = Adequate (Blue), < 0 = Low (Orange/Red)
+        if(balance > 0) return {cls:'status-surplus', label:'Surplus', icon:'fa-check'};
+        if(balance === 0) return {cls:'status-adequate', label:'Adequate', icon:'fa-circle'};
+        return {cls:'status-low', label:'Low', icon:'fa-triangle-exclamation'}; // balance < 0
     }
 
     function filtered(){
@@ -410,12 +412,16 @@
             const matchesType = (t === 'all' || r.blood_type === t);
             const matchesSearch = (`${r.blood_type}`.toLowerCase().includes(s));
             
-            // Filter by balance status
+            // Filter by balance status (Updated: Surplus > 0, Adequate = 0, Low < 0)
             let matchesBalance = true;
             if (b !== 'all') {
-                if (b === 'surplus' && r.projected_balance < 0) matchesBalance = false;
-                if (b === 'shortage' && r.projected_balance >= 0) matchesBalance = false;
-                if (b === 'critical' && r.status !== 'critical') matchesBalance = false;
+                if (b === 'surplus' && r.projected_balance <= 0) matchesBalance = false;
+                if (b === 'adequate' && r.projected_balance !== 0) matchesBalance = false;
+                if (b === 'shortage' || b === 'low' || b === 'critical') {
+                    // Map old status names to new ones
+                    if (r.projected_balance >= 0) matchesBalance = false;
+                    if (b === 'critical' && r.status !== 'low' && r.status !== 'critical') matchesBalance = false;
+                }
             }
             
             // Filter by year
@@ -723,7 +729,7 @@
                             month: monthKey,
                             monthDate: new Date(monthKey),
                             blood_type: bt,
-                            balance: balance,
+                        balance: Math.round(balance),  // Round to whole number
                             isForecast: false
                         });
                     }
@@ -749,7 +755,7 @@
                         month: item.forecast_month,
                         monthDate: forecastDate,
                         blood_type: item.blood_type,
-                        balance: item.projected_balance || 0,
+                        balance: Math.round(item.projected_balance || 0),  // Round to whole number
                         isForecast: true
                     });
                 }
@@ -826,7 +832,7 @@
             }
         });
         
-        const balances = months.map(m => monthMap[m].balance);
+        const balances = months.map(m => Math.round(monthMap[m].balance));  // Round final balances to whole numbers
         const isForecast = months.map(m => monthMap[m].isForecast);
         
         console.log('Final chart data - Months:', months.length, 'Labels:', labels.length, 'Balances:', balances.length);
@@ -898,6 +904,25 @@
                         title: {
                             display: true,
                             text: selectedYear === 'all' ? 'Month/Year' : 'Month'
+                        },
+                        ticks: {
+                            // Show ticks every 2-3 months to reduce clutter (Recommendation #3)
+                            maxTicksLimit: Math.ceil(labels.length / 3), // Show ~1/3 of labels
+                            autoSkip: true,
+                            maxRotation: 45, // Rotate labels 45 degrees for readability
+                            minRotation: 30, // Minimum rotation
+                            callback: function(value, index) {
+                                // Only show labels for every 2-3 months to reduce clutter
+                                const step = Math.ceil(labels.length / Math.min(12, labels.length));
+                                if (index % step === 0 || index === labels.length - 1) {
+                                    return labels[index];
+                                }
+                                return '';
+                            }
+                        },
+                        grid: {
+                            display: true,
+                            color: '#f0f0f0'
                         }
                     },
                     y: {
@@ -905,9 +930,19 @@
                             display: true,
                             text: 'Balance (Units)'
                         },
+                        // FIXED: Allow negative values to show shortages (demand > supply)
+                        // Negative balance indicates critical shortage that needs attention
+                        beginAtZero: false,  // Allow negative values
                         grid: {
                             color: function(context) {
+                                // Highlight zero line to show surplus vs shortage
                                 return context.tick.value === 0 ? '#000' : '#e0e0e0';
+                            }
+                        },
+                        ticks: {
+                            // Show negative values clearly
+                            callback: function(value) {
+                                return value;
                             }
                         }
                     }

@@ -48,7 +48,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
 .table thead th{background:#941022;color:#fff;}
 .status-badge{display:inline-flex;align-items:center;gap:6px;padding:.25rem .6rem;border-radius:999px;font-weight:600}
 .status-low{background:#fff7e6;color:#b35c00}
-.status-critical{background:#ffeaea;color:#b00020}
+.status-adequate{background:#e3f2fd;color:#1976d2}
 .status-surplus{background:#e6fff2;color:#0f7a3a}
 .action-btn{border:none;background:#e9ecef;border-radius:6px;width:32px;height:28px;display:flex;align-items:center;justify-content:center}
 .chart-card{background:#fff;border:1px solid #eee;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.06)}
@@ -195,8 +195,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
                         <select class="form-select form-select-sm" id="balanceFilter">
                             <option value="all">All Balances</option>
                             <option value="surplus">Surplus Only</option>
-                            <option value="shortage">Shortage Only</option>
-                            <option value="critical">Critical Only</option>
+                            <option value="adequate">Adequate Only</option>
+                            <option value="low">Low Only</option>
                         </select>
                         <select class="form-select form-select-sm" id="yearFilter">
                             <option value="all">All Years</option>
