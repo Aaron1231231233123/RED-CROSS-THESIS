@@ -164,6 +164,8 @@ try {
     if ($role_id === 3 && !empty($subrole)) {
         $subrolePayload = [
             'user_id' => $user_id,
+            'email' => $email,
+            'role_id' => 3,
             'user_staff_roles' => $subrole
         ];
         $subroleResp = supabaseWrite('user_roles', 'POST', $subrolePayload);

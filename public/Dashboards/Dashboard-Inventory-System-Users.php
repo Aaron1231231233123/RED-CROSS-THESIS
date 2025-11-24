@@ -22,6 +22,10 @@ if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] !== $required_role) {
 
 // Fetch users from Supabase users table with subroles
 $users = [];
+$flashMessage = $_SESSION['user_update_success'] ?? null;
+if ($flashMessage) {
+    unset($_SESSION['user_update_success']);
+}
 try {
     if (function_exists('supabaseRequest')) {
         // Get users data including timestamps
@@ -29,7 +33,7 @@ try {
         
         if (isset($usersResponse['data']) && is_array($usersResponse['data'])) {
             // Get user_roles data for subroles
-            $userRolesResponse = supabaseRequest('user_roles?select=user_id,user_staff_roles', 'GET');
+            $userRolesResponse = supabaseRequest('user_roles?select=user_id,user_staff_roles', 'GET', null, true);
             $userRoles = [];
             if (isset($userRolesResponse['data']) && is_array($userRolesResponse['data'])) {
                 foreach ($userRolesResponse['data'] as $role) {
@@ -172,6 +176,12 @@ body {
 	padding: 24px;
 	margin-top: 0;
 }
+.table-hover tbody tr.user-row {
+	cursor: pointer;
+}
+.table-hover tbody tr.user-row .row-actions {
+	cursor: default;
+}
 main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 	margin-left: 280px !important;
 	margin-top: 70px !important;
@@ -247,6 +257,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <button class="btn btn-danger" id="openCreateUserModalBtn"><i class="fa fa-user-plus me-2"></i>Add User</button>
                         </div>
                     </div>
+                    <?php if (!empty($flashMessage)): ?>
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <?php echo htmlspecialchars($flashMessage); ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    <?php endif; ?>
                     <div class="card">
                         <div class="card-body">
                             <div class="row mb-3">
@@ -287,7 +303,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         </tr>
                                         <?php else: ?>
                                         <?php foreach ($users as $index => $u): ?>
-                                        <tr>
+                                        <?php 
+                                            $userId = htmlspecialchars($u['id'], ENT_QUOTES, 'UTF-8');
+                                            $profileUrl = 'user-profile.php?id=' . urlencode($u['id']);
+                                        ?>
+                                        <tr class="user-row" data-user-id="<?php echo $userId; ?>" data-profile-url="<?php echo htmlspecialchars($profileUrl, ENT_QUOTES, 'UTF-8'); ?>">
                                             <td><?php echo $index + 1; ?></td>
                                             <td><?php echo htmlspecialchars($u['name'] ?? ''); ?></td>
                                             <td><?php echo htmlspecialchars($u['email'] ?? ''); ?></td>
@@ -300,31 +320,41 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                                 <?php endif; ?>
                                             </td>
                                             <td>
-                                                <button
-                                                    class="btn btn-sm btn-info me-1 view-user-btn"
-                                                    data-user-id="<?php echo htmlspecialchars($u['id'], ENT_QUOTES, 'UTF-8'); ?>"
-                                                    data-user-name="<?php echo htmlspecialchars($u['name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-                                                    data-user-email="<?php echo htmlspecialchars($u['email'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-                                                    data-user-role="<?php echo htmlspecialchars($u['role'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-                                                    data-user-status="<?php echo isset($u['is_active']) && $u['is_active'] ? 'Active' : 'Inactive'; ?>"
-                                                    data-user-created="<?php echo htmlspecialchars($u['created_at'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-                                                    data-user-last-login="<?php echo htmlspecialchars($u['last_login_at'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-                                                >
-                                                    <i class="fas fa-eye"></i>
-                                                </button>
-                                                <?php if (isset($u['is_active']) && $u['is_active']): ?>
+                                                <div class="d-flex flex-wrap gap-1 row-actions">
+                                                    <button
+                                                        class="btn btn-sm btn-info me-1 view-user-btn"
+                                                        title="View user"
+                                                        data-user-id="<?php echo htmlspecialchars($u['id'], ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-user-name="<?php echo htmlspecialchars($u['name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-user-email="<?php echo htmlspecialchars($u['email'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-user-role="<?php echo htmlspecialchars($u['role'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-user-status="<?php echo isset($u['is_active']) && $u['is_active'] ? 'Active' : 'Inactive'; ?>"
+                                                        data-user-created="<?php echo htmlspecialchars($u['created_at'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-user-last-login="<?php echo htmlspecialchars($u['last_login_at'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                    >
+                                                        <i class="fas fa-eye"></i>
+                                                    </button>
+                                                    <a
+                                                        href="<?php echo htmlspecialchars($profileUrl, ENT_QUOTES, 'UTF-8'); ?>"
+                                                        class="btn btn-sm btn-warning text-dark me-1 edit-user-btn"
+                                                        title="Edit user"
+                                                    >
+                                                        <i class="fas fa-pencil-alt"></i>
+                                                    </a>
+                                                    <?php if (isset($u['is_active']) && $u['is_active']): ?>
                                                     <button
                                                         class="btn btn-sm btn-danger deactivate-user-btn"
                                                         data-user-id="<?php echo htmlspecialchars($u['id'], ENT_QUOTES, 'UTF-8'); ?>"
                                                         data-user-name="<?php echo htmlspecialchars($u['name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                                     >Deactivate</button>
-                                                <?php else: ?>
+                                                    <?php else: ?>
                                                     <button
                                                         class="btn btn-sm btn-success activate-user-btn"
                                                         data-user-id="<?php echo htmlspecialchars($u['id'], ENT_QUOTES, 'UTF-8'); ?>"
                                                         data-user-name="<?php echo htmlspecialchars($u['name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                                     >Activate</button>
-                                                <?php endif; ?>
+                                                    <?php endif; ?>
+                                                </div>
                                             </td>
                                         </tr>
                                         <?php endforeach; ?>
@@ -336,6 +366,54 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     </div>
                 </div>
             </main>
+        </div>
+    </div>
+
+    <!-- View User Modal -->
+    <div class="modal fade" id="viewUserModal" tabindex="-1" aria-labelledby="viewUserModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header" style="border-bottom: 1px solid #dee2e6;">
+                    <h5 class="modal-title" id="viewUserModalLabel" style="color: #b22222; font-weight: 700; font-size: 1.5rem;">
+                        User Details
+                    </h5>
+                    <div id="viewUserStatusBadge" style="margin-left: auto;"></div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" style="padding: 1.5rem;">
+                    <div class="mb-4">
+                        <h4 id="viewUserName" style="font-weight: 700; color: #000; margin-bottom: 0.5rem;"></h4>
+                        <p id="viewUserId" style="color: #6c757d; margin: 0; font-size: 0.9rem;">User ID: <span id="viewUserIdValue"></span></p>
+                    </div>
+                    
+                    <hr style="margin: 1rem 0; border-color: #dee2e6;">
+                    
+                    <div class="mb-3">
+                        <label class="form-label" style="font-weight: 600; color: #000;">Email Address</label>
+                        <input type="email" class="form-control" id="viewUserEmail" readonly style="background-color: #f8f9fa; border: 1px solid #dee2e6;">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label" style="font-weight: 600; color: #000;">Role</label>
+                        <select class="form-select" id="viewUserRole" disabled style="background-color: #f8f9fa; border: 1px solid #dee2e6;">
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label" style="font-weight: 600; color: #000;">Password</label>
+                        <input type="password" class="form-control" id="viewUserPassword" readonly style="background-color: #f8f9fa; border: 1px solid #dee2e6;" value="********">
+                    </div>
+                    
+                    <div class="row mt-4" style="font-size: 0.85rem; color: #6c757d;">
+                        <div class="col-6">
+                            <span>Last Login: <span id="viewUserLastLogin">Not available</span></span>
+                        </div>
+                        <div class="col-6 text-end">
+                            <span>Account Creation Date: <span id="viewUserCreatedDate">Not available</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -428,57 +506,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-success" id="confirmAddUserBtn">Confirm</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- View User Modal -->
-    <div class="modal fade" id="viewUserModal" tabindex="-1" aria-labelledby="viewUserModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header" style="border-bottom: 1px solid #dee2e6;">
-                    <h5 class="modal-title" id="viewUserModalLabel" style="color: #b22222; font-weight: 700; font-size: 1.5rem;">
-                        User Details
-                    </h5>
-                    <div id="viewUserStatusBadge" style="margin-left: auto;"></div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body" style="padding: 1.5rem;">
-                    <!-- User Name and ID Section -->
-                    <div class="mb-4">
-                        <h4 id="viewUserName" style="font-weight: 700; color: #000; margin-bottom: 0.5rem;"></h4>
-                        <p id="viewUserId" style="color: #6c757d; margin: 0; font-size: 0.9rem;">User ID: <span id="viewUserIdValue"></span></p>
-                    </div>
-                    
-                    <hr style="margin: 1rem 0; border-color: #dee2e6;">
-                    
-                    <!-- Form Fields Section -->
-                    <div class="mb-3">
-                        <label class="form-label" style="font-weight: 600; color: #000;">Email Address</label>
-                        <input type="email" class="form-control" id="viewUserEmail" readonly style="background-color: #f8f9fa; border: 1px solid #dee2e6;">
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label" style="font-weight: 600; color: #000;">Role</label>
-                        <select class="form-select" id="viewUserRole" disabled style="background-color: #f8f9fa; border: 1px solid #dee2e6;">
-                        </select>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label" style="font-weight: 600; color: #000;">Password</label>
-                        <input type="password" class="form-control" id="viewUserPassword" readonly style="background-color: #f8f9fa; border: 1px solid #dee2e6;" value="********">
-                    </div>
-                    
-                    <!-- Footer Information -->
-                    <div class="row mt-4" style="font-size: 0.85rem; color: #6c757d;">
-                        <div class="col-6">
-                            <span>Last Login: <span id="viewUserLastLogin">Not available</span></span>
-                        </div>
-                        <div class="col-6 text-end">
-                            <span>Account Creation Date: <span id="viewUserCreatedDate">Not available</span></span>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -628,6 +655,15 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     const dataset = activateBtn.dataset;
                     showActivateModal(dataset.userId || '', dataset.userName || '');
                     return;
+                }
+
+                if (event.target.closest('.row-actions')) {
+                    return;
+                }
+
+                const targetRow = event.target.closest('tr[data-profile-url]');
+                if (targetRow) {
+                    window.location.href = targetRow.dataset.profileUrl;
                 }
             });
         });
@@ -789,62 +825,50 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
         // Show view user modal
         function showViewUserModal(userId, userName, userEmail, userRole, userStatus, createdAt, lastLoginAt) {
-            // Set user name and ID
-            document.getElementById('viewUserName').textContent = userName;
-            document.getElementById('viewUserIdValue').textContent = userId;
+            document.getElementById('viewUserName').textContent = userName || 'Unknown User';
+            document.getElementById('viewUserIdValue').textContent = userId || 'N/A';
+            document.getElementById('viewUserEmail').value = userEmail || '';
             
-            // Set email
-            document.getElementById('viewUserEmail').value = userEmail;
-            
-            // Set role in dropdown
             const roleSelect = document.getElementById('viewUserRole');
-            roleSelect.innerHTML = `<option value="${userRole}" selected>${userRole}</option>`;
-            
-            // Display the status badge in header
+            roleSelect.innerHTML = `<option value="${userRole}">${userRole || 'N/A'}</option>`;
+
             const statusBadge = document.getElementById('viewUserStatusBadge');
             if (userStatus === 'Active') {
                 statusBadge.innerHTML = '<span class="badge bg-success">Active</span>';
             } else {
                 statusBadge.innerHTML = '<span class="badge bg-secondary">Inactive</span>';
             }
-            
-            // Format and display dates
+
             document.getElementById('viewUserLastLogin').textContent = formatDate(lastLoginAt, true);
             document.getElementById('viewUserCreatedDate').textContent = formatDate(createdAt, false);
-            
+
             const modal = new bootstrap.Modal(document.getElementById('viewUserModal'));
             modal.show();
         }
 
-        // Format dates for display
         function formatDate(dateString, includeTime = false) {
-            if (!dateString || dateString === '' || dateString === 'null' || dateString === 'undefined') {
+            if (!dateString || dateString === 'null' || dateString === 'undefined') {
                 return 'Not available';
             }
-            
-            try {
-                const date = new Date(dateString);
-                if (isNaN(date.getTime())) {
-                    return 'Not available';
-                }
-                
-                const day = date.getDate().toString().padStart(2, '0');
-                const month = (date.getMonth() + 1).toString().padStart(2, '0');
-                const year = date.getFullYear();
-                
-                if (includeTime) {
-                    const hours = date.getHours();
-                    const minutes = date.getMinutes().toString().padStart(2, '0');
-                    const ampm = hours >= 12 ? 'PM' : 'AM';
-                    const displayHours = hours % 12 || 12;
-                    return `${day}/${month}/${year} ${displayHours}:${minutes} ${ampm}`;
-                }
-                
-                return `${day}/${month}/${year}`;
-            } catch (error) {
-                console.error('Date formatting error:', error);
+
+            const parsed = new Date(dateString);
+            if (Number.isNaN(parsed.getTime())) {
                 return 'Not available';
             }
+
+            const day = parsed.getDate().toString().padStart(2, '0');
+            const month = (parsed.getMonth() + 1).toString().padStart(2, '0');
+            const year = parsed.getFullYear();
+
+            if (includeTime) {
+                const hours = parsed.getHours();
+                const minutes = parsed.getMinutes().toString().padStart(2, '0');
+                const ampm = hours >= 12 ? 'PM' : 'AM';
+                const displayHours = hours % 12 || 12;
+                return `${day}/${month}/${year} ${displayHours}:${minutes} ${ampm}`;
+            }
+
+            return `${day}/${month}/${year}`;
         }
 
         // Handle deactivate confirmation

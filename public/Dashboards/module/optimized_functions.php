@@ -5,19 +5,19 @@
 // OPTIMIZATION: Enhanced function to make API requests to Supabase with retry mechanism
 // For backend operations (POST/PATCH/DELETE), uses service role key to bypass RLS
 // For read operations (GET), uses anon key by default
-function supabaseRequest($endpoint, $method = 'GET', $data = null) {
+function supabaseRequest($endpoint, $method = 'GET', $data = null, $forceServiceRole = false, $preferHeader = 'return=representation') {
     $url = SUPABASE_URL . "/rest/v1/" . $endpoint;
 
     // Use service role key for write operations (POST/PATCH/DELETE) to bypass RLS
     // Use anon key for read operations (GET) by default
-    $useServiceRole = in_array(strtoupper($method), ['POST', 'PATCH', 'PUT', 'DELETE']);
+    $useServiceRole = $forceServiceRole || in_array(strtoupper($method), ['POST', 'PATCH', 'PUT', 'DELETE']);
     $apiKey = $useServiceRole && defined('SUPABASE_SERVICE_KEY') ? SUPABASE_SERVICE_KEY : SUPABASE_API_KEY;
 
     $headers = [
         "Content-Type: application/json",
         "apikey: " . $apiKey,
         "Authorization: Bearer " . $apiKey,
-        "Prefer: return=representation"
+        "Prefer: " . $preferHeader
     ];
 
     // OPTIMIZATION FOR SLOW INTERNET: Enhanced timeout and retry settings
