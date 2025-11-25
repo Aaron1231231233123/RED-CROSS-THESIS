@@ -3,6 +3,7 @@
 session_start();
 require_once '../../assets/conn/db_conn.php';
 require_once '../Dashboards/module/optimized_functions.php';
+require_once '../../assets/php_func/buffer_blood_manager.php';
 
 // Set headers for JSON response
 header('Content-Type: application/json');
@@ -98,9 +99,20 @@ try {
     if (isset($response['code']) && $response['code'] >= 200 && $response['code'] < 300 && isset($response['data'])) {
         $blood_units = $response['data'];
         
+        $bufferContext = getBufferBloodContext();
+        $bufferUnitsUsed = [];
+        
         // Format the response
         $formatted_units = [];
         foreach ($blood_units as $unit) {
+            $isBuffer = isBufferUnitFromLookup($unit, $bufferContext['buffer_lookup']);
+            if ($isBuffer) {
+                $bufferUnitsUsed[] = [
+                    'unit_id' => $unit['unit_id'],
+                    'serial_number' => $unit['unit_serial_number'],
+                    'blood_type' => $unit['blood_type']
+                ];
+            }
             $formatted_units[] = [
                 'unit_id' => $unit['unit_id'],
                 'serial_number' => $unit['unit_serial_number'],
@@ -108,8 +120,25 @@ try {
                 'bag_type' => $unit['bag_type'] ?: 'Standard',
                 'bag_brand' => $unit['bag_brand'] ?: 'N/A',
                 'expiration_date' => date('Y-m-d', strtotime($unit['expires_at'])),
-                'status' => $unit['status']
+                'status' => $unit['status'],
+                'is_buffer' => $isBuffer
             ];
+        }
+        
+        $bufferUsagePayload = [
+            'used' => !empty($bufferUnitsUsed),
+            'units' => $bufferUnitsUsed,
+            'unit_serials' => array_column($bufferUnitsUsed, 'serial_number'),
+            'message' => ''
+        ];
+        if ($bufferUsagePayload['used']) {
+            $bufferUsagePayload['message'] = sprintf(
+                'Using %d buffer unit%s (%s) to fulfill this request.',
+                count($bufferUnitsUsed),
+                count($bufferUnitsUsed) > 1 ? 's' : '',
+                implode(', ', $bufferUsagePayload['unit_serials'])
+            );
+            logBufferUsageEvent($bufferUnitsUsed, $request_id, $_SESSION['user_id'] ?? null, 'preview');
         }
         
         echo json_encode([
@@ -122,7 +151,9 @@ try {
                 'blood_type_needed' => $needed_blood_type . ($is_positive ? '+' : '-')
             ],
             'blood_units' => $formatted_units,
-            'total_units' => count($formatted_units)
+            'total_units' => count($formatted_units),
+            'buffer_usage' => $bufferUsagePayload,
+            'buffer_reserve' => $bufferContext['count']
         ]);
     } else {
         $detail = isset($response['error']) ? $response['error'] : 'Unknown error';

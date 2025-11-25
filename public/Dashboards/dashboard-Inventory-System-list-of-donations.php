@@ -840,6 +840,11 @@ function getCacheStats() {
         /* Hide heavy sections until ready to avoid staggered row paints */
         .progressive-hide { visibility: hidden; }
     </style>
+    <script src="../../assets/js/access-lock-manager.js"></script>
+    <script src="../../assets/js/access-lock-guard.js"></script>
+    <script>
+        window.ACCESS_LOCK_ROLE_VALUE = 2;
+    </script>
     <script>
     (function() {
         function reveal() {
@@ -2733,7 +2738,7 @@ function getCacheStats() {
                 }
             };
             // Helper to open details using new modal with legacy fallback
-            function openDetails(donorId, eligibilityId) {
+            const baseOpenDetails = function(donorId, eligibilityId) {
                 if (!donorId) { return; }
                 // Legacy first: match behavior of the All status filter
                 const legacyDetails = document.getElementById('donorDetails');
@@ -2744,7 +2749,49 @@ function getCacheStats() {
                 if (typeof window.fetchDonorDetails === 'function') {
                     window.fetchDonorDetails(donorId, eligibilityId || '');
                 }
+            };
+
+            function openDetails(donorId, eligibilityId) {
+                if (!donorId) { return; }
+                const proceed = () => {
+                    window.currentAdminDonorId = donorId;
+                    if (window.AccessLockManager) {
+                        window.AccessLockManager.activate({ donor_id: donorId });
+                    }
+                    baseOpenDetails(donorId, eligibilityId);
+                };
+                if (window.AccessLockGuard) {
+                    AccessLockGuard.ensureAccess({
+                        scope: ['medical_history', 'physical_examination', 'blood_collection'],
+                        donorId,
+                        lockValue: 2,
+                        messages: {
+                            medical_history: 'This donor is being processed in the Interviewer stage.',
+                            physical_examination: 'This donor is being processed in the Interviewer stage.',
+                            blood_collection: 'This donor is being processed in the Phlebotomist stage.'
+                        },
+                        onAllowed: proceed
+                    });
+                } else {
+                    proceed();
+                }
             }
+            const baseOpenDetails = openDetails;
+            openDetails = function(donorId, eligibilityId) {
+                if (!donorId) return;
+                const proceed = () => baseOpenDetails(donorId, eligibilityId);
+                if (window.AccessLockGuard) {
+                    AccessLockGuard.ensureAccess({
+                        scope: ['blood_collection', 'medical_history', 'physical_examination'],
+                        donorId,
+                        lockValue: 2,
+                        message: 'This donor is currently being processed by a staff account. Please try again later.',
+                        onAllowed: proceed
+                    });
+                } else {
+                    proceed();
+                }
+            };
             // Explicit listeners (replicates previous working approach)
             document.querySelectorAll('.view-donor').forEach(function(btn){
                 btn.addEventListener('click', function(e){
@@ -8432,5 +8479,28 @@ function getCacheStats() {
     // NOTE: Mobile credentials modal is NOT shown on dashboards
     // It should ONLY appear on the declaration form when registering a new donor
     ?>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window.AccessLockManager) {
+                window.AccessLockManager.init({
+                    role: 'admin',
+                    scopes: ['blood_collection', 'medical_history', 'physical_examination'],
+                    guardSelectors: ['.view-donor', '.circular-btn', 'button[data-donor-id]', 'button[data-eligibility-id]'],
+                    endpoint: '../../assets/php_func/access_lock_manager.php'
+                });
+            }
+            window.currentAdminDonorId = null;
+            ['donorModal', 'donorDetailsModal'].forEach(function(modalId) {
+                const modal = document.getElementById(modalId);
+                if (!modal) return;
+                modal.addEventListener('hidden.bs.modal', function () {
+                    window.currentAdminDonorId = null;
+                    if (window.AccessLockManager) {
+                        window.AccessLockManager.deactivate();
+                    }
+                });
+            });
+        });
+    </script>
 </body>
 </html>

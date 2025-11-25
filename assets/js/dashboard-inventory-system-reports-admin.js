@@ -7,6 +7,8 @@
     let forecastMonths = [];
     let currentMonths = [];
     let isLoading = false;
+    let trendlineData = {}; // NEW: Trendline data for visualization
+    let projectedStock = []; // NEW: Projected stock with buffer information
 
     const pageSize = 8; // Show all blood types (A+, A-, B+, B-, O+, O-, AB+, AB-)
     let currentPage = 1;
@@ -56,6 +58,8 @@
                 };
                 forecastMonths = data.forecast_months || []; // Future months = forecasts
                 currentMonths = data.all_months || data.historical_months || data.current_months || []; // All database months for display
+                trendlineData = data.trendline_data || {}; // NEW: Extract trendline data
+                projectedStock = data.projected_stock || []; // NEW: Extract projected stock with buffer
                 
                 // Debug: Log received data
                 console.log('Received forecast data:', data);
@@ -95,6 +99,13 @@
                 // Small delay to ensure DOM is ready
                 setTimeout(() => {
                     initCharts();
+                    // NEW: Initialize buffer and trendline visualizations
+                    if (Object.keys(trendlineData).length > 0) {
+                        initTrendlineCharts();
+                    }
+                    if (projectedStock.length > 0) {
+                        initBufferVisualization();
+                    }
                 }, 100);
             } else {
                 console.error('API Error:', data.error);
@@ -2297,6 +2308,408 @@
             console.error('Error generating forecast analysis:', error);
             return `<div class="section"><h3>Forecast Analysis</h3><p>Error generating analysis: ${error.message}</p></div>`;
         }
+    }
+
+    // NEW: Initialize trendline charts (Supply, Demand, Combined)
+    function initTrendlineCharts() {
+        if (!trendlineData || Object.keys(trendlineData).length === 0) {
+            console.log('No trendline data available');
+            return;
+        }
+        
+        console.log('Initializing trendline charts with data:', trendlineData);
+        
+        // Create container for trendline charts if it doesn't exist
+        let trendlineContainer = document.getElementById('trendlineChartsContainer');
+        if (!trendlineContainer) {
+            trendlineContainer = document.createElement('div');
+            trendlineContainer.id = 'trendlineChartsContainer';
+            trendlineContainer.className = 'row g-3 mb-3';
+            trendlineContainer.innerHTML = `
+                <div class="col-12">
+                    <div class="card chart-card p-3">
+                        <h6>🩸 2025 Blood Supply & 3-Month Forecast by Blood Type</h6>
+                        <canvas id="supplyTrendlineChart" height="400"></canvas>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="card chart-card p-3">
+                        <h6>📊 2025 Hospital Blood Requests & 3-Month Forecast by Blood Type</h6>
+                        <canvas id="demandTrendlineChart" height="400"></canvas>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="card chart-card p-3">
+                        <h6>🩸 2025 Supply vs Demand Trend & 3-Month Forecast by Blood Type</h6>
+                        <canvas id="combinedTrendlineChart" height="400"></canvas>
+                    </div>
+                </div>
+            `;
+            // Insert after the existing line chart
+            const lineChartCard = document.querySelector('.chart-card');
+            if (lineChartCard && lineChartCard.parentElement) {
+                lineChartCard.parentElement.parentElement.insertAdjacentElement('afterend', trendlineContainer);
+            }
+        }
+        
+        // Initialize supply trendline chart
+        initSupplyTrendlineChart();
+        
+        // Initialize demand trendline chart
+        initDemandTrendlineChart();
+        
+        // Initialize combined trendline chart
+        initCombinedTrendlineChart();
+    }
+    
+    // NEW: Initialize supply trendline chart
+    function initSupplyTrendlineChart() {
+        const ctx = document.getElementById('supplyTrendlineChart');
+        if (!ctx) return;
+        
+        const bloodTypes = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+        const datasets = [];
+        
+        bloodTypes.forEach((bt, index) => {
+            const trendData = trendlineData.supply_trendlines?.[bt];
+            if (!trendData) return;
+            
+            // Actual 2025 data
+            const actualData = trendData.actual_2025 || [];
+            if (actualData.length > 0) {
+                datasets.push({
+                    label: `${bt} - Actual (2025)`,
+                    data: actualData.map(item => ({ x: item.month, y: item.value })),
+                    borderColor: index === 0 ? 'steelblue' : `hsl(${index * 45}, 70%, 50%)`,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    pointRadius: 6,
+                    showLine: true
+                });
+            }
+            
+            // Forecast 3 months
+            const forecastData = trendData.forecast_3months || [];
+            if (forecastData.length > 0) {
+                datasets.push({
+                    label: `${bt} - Forecast (3 months)`,
+                    data: forecastData.map(item => ({ x: item.month, y: item.value })),
+                    borderColor: index === 0 ? 'tomato' : `hsl(${index * 45 + 180}, 70%, 50%)`,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 6,
+                    pointStyle: 'diamond',
+                    showLine: true
+                });
+            }
+        });
+        
+        if (datasets.length === 0) return;
+        
+        new Chart(ctx, {
+            type: 'line',
+            data: { datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: 'month' },
+                        title: { display: true, text: 'Month' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Units Collected' },
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: { display: true, position: 'top' },
+                    tooltip: { mode: 'index', intersect: false }
+                }
+            }
+        });
+    }
+    
+    // NEW: Initialize demand trendline chart
+    function initDemandTrendlineChart() {
+        const ctx = document.getElementById('demandTrendlineChart');
+        if (!ctx) return;
+        
+        const bloodTypes = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+        const datasets = [];
+        
+        bloodTypes.forEach((bt, index) => {
+            const trendData = trendlineData.demand_trendlines?.[bt];
+            if (!trendData) return;
+            
+            // Actual 2025 data
+            const actualData = trendData.actual_2025 || [];
+            if (actualData.length > 0) {
+                datasets.push({
+                    label: `${bt} - Actual Requests`,
+                    data: actualData.map(item => ({ x: item.month, y: item.value })),
+                    borderColor: index === 0 ? 'indianred' : `hsl(${index * 45}, 70%, 50%)`,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    pointRadius: 6,
+                    showLine: true
+                });
+            }
+            
+            // Forecast 3 months
+            const forecastData = trendData.forecast_3months || [];
+            if (forecastData.length > 0) {
+                datasets.push({
+                    label: `${bt} - Forecast Requests`,
+                    data: forecastData.map(item => ({ x: item.month, y: item.value })),
+                    borderColor: index === 0 ? 'indianred' : `hsl(${index * 45 + 180}, 70%, 50%)`,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 6,
+                    pointStyle: 'diamond',
+                    showLine: true
+                });
+            }
+        });
+        
+        if (datasets.length === 0) return;
+        
+        new Chart(ctx, {
+            type: 'line',
+            data: { datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: 'month' },
+                        title: { display: true, text: 'Month' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Pints Requested (units)' },
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: { display: true, position: 'top' },
+                    tooltip: { mode: 'index', intersect: false }
+                }
+            }
+        });
+    }
+    
+    // NEW: Initialize combined supply vs demand trendline chart
+    function initCombinedTrendlineChart() {
+        const ctx = document.getElementById('combinedTrendlineChart');
+        if (!ctx) return;
+        
+        const bloodTypes = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+        const datasets = [];
+        
+        bloodTypes.forEach((bt, index) => {
+            const trendData = trendlineData.combined_trendlines?.[bt];
+            if (!trendData) return;
+            
+            // Supply actual
+            const supplyActual = trendData.supply_actual_2025 || [];
+            if (supplyActual.length > 0) {
+                datasets.push({
+                    label: `${bt} - Supply Actual`,
+                    data: supplyActual.map(item => ({ x: item.month, y: item.value })),
+                    borderColor: 'mediumseagreen',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2.5,
+                    pointRadius: 7,
+                    pointStyle: 'circle',
+                    showLine: true
+                });
+            }
+            
+            // Supply forecast
+            const supplyForecast = trendData.supply_forecast_3months || [];
+            if (supplyForecast.length > 0) {
+                datasets.push({
+                    label: `${bt} - Supply Forecast`,
+                    data: supplyForecast.map(item => ({ x: item.month, y: item.value })),
+                    borderColor: 'mediumseagreen',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2.5,
+                    borderDash: [5, 5],
+                    pointRadius: 8,
+                    pointStyle: 'diamond',
+                    showLine: true
+                });
+            }
+            
+            // Demand actual
+            const demandActual = trendData.demand_actual_2025 || [];
+            if (demandActual.length > 0) {
+                datasets.push({
+                    label: `${bt} - Demand Actual`,
+                    data: demandActual.map(item => ({ x: item.month, y: item.value })),
+                    borderColor: 'indianred',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2.5,
+                    pointRadius: 7,
+                    pointStyle: 'circle',
+                    showLine: true
+                });
+            }
+            
+            // Demand forecast
+            const demandForecast = trendData.demand_forecast_3months || [];
+            if (demandForecast.length > 0) {
+                datasets.push({
+                    label: `${bt} - Demand Forecast`,
+                    data: demandForecast.map(item => ({ x: item.month, y: item.value })),
+                    borderColor: 'indianred',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2.5,
+                    borderDash: [5, 5],
+                    pointRadius: 8,
+                    pointStyle: 'diamond',
+                    showLine: true
+                });
+            }
+        });
+        
+        if (datasets.length === 0) return;
+        
+        new Chart(ctx, {
+            type: 'line',
+            data: { datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: 'month' },
+                        title: { display: true, text: 'Month' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Blood Units' },
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: { display: true, position: 'top' },
+                    tooltip: { mode: 'index', intersect: false }
+                }
+            }
+        });
+    }
+    
+    // NEW: Initialize buffer visualization (Stock Level with Target Buffer)
+    function initBufferVisualization() {
+        if (!projectedStock || projectedStock.length === 0) {
+            console.log('No projected stock data available');
+            return;
+        }
+        
+        console.log('Initializing buffer visualization with data:', projectedStock);
+        
+        // Create container for buffer chart if it doesn't exist
+        let bufferContainer = document.getElementById('bufferChartContainer');
+        if (!bufferContainer) {
+            bufferContainer = document.createElement('div');
+            bufferContainer.id = 'bufferChartContainer';
+            bufferContainer.className = 'row g-3 mb-3';
+            bufferContainer.innerHTML = `
+                <div class="col-12">
+                    <div class="card chart-card p-3">
+                        <h6>🎯 Projected Stock Level vs Target Buffer (Next Month)</h6>
+                        <p class="text-muted small mb-2">Target Buffer: 25% of forecasted demand</p>
+                        <canvas id="bufferChart" height="400"></canvas>
+                    </div>
+                </div>
+            `;
+            // Insert after trendline charts
+            const trendlineContainer = document.getElementById('trendlineChartsContainer');
+            if (trendlineContainer) {
+                trendlineContainer.insertAdjacentElement('afterend', bufferContainer);
+            } else {
+                // Fallback: insert after existing charts
+                const chartsRow = document.querySelector('.charts-row');
+                if (chartsRow && chartsRow.parentElement) {
+                    chartsRow.parentElement.insertBefore(bufferContainer, chartsRow);
+                }
+            }
+        }
+        
+        const ctx = document.getElementById('bufferChart');
+        if (!ctx) return;
+        
+        const bloodTypes = projectedStock.map(item => item['Blood Type'] || item.blood_type);
+        const projectedLevels = projectedStock.map(item => item['Projected Stock Level (Next Month)'] || item.projected_balance || 0);
+        const targetLevels = projectedStock.map(item => item['Target Stock Level'] || item.target_stock_level || 0);
+        const bufferStatuses = projectedStock.map(item => item['Buffer Status'] || item.buffer_status || '🟢 Above Target (Safe)');
+        
+        // Color mapping based on buffer status
+        const backgroundColors = bufferStatuses.map(status => {
+            if (status.includes('🟢') || status.includes('Above Target')) return 'mediumseagreen';
+            if (status.includes('🟡') || status.includes('Below Target')) return 'orange';
+            if (status.includes('🔴') || status.includes('Critical')) return 'darkred';
+            return 'gray';
+        });
+        
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: bloodTypes,
+                datasets: [
+                    {
+                        label: 'Projected Stock Level',
+                        data: projectedLevels,
+                        backgroundColor: backgroundColors,
+                        borderColor: backgroundColors,
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Target Stock Level',
+                        data: targetLevels,
+                        type: 'scatter',
+                        backgroundColor: 'darkblue',
+                        borderColor: 'darkblue',
+                        pointRadius: 8,
+                        pointStyle: 'diamond',
+                        showLine: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        title: { display: true, text: 'Stock Level (Units)' },
+                        beginAtZero: true
+                    },
+                    x: {
+                        title: { display: true, text: 'Blood Type' }
+                    }
+                },
+                plugins: {
+                    legend: { display: true, position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            afterLabel: function(context) {
+                                const index = context.dataIndex;
+                                const item = projectedStock[index];
+                                return [
+                                    `Buffer Gap: ${item['Buffer Gap'] || item.buffer_gap || 0}`,
+                                    `Status: ${item['Buffer Status'] || item.buffer_status || 'N/A'}`
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+        });
     }
 
 })();

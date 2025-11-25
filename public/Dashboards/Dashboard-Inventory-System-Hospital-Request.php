@@ -3,6 +3,7 @@ session_start();
 require_once '../../assets/conn/db_conn.php';
 require_once 'module/optimized_functions.php';
 require_once '../../assets/php_func/admin_hospital_request_priority_handler.php';
+require_once '../../assets/php_func/buffer_blood_manager.php';
 // Send short-term caching headers for better performance on slow networks
 header('Cache-Control: public, max-age=180, stale-while-revalidate=60');
 header('Vary: Accept-Encoding');
@@ -288,6 +289,9 @@ $offset = ($page - 1) * $page_size;
 $total_count = 0;
 $blood_requests = fetchAllBloodRequests($page_size, $offset, $total_count);
 $total_pages = $total_count > 0 ? ceil($total_count / $page_size) : 1;
+
+$bufferContext = getBufferBloodContext();
+$bufferReserveCount = $bufferContext['count'];
 
 // Batch fetch handed-over user names to avoid N+1 queries
 $handed_over_name_map = [];
@@ -584,6 +588,23 @@ body {
     margin: 0;
     padding: 0;
     font-family: Arial, sans-serif;
+}
+.buffer-row {
+    background-color: #fffdf0 !important;
+}
+.buffer-row td {
+    border-top: 1px solid #fde9a5 !important;
+}
+.buffer-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 6px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: #f7d774;
+    color: #7a4a00;
 }
 /* Reduce Left Margin for Main Content */
 main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
@@ -2141,6 +2162,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     <!-- Blood Units Table -->
                     <div class="mb-4">
                         <h5 style="font-weight: bold; color: #333; margin-bottom: 20px;">Blood Units to Hand Over</h5>
+                        <div class="alert alert-warning d-none" id="handoverBufferWarning" role="alert" style="border-radius: 6px;">
+                            <i class="fas fa-shield-alt me-2"></i>
+                            <span id="handoverBufferWarningText">Buffer units will be used for this handover.</span>
+                        </div>
                         
                         <div class="table-responsive">
                             <table class="table table-bordered" style="margin: 0;">
@@ -2217,6 +2242,19 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
       </div>
     </div>
     
+    <?php
+        $bufferJsPayload = [
+            'count' => $bufferReserveCount,
+            'unit_ids' => array_keys($bufferContext['buffer_lookup']['by_id']),
+            'unit_serials' => array_keys($bufferContext['buffer_lookup']['by_serial']),
+            'types' => $bufferContext['buffer_types'],
+            'page' => 'hospital-requests'
+        ];
+    ?>
+    <script>
+        window.BUFFER_BLOOD_CONTEXT = <?php echo json_encode($bufferJsPayload); ?>;
+    </script>
+    <script src="../../assets/js/buffer-blood-manager.js"></script>
     <!-- jQuery first (if needed) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <!-- Popper.js -->
@@ -2442,6 +2480,22 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         document.getElementById('handoverHospitalName').textContent = data.request.hospital_admitted || 'Hospital';
         document.getElementById('handoverHospitalDetails').textContent = `Request ID: ${data.request.request_id} | Patient: ${data.request.patient_name}`;
         
+        const bufferWarning = document.getElementById('handoverBufferWarning');
+        const bufferWarningText = document.getElementById('handoverBufferWarningText');
+        if (bufferWarning) {
+            if (data.buffer_usage && data.buffer_usage.used) {
+                bufferWarning.classList.remove('d-none');
+                if (bufferWarningText) {
+                    bufferWarningText.textContent = data.buffer_usage.message;
+                }
+                if (window.BufferBloodToolkit && typeof window.BufferBloodToolkit.showToast === 'function') {
+                    window.BufferBloodToolkit.showToast(data.buffer_usage.message);
+                }
+            } else {
+                bufferWarning.classList.add('d-none');
+            }
+        }
+        
         // Set summary information
         document.getElementById('handoverRequestId').textContent = data.request.request_id;
         document.getElementById('handoverPatientName').textContent = data.request.patient_name;
@@ -2464,13 +2518,18 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         if (data.blood_units && data.blood_units.length > 0) {
             data.blood_units.forEach((unit, index) => {
                 const row = document.createElement('tr');
+                if (unit.is_buffer) {
+                    row.classList.add('buffer-row');
+                }
+                const statusClass = unit.is_buffer ? 'bg-warning text-dark' : 'bg-success';
+                const bufferLabel = unit.is_buffer ? '<span class="buffer-badge ms-1">Buffer</span>' : '';
                 row.innerHTML = `
-                    <td style="padding: 12px; text-align: center; font-weight: bold;">${unit.serial_number}</td>
+                    <td style="padding: 12px; text-align: center; font-weight: bold;">${unit.serial_number || '-'} ${bufferLabel}</td>
                     <td style="padding: 12px; text-align: center;">${unit.blood_type}</td>
                     <td style="padding: 12px; text-align: center;">${unit.bag_type}</td>
                     <td style="padding: 12px; text-align: center;">${unit.expiration_date}</td>
                     <td style="padding: 12px; text-align: center;">
-                        <span class="badge bg-success">${unit.status}</span>
+                        <span class="badge ${statusClass}">${unit.status}</span>
                     </td>
                 `;
                 tableBody.appendChild(row);

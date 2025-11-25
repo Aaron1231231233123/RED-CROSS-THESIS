@@ -206,7 +206,7 @@ class PhysicalExaminationModal {
         this.screeningData = screeningData;
         this.resetForm();
         this.isReadonly = false;
-        
+
         // Ensure any parent modal (e.g., donor profile) is closed before showing PE to avoid stacked backdrops
         try {
             const dpEl = document.getElementById('donorProfileModal');
@@ -1285,6 +1285,7 @@ class PhysicalExaminationModal {
                     variant: 'success',
                     durationMs: 1800
                 });
+                try { window.__holdPhysAccessLock = true; } catch(_) {}
                 this.redirectToDonorProfile(donorId, this.screeningData);
             } else {
                 const errMsg = (result && (result.message || result.error)) || 'Submission failed';
@@ -1362,85 +1363,153 @@ class PhysicalExaminationModal {
     async redirectToDonorProfile(donorId, screeningData) {
         try { 
             window.__peSuccessActive = false; 
-            window.__mhSuccessActive = false; // Clear medical history success state
+            window.__mhSuccessActive = false;
         } catch(_) {}
         
-        // Clean up all modals properly
-        try {
-            document.querySelectorAll('.modal.show').forEach(el => {
-                try { 
-                    const modalInstance = bootstrap.Modal.getInstance(el);
-                    if (modalInstance) modalInstance.hide();
-                } catch(_) {}
-            });
-            // Only remove backdrops if no other modals are open
-            const otherModals = document.querySelectorAll('.modal.show:not(#physicalExaminationModal)');
-            if (otherModals.length === 0) {
-                // Avoid force-removing backdrops globally
-                document.body.classList.remove('modal-open');
-                document.body.style.overflow = '';
-                document.body.style.paddingRight = '';
-            }
-        } catch(_) {}
-        
-        // Store context for reopening
-        const ctx = { donorId: String(donorId), screeningData: screeningData };
-        if (donorId) {
+        const ctx = { donorId: donorId ? String(donorId) : null, screeningData: screeningData || null };
+        if (ctx.donorId) {
             try { 
                 window.lastDonorProfileContext = ctx; 
-                window.__peLastDonorId = String(donorId);
+                window.__peLastDonorId = ctx.donorId;
             } catch(_) {}
         }
         
-        // Hide PE modal first
-        try { window.__peRedirecting = true; } catch(_) {}
-        try {
-            const pe = document.getElementById('physicalExaminationModal');
-            if (pe) {
-                const inst = bootstrap.Modal.getInstance(pe) || bootstrap.Modal.getOrCreateInstance(pe);
-                try { inst.hide(); } catch(_) {}
+        const waitForPEToHide = () => new Promise((resolve) => {
+            try {
+                const peEl = document.getElementById('physicalExaminationModal');
+                if (!peEl) {
+                    resolve();
+                    return;
+                }
+                let resolved = false;
+                const finish = () => {
+                    if (resolved) return;
+                    resolved = true;
+                    peEl.removeEventListener('hidden.bs.modal', finish, true);
+                    setTimeout(resolve, 60);
+                };
+                const isVisible = peEl.classList.contains('show') || peEl.style.display === 'block';
+                if (isVisible) {
+                    peEl.addEventListener('hidden.bs.modal', finish, true);
+                    const inst = bootstrap.Modal.getInstance(peEl) || bootstrap.Modal.getOrCreateInstance(peEl);
+                    try { inst.hide(); } catch(_) { finish(); }
+                    setTimeout(() => {
+                        if (resolved) return;
+                        try {
+                            peEl.classList.remove('show');
+                            peEl.style.display = 'none';
+                            peEl.setAttribute('aria-hidden', 'true');
+                        } catch(_) {}
+                        finish();
+                    }, 400);
+                } else {
+                    finish();
+                }
+            } catch(_) {
+                resolve();
             }
-        } catch(_) {}
+        });
+
+        const forceClosePhysicalModal = () => {
+            try {
+                const peEl = document.getElementById('physicalExaminationModal');
+                if (peEl) {
+                    peEl.classList.remove('show');
+                    peEl.style.display = 'none';
+                    peEl.setAttribute('aria-hidden', 'true');
+                    peEl.removeAttribute('aria-modal');
+                    peEl.dataset.releaseLock = '0';
+                }
+                const inst = peEl ? (bootstrap.Modal.getInstance(peEl) || null) : null;
+                if (inst) {
+                    try { inst._isShown = false; } catch(_) {}
+                }
+            } catch(_) {}
+        };
         
-        // Check if physical examination is approved/accepted
+        const normalizeBodyState = () => {
+            try {
+                const anyOpen = document.querySelector('.modal.show');
+                if (!anyOpen) {
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+                }
+            } catch(_) {}
+        };
+        
+        const finalizeNavFlags = () => {
+            setTimeout(() => {
+                try {
+                    window.__sidebarNavigationActive = false;
+                    window.__explicitDonorProfileOpen = false;
+                    window.__navigationTarget = null;
+                } catch(_) {}
+            }, 3500);
+        };
+        
+        const openDonorProfileFallback = () => {
+            try {
+                window.__preventDonorProfileOpen = false;
+                window.__explicitDonorProfileOpen = true;
+                window.__navigationTarget = 'donor-profile';
+                window.__sidebarNavigationActive = false;
+            } catch(_) {}
+            
+            const targetScreening = ctx.screeningData || (window.lastDonorProfileContext && window.lastDonorProfileContext.screeningData) || (ctx.donorId ? { donor_form_id: ctx.donorId } : null);
+            if (typeof openDonorProfileModal === 'function' && targetScreening) {
+                openDonorProfileModal(targetScreening);
+            } else {
+                const dpEl = document.getElementById('donorProfileModal');
+                if (dpEl) {
+                    const dp = bootstrap.Modal.getOrCreateInstance(dpEl, { backdrop: 'static', keyboard: false });
+                    dp.show();
+                }
+            }
+            
+            if (ctx && ctx.donorId && typeof refreshDonorProfileModal === 'function') {
+                setTimeout(() => { try { refreshDonorProfileModal(ctx); } catch(_) {} }, 150);
+            }
+            
+            finalizeNavFlags();
+        };
+        
+        const showSummaryOrProfile = (isApproved) => {
+            if (isApproved && typeof openPhysicalExaminationSummaryModal === 'function' && ctx.donorId) {
+                openPhysicalExaminationSummaryModal(ctx.donorId);
+                finalizeNavFlags();
+            } else {
+                openDonorProfileFallback();
+            }
+        };
+        
+        try { window.__peRedirecting = true; } catch(_) {}
+        await waitForPEToHide();
+        forceClosePhysicalModal();
+        normalizeBodyState();
+        
         try {
-            const apiCall = typeof makeApiCall === 'function' ? makeApiCall : async (url, options) => {
-                const response = await fetch(url, options);
-                return await response.json();
-            };
+            const apiCall = typeof makeApiCall === 'function'
+                ? makeApiCall
+                : async (url, options) => {
+                    const response = await fetch(url, options);
+                    return await response.json();
+                };
             
-            const peData = await apiCall(`../../public/api/get-physical-examination.php?donor_id=${donorId}&_=${Date.now()}`);
+            const peData = await apiCall(`../../public/api/get-physical-examination.php?donor_id=${ctx.donorId || donorId}&_=${Date.now()}`);
             
-            // Check if physical examination is approved (remarks === 'Accepted' or status indicates approval)
-            const isApproved = peData && peData.success && peData.physical_exam && 
-                              (peData.physical_exam.remarks === 'Accepted' || 
-                               peData.physical_exam.status === 'Approved' ||
-                               peData.physical_exam.status === 'approved');
+            const isApproved = !!(peData && peData.success && peData.physical_exam && 
+                (peData.physical_exam.remarks === 'Accepted' ||
+                 peData.physical_exam.status === 'Approved' ||
+                 peData.physical_exam.status === 'approved'));
             
             setTimeout(() => {
-                if (isApproved && typeof openPhysicalExaminationSummaryModal === 'function') {
-                    // Redirect to summary modal if approved
-                    openPhysicalExaminationSummaryModal(donorId);
-                } else {
-                    // Otherwise redirect to donor profile
-                    const dpEl = document.getElementById('donorProfileModal');
-                    if (!dpEl) return;
-                    const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
-                    dp.show();
-                    // Refresh content after show
-                    setTimeout(() => { try { refreshDonorProfileModal(ctx); } catch(_) {} }, 120);
-                }
+                showSummaryOrProfile(isApproved);
                 try { window.__peRedirecting = false; } catch(_) {}
             }, 120);
         } catch(error) {
-            // If check fails, default to donor profile
             setTimeout(() => {
-                const dpEl = document.getElementById('donorProfileModal');
-                if (!dpEl) return;
-                const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
-                dp.show();
-                // Refresh content after show
-                setTimeout(() => { try { refreshDonorProfileModal(ctx); } catch(_) {} }, 120);
+                openDonorProfileFallback();
                 try { window.__peRedirecting = false; } catch(_) {}
             }, 120);
         }

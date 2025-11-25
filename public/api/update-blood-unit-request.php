@@ -3,6 +3,7 @@
 session_start();
 require_once '../../assets/conn/db_conn.php';
 require_once '../Dashboards/module/optimized_functions.php';
+require_once '../../assets/php_func/buffer_blood_manager.php';
 
 // Set headers for JSON response
 header('Content-Type: application/json');
@@ -40,6 +41,11 @@ try {
         }
     }
     
+    $bufferContext = getBufferBloodContext();
+    $unitResponse = supabaseRequest("blood_bank_units?select=unit_id,unit_serial_number,blood_type&unit_id=eq." . $unit_id);
+    $unitData = isset($unitResponse['data'][0]) ? $unitResponse['data'][0] : null;
+    $isBufferUnit = $unitData ? isBufferUnitFromLookup($unitData, $bufferContext['buffer_lookup']) : false;
+    
     // Update the blood unit to mark as handed over and assign to request
     $update_data = [
         'status' => 'handed_over',
@@ -66,6 +72,13 @@ try {
     );
     
     if ($response['code'] >= 200 && $response['code'] < 300) {
+        if ($isBufferUnit && $unitData) {
+            logBufferUsageEvent([[
+                'unit_id' => $unit_id,
+                'serial_number' => $unitData['unit_serial_number'] ?? '',
+                'blood_type' => $unitData['blood_type'] ?? ''
+            ]], $request_id, $_SESSION['user_id'] ?? null, 'handover');
+        }
         echo json_encode(['success' => true, 'message' => 'Blood unit updated successfully', 'updated' => $response['data']]);
     } else {
         $errorMsg = 'Failed to update blood unit. HTTP Code: ' . $response['code'];

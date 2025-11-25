@@ -442,6 +442,7 @@ foreach ($display_records as $index => $record) {
     <script src="../../assets/js/search_func/search_account_blood_collection.js"></script>
     <script src="../../assets/js/search_func/filter_search_account_blood_collection.js"></script>
     <script src="../../assets/js/search_func/sort_account_blood_collection.js"></script>
+    <script src="../../assets/js/access-lock-guard-phleb.js"></script>
     <style>
         :root {
             --bg-color: #f5f5f5;
@@ -2127,7 +2128,8 @@ foreach ($display_records as $index => $record) {
                                             'middle_name' => $donor_form['middle_name'] ?? '',
                                             'birthdate' => $donor_form['birthdate'] ?? '',
                                             'age' => $donor_form['age'] ?? '',
-                                            'prc_donor_number' => $donor_form['prc_donor_number'] ?? ''
+                                            'prc_donor_number' => $donor_form['prc_donor_number'] ?? '',
+                                            'blood_collection_id' => $bc['blood_collection_id'] ?? null
                                         ];
                                         $data_exam = htmlspecialchars(json_encode($modal_data, JSON_UNESCAPED_UNICODE));
                                         
@@ -2859,6 +2861,44 @@ foreach ($display_records as $index => $record) {
             // Clear search box to ensure no filters are applied
             searchInput.value = '';
             
+            function showCollectionConfirmation() {
+                if (!currentCollectionData) return;
+                const modalDonorId = document.getElementById('modal-donor-id');
+                if (modalDonorId && currentCollectionData.prc_donor_number) {
+                    const donorNumber = currentCollectionData.prc_donor_number.startsWith('PRC-')
+                        ? currentCollectionData.prc_donor_number.substring(4)
+                        : currentCollectionData.prc_donor_number;
+                    modalDonorId.textContent = donorNumber;
+                } else if (modalDonorId) {
+                    modalDonorId.textContent = currentCollectionData.donor_id || 'Unknown';
+                }
+
+                confirmationDialog.classList.remove("hide");
+                confirmationDialog.classList.add("show");
+                confirmationDialog.style.display = "block";
+            }
+
+            function guardCollectionAccess(callback) {
+                if (typeof callback !== 'function') {
+                    return;
+                }
+                if (!currentCollectionData) {
+                    callback();
+                    return;
+                }
+                if (window.PhlebAccessLock) {
+                    PhlebAccessLock.ensureAccess(currentCollectionData)
+                        .then((allowed) => {
+                            if (allowed) {
+                                callback();
+                            }
+                        })
+                        .catch(() => callback());
+                } else {
+                    callback();
+                }
+            }
+
             // Attach click event to all rows and collect buttons
             function attachRowClickHandlers() {
                 document.querySelectorAll(".clickable-row").forEach(row => {
@@ -2875,22 +2915,9 @@ foreach ($display_records as $index => $record) {
                         }
                         
                         currentCollectionData = JSON.parse(this.dataset.examination);
+                        window.currentCollectionData = currentCollectionData;
                         
-                        // Update modal with donor information
-                        const modalDonorId = document.getElementById('modal-donor-id');
-                        if (modalDonorId && currentCollectionData.prc_donor_number) {
-                            // Remove "PRC-" prefix if present
-                            const donorNumber = currentCollectionData.prc_donor_number.startsWith('PRC-') 
-                                ? currentCollectionData.prc_donor_number.substring(4) 
-                                : currentCollectionData.prc_donor_number;
-                            modalDonorId.textContent = donorNumber;
-                        } else if (modalDonorId) {
-                            modalDonorId.textContent = currentCollectionData.donor_id || 'Unknown';
-                        }
-                        
-                        confirmationDialog.classList.remove("hide");
-                        confirmationDialog.classList.add("show");
-                        confirmationDialog.style.display = "block";
+                        guardCollectionAccess(showCollectionConfirmation);
                     });
                 });
                 
@@ -2900,23 +2927,9 @@ foreach ($display_records as $index => $record) {
                         e.stopPropagation(); // Prevent row click
                         try {
                             currentCollectionData = JSON.parse(this.getAttribute('data-examination'));
+                            window.currentCollectionData = currentCollectionData;
                             console.log("Selected record for collection:", currentCollectionData);
-                            
-                            // Update modal with donor information
-                            const modalDonorId = document.getElementById('modal-donor-id');
-                            if (modalDonorId && currentCollectionData.prc_donor_number) {
-                                // Remove "PRC-" prefix if present
-                                const donorNumber = currentCollectionData.prc_donor_number.startsWith('PRC-') 
-                                    ? currentCollectionData.prc_donor_number.substring(4) 
-                                    : currentCollectionData.prc_donor_number;
-                                modalDonorId.textContent = donorNumber;
-                            } else if (modalDonorId) {
-                                modalDonorId.textContent = currentCollectionData.donor_id || 'Unknown';
-                            }
-                            
-                            confirmationDialog.classList.remove("hide");
-                            confirmationDialog.classList.add("show");
-                            confirmationDialog.style.display = "block";
+                            guardCollectionAccess(showCollectionConfirmation);
                         } catch (e) {
                             console.error("Error parsing examination data:", e);
                             alert("Error selecting this record. Please try again.");
@@ -2926,6 +2939,37 @@ foreach ($display_records as $index => $record) {
             }
 
             attachRowClickHandlers();
+            function attachModalLockReleaseHandler() {
+                if (!window.PhlebAccessLock || !window.bloodCollectionModal || window.bloodCollectionModal.__phlebLockWrapped) {
+                    return;
+                }
+                const originalClose = window.bloodCollectionModal.closeModal.bind(window.bloodCollectionModal);
+                window.bloodCollectionModal.closeModal = function(...args) {
+                    try {
+                        if (window.PhlebAccessLock) {
+                            window.PhlebAccessLock.releaseLock();
+                        }
+                    } catch (err) {
+                        console.warn('Failed to release phlebotomist lock on close', err);
+                    }
+                    return originalClose(...args);
+                };
+                window.bloodCollectionModal.__phlebLockWrapped = true;
+            }
+
+            attachModalLockReleaseHandler();
+            let modalLockAttempts = 0;
+            const modalReadyInterval = setInterval(() => {
+                if (window.bloodCollectionModal && window.bloodCollectionModal.__phlebLockWrapped) {
+                    clearInterval(modalReadyInterval);
+                    return;
+                }
+                modalLockAttempts++;
+                attachModalLockReleaseHandler();
+                if (modalLockAttempts > 10) {
+                    clearInterval(modalReadyInterval);
+                }
+            }, 300);
             
             // Attach click event to view buttons
             document.addEventListener('click', function(e) {
@@ -2984,6 +3028,9 @@ foreach ($display_records as $index => $record) {
                 
                 // Auto-reload after 2 seconds
                 setTimeout(() => {
+                    if (window.PhlebAccessLock) {
+                        window.PhlebAccessLock.releaseLock();
+                    }
                     window.location.reload();
                 }, 2000);
             }
@@ -2995,19 +3042,33 @@ foreach ($display_records as $index => $record) {
                     return;
                 }
 
-                closeModal();
-                
-                // Open the Blood Collection modal
-                if (window.bloodCollectionModal) {
-                    window.bloodCollectionModal.openModal(currentCollectionData);
-                    // Auto-fill phlebotomist hidden field
-                    const phField = document.getElementById('blood-phlebotomist');
-                    if (phField && LOGGED_PHLEBOTOMIST) {
-                        phField.value = LOGGED_PHLEBOTOMIST;
+                const openCollectionForm = () => {
+                    closeModal();
+                    if (window.bloodCollectionModal) {
+                        window.bloodCollectionModal.openModal(currentCollectionData);
+                        const phField = document.getElementById('blood-phlebotomist');
+                        if (phField && LOGGED_PHLEBOTOMIST) {
+                            phField.value = LOGGED_PHLEBOTOMIST;
+                        }
+                    } else {
+                        console.error("Blood collection modal not initialized");
+                        alert("Error: Modal not properly initialized. Please refresh the page.");
                     }
+                };
+
+                const handleLockError = () => {
+                    alert('Unable to start blood collection right now. Please try again shortly.');
+                };
+
+                if (window.PhlebAccessLock) {
+                    PhlebAccessLock.claimLock(currentCollectionData)
+                        .then(openCollectionForm)
+                        .catch((error) => {
+                            console.error('Unable to claim blood collection lock', error);
+                            handleLockError();
+                        });
                 } else {
-                    console.error("Blood collection modal not initialized");
-                    alert("Error: Modal not properly initialized. Please refresh the page.");
+                    openCollectionForm();
                 }
             });
 

@@ -22,7 +22,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const isDeclarationFormOpen = declarationFormModal && declarationFormModal.classList.contains('show');
         
         if (isMedicalHistoryOpen || isDeclarationFormOpen) {
-            console.log('[Screening Modal] Skipping backdrop cleanup - other important modal is open');
             return;
         }
         
@@ -690,19 +689,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const specificGravityValue = specificGravityInput.value ? String(specificGravityInput.value).trim() : '';
             const bloodTypeValue = bloodTypeSelect.value ? String(bloodTypeSelect.value).trim() : '';
             
-            // Debug logging to help identify the issue
-            console.log('[Screening Validation Step 2]', {
-                bodyWeightInput: bodyWeightInput.value,
-                bodyWeightValue: bodyWeightValue,
-                specificGravityInput: specificGravityInput.value,
-                specificGravityValue: specificGravityValue,
-                bloodTypeSelect: bloodTypeSelect.value,
-                bloodTypeValue: bloodTypeValue,
-                bodyWeightEmpty: !bodyWeightValue,
-                specificGravityEmpty: !specificGravityValue,
-                bloodTypeEmpty: !bloodTypeValue
-            });
-            
             // Check required fields - must have non-empty values
             if (!bodyWeightValue || bodyWeightValue === '' || bodyWeightValue === '0') {
                 showAlert('Please enter a valid Body Weight value.', 'warning');
@@ -1105,8 +1091,15 @@ document.addEventListener('DOMContentLoaded', function() {
         window.currentScreeningData = formDataObj;
         
         // Close the screening modal
-        const screeningModalInstance = bootstrap.Modal.getInstance(document.getElementById('screeningFormModal'));
-        if (screeningModalInstance) {
+        const screeningModalEl = document.getElementById('screeningFormModal');
+        const screeningModalInstance = screeningModalEl ? bootstrap.Modal.getInstance(screeningModalEl) : null;
+        if (screeningModalEl) {
+            if (typeof window.hideModalKeepLock === 'function') {
+                window.hideModalKeepLock(screeningModalEl);
+            } else if (screeningModalInstance) {
+                screeningModalInstance.hide();
+            }
+        } else if (screeningModalInstance) {
             screeningModalInstance.hide();
         }
         
@@ -1145,8 +1138,6 @@ function openScreeningModal(donorData) {
 
     // Store donor data globally for form submission
     window.currentDonorData = donorData;
-    
-    //console.log('Opening screening modal for donor:', donorData.donor_id);
     
     // Clear form
     const form = document.getElementById('screeningForm');
@@ -1217,27 +1208,18 @@ function openScreeningModal(donorData) {
     
     // Also try prefill after a longer delay in case of timing issues
     setTimeout(() => {
-        //console.log('[Screening Modal] Delayed prefill attempt');
         prefillFromExisting();
     }, 500);
     
     // Direct auto-increment for Red Cross donations
     setTimeout(() => {
-        //console.log('[Direct Auto-Increment] Starting direct auto-increment...');
-        
         // Get the Red Cross input field
         const rcInput = document.querySelector('input[name="red-cross"]');
         if (rcInput) {
-            //console.log('[Direct Auto-Increment] Found RC input, current value:', rcInput.value);
-            
             // Get current value and increment it
             const currentValue = parseInt(rcInput.value) || 0;
             const newValue = currentValue + 1;
             rcInput.value = newValue;
-            
-            //console.log('[Direct Auto-Increment] Incremented RC from', currentValue, 'to', newValue);
-        } else {
-            //console.log('[Direct Auto-Increment] RC input not found!');
         }
     }, 200);
 } 
@@ -1293,8 +1275,6 @@ function prefillFromExisting() {
 
 // Handle defer donor functionality
 function handleDeferDonor() {
-    //console.log('Defer donor button clicked in screening form');
-    
     // Get donor ID from multiple sources - prioritize window.currentDonorData
     let donorId = null;
     
@@ -1323,8 +1303,6 @@ function handleDeferDonor() {
         alert('Error: No donor ID found. Please try again.');
         return;
     }
-    
-    //console.log('Opening defer modal for donor ID:', donorId);
     
     // Close the screening modal first
     const screeningModal = document.getElementById('screeningFormModal');

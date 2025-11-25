@@ -166,6 +166,124 @@ class ForecastReportsCalculator:
         """Aggregate data by blood type for charts"""
         return aggregate_data_by_blood_type(data)
     
+    def _generate_trendline_data(self, monthly_supply: Dict, monthly_demand: Dict,
+                                supply_forecasts: Dict, demand_forecasts: Dict,
+                                forecast_months: List[str], last_historical_month: datetime,
+                                projected_stock: Dict) -> Dict:
+        """
+        Generate trendline data structures matching R code (New code.R)
+        Creates data for: Supply trendlines, Demand trendlines, Combined, and Stock Level with Buffer
+        R code generates 3-month forecasts (h=3) for visualization
+        """
+        trendline_data = {
+            'supply_trendlines': {},
+            'demand_trendlines': {},
+            'combined_trendlines': {},
+            'stock_level_trendlines': {}
+        }
+        
+        # R code: Generate 3 months forecast (h = 3) for visualization
+        forecast_horizon = 3
+        
+        for bt in BLOOD_TYPES:
+            # ===== SUPPLY TRENDLINE DATA =====
+            # R code: Filter actual data to show only 2025
+            supply_actual_2025 = []
+            supply_forecast_2025 = []
+            
+            # Get actual supply data for 2025
+            for month_key in sorted(monthly_supply.keys()):
+                month_date = datetime.strptime(month_key, '%Y-%m-%d')
+                if month_date.year == 2025:
+                    value = monthly_supply[month_key].get(bt, 0)
+                    supply_actual_2025.append({
+                        'month': month_key,
+                        'value': value
+                    })
+            
+            # Get supply forecasts (3 months ahead, matching R's h=3)
+            supply_forecast_dict = supply_forecasts.get(bt, {})
+            if isinstance(supply_forecast_dict, dict):
+                supply_forecast_list = supply_forecast_dict.get('forecast', [])
+            else:
+                supply_forecast_list = supply_forecast_dict if isinstance(supply_forecast_dict, list) else []
+            
+            # Generate forecast months (3 months ahead)
+            for i in range(min(forecast_horizon, len(supply_forecast_list))):
+                if i < len(forecast_months):
+                    forecast_month = forecast_months[i]
+                    forecast_value = supply_forecast_list[i] if i < len(supply_forecast_list) else 0
+                    supply_forecast_2025.append({
+                        'month': forecast_month,
+                        'value': max(0, round(forecast_value))
+                    })
+            
+            trendline_data['supply_trendlines'][bt] = {
+                'actual_2025': supply_actual_2025,
+                'forecast_3months': supply_forecast_2025
+            }
+            
+            # ===== DEMAND TRENDLINE DATA =====
+            # R code: Filter actual data to show only 2025
+            demand_actual_2025 = []
+            demand_forecast_2025 = []
+            
+            # Get actual demand data for 2025
+            for month_key in sorted(monthly_demand.keys()):
+                month_date = datetime.strptime(month_key, '%Y-%m-%d')
+                if month_date.year == 2025:
+                    value = monthly_demand[month_key].get(bt, 0)
+                    demand_actual_2025.append({
+                        'month': month_key,
+                        'value': value
+                    })
+            
+            # Get demand forecasts (3 months ahead, matching R's h=3)
+            demand_forecast_dict = demand_forecasts.get(bt, {})
+            if isinstance(demand_forecast_dict, dict):
+                demand_forecast_list = demand_forecast_dict.get('forecast', [])
+            else:
+                demand_forecast_list = demand_forecast_dict if isinstance(demand_forecast_dict, list) else []
+            
+            # Generate forecast months (3 months ahead)
+            for i in range(min(forecast_horizon, len(demand_forecast_list))):
+                if i < len(forecast_months):
+                    forecast_month = forecast_months[i]
+                    forecast_value = demand_forecast_list[i] if i < len(demand_forecast_list) else 0
+                    demand_forecast_2025.append({
+                        'month': forecast_month,
+                        'value': max(0, round(forecast_value))
+                    })
+            
+            trendline_data['demand_trendlines'][bt] = {
+                'actual_2025': demand_actual_2025,
+                'forecast_3months': demand_forecast_2025
+            }
+            
+            # ===== COMBINED SUPPLY vs DEMAND TRENDLINE DATA =====
+            trendline_data['combined_trendlines'][bt] = {
+                'supply_actual_2025': supply_actual_2025,
+                'supply_forecast_3months': supply_forecast_2025,
+                'demand_actual_2025': demand_actual_2025,
+                'demand_forecast_3months': demand_forecast_2025
+            }
+            
+            # ===== STOCK LEVEL WITH BUFFER TRENDLINE DATA =====
+            # R code: Projected Stock Level with Target Buffer visualization
+            # This includes the projected stock level and target buffer level for visualization
+            stock_data = projected_stock.get(bt, {})
+            trendline_data['stock_level_trendlines'][bt] = {
+                'projected_stock_level': stock_data.get('Projected Stock Level (Next Month)', 0),
+                'target_stock_level': stock_data.get('Target Stock Level', 0),
+                'target_buffer_level': stock_data.get('Target Buffer Level', 0),
+                'buffer_gap': stock_data.get('Buffer Gap', 0),
+                'buffer_status': stock_data.get('Buffer Status', '🟢 Above Target (Safe)'),
+                'forecast_demand': stock_data.get('Forecast_Demand', 0),
+                'forecast_supply': stock_data.get('Forecast_Supply', 0)
+            }
+        
+        return trendline_data
+    
     def generate_forecasts(self) -> Dict:
         """
         EXACT 1:1 translation of R Studio workflow:
@@ -447,20 +565,30 @@ class ForecastReportsCalculator:
             # STEP 4: EXACT R - Projected Stock Level.R
             target_buffer_percentage = 0.25  # 25% of forecasted demand as safety buffer
             
+            # FIXED: Process ALL blood types (not just those in combined) - matching R code
+            # R code processes all unique blood types from df_monthly
             projected_stock = {}
-            for bt in combined:
-                # Round supply and demand to whole numbers (blood units are discrete)
-                supply = round(combined[bt].get('Forecast_Supply', 0))
-                demand = round(combined[bt].get('Forecast_Demand', 0))
+            for bt in BLOOD_TYPES:
+                # Get supply and demand from combined dict (if available)
+                supply = round(combined.get(bt, {}).get('Forecast_Supply', 0))
+                demand = round(combined.get(bt, {}).get('Forecast_Demand', 0))
                 projected_balance = supply - demand
                 
                 # EXACT R logic from New code.R: Target Buffer & Target Stock Level
+                # R code: Target Buffer Level = round(Forecast_Demand * target_buffer_percentage, 2)
+                # R code: Target Stock Level = round(Forecast_Demand + Target Buffer Level, 2)
+                # R code: Buffer Gap = round(Projected Stock Level (Next Month) - Target Stock Level, 2)
                 # Buffer levels can have decimals, but actual units should be whole numbers
                 target_buffer_level = round(demand * target_buffer_percentage, 2)
                 target_stock_level = round(demand + target_buffer_level, 2)
                 buffer_gap = round(projected_balance - target_stock_level, 2)
                 
                 # EXACT R logic from New code.R: Buffer Status
+                # R code: case_when(
+                #   Buffer Gap >= 0 ~ "🟢 Above Target (Safe)",
+                #   Buffer Gap >= -(Target Buffer Level * 0.5) ~ "🟡 Below Target (Monitor)",
+                #   TRUE ~ "🔴 Critical (Action Required)"
+                # )
                 if buffer_gap >= 0:
                     buffer_status = "🟢 Above Target (Safe)"
                 elif buffer_gap >= -(target_buffer_level * 0.5):
@@ -475,8 +603,8 @@ class ForecastReportsCalculator:
                     'Projected Stock Level (Next Month)': projected_balance,
                     # Updated status labels: > 0 = Surplus (Green), = 0 = Adequate (Blue), < 0 = Low (Orange/Red)
                     'Stock Status': '🔴 Low' if projected_balance < 0 else ('🔵 Adequate' if projected_balance == 0 else '🟢 Surplus'),
-                    'Forecast_Gap': combined[bt].get('Forecast_Gap', 0),
-                    'Status': combined[bt].get('Status', '🟢 Surplus'),
+                    'Forecast_Gap': combined.get(bt, {}).get('Forecast_Gap', 0),
+                    'Status': combined.get(bt, {}).get('Status', '🟢 Surplus'),
                     'Target Buffer Level': target_buffer_level,
                     'Target Stock Level': target_stock_level,
                     'Buffer Gap': buffer_gap,
@@ -565,6 +693,10 @@ class ForecastReportsCalculator:
             
             # Extended forecast: Generate 6 months ahead for better visibility
             # R code: forecast(model, h = 3) - but we extend to 6 months for better trend visibility
+            # Initialize forecast variables
+            self.supply_all_forecasts = {}
+            self.demand_all_forecasts = {}
+            
             if forecast_months:
                 # Generate 6 months of forecasted data (as requested)
                 max_horizon = 6
@@ -577,6 +709,10 @@ class ForecastReportsCalculator:
                 # This matches R's: fc <- forecast(model, h = 3); forecast = as.numeric(fc$mean)
                 supply_all_forecasts = generate_all_forecasts(supply_cached_models, max_horizon, df_monthly_supply)
                 demand_all_forecasts = generate_all_forecasts(demand_cached_models, max_horizon, df_monthly_demand)
+                
+                # Store for trendline generation
+                self.supply_all_forecasts = supply_all_forecasts
+                self.demand_all_forecasts = demand_all_forecasts
                 
                 # Extract forecasts for each month (R does NOT apply any constraints or mean reversion)
                 # BUT: Blood units cannot be negative, so clamp to >= 0
@@ -598,8 +734,8 @@ class ForecastReportsCalculator:
                     # Extract forecast from pre-computed arrays (matching R's forecast output)
                     for bt in BLOOD_TYPES:
                         # Get forecast from cached arrays (now returns dict with 'forecast', 'ci_80_lower', etc.)
-                        supply_data = supply_all_forecasts.get(bt, {})
-                        demand_data = demand_all_forecasts.get(bt, {})
+                        supply_data = self.supply_all_forecasts.get(bt, {})
+                        demand_data = self.demand_all_forecasts.get(bt, {})
                         
                         # Handle new format (dict) or old format (list) for backward compatibility
                         if isinstance(supply_data, dict):
@@ -742,6 +878,18 @@ class ForecastReportsCalculator:
             
             historical_months.sort()
             
+            # Generate trendline data structures matching R code (New code.R)
+            # R code generates trendlines for: Supply, Demand, Combined, and Stock Level with Buffer
+            trendline_data = self._generate_trendline_data(
+                self.monthly_supply, 
+                self.monthly_demand, 
+                getattr(self, 'supply_all_forecasts', {}),
+                getattr(self, 'demand_all_forecasts', {}),
+                forecast_months,
+                last_historical_month if forecast_months else current_date,
+                projected_stock
+            )
+            
             return {
                 'success': True,
                 'kpis': self.kpi_data,
@@ -754,7 +902,8 @@ class ForecastReportsCalculator:
                 'forecast_supply_df': forecast_supply_df,
                 'forecast_demand_df': forecast_demand_df,
                 'combined': list(combined.values()),
-                'projected_stock': list(projected_stock.values())
+                'projected_stock': list(projected_stock.values()),
+                'trendline_data': trendline_data  # NEW: Trendline data for visualization
             }
             
         finally:

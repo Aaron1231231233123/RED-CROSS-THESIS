@@ -522,6 +522,11 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
     <script src="../../assets/js/search_func/search_accont_physical_exam.js?v=<?php echo time(); ?>"></script>
     <script src="../../assets/js/search_func/filter_search_accont_physical_exam.js?v=<?php echo time(); ?>"></script>
     <script src="../../assets/js/search_func/sort_accont_physical_exam.js?v=<?php echo time(); ?>"></script>
+    <script src="../../assets/js/access-lock-manager.js"></script>
+    <script src="../../assets/js/access-lock-guard.js"></script>
+    <script>
+        window.ACCESS_LOCK_ROLE_VALUE = 1;
+    </script>
     
     <style>
         :root {
@@ -896,7 +901,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         .medical-modal-header {
             background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
             color: white;
-            padding: 20px 30px;
+            padding: 15px 20px;
             border-radius: 15px 15px 0 0;
             display: flex;
             justify-content: space-between;
@@ -934,12 +939,15 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         }
 
         .medical-modal-body {
-            padding: 30px;
+            padding: 15px 20px;
             overflow-y: auto;
             overflow-x: hidden;
             flex: 1;
             min-height: 0;
             -webkit-overflow-scrolling: touch;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
         
         /* Custom scrollbar for medical modal body */
@@ -966,6 +974,23 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             overflow-y: auto;
             overflow-x: hidden;
             -webkit-overflow-scrolling: touch;
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        #medicalHistoryModalContent > * {
+            width: 100%;
+        }
+        
+        #medicalHistoryModalContent form,
+        #medicalHistoryModalContent table,
+        #medicalHistoryModalContent .table {
+            width: 100%;
+            margin: 0 auto;
         }
         
         /* Smooth scrolling for medical history content */
@@ -2254,19 +2279,29 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         
         .modal-nav-header {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            padding: 1.5rem;
+            justify-content: center;
+            padding: 1.5rem 1rem;
             background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
             color: white;
             border-bottom: none;
             border-radius: 0;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .modal-nav-header-icon-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            margin-bottom: 0.75rem;
         }
         
         .modal-nav-header-icon {
             font-size: 24px;
             color: white;
-            margin-right: 0.75rem;
             width: 44px;
             height: 44px;
             display: flex;
@@ -2276,11 +2311,12 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             border-radius: 50%;
             flex-shrink: 0;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            margin: 0 auto;
         }
         
         .modal-nav-header-text {
-            flex: 1;
-            min-width: 0;
+            width: 100%;
+            text-align: center;
         }
         
         .modal-nav-header-title {
@@ -2364,8 +2400,12 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         .modal-nav-item-icon {
             margin-right: 10px;
             font-size: 15px;
-            width: 18px;
+            width: 20px;
+            min-width: 20px;
             text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             flex-shrink: 0;
         }
         
@@ -2988,7 +3028,9 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             <!-- Navigation Sidebar -->
             <div class="modal-nav-sidebar" id="medicalHistoryNavSidebar">
                 <div class="modal-nav-header">
-                    <i class="fas fa-user-md modal-nav-header-icon"></i>
+                    <div class="modal-nav-header-icon-wrapper">
+                        <i class="fas fa-user-md modal-nav-header-icon"></i>
+                    </div>
                     <div class="modal-nav-header-text">
                         <div class="modal-nav-header-title">PHYSICIAN</div>
                         <div class="modal-nav-header-subtitle">Workflow</div>
@@ -3058,6 +3100,43 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         // Pass PHP data to JavaScript
         const medicalByDonor = <?php echo json_encode($medical_by_donor ?? []); ?>;
         try { window.medicalByDonor = (typeof window.medicalByDonor === 'object' && window.medicalByDonor) ? { ...window.medicalByDonor, ...medicalByDonor } : medicalByDonor; } catch(_) {}
+
+        window.hideModalKeepLock = function(modalEl) {
+            if (!modalEl || !window.bootstrap) return;
+            modalEl.dataset.releaseLock = '0';
+            const instance = window.bootstrap.Modal.getInstance(modalEl);
+            if (instance) {
+                instance.hide();
+            }
+        };
+
+        function setupLockReleaseModal(modalId) {
+            const modalEl = document.getElementById(modalId);
+            if (!modalEl) return;
+            modalEl.dataset.releaseLock = modalEl.dataset.releaseLock || '1';
+            modalEl.addEventListener('hidden.bs.modal', function () {
+                const shouldRelease = modalEl.dataset.releaseLock !== '0';
+                modalEl.dataset.releaseLock = '1';
+                const holdActive = modalId === 'physicalExaminationModal' && window.__holdPhysAccessLock;
+                if (holdActive) {
+                    modalEl.dataset.releaseLock = '0';
+                    return;
+                }
+                if (shouldRelease && window.AccessLockManager) {
+                    window.AccessLockManager.deactivate();
+                }
+            });
+            modalEl.addEventListener('hide.bs.modal', function () {
+                if (!modalEl.dataset.releaseLock) {
+                    modalEl.dataset.releaseLock = '1';
+                }
+            });
+            modalEl.querySelectorAll('[data-bs-dismiss="modal"], .btn-close').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    modalEl.dataset.releaseLock = '1';
+                });
+            });
+        }
         
         /**
          * Unified API call function to reduce duplication
@@ -3282,8 +3361,16 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             try {
                 const reopenProfile = function(){
                     try {
-                        // Don't reopen if we're in the middle of an approve process, sidebar navigation, or explicitly prevented
-                        if (window.__suppressReturnToProfile || window.__screeningApproveActive || window.__physApproveActive || window.__sidebarNavigationActive || window.__preventDonorProfileOpen) { 
+                        // STRICT: Don't reopen if we're in the middle of an approve process, sidebar navigation, or explicitly prevented
+                        const navTarget = window.__navigationTarget;
+                        const shouldBlock = window.__suppressReturnToProfile || 
+                                          window.__screeningApproveActive || 
+                                          window.__physApproveActive || 
+                                          window.__sidebarNavigationActive || 
+                                          window.__preventDonorProfileOpen ||
+                                          (navTarget && navTarget !== 'donor-profile' && navTarget !== null);
+                        
+                        if (shouldBlock) { 
                             window.__suppressReturnToProfile = false; 
                             return; 
                         }
@@ -3304,8 +3391,12 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 if (sEl && !sEl.__returnHooked) {
                     sEl.__returnHooked = true;
                     sEl.addEventListener('hidden.bs.modal', function(){ 
-                        // Check if sidebar navigation is active or donor profile opening is prevented before reopening profile
-                        if (!window.__sidebarNavigationActive && !window.__preventDonorProfileOpen) {
+                        // STRICT: Check if sidebar navigation is active, donor profile opening is prevented, or navigation target is set
+                        const navTarget = window.__navigationTarget;
+                        const shouldReopen = !window.__sidebarNavigationActive && 
+                                           !window.__preventDonorProfileOpen &&
+                                           (!navTarget || navTarget === 'donor-profile' || navTarget === null);
+                        if (shouldReopen) {
                             reopenProfile(); 
                         }
                     });
@@ -3314,9 +3405,13 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     if (xBtn && !xBtn.__returnHooked) {
                         xBtn.__returnHooked = true;
                         xBtn.addEventListener('click', function(){
-                            // Check if sidebar navigation is active or donor profile opening is prevented before reopening profile
+                            // STRICT: Check if sidebar navigation is active, donor profile opening is prevented, or navigation target is set
                             setTimeout(function() {
-                                if (!window.__sidebarNavigationActive && !window.__preventDonorProfileOpen) {
+                                const navTarget = window.__navigationTarget;
+                                const shouldReopen = !window.__sidebarNavigationActive && 
+                                                   !window.__preventDonorProfileOpen &&
+                                                   (!navTarget || navTarget === 'donor-profile' || navTarget === null);
+                                if (shouldReopen) {
                                     reopenProfile();
                                 }
                             }, 200);
@@ -3569,59 +3664,80 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
 
         // Donor Profile Modal Functions
         function openDonorProfileModal(screeningData) {
-            // CRITICAL: If sidebar navigation is active and we're NOT explicitly opening donor profile, block it
+            // STRICT: If sidebar navigation is active and we're NOT explicitly opening donor profile, block it
             // Only allow if explicitly called from sidebar donor profile button (check caller)
             if (window.__sidebarNavigationActive && !window.__explicitDonorProfileOpen) {
                 return;
             }
             
-            // CRITICAL: If we're preventing donor profile from opening (e.g., during modal transitions), block it
+            // STRICT: If we're preventing donor profile from opening (e.g., during modal transitions), block it
             if (window.__preventDonorProfileOpen) {
                 return;
             }
             
-            // Prevent multiple instances
-            if (window.isOpeningDonorProfile) {
-                try {
-                    const dpElChk = document.getElementById('donorProfileModal');
-                    const visible = dpElChk && dpElChk.classList.contains('show') && dpElChk.style.display !== 'none';
-                    const tooOld = window.__dpLastOpenAttempt && (Date.now() - window.__dpLastOpenAttempt > 1500);
-                    if (!visible || tooOld) {
-                        // Stale or failed open attempt; clear the flag and continue
-                        window.isOpeningDonorProfile = false;
-                        
-                    } else {
-                        
-                        return;
-                    }
-                } catch(_) { /* continue */ }
+            // STRICT: If navigation target is set to something other than donor-profile, block it
+            const navTarget = window.__navigationTarget;
+            if (navTarget && navTarget !== 'donor-profile' && navTarget !== null) {
+                // Navigation is targeting a different modal, don't open donor profile
+                return;
             }
-            window.isOpeningDonorProfile = true;
-            try { window.__dpLastOpenAttempt = Date.now(); } catch(_) {}
             
             // Get donor ID from screening data
             const donorId = screeningData.donor_form_id;
             if (!donorId) {
                 alert("Error: No donor ID found. Please try again.");
-                window.isOpeningDonorProfile = false;
                 return;
             }
-            
-            // Only hide an existing visible modal when explicitly forcing a reopen
-            try {
-                const el = document.getElementById('donorProfileModal');
-                const existingModal = el ? bootstrap.Modal.getInstance(el) : null;
-                const isVisible = el && el.classList.contains('show');
-                if (existingModal && isVisible && window.forceReopenDonorProfile === true) {
-                    existingModal.hide();
-                    setTimeout(() => { openDonorProfileModalInternal(screeningData, donorId); }, 100);
-                    window.forceReopenDonorProfile = false;
-                    return;
+
+            const continueOpen = () => {
+                window.currentPhysicalDonorId = donorId;
+                physicalDonorId = donorId;
+                // Prevent multiple instances
+                if (window.isOpeningDonorProfile) {
+                    try {
+                        const dpElChk = document.getElementById('donorProfileModal');
+                        const visible = dpElChk && dpElChk.classList.contains('show') && dpElChk.style.display !== 'none';
+                        const tooOld = window.__dpLastOpenAttempt && (Date.now() - window.__dpLastOpenAttempt > 1500);
+                        if (!visible || tooOld) {
+                            // Stale or failed open attempt; clear the flag and continue
+                            window.isOpeningDonorProfile = false;
+                            
+                        } else {
+                            
+                            return;
+                        }
+                    } catch(_) { /* continue */ }
                 }
-            } catch (e) { /* noop */ }
-            
-            // Open modal directly if no existing instance
-            openDonorProfileModalInternal(screeningData, donorId);
+                window.isOpeningDonorProfile = true;
+                try { window.__dpLastOpenAttempt = Date.now(); } catch(_) {}
+                
+                // Only hide an existing visible modal when explicitly forcing a reopen
+                try {
+                    const el = document.getElementById('donorProfileModal');
+                    const existingModal = el ? bootstrap.Modal.getInstance(el) : null;
+                    const isVisible = el && el.classList.contains('show');
+                    if (existingModal && isVisible && window.forceReopenDonorProfile === true) {
+                        hideModalKeepLock(el);
+                        setTimeout(() => { openDonorProfileModalInternal(screeningData, donorId); }, 100);
+                        window.forceReopenDonorProfile = false;
+                        return;
+                    }
+                } catch (e) { /* noop */ }
+                
+                // Open modal directly if no existing instance
+                openDonorProfileModalInternal(screeningData, donorId);
+            };
+
+            if (window.AccessLockGuard) {
+                AccessLockGuard.ensureAccess({
+                    scope: 'physical_examination',
+                    donorId,
+                    message: 'This donor is currently being processed by an admin account.',
+                    onAllowed: continueOpen
+                });
+            } else {
+                continueOpen();
+            }
         }
         
         function openDonorProfileModalInternal(screeningData, donorId) {
@@ -3639,6 +3755,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             
             // Show the modal
             const donorProfileModalEl = document.getElementById('donorProfileModal');
+            donorProfileModalEl.dataset.releaseLock = '1';
+            if (window.AccessLockManager && donorId) {
+                window.AccessLockManager.activate({ donor_id: donorId });
+            }
             // Check if modal instance already exists to prevent conflicts
             let donorProfileModal = bootstrap.Modal.getInstance(donorProfileModalEl);
             if (!donorProfileModal) {
@@ -3895,13 +4015,19 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         }
 
         // Helper: consolidate modal cleanup logic
-        function cleanupModalState(modalId) {
+        function cleanupModalState(modalId, options = {}) {
+            const keepLock = !!options.keepLock;
             try {
                 const modalEl = document.getElementById(modalId);
                 if (modalEl) {
-                    const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                    if (keepLock && typeof window.hideModalKeepLock === 'function') {
+                        window.hideModalKeepLock(modalEl);
+                    }
+                    const modal = (!keepLock) ? (bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl)) : null;
                     try { (modalEl.__dpObserver || window.__dpObserver)?.disconnect?.(); } catch(_) {}
-                    try { modal.hide(); } catch(_) {}
+                    if (!keepLock) {
+                        try { modal.hide(); } catch(_) {}
+                    }
                     setTimeout(() => {
                         try { modalEl.classList.remove('show'); modalEl.style.display = 'none'; modalEl.setAttribute('aria-hidden','true'); } catch(_) {}
                         try { /* leave backdrops to Bootstrap */ } catch(_) {}
@@ -4020,7 +4146,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
 
                     // Always close donor profile modal before opening the next modal
                     try { window.allowDonorProfileHide = true; } catch(_) {}
-                    cleanupModalState('donorProfileModal');
+                    cleanupModalState('donorProfileModal', { keepLock: true });
 
                     // Open medical history modal
                     setTimeout(() => openMedicalHistoryModal(donorId), 120);
@@ -4052,7 +4178,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         try {
                             // Close donor profile modal
                             window.allowDonorProfileHide = true;
-                            cleanupModalState('donorProfileModal');
+                            cleanupModalState('donorProfileModal', { keepLock: true });
                             
                             // Set donor ID in the screening form
                             setTimeout(() => {
@@ -4087,7 +4213,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         try {
                             // Close donor profile modal
                             window.allowDonorProfileHide = true;
-                            cleanupModalState('donorProfileModal');
+                            cleanupModalState('donorProfileModal', { keepLock: true });
                             
                             // Set donor ID in the screening form
                             setTimeout(() => {
@@ -4135,8 +4261,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         document.activeElement.blur();
                     }
                     
-                    const donorProfileModal = bootstrap.Modal.getInstance(document.getElementById('donorProfileModal'));
-                    if (donorProfileModal) donorProfileModal.hide();
+                    const dpEl = document.getElementById('donorProfileModal');
+                    if (dpEl) {
+                        hideModalKeepLock(dpEl);
+                    }
                     
                     // Wait for donor profile to close, then open PE modal
                     // Don't remove backdrops - let Bootstrap manage them
@@ -4185,8 +4313,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         document.activeElement.blur();
                     }
                     
-                    const donorProfileModal = bootstrap.Modal.getInstance(document.getElementById('donorProfileModal'));
-                    if (donorProfileModal) donorProfileModal.hide();
+                    const dpEl = document.getElementById('donorProfileModal');
+                    if (dpEl) {
+                        hideModalKeepLock(dpEl);
+                    }
                     
                     // Clean up any Bootstrap backdrops from donor profile modal
                     setTimeout(() => {
@@ -4535,6 +4665,15 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             }
         }
 
+        function releasePhysicalAccessLock() {
+            try { window.__holdPhysAccessLock = false; } catch(_) {}
+            try {
+                if (window.AccessLockManager) {
+                    window.AccessLockManager.deactivate();
+                }
+            } catch(_) {}
+        }
+
         async function advanceToCollection(donorId) {
             // Hard gate: verify again before showing any confirmation
             try {
@@ -4615,6 +4754,9 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     return;
                 }
                 
+                // Release access lock only after successful transition to blood collection
+                releasePhysicalAccessLock();
+
                 // Show success modal
                 if (typeof showFooterActionSuccessModal === 'function') {
                     showFooterActionSuccessModal();
@@ -4627,8 +4769,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         document.activeElement.blur();
                     }
                     
-                    const donorProfileModal = bootstrap.Modal.getInstance(document.getElementById('donorProfileModal'));
-                    if (donorProfileModal) donorProfileModal.hide();
+                    const dpEl = document.getElementById('donorProfileModal');
+                    if (dpEl) {
+                        hideModalKeepLock(dpEl);
+                    }
                     // Use the optimized cleanup and reload function
                     forcePageReload(500); // Shorter delay for better UX
                 }, 3500); // Wait for success modal to show
@@ -4655,8 +4799,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             }
             
             // Close donor profile modal
-            const donorProfileModal = bootstrap.Modal.getInstance(document.getElementById('donorProfileModal'));
-            donorProfileModal.hide();
+            const dpElFinal = document.getElementById('donorProfileModal');
+            if (dpElFinal) {
+                hideModalKeepLock(dpElFinal);
+            }
             
             // Clean up any Bootstrap backdrops from donor profile modal
             setTimeout(() => {
@@ -4881,8 +5027,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         }
         
         function closeMedicalHistoryModal() {
-            // Check if sidebar navigation is active - if so, don't reopen donor profile
+            // STRICT: Check if sidebar navigation is active - if so, NEVER reopen donor profile
             const isSidebarNav = window.__sidebarNavigationActive;
+            const preventDonorProfile = window.__preventDonorProfileOpen;
+            const navigationTarget = window.__navigationTarget;
             
             const mhElement = document.getElementById('medicalHistoryModal');
             if (!mhElement) {
@@ -4897,14 +5045,29 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 mhElement.style.display = 'none';
                 window.isOpeningMedicalHistory = false;
                 
-                // Only reopen donor profile if NOT navigating via sidebar
-                if (!isSidebarNav && !window.__sidebarNavigationActive) {
+                // STRICT: Only reopen donor profile if NOT navigating via sidebar AND no prevention flags
+                // Also check navigation target - if it's set to something other than donor-profile, NEVER open donor profile
+                const shouldReopenDonorProfile = !isSidebarNav && 
+                                                 !window.__sidebarNavigationActive && 
+                                                 !preventDonorProfile && 
+                                                 !window.__preventDonorProfileOpen &&
+                                                 navigationTarget !== 'physical-examination' &&
+                                                 navigationTarget !== 'initial-screening' &&
+                                                 window.__navigationTarget !== 'physical-examination' &&
+                                                 window.__navigationTarget !== 'initial-screening';
+                
+                if (shouldReopenDonorProfile) {
                     // Check if donor profile should be reopened (only if it was open before)
                     const dpEl = document.getElementById('donorProfileModal');
                     if (dpEl && window.lastDonorProfileContext) {
                         setTimeout(() => {
-                            // Final check: ensure both flags are not set before reopening
-                            if (!window.__sidebarNavigationActive && !window.__preventDonorProfileOpen) {
+                            // Final STRICT check: ensure ALL flags are not set before reopening
+                            const finalCheck = !window.__sidebarNavigationActive && 
+                                             !window.__preventDonorProfileOpen &&
+                                             window.__navigationTarget !== 'physical-examination' &&
+                                             window.__navigationTarget !== 'initial-screening';
+                            
+                            if (finalCheck) {
                                 try {
                                     const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
                                     dp.show();
@@ -4955,18 +5118,26 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     document.body.style.paddingRight = '';
                 } catch(_) {}
                 
-                // Return to Donor Profile modal unless explicitly prevented (e.g., proceeding to Initial Screening)
+                // STRICT: Return to Donor Profile modal ONLY if explicitly allowed
                 // CRITICAL: Check ALL flags that prevent donor profile from opening
                 try {
                     const prevented = !!window.__preventReturnToProfile;
                     const sidebarNavActive = !!window.__sidebarNavigationActive;
                     const preventDonorProfileOpen = !!window.__preventDonorProfileOpen;
+                    const navTarget = window.__navigationTarget;
                     
                     // Reset flag for next time
                     window.__preventReturnToProfile = false;
                     
-                    // Only reopen donor profile if NONE of the prevention flags are set
-                    if (!prevented && !sidebarNavActive && !preventDonorProfileOpen) {
+                    // STRICT: Only reopen donor profile if NONE of the prevention flags are set
+                    // AND navigation target is NOT set to another modal
+                    const canReopen = !prevented && 
+                                    !sidebarNavActive && 
+                                    !preventDonorProfileOpen &&
+                                    navTarget !== 'physical-examination' &&
+                                    navTarget !== 'initial-screening';
+                    
+                    if (canReopen) {
                         const dpEl = document.getElementById('donorProfileModal');
                         if (dpEl) {
                             const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
@@ -6820,6 +6991,71 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
     // NOTE: Mobile credentials modal is NOT shown on dashboards
     // It should ONLY appear on the declaration form when registering a new donor
     ?>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            window.__holdPhysAccessLock = window.__holdPhysAccessLock === true;
+            if (window.AccessLockManager) {
+                window.AccessLockManager.init({
+                    role: 'staff',
+                    scopes: ['physical_examination'],
+                    guardSelectors: ['.edit-btn', '.view-btn', '.clickable-row'],
+                    endpoint: '../../assets/php_func/access_lock_manager.php',
+                    autoClaim: false
+                });
+            }
+            ['donorProfileModal','physicalExaminationModal','physicalExamApproveConfirmModal'].forEach(setupLockReleaseModal);
+            let physicalDonorId = null;
+            window.currentPhysicalDonorId = window.currentPhysicalDonorId || null;
+            const physicalModal = document.getElementById('physicalExaminationModal');
+            if (physicalModal) {
+                physicalModal.addEventListener('show.bs.modal', function () {
+                    if (window.AccessLockManager && physicalDonorId) {
+                        window.AccessLockManager.activate({ donor_id: physicalDonorId });
+                    }
+                });
+                physicalModal.addEventListener('hidden.bs.modal', function () {
+                    physicalDonorId = null;
+                    if (window.__holdPhysAccessLock) {
+                        return;
+                    }
+                    window.AccessLockManager && window.AccessLockManager.deactivate();
+                });
+            }
+            const donorProfileModal = document.getElementById('donorProfileModal');
+            if (donorProfileModal) {
+                donorProfileModal.addEventListener('click', function (evt) {
+                    const trigger = evt.target.closest('.btn-view-physical-exam, .btn-edit-physical-exam');
+                    if (trigger) {
+                        evt.preventDefault();
+                        evt.stopPropagation();
+                        let donorId = trigger.getAttribute('data-donor-id');
+                        if (!donorId) {
+                            try {
+                                const payload = JSON.parse(trigger.getAttribute('data-screening') || '{}');
+                                donorId = payload?.donor_id || payload?.donor_form_id || payload?.donor_form?.donor_id || null;
+                            } catch (_) {}
+                        }
+                        const proceed = () => {
+                            const screeningPayload = trigger.getAttribute('data-screening');
+                            if (screeningPayload && window.physicalExaminationModal) {
+                                window.physicalExaminationModal.open(JSON.parse(screeningPayload));
+                            }
+                        };
+                        if (donorId && window.AccessLockGuard) {
+                            AccessLockGuard.ensureAccess({
+                                scope: 'physical_examination',
+                                donorId,
+                                message: 'This donor is currently being processed by an admin account.',
+                                onAllowed: proceed
+                            });
+                        } else {
+                            proceed();
+                        }
+                    }
+                });
+            }
+        });
+    </script>
 </body>
 </html>
 <script>
@@ -6994,9 +7230,10 @@ if (navPhysicianInitialScreening) {
         e.preventDefault();
         e.stopPropagation();
         
-        // CRITICAL: Set ALL flags IMMEDIATELY to prevent any donor profile opening
+        // STRICT: Set ALL flags IMMEDIATELY to prevent any donor profile opening
         window.__sidebarNavigationActive = true;
         window.__preventDonorProfileOpen = true;
+        window.__navigationTarget = 'initial-screening'; // Track where we're navigating to
         
         const donorId = getCurrentPhysicianDonorId();
         if (donorId) {
@@ -7022,6 +7259,11 @@ if (navPhysicianInitialScreening) {
             closeMedicalHistoryModal();
             
             setTimeout(() => {
+                // Ensure flags are still set before opening screening modal
+                window.__sidebarNavigationActive = true;
+                window.__preventDonorProfileOpen = true;
+                window.__navigationTarget = 'initial-screening';
+                
                 const screeningModal = document.getElementById('screeningFormModal');
                 if (screeningModal) {
                     
@@ -7063,9 +7305,14 @@ if (navPhysicianInitialScreening) {
                     
                     // Clear flags after modal is fully shown and stable (extended duration)
                     setTimeout(() => {
-                        window.__sidebarNavigationActive = false;
-                        window.__preventDonorProfileOpen = false;
-                    }, 5000);
+                        // Only clear if we successfully navigated to screening
+                        const screeningModalVisible = screeningModal && (screeningModal.classList.contains('show') || screeningModal.style.display !== 'none');
+                        if (screeningModalVisible || window.__navigationTarget === 'initial-screening') {
+                            window.__sidebarNavigationActive = false;
+                            window.__preventDonorProfileOpen = false;
+                            window.__navigationTarget = null;
+                        }
+                    }, 8000); // Extended duration
                 } else {
                     window.__sidebarNavigationActive = false;
                     window.__preventDonorProfileOpen = false;
@@ -7082,12 +7329,14 @@ if (navPhysicianInitialScreening) {
 const navPhysicianPhysicalExam = document.getElementById('navPhysicianPhysicalExam');
 if (navPhysicianPhysicalExam) {
     navPhysicianPhysicalExam.addEventListener('click', function() {
-        // Set flags to prevent donor profile from opening on modal close
+        // STRICT: Set flags IMMEDIATELY and set navigation target to prevent any donor profile opening
         window.__sidebarNavigationActive = true;
         window.__preventDonorProfileOpen = true;
+        window.__navigationTarget = 'physical-examination'; // Track where we're navigating to
         
         const donorId = getCurrentPhysicianDonorId();
         if (donorId) {
+            // Close medical history modal - flags will prevent donor profile from opening
             closeMedicalHistoryModal();
             
             // Check physical examination status
@@ -7106,6 +7355,11 @@ if (navPhysicianPhysicalExam) {
                                     result.physical_exam.remarks === 'Pending';
                     
                     setTimeout(() => {
+                        // Ensure flags are still set before opening PE modal
+                        window.__sidebarNavigationActive = true;
+                        window.__preventDonorProfileOpen = true;
+                        window.__navigationTarget = 'physical-examination';
+                        
                         if (isPending) {
                             // If Pending, open Physical Examination FORM
                             const screeningData = getCurrentScreeningData();
@@ -7129,16 +7383,28 @@ if (navPhysicianPhysicalExam) {
                             }
                         }
                         
+                        // Keep flags active longer to prevent any delayed donor profile opening
                         setTimeout(() => {
-                            window.__sidebarNavigationActive = false;
-                            window.__preventDonorProfileOpen = false;
-                        }, 5000);
-                    }, 300);
+                            // Only clear if we successfully navigated to PE
+                            const peModal = document.getElementById('physicalExaminationModal');
+                            const peModalVisible = peModal && (peModal.classList.contains('show') || peModal.style.display !== 'none');
+                            if (peModalVisible || window.__navigationTarget === 'physical-examination') {
+                                window.__sidebarNavigationActive = false;
+                                window.__preventDonorProfileOpen = false;
+                                window.__navigationTarget = null;
+                            }
+                        }, 8000); // Extended duration
+                    }, 400); // Slightly longer delay to ensure modal is closed
                 })
                 .catch(error => {
                     // On error, default to opening the form
                     const screeningData = getCurrentScreeningData();
                     setTimeout(() => {
+                        // Ensure flags are still set before opening PE modal
+                        window.__sidebarNavigationActive = true;
+                        window.__preventDonorProfileOpen = true;
+                        window.__navigationTarget = 'physical-examination';
+                        
                         if (window.physicalExaminationModal && typeof window.physicalExaminationModal.open === 'function') {
                             window.physicalExaminationModal.open(screeningData);
                         } else {
@@ -7153,15 +7419,22 @@ if (navPhysicianPhysicalExam) {
                         }
                         updatePhysicianActiveNavItem('navPEPhysicalExam');
                         
+                        // Keep flags active longer to prevent any delayed donor profile opening
                         setTimeout(() => {
-                            window.__sidebarNavigationActive = false;
-                            window.__preventDonorProfileOpen = false;
-                        }, 5000);
-                    }, 300);
+                            const peModal = document.getElementById('physicalExaminationModal');
+                            const peModalVisible = peModal && (peModal.classList.contains('show') || peModal.style.display !== 'none');
+                            if (peModalVisible || window.__navigationTarget === 'physical-examination') {
+                                window.__sidebarNavigationActive = false;
+                                window.__preventDonorProfileOpen = false;
+                                window.__navigationTarget = null;
+                            }
+                        }, 8000); // Extended duration
+                    }, 400);
                 });
         } else {
             window.__sidebarNavigationActive = false;
             window.__preventDonorProfileOpen = false;
+            window.__navigationTarget = null;
         }
     });
 }
@@ -7170,16 +7443,21 @@ if (navPhysicianPhysicalExam) {
 const navPhysicianDonorProfile = document.getElementById('navPhysicianDonorProfile');
 if (navPhysicianDonorProfile) {
     navPhysicianDonorProfile.addEventListener('click', function() {
-        // Set flag to prevent donor profile from opening on modal close
+        // STRICT: Set flags to explicitly allow donor profile opening (only from this button)
         window.__sidebarNavigationActive = true;
-        // Set explicit flag to allow donor profile opening
         window.__explicitDonorProfileOpen = true;
+        window.__navigationTarget = 'donor-profile'; // Track that we're navigating to donor profile
         
         const screeningData = getCurrentScreeningData();
         if (screeningData) {
             closeMedicalHistoryModal();
             setTimeout(() => {
-                // Explicitly open donor profile - this is intentional
+                // Ensure flags are still set before opening
+                window.__sidebarNavigationActive = true;
+                window.__explicitDonorProfileOpen = true;
+                window.__navigationTarget = 'donor-profile';
+                
+                // Explicitly open donor profile - this is intentional and ONLY allowed from this button
                 openDonorProfileModal(screeningData);
                 updatePhysicianActiveNavItem('navPhysicianDonorProfile');
                 
@@ -7187,11 +7465,13 @@ if (navPhysicianDonorProfile) {
                 setTimeout(() => {
                     window.__sidebarNavigationActive = false;
                     window.__explicitDonorProfileOpen = false;
-                }, 3000);
-            }, 300);
+                    window.__navigationTarget = null;
+                }, 5000);
+            }, 400);
         } else {
             window.__sidebarNavigationActive = false;
             window.__explicitDonorProfileOpen = false;
+            window.__navigationTarget = null;
         }
     });
 }
@@ -7327,6 +7607,8 @@ if (navScreeningDonorProfile) {
         window.__sidebarNavigationActive = true;
         // Set explicit flag to allow donor profile opening
         window.__explicitDonorProfileOpen = true;
+        window.__navigationTarget = 'donor-profile';
+        window.__preventDonorProfileOpen = false;
         
         const screeningData = getCurrentScreeningData();
         if (screeningData) {
@@ -7337,6 +7619,9 @@ if (navScreeningDonorProfile) {
             }
             
             setTimeout(() => {
+                window.__navigationTarget = 'donor-profile';
+                window.__preventDonorProfileOpen = false;
+                window.__explicitDonorProfileOpen = true;
                 // Explicitly open donor profile - this is intentional
                 openDonorProfileModal(screeningData);
                 updatePhysicianActiveNavItem('navScreeningDonorProfile');
@@ -7345,11 +7630,13 @@ if (navScreeningDonorProfile) {
                 setTimeout(() => {
                     window.__sidebarNavigationActive = false;
                     window.__explicitDonorProfileOpen = false;
+                    window.__navigationTarget = null;
                 }, 3000);
             }, 300);
         } else {
             window.__sidebarNavigationActive = false;
             window.__explicitDonorProfileOpen = false;
+            window.__navigationTarget = null;
         }
     });
 }
@@ -7471,6 +7758,8 @@ if (navPEDonorProfile) {
         window.__sidebarNavigationActive = true;
         // Set explicit flag to allow donor profile opening
         window.__explicitDonorProfileOpen = true;
+        window.__navigationTarget = 'donor-profile';
+        window.__preventDonorProfileOpen = false;
         
         const screeningData = getCurrentScreeningData();
         if (screeningData) {
@@ -7481,6 +7770,9 @@ if (navPEDonorProfile) {
             }
             
             setTimeout(() => {
+                window.__navigationTarget = 'donor-profile';
+                window.__preventDonorProfileOpen = false;
+                window.__explicitDonorProfileOpen = true;
                 // Explicitly open donor profile - this is intentional
                 openDonorProfileModal(screeningData);
                 updatePhysicianActiveNavItem('navPEDonorProfile');
@@ -7489,11 +7781,13 @@ if (navPEDonorProfile) {
                 setTimeout(() => {
                     window.__sidebarNavigationActive = false;
                     window.__explicitDonorProfileOpen = false;
+                    window.__navigationTarget = null;
                 }, 3000);
             }, 300);
         } else {
             window.__sidebarNavigationActive = false;
             window.__explicitDonorProfileOpen = false;
+            window.__navigationTarget = null;
         }
     });
 }

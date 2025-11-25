@@ -1089,6 +1089,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
     <script src="../../assets/js/search_func/search_account_medical_history.js"></script>
     <script src="../../assets/js/search_func/filter_search_account_medical_history.js"></script>
     <script src="../../assets/js/search_func/sort_account_medical_history.js"></script>
+    <script src="../../assets/js/access-lock-manager.js"></script>
+    <script src="../../assets/js/access-lock-guard.js"></script>
+    <script>
+        window.ACCESS_LOCK_ROLE_VALUE = 1;
+    </script>
     <style>
         :root {
             --bg-color: #f5f5f5;
@@ -3093,6 +3098,38 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
         const medicalByDonor = <?php echo json_encode($medical_by_donor); ?>;
         const eligibilityDonorIds = <?php echo json_encode(array_keys($eligibility_by_donor)); ?>;
         const hasEligibility = (did) => Array.isArray(eligibilityDonorIds) && eligibilityDonorIds.includes(String(did)) || eligibilityDonorIds.includes(Number(did));
+
+        function hideModalKeepLock(modalEl) {
+            if (!modalEl || !window.bootstrap) return;
+            modalEl.dataset.releaseLock = '0';
+            const instance = window.bootstrap.Modal.getInstance(modalEl);
+            if (instance) {
+                instance.hide();
+            }
+        }
+
+        function setupLockReleaseModal(modalId) {
+            const modalEl = document.getElementById(modalId);
+            if (!modalEl) return;
+            modalEl.dataset.releaseLock = modalEl.dataset.releaseLock || '1';
+            modalEl.addEventListener('hidden.bs.modal', function () {
+                const shouldRelease = modalEl.dataset.releaseLock !== '0';
+                modalEl.dataset.releaseLock = '1';
+                if (shouldRelease && window.AccessLockManager) {
+                    window.AccessLockManager.deactivate();
+                }
+            });
+            modalEl.addEventListener('hide.bs.modal', function () {
+                if (!modalEl.dataset.releaseLock) {
+                    modalEl.dataset.releaseLock = '1';
+                }
+            });
+            modalEl.querySelectorAll('[data-bs-dismiss="modal"], .btn-close').forEach((btn) => {
+                btn.addEventListener('click', function () {
+                    modalEl.dataset.releaseLock = '1';
+                });
+            });
+        }
         
         function showConfirmationModal() {
             if (IS_REVIEWER) {
@@ -4064,14 +4101,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     const declarationModalEl = document.getElementById('declarationFormModal');
                     const declarationModal = declarationModalEl ? bootstrap.Modal.getInstance(declarationModalEl) : null;
                     if (declarationModal && declarationModalEl.classList.contains('show')) {
-                        declarationModal.hide();
+                        hideModalKeepLock(declarationModalEl);
                     }
                 }
                 
                 // Hide the deferral status modal first
                 const modalEl = document.getElementById('deferralStatusModal');
-                const modalInstance = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
-                if (modalInstance) modalInstance.hide();
+                if (modalEl) {
+                    hideModalKeepLock(modalEl);
+                }
                 
                 // Reset initialization flags to ensure fresh initialization
                 window.editFunctionalityInitialized = false;
@@ -4907,8 +4945,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     if (data.success) {
                         if (action === 'next' || action === 'approve') {
                             // Close medical history modal first
-                            const medicalModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModal'));
-                            medicalModal.hide();
+                            hideModalKeepLock(document.getElementById('medicalHistoryModal'));
                             
                             // Resolve donor_id from the form
                             const donorIdInput = document.querySelector('#modalMedicalHistoryForm input[name="donor_id"]');
@@ -4986,8 +5023,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                             }
                         } else if (action === 'decline') {
                             // Close modal and refresh the main page for decline only
-                            const modal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModal'));
-                            modal.hide();
+                            hideModalKeepLock(document.getElementById('medicalHistoryModal'));
                             window.location.reload();
                         }
                     } else {
@@ -5031,7 +5067,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             const declarationModalEl = document.getElementById('declarationFormModal');
             const declarationModal = declarationModalEl ? bootstrap.Modal.getInstance(declarationModalEl) : null;
             if (declarationModal && declarationModalEl.classList.contains('show')) {
-                declarationModal.hide();
+                hideModalKeepLock(declarationModalEl);
                 declarationModalEl.addEventListener('hidden.bs.modal', function onHidden() {
                     declarationModalEl.removeEventListener('hidden.bs.modal', onHidden);
                     closeOtherModalsAndOpenScreening();
@@ -5046,8 +5082,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 const medicalHistoryModalEl = document.getElementById('medicalHistoryModal');
                 if (medicalHistoryModalEl) {
                     const medicalHistoryModal = bootstrap.Modal.getInstance(medicalHistoryModalEl);
-                    if (medicalHistoryModal && medicalHistoryModalEl.classList.contains('show')) {
-                        medicalHistoryModal.hide();
+                if (medicalHistoryModal && medicalHistoryModalEl.classList.contains('show')) {
+                    hideModalKeepLock(medicalHistoryModalEl);
                         // Wait for modal to fully close before opening next modal
                         medicalHistoryModalEl.addEventListener('hidden.bs.modal', function onHidden() {
                             medicalHistoryModalEl.removeEventListener('hidden.bs.modal', onHidden);
@@ -5157,10 +5193,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     const donorId = donorIdInput ? donorIdInput.value : window.currentDonorId;
                     if (donorId) {
                         // Close medical history modal
-                        const medicalHistoryModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModal'));
-                        if (medicalHistoryModal) {
-                            medicalHistoryModal.hide();
-                        }
+                        hideModalKeepLock(document.getElementById('medicalHistoryModal'));
                         
                         // Open declaration form modal (skip confirmation when from sidebar)
                         setTimeout(() => {
@@ -5185,10 +5218,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         window.currentDonorId = donorId;
                         
                         // Close screening modal
-                        const screeningModal = bootstrap.Modal.getInstance(document.getElementById('screeningFormModal'));
-                        if (screeningModal) {
-                            screeningModal.hide();
-                        }
+                        hideModalKeepLock(document.getElementById('screeningFormModal'));
                         
                         // Open medical history modal directly with navbar visible (skip confirmation)
                         setTimeout(() => {
@@ -5220,10 +5250,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         window.currentDonorId = donorId;
                         
                         // Close screening modal
-                        const screeningModal = bootstrap.Modal.getInstance(document.getElementById('screeningFormModal'));
-                        if (screeningModal) {
-                            screeningModal.hide();
-                        }
+                        hideModalKeepLock(document.getElementById('screeningFormModal'));
                         
                         // Open declaration form modal (skip confirmation when from sidebar)
                         setTimeout(() => {
@@ -5303,7 +5330,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         const declarationModal = declarationModalEl ? bootstrap.Modal.getInstance(declarationModalEl) : null;
                         
                         if (declarationModal && declarationModalEl.classList.contains('show')) {
-                            declarationModal.hide();
+                            hideModalKeepLock(declarationModalEl);
                             
                             // Wait for modal to fully close before opening next modal
                             declarationModalEl.addEventListener('hidden.bs.modal', function onHidden() {
@@ -5378,7 +5405,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         const declarationModal = declarationModalEl ? bootstrap.Modal.getInstance(declarationModalEl) : null;
                         
                         if (declarationModal && declarationModalEl.classList.contains('show')) {
-                            declarationModal.hide();
+                            hideModalKeepLock(document.getElementById('declarationFormModal'));
                             
                             // Wait for modal to fully close before opening next modal
                             declarationModalEl.addEventListener('hidden.bs.modal', function onHidden() {
@@ -5729,7 +5756,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                     // Close declaration form modal ONLY after explicit confirmation (already given)
                                     const declarationModal = bootstrap.Modal.getInstance(document.getElementById('declarationFormModal'));
                                     if (declarationModal) {
-                                        declarationModal.hide();
+                                    hideModalKeepLock(document.getElementById('declarationFormModal'));
                                     }
                                     
                                     // Show success modal with requested copy and behavior
@@ -6838,70 +6865,89 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
 
         // Function to check if donor is new (no eligibility record)
         function checkAndShowDonorStatus(donorId) {
-            // Directly show the donor status modal
+            if (!donorId) return;
             showDonorStatusModal(donorId);
         }
 
         // Function to show donor status modal
         // OPTIMIZED: Removed 800ms artificial delay, uses parallel data fetching, reuses modal instances
         function showDonorStatusModal(donorId) {
-            // Set current donor ID
-            window.currentDonorId = donorId;
+            if (!donorId) return;
 
-            // Get or create the donor status modal instance - reuse for better performance
-            const deferralStatusModalEl = document.getElementById('deferralStatusModal');
-            let deferralStatusModal = deferralStatusModalEl ? bootstrap.Modal.getInstance(deferralStatusModalEl) : null;
-            if (!deferralStatusModal) {
-                deferralStatusModal = new bootstrap.Modal(deferralStatusModalEl);
-            }
-            const deferralStatusContent = document.getElementById('deferralStatusContent');
-            
-            // Clear any previous content immediately and show loading
-            deferralStatusContent.innerHTML = `
-                <div class="d-flex justify-content-center align-items-center" style="min-height: 300px;">
-                    <div class="text-center">
-                        <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
-                            <span class="visually-hidden">Loading...</span>
+            const openModal = () => {
+                // Set current donor ID
+                window.currentDonorId = donorId;
+                if (window.AccessLockManager) {
+                    window.AccessLockManager.activate({ donor_id: donorId });
+                }
+
+                // Get or create the donor status modal instance - reuse for better performance
+                const deferralStatusModalEl = document.getElementById('deferralStatusModal');
+                let deferralStatusModal = deferralStatusModalEl ? bootstrap.Modal.getInstance(deferralStatusModalEl) : null;
+                if (!deferralStatusModal) {
+                    deferralStatusModal = new bootstrap.Modal(deferralStatusModalEl);
+                }
+                const deferralStatusContent = document.getElementById('deferralStatusContent');
+                
+                // Clear any previous content immediately and show loading
+                deferralStatusContent.innerHTML = `
+                    <div class="d-flex justify-content-center align-items-center" style="min-height: 300px;">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted fs-5">Loading donor information...</p>
+                            <p class="text-muted small">Please wait while we fetch the latest data</p>
                         </div>
-                        <p class="text-muted fs-5">Loading donor information...</p>
-                        <p class="text-muted small">Please wait while we fetch the latest data</p>
-                    </div>
-                </div>`;
-            
-            // Show modal immediately with loading state
-            deferralStatusModal.show();
-            
-            // Control "Mark for Medical Review" button visibility
-            controlMarkReviewButton(donorId);
-
-            // Fetch and display donor info immediately - OPTIMIZED: Single unified endpoint with parallel backend processing
-            fetch('../../assets/php_func/fetch_donor_complete_info_staff-medical-history.php?donor_id=' + donorId)
-                .then(r => r.json())
-                .then(response => {
-                        // Double-check we're still showing the correct donor
-                        if (window.currentDonorId === donorId) {
-                        if (response && response.success && response.data) {
-                            // Extract the data and deferral info from unified response
-                            const donorData = { success: true, data: response.data };
-                            const deferralData = response.deferral || null;
-                        displayDonorInfo(donorData, deferralData);
-                            } else {
+                    </div>`;
+                
+                // Show modal immediately with loading state
+                deferralStatusModal.show();
+                
+                // Control "Mark for Medical Review" button visibility
+                controlMarkReviewButton(donorId);
+                
+                // Fetch and display donor info immediately - OPTIMIZED: Single unified endpoint with parallel backend processing
+                fetch('../../assets/php_func/fetch_donor_complete_info_staff-medical-history.php?donor_id=' + donorId)
+                    .then(r => r.json())
+                    .then(response => {
+                            // Double-check we're still showing the correct donor
+                            if (window.currentDonorId === donorId) {
+                            if (response && response.success && response.data) {
+                                // Extract the data and deferral info from unified response
+                                const donorData = { success: true, data: response.data };
+                                const deferralData = response.deferral || null;
+                            displayDonorInfo(donorData, deferralData);
+                                } else {
+                                    deferralStatusContent.innerHTML = `
+                                        <div class="alert alert-danger">
+                                            Failed to load donor information
+                                        </div>`;
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error fetching donor info:', error);
+                            if (window.currentDonorId === donorId) {
                                 deferralStatusContent.innerHTML = `
                                     <div class="alert alert-danger">
-                                        Failed to load donor information
+                                        An error occurred while loading donor information
                                     </div>`;
                             }
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching donor info:', error);
-                        if (window.currentDonorId === donorId) {
-                            deferralStatusContent.innerHTML = `
-                                <div class="alert alert-danger">
-                                    An error occurred while loading donor information
-                                </div>`;
-                        }
-                    });
+                        });
+            };
+
+            if (window.AccessLockGuard) {
+                AccessLockGuard.ensureAccess({
+                    scope: 'medical_history',
+                    donorId,
+                    lockValue: 1,
+                    message: 'This donor is currently being processed by an admin account. Please try again later.',
+                    onAllowed: openModal
+                });
+            } else {
+                openModal();
+            }
         }
 
 
@@ -6920,5 +6966,28 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
 <?php if ($is_reviewer): ?>
 <script src="../../assets/js/admin-donor-registration-modal.js"></script>
 <?php endif; ?>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window.AccessLockManager) {
+                window.AccessLockManager.init({
+                    role: 'staff',
+                    scopes: ['medical_history'],
+                    guardSelectors: ['.view-donor-btn', '.clickable-row'],
+                    endpoint: '../../assets/php_func/access_lock_manager.php',
+                    autoClaim: false
+                });
+            }
+            ['deferralStatusModal','medicalHistoryModal','screeningFormModal','declarationFormModal','dataProcessingConfirmModal']
+                .forEach(setupLockReleaseModal);
+            const deferralModal = document.getElementById('deferralStatusModal');
+            if (deferralModal) {
+                deferralModal.addEventListener('show.bs.modal', function () {
+                    if (window.AccessLockManager && window.currentDonorId) {
+                        window.AccessLockManager.activate({ donor_id: window.currentDonorId });
+                    }
+                });
+            }
+        });
+    </script>
 </body>
 </html>

@@ -1,8 +1,0 @@
-requests>=2.31.0
-statsmodels>=0.14.0
-pandas>=2.0.0
-numpy>=1.24.0
-scipy>=1.3.2
-# Note: pmdarima would be ideal for auto.arima but has build issues on Windows
-# Using comprehensive SARIMA search with statsmodels instead
-

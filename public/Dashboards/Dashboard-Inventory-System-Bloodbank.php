@@ -25,6 +25,7 @@ include_once __DIR__ . '/module/optimized_functions.php';
 
 // Include auto-dispose function for expired blood units
 require_once '../../assets/php_func/admin_blood_bank_auto_dispose.php';
+require_once '../../assets/php_func/buffer_blood_manager.php';
 
 // Auto-dispose expired blood bank units on page load
 // This marks units with expires_at <= today as "Disposed"
@@ -281,12 +282,22 @@ if (empty($bloodInventory)) {
     $bloodInventory = [];
 }
 
+$bufferContext = getBufferBloodContext(BUFFER_BLOOD_DEFAULT_LIMIT, $bloodInventory);
+$bloodInventory = tagBufferBloodInInventory($bloodInventory, $bufferContext['buffer_lookup']);
+$bufferOnlyInventory = array_values(array_filter($bloodInventory, function($unit) {
+    return !empty($unit['is_buffer']);
+}));
+$activeInventory = array_values(array_filter($bloodInventory, function($unit) {
+    return empty($unit['is_buffer']);
+}));
+$bufferReserveCount = count($bufferOnlyInventory);
+
 // OPTIMIZATION 8: Efficient statistics calculation using array functions
 $today = new DateTime();
 $expiryLimit = (new DateTime())->modify('+7 days');
 
 // Use array_reduce for single-pass statistics calculation
-$stats = array_reduce($bloodInventory, function($carry, $bag) use ($today, $expiryLimit) {
+$stats = array_reduce($activeInventory, function($carry, $bag) use ($today, $expiryLimit) {
     // Count available (valid) bags; each unit represents 1 bag
     if ($bag['status'] === 'Valid') {
         $carry['totalBags'] += 1;
@@ -676,6 +687,63 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
     border: none;
 }
 
+.buffer-banner {
+    background: #fff8e1;
+    border: 1px solid #f7d774;
+    color: #8a5300;
+    border-radius: 6px;
+    padding: 12px 15px;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.buffer-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: #f7d774;
+    color: #7a4a00;
+}
+
+.buffer-row {
+    background: #fffdf0 !important;
+    position: relative;
+}
+
+.buffer-row td {
+    border-top: 1px solid #fde9a5 !important;
+}
+
+.buffer-type-card {
+    border-color: #f7d774;
+    box-shadow: 0 0 0 1px rgba(247, 215, 116, 0.4);
+    background: linear-gradient(135deg, #fffdf0 0%, #fff6d5 100%);
+}
+
+.buffer-drawer {
+    border: 1px solid #f7d774;
+    border-radius: 8px;
+    padding: 15px;
+    background: #fffef6;
+    display: none;
+}
+
+.buffer-drawer.open {
+    display: block;
+}
+
+.buffer-drawer table {
+    font-size: 0.9rem;
+}
+
 .inventory-stat-number {
     font-size: 64px;
     font-weight: bold;
@@ -1042,7 +1110,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <div class="col-md-3">
                             <div class="card text-center p-3 h-100 inventory-stat-card">
                                 <div class="card-body">
-                                    <h5 class="card-title text-dark fw-bold">Total Blood Units</h5>
+                                    <h5 class="card-title text-dark fw-bold">Total Blood Units (Active)</h5>
                                     <h1 class="inventory-stat-number my-3"><?php echo $totalBags; ?></h1>
                                 </div>
                             </div>
@@ -1078,12 +1146,52 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             </div>
                         </div>
                     </div>
+
+                    <div class="buffer-banner mb-3" data-buffer-banner>
+                        <i class="fas fa-shield-alt fa-lg"></i>
+                        <div>
+                            <strong><?php echo $bufferReserveCount; ?> buffer unit<?php echo $bufferReserveCount === 1 ? '' : 's'; ?></strong> are held in reserve. They remain highlighted in the table and are excluded from the totals above.
+                        </div>
+                        <button type="button" class="btn btn-outline-warning btn-sm" data-buffer-toggle>
+                            <i class="fas fa-list me-1"></i>View Buffer List
+                        </button>
+                    </div>
+                    <div class="buffer-drawer mb-4" data-buffer-drawer>
+                        <?php if ($bufferReserveCount > 0): ?>
+                            <div class="table-responsive">
+                                <table class="table table-sm mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Serial</th>
+                                            <th>Blood Type</th>
+                                            <th>Bag</th>
+                                            <th>Collected</th>
+                                            <th>Expires</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($bufferContext['buffer_units'] as $bufferUnit): ?>
+                                            <tr>
+                                                <td><?php echo htmlspecialchars($bufferUnit['serial_number'] ?? 'N/A'); ?></td>
+                                                <td><?php echo htmlspecialchars($bufferUnit['blood_type'] ?? 'Unknown'); ?></td>
+                                                <td><?php echo htmlspecialchars($bufferUnit['bag_type'] ?? 'Standard'); ?></td>
+                                                <td><?php echo $bufferUnit['collected_at'] ? date('M d, Y', strtotime($bufferUnit['collected_at'])) : '—'; ?></td>
+                                                <td><?php echo $bufferUnit['expires_at'] ? date('M d, Y', strtotime($bufferUnit['expires_at'])) : '—'; ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        <?php else: ?>
+                            <p class="text-muted mb-0">No buffer units identified at the moment.</p>
+                        <?php endif; ?>
+                    </div>
                     
                     <h5 class="mt-4 mb-3">Available Blood per Unit</h5>
                     
                     <?php
                     // OPTIMIZATION 9: Calculate blood type counts using array_reduce for efficiency
-                    $bloodTypeCounts = array_reduce($bloodInventory, function($carry, $bag) {
+                    $bloodTypeCounts = array_reduce($activeInventory, function($carry, $bag) {
                         if ($bag['status'] == 'Valid' && isset($carry[$bag['blood_type']])) {
                             $carry[$bag['blood_type']] += 1; // Each unit = 1 bag
                         }
@@ -1106,101 +1214,33 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     
                     <div class="row mb-4">
                         <!-- Blood Type Cards -->
+                        <?php
+                            $bloodTypeOrder = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+                            foreach ($bloodTypeOrder as $typeLabel):
+                                $availableCount = (int)($bloodTypeCounts[$typeLabel] ?? 0);
+                                $bufferTypeCount = (int)($bufferContext['buffer_types'][$typeLabel] ?? 0);
+                                $cardClasses = 'card p-3 h-100 blood-type-card position-relative';
+                                if ($bufferTypeCount > 0) {
+                                    $cardClasses .= ' buffer-type-card';
+                                }
+                        ?>
                         <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
-                                <?php echo renderDangerIcon((int)$bloodTypeCounts['A+'], $lowThreshold); ?>
+                            <div class="<?php echo $cardClasses; ?>">
+                                <?php echo renderDangerIcon($availableCount, $lowThreshold); ?>
+                                <?php if ($bufferTypeCount > 0): ?>
+                                    <div class="d-flex justify-content-end mb-1">
+                                        <span class="buffer-pill" data-buffer-highlight><?php echo $bufferTypeCount; ?> in buffer</span>
+                                    </div>
+                                <?php endif; ?>
                                 <div class="card-body">
-                                    <h5 class="card-title fw-bold">Blood Type: A+</h5>
-                                    <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['A+']; ?></span>
+                                    <h5 class="card-title fw-bold">Blood Type: <?php echo $typeLabel; ?></h5>
+                                    <p class="card-text">Availability:
+                                        <span class="fw-bold"><?php echo $availableCount; ?></span>
                                     </p>
                                 </div>
                             </div>
                         </div>
-                        
-                        <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
-                                <?php echo renderDangerIcon((int)$bloodTypeCounts['A-'], $lowThreshold); ?>
-                                <div class="card-body">
-                                    <h5 class="card-title fw-bold">Blood Type: A-</h5>
-                                    <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['A-']; ?></span>
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
-                                <?php echo renderDangerIcon((int)$bloodTypeCounts['B+'], $lowThreshold); ?>
-                                <div class="card-body">
-                                    <h5 class="card-title fw-bold">Blood Type: B+</h5>
-                                    <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['B+']; ?></span>
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
-                                <?php echo renderDangerIcon((int)$bloodTypeCounts['B-'], $lowThreshold); ?>
-                                <div class="card-body">
-                                    <h5 class="card-title fw-bold">Blood Type: B-</h5>
-                                    <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['B-']; ?></span>
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
-                                <?php echo renderDangerIcon((int)$bloodTypeCounts['O+'], $lowThreshold); ?>
-                                <div class="card-body">
-                                    <h5 class="card-title fw-bold">Blood Type: O+</h5>
-                                    <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['O+']; ?></span>
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
-                                <?php echo renderDangerIcon((int)$bloodTypeCounts['O-'], $lowThreshold); ?>
-                                <div class="card-body">
-                                    <h5 class="card-title fw-bold">Blood Type: O-</h5>
-                                    <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['O-']; ?></span>
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
-                                <?php echo renderDangerIcon((int)$bloodTypeCounts['AB+'], $lowThreshold); ?>
-                                <div class="card-body">
-                                    <h5 class="card-title fw-bold">Blood Type: AB+</h5>
-                                    <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['AB+']; ?></span>
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-md-3 mb-3">
-                            <div class="card p-3 h-100 blood-type-card" style="position: relative;">
-                                <?php echo renderDangerIcon((int)$bloodTypeCounts['AB-'], $lowThreshold); ?>
-                                <div class="card-body">
-                                    <h5 class="card-title fw-bold">Blood Type: AB-</h5>
-                                    <p class="card-text">Availability: 
-                                        <span class="fw-bold"><?php echo (int)$bloodTypeCounts['AB-']; ?></span>
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
+                        <?php endforeach; ?>
                     </div>
                     
                     <!-- Blood Bank Table -->
@@ -1224,11 +1264,24 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             </thead>
                             <tbody>
                                 <?php foreach ($currentPageInventory as $index => $bag): ?>
-                                <tr>
-                                    <td><?php echo $bag['serial_number']; ?></td>
-                                    <td><?php echo $bag['blood_type']; ?></td>
-                                    <td><?php echo $bag['collection_date']; ?></td>
-                                    <td><?php echo $bag['expiration_date']; ?></td>
+                                <?php
+                                    $unitId = $bag['unit_id'] ?? null;
+                                    $serialNumber = $bag['serial_number'] ?? '';
+                                    $isBufferRow = !empty($bag['is_buffer']);
+                                    $rowClasses = $isBufferRow ? 'buffer-row' : '';
+                                ?>
+                                <tr class="<?php echo $rowClasses; ?>"
+                                    data-unit-id="<?php echo htmlspecialchars($unitId ?? $serialNumber ?? ''); ?>"
+                                    data-unit-serial="<?php echo htmlspecialchars($serialNumber); ?>">
+                                    <td>
+                                        <?php echo htmlspecialchars($serialNumber); ?>
+                                        <?php if ($isBufferRow): ?>
+                                            <span class="buffer-pill ms-2" data-buffer-unit>Buffer</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td><?php echo htmlspecialchars($bag['blood_type']); ?></td>
+                                    <td><?php echo htmlspecialchars($bag['collection_date']); ?></td>
+                                    <td><?php echo htmlspecialchars($bag['expiration_date']); ?></td>
                                     <td class="text-center">
                                         <button class="btn btn-primary btn-sm" onclick="showDonorDetails(<?php echo $startIndex + $index; ?>)">
                                             <i class="fas fa-eye"></i>
@@ -1414,6 +1467,19 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <?php
+        $bufferJsPayload = [
+            'count' => $bufferReserveCount,
+            'unit_ids' => array_keys($bufferContext['buffer_lookup']['by_id']),
+            'unit_serials' => array_keys($bufferContext['buffer_lookup']['by_serial']),
+            'types' => $bufferContext['buffer_types'],
+            'page' => 'bloodbank'
+        ];
+    ?>
+    <script>
+        window.BUFFER_BLOOD_CONTEXT = <?php echo json_encode($bufferJsPayload); ?>;
+    </script>
+    <script src="../../assets/js/buffer-blood-manager.js"></script>
     <script>
         // Simple cache prevention - only refresh if page was loaded from cache
         window.addEventListener('pageshow', function(event) {
