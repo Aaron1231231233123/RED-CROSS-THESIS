@@ -86,6 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($fatalError)) {
     $subroleInput = trim($_POST['user_staff_roles'] ?? '');
     $currentImagePath = $userData['user_image'] ?? '';
     $newImageUploaded = false;
+    $removeImage = isset($_POST['remove_user_image']) && $_POST['remove_user_image'] === '1';
 
     if ($firstName === '') {
         $errors[] = 'First name is required.';
@@ -103,15 +104,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($fatalError)) {
         $errors[] = 'Please choose a valid staff subrole.';
     }
 
-    // Handle optional profile photo upload
+    // Handle optional profile photo upload (takes precedence over remove)
     if (isset($_FILES['user_image']) && $_FILES['user_image']['error'] !== UPLOAD_ERR_NO_FILE) {
         if ($_FILES['user_image']['error'] !== UPLOAD_ERR_OK) {
             $errors[] = 'Failed to upload profile photo.';
         } else {
             $allowedTypes = [
-                'image/jpeg' => 'jpg',
-                'image/png' => 'png',
-                'image/webp' => 'webp'
+                'image/jpeg' => 'image/jpeg',
+                'image/png' => 'image/png',
+                'image/webp' => 'image/webp'
             ];
             $tmpPath = $_FILES['user_image']['tmp_name'];
             $mime = mime_content_type($tmpPath);
@@ -120,27 +121,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($fatalError)) {
             } elseif ($_FILES['user_image']['size'] > 2 * 1024 * 1024) {
                 $errors[] = 'Profile photo must be 2MB or smaller.';
             } else {
-                $uploadDir = __DIR__ . '/../uploads/user_profiles/';
-                if (!is_dir($uploadDir) && !mkdir($uploadDir, 0775, true)) {
-                    $errors[] = 'Unable to create upload directory.';
+                // Read image file and convert to base64 data URL
+                $imageData = file_get_contents($tmpPath);
+                if ($imageData === false) {
+                    $errors[] = 'Failed to read profile photo.';
                 } else {
-                    $fileName = $userId . '_' . time() . '.' . $allowedTypes[$mime];
-                    $destination = $uploadDir . $fileName;
-                    if (!move_uploaded_file($tmpPath, $destination)) {
-                        $errors[] = 'Failed to save profile photo.';
-                    } else {
-                        if (!empty($currentImagePath)) {
-                            $existingPath = __DIR__ . '/../' . ltrim($currentImagePath, '/\\');
-                            if (is_file($existingPath)) {
-                                @unlink($existingPath);
-                            }
-                        }
-                        $currentImagePath = 'uploads/user_profiles/' . $fileName;
-                        $newImageUploaded = true;
-                    }
+                    // Convert to base64 data URL for storage in database
+                    $base64Image = base64_encode($imageData);
+                    $dataUrl = 'data:' . $mime . ';base64,' . $base64Image;
+                    $currentImagePath = $dataUrl;
+                    $newImageUploaded = true;
                 }
             }
         }
+    } elseif ($removeImage && !empty($currentImagePath)) {
+        // Handle profile photo removal (only if no new image was uploaded)
+        $currentImagePath = null;
+        $newImageUploaded = true; // Flag to update database with null
     }
 
     if (empty($errors)) {
@@ -153,39 +150,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($fatalError)) {
             'role_id' => $roleId,
             'is_active' => $isActive
         ];
+        // Only update user_image if a new image was uploaded or removed
+        // This ensures updating other fields won't affect the existing image
         if ($newImageUploaded) {
-            $updatePayload['user_image'] = $currentImagePath;
+            $updatePayload['user_image'] = $currentImagePath; // Will be null if removed, or new path if uploaded
         }
 
         $userUpdateResponse = supabaseRequest("users?user_id=eq.$userId", 'PATCH', $updatePayload);
 
         if (!supabaseSucceeded($userUpdateResponse)) {
             $errors[] = 'Failed to update user record.';
+            // If image was uploaded but database update failed, the file is still on server
+            // This is acceptable as user can retry the update
         } else {
-            // Future enhancement: attach audit logging payload here when backend hook is ready.
-            $upsertPayload = [
-                'user_id' => $userId,
-                'email' => $email,
-                'role_id' => $roleId,
-                'user_staff_roles' => $roleId === 3 ? $subroleInput : null
-            ];
+            // Refresh user data after successful update to get latest values (especially user_image)
+            $userData = fetchUserProfileById($userId);
+            if (!$userData) {
+                $errors[] = 'User record updated but could not refresh data.';
+            } else {
+                // Future enhancement: attach audit logging payload here when backend hook is ready.
+                $upsertPayload = [
+                    'user_id' => $userId,
+                    'email' => $email,
+                    'role_id' => $roleId,
+                    'user_staff_roles' => $roleId === 3 ? $subroleInput : null
+                ];
 
-            $roleResponse = supabaseRequest(
-                "user_roles?on_conflict=user_id",
-                'POST',
-                $upsertPayload,
-                true,
-                'resolution=merge-duplicates,return=representation'
-            );
+                $roleResponse = supabaseRequest(
+                    "user_roles?on_conflict=user_id",
+                    'POST',
+                    $upsertPayload,
+                    true,
+                    'resolution=merge-duplicates,return=representation'
+                );
 
-            if (!supabaseSucceeded($roleResponse)) {
-                $errors[] = 'Failed to update staff role details.';
-            }
+                if (!supabaseSucceeded($roleResponse)) {
+                    $errors[] = 'Failed to update staff role details.';
+                }
 
-            if (empty($errors)) {
-                $_SESSION['user_update_success'] = 'User profile updated successfully.';
-                header('Location: Dashboard-Inventory-System-Users.php');
-                exit();
+                if (empty($errors)) {
+                    $_SESSION['user_update_success'] = 'User profile updated successfully.';
+                    header('Location: Dashboard-Inventory-System-Users.php');
+                    exit();
+                }
             }
         }
     }
@@ -206,7 +213,17 @@ $roleIdCurrent = isset($userData['role_id']) ? (int)$userData['role_id'] : 0;
 $staffSubroleCurrent = $userData['user_staff_roles'] ?? '';
 $profileImagePath = $userData['user_image'] ?? '';
 $hasProfileImage = !empty($profileImagePath);
-$profileImageUrl = $hasProfileImage ? '../' . ltrim($profileImagePath, '/\\') : $defaultProfileAvatar;
+// Check if it's a base64 data URL (starts with 'data:') or a file path
+if ($hasProfileImage && strpos($profileImagePath, 'data:') === 0) {
+    // It's a base64 data URL stored in database - use directly
+    $profileImageUrl = $profileImagePath;
+} elseif ($hasProfileImage) {
+    // Legacy: It's a file path - prepend '../' for relative path
+    $profileImageUrl = '../' . ltrim($profileImagePath, '/\\');
+} else {
+    // No image - use default avatar
+    $profileImageUrl = $defaultProfileAvatar;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -507,6 +524,20 @@ $profileImageUrl = $hasProfileImage ? '../' . ltrim($profileImagePath, '/\\') : 
                                                 accept="image/jpeg,image/png,image/webp"
                                             >
                                             <div class="form-text">Max size 2MB. JPG, PNG, or WEBP.</div>
+                                            <?php if ($hasProfileImage): ?>
+                                                <div class="form-check mt-2">
+                                                    <input
+                                                        class="form-check-input"
+                                                        type="checkbox"
+                                                        name="remove_user_image"
+                                                        id="remove_user_image"
+                                                        value="1"
+                                                    >
+                                                    <label class="form-check-label text-danger" for="remove_user_image">
+                                                        Remove current photo
+                                                    </label>
+                                                </div>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
                                 </div>
@@ -556,8 +587,11 @@ $profileImageUrl = $hasProfileImage ? '../' . ltrim($profileImagePath, '/\\') : 
             const imageInput = document.getElementById('user_image');
             const imagePreview = document.getElementById('profileImagePreview');
             const imagePlaceholder = document.getElementById('profileImagePlaceholderText');
+            const removeImageCheckbox = document.getElementById('remove_user_image');
             const isActiveSwitch = document.getElementById('is_active');
             const isActiveLabel = document.querySelector('label[for="is_active"]');
+            const defaultProfileAvatar = '<?php echo htmlspecialchars($defaultProfileAvatar, ENT_QUOTES); ?>';
+            const currentProfileImage = '<?php echo htmlspecialchars($profileImageUrl, ENT_QUOTES); ?>';
 
             function toggleSubroleVisibility() {
                 if (!roleSelect || !subroleGroup || !subroleSelect || !requiredIndicator) {
@@ -584,6 +618,10 @@ $profileImageUrl = $hasProfileImage ? '../' . ltrim($profileImagePath, '/\\') : 
                     if (!file) {
                         return;
                     }
+                    // Uncheck remove image if user selects a new file
+                    if (removeImageCheckbox) {
+                        removeImageCheckbox.checked = false;
+                    }
                     const reader = new FileReader();
                     reader.onload = function(evt) {
                         imagePreview.src = evt.target?.result || imagePreview.src;
@@ -593,6 +631,34 @@ $profileImageUrl = $hasProfileImage ? '../' . ltrim($profileImagePath, '/\\') : 
                     };
                     reader.readAsDataURL(file);
                 });
+                
+                // Handle remove image checkbox
+                if (removeImageCheckbox && imagePreview) {
+                    removeImageCheckbox.addEventListener('change', function() {
+                        if (this.checked) {
+                            // Clear file input when removing
+                            if (imageInput) {
+                                imageInput.value = '';
+                            }
+                            // Show default placeholder image
+                            if (imagePreview && defaultProfileAvatar) {
+                                imagePreview.src = defaultProfileAvatar;
+                            }
+                            if (imagePlaceholder) {
+                                imagePlaceholder.classList.remove('d-none');
+                            }
+                        } else {
+                            // Restore original image if unchecking
+                            if (imagePreview && currentProfileImage) {
+                                imagePreview.src = currentProfileImage;
+                            }
+                            if (imagePlaceholder) {
+                                const hasImage = currentProfileImage && !currentProfileImage.startsWith('data:image/svg');
+                                imagePlaceholder.classList.toggle('d-none', hasImage);
+                            }
+                        }
+                    });
+                }
             }
 
             function updateStatusLabel() {
