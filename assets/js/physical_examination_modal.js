@@ -1285,6 +1285,7 @@ class PhysicalExaminationModal {
                     variant: 'success',
                     durationMs: 1800
                 });
+                try { window.__skipPESummary = true; } catch(_) {}
                 try { window.__holdPhysAccessLock = true; } catch(_) {}
                 this.redirectToDonorProfile(donorId, this.screeningData);
             } else {
@@ -1367,6 +1368,7 @@ class PhysicalExaminationModal {
         } catch(_) {}
         
         const ctx = { donorId: donorId ? String(donorId) : null, screeningData: screeningData || null };
+        const skipSummary = !!window.__skipPESummary;
         if (ctx.donorId) {
             try { 
                 window.lastDonorProfileContext = ctx; 
@@ -1475,12 +1477,14 @@ class PhysicalExaminationModal {
         };
         
         const showSummaryOrProfile = (isApproved) => {
-            if (isApproved && typeof openPhysicalExaminationSummaryModal === 'function' && ctx.donorId) {
+            const shouldSkipSummary = skipSummary || !!window.__skipPESummary;
+            if (!shouldSkipSummary && isApproved && typeof openPhysicalExaminationSummaryModal === 'function' && ctx.donorId) {
                 openPhysicalExaminationSummaryModal(ctx.donorId);
                 finalizeNavFlags();
             } else {
                 openDonorProfileFallback();
             }
+            try { window.__skipPESummary = false; } catch(_) {}
         };
         
         try { window.__peRedirecting = true; } catch(_) {}

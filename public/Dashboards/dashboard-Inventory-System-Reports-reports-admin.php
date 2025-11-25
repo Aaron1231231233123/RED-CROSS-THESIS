@@ -164,48 +164,19 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
                         <div class="col-12">
                             <div class="card chart-card p-3">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <h6 class="mb-0">Projected Balance Forecast by Month/Year</h6>
-                                    <div class="d-flex gap-2">
-                                        <select class="form-select form-select-sm" id="chartYearFilter" style="max-width:120px">
-                                            <option value="all">All Years</option>
-                                        </select>
-                                        <select class="form-select form-select-sm" id="chartBloodTypeFilter" style="max-width:150px">
-                                            <option value="all">All Blood Types</option>
-                                            <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
-                                            <option>O+</option><option>O-</option><option>AB+</option><option>AB-</option>
-                                        </select>
-                                    </div>
+                                    <h6 class="mb-0">Interactive Supply vs Demand (Next 3 Months)</h6>
+                                    <span class="text-muted small">Powered by Plotly</span>
                                 </div>
-                                <canvas id="lineChart" height="400"></canvas>
+                                <iframe id="interactiveCombinedFrame" src="" width="100%" height="420" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                                <small class="text-muted">This interactive view refreshes whenever you click Refresh Data.</small>
                             </div>
                         </div>
                     </div>
 
                     <hr class="my-2">
 
-                    <div class="d-flex gap-2 mb-3 filters flex-wrap">
-                        <select class="form-select form-select-sm" id="monthFilter">
-                            <option>All Months</option>
-                        </select>
-                        <select class="form-select form-select-sm" id="typeFilter">
-                            <option value="all">All Blood Types</option>
-                            <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
-                            <option>O+</option><option>O-</option><option>AB+</option><option>AB-</option>
-                        </select>
-                        <select class="form-select form-select-sm" id="balanceFilter">
-                            <option value="all">All Balances</option>
-                            <option value="surplus">Surplus Only</option>
-                            <option value="adequate">Adequate Only</option>
-                            <option value="low">Low Only</option>
-                        </select>
-                        <select class="form-select form-select-sm" id="yearFilter">
-                            <option value="all">All Years</option>
-                            <option value="2023">2023</option>
-                            <option value="2024">2024</option>
-                            <option value="2025">2025</option>
-                            <option value="2026">2026</option>
-                        </select>
-                        <input class="form-control form-control-sm" id="searchInput" placeholder="Search..." style="max-width:200px">
+                    <div class="alert alert-light border mb-3" role="alert">
+                        Forecast data below refreshes directly from Supabase. Use the Refresh Data button whenever you need the latest numbers.
                     </div>
 
                     <div class="table-responsive">
@@ -218,23 +189,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
                                     <th>Forecasted Donations</th>
                                     <th>Projected Balance</th>
                                     <th>Status</th>
-                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
                         </table>
                     </div>
-                    <div class="d-flex justify-content-center mt-2">
-                        <ul class="pagination pagination-sm custom-pagination" id="pagination">
-                            <li class="page-item"><a class="page-link" href="#">&lt;</a></li>
-                            <li class="page-item active"><a class="page-link" href="#">1</a></li>
-                            <li class="page-item"><a class="page-link" href="#">2</a></li>
-                            <li class="page-item"><a class="page-link" href="#">3</a></li>
-                            <li class="page-item"><a class="page-link" href="#">4</a></li>
-                            <li class="page-item"><a class="page-link" href="#">5</a></li>
-                            <li class="page-item"><a class="page-link" href="#">&gt;</a></li>
-                        </ul>
-                    </div>
+                    <div class="text-muted mt-2 small">Showing latest forecast for every blood type.</div>
 
                     <hr class="my-3">
 
@@ -242,16 +202,46 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
                     <div class="row g-3 charts-row">
                         <div class="col-lg-6 col-md-12">
                             <div class="card chart-card p-3">
-                                <h6>Demand vs. Donations</h6>
-                                <canvas id="barChart" height="450"></canvas>
+                                <h6>Forecasted Blood Supply</h6>
+                                <img id="supplyChartImg" src="" alt="Supply Forecast Chart" class="img-fluid rounded mb-3 border">
+                                <h6 class="mt-2">Forecasted Hospital Demand</h6>
+                                <img id="demandChartImg" src="" alt="Demand Forecast Chart" class="img-fluid rounded border">
                             </div>
                         </div>
                         <div class="col-lg-6 col-md-12">
                             <div class="card chart-card p-3">
-                                <h6>Share of Demand</h6>
-                                <canvas id="pieChart" height="450"></canvas>
+                                <h6>Supply vs Demand Comparison</h6>
+                                <img id="comparisonChartImg" src="" alt="Supply vs Demand Chart" class="img-fluid rounded mb-3 border">
+                                <h6 class="mt-2">Projected Stock Buffer</h6>
+                                <img id="projectedChartImg" src="" alt="Projected Stock Chart" class="img-fluid rounded border">
                             </div>
                         </div>
+                    </div>
+
+                    <div class="row g-3 charts-row mt-1">
+                        <div class="col-lg-6 col-md-12">
+                            <div class="card chart-card p-3">
+                                <h6>Interactive Supply Trend</h6>
+                                <iframe id="interactiveSupplyFrame" src="" width="100%" height="360" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                            </div>
+                        </div>
+                        <div class="col-lg-6 col-md-12">
+                            <div class="card chart-card p-3">
+                                <h6>Interactive Demand Trend</h6>
+                                <iframe id="interactiveDemandFrame" src="" width="100%" height="360" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card chart-card p-3 mt-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">Projected Stock Status</h6>
+                            <small class="text-muted">Target buffer: 10 units</small>
+                        </div>
+                        <div id="projectedStockPanel" class="mt-3">
+                            <p class="text-muted mb-0">Loading projected stock levels...</p>
+                        </div>
+                        <iframe id="projectedStockFrame" src="" width="100%" height="360" frameborder="0" class="mt-3" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
                     </div>
                     </div>
                 </div>
@@ -277,8 +267,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
     </div>
 
     <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script defer src="../../assets/js/dashboard-inventory-system-reports-admin.js"></script>
+    <script defer src="../../assets/js/forecast-dashboard.js"></script>
     
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -295,4 +284,5 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
     <script src="../../assets/js/admin-donor-registration-modal.js"></script>
     <script src="../../assets/js/admin-screening-form-modal.js"></script>
 </body>
+</html>
 </html>

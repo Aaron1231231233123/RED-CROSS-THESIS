@@ -1089,8 +1089,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
     <script src="../../assets/js/search_func/search_account_medical_history.js"></script>
     <script src="../../assets/js/search_func/filter_search_account_medical_history.js"></script>
     <script src="../../assets/js/search_func/sort_account_medical_history.js"></script>
-    <script src="../../assets/js/access-lock-manager.js"></script>
-    <script src="../../assets/js/access-lock-guard.js"></script>
+    <script>
+        window.ACCESS_LOCK_ENDPOINT_INTERVIEWER = '../../assets/php_func/access_lock_manager-interviewer.php';
+    </script>
+    <script src="../../assets/js/access-lock-manager-interviewer.js"></script>
+    <script src="../../assets/js/access-lock-guard-interviewer.js"></script>
     <script>
         window.ACCESS_LOCK_ROLE_VALUE = 1;
     </script>
@@ -3115,8 +3118,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             modalEl.addEventListener('hidden.bs.modal', function () {
                 const shouldRelease = modalEl.dataset.releaseLock !== '0';
                 modalEl.dataset.releaseLock = '1';
-                if (shouldRelease && window.AccessLockManager) {
-                    window.AccessLockManager.deactivate();
+                if (shouldRelease && window.AccessLockManagerInterviewer) {
+                    window.AccessLockManagerInterviewer.deactivate();
                 }
             });
             modalEl.addEventListener('hide.bs.modal', function () {
@@ -3990,9 +3993,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             // Handle proceed button click with confirmation
             function openMedicalHistoryForCurrentDonor() {
                 if (!currentDonorId) return;
-                
-                // Show confirmation modal before proceeding
-                showProcessMedicalHistoryConfirmation();
+                const proceed = () => {
+                    // Show confirmation modal before proceeding
+                    showProcessMedicalHistoryConfirmation();
+                };
+                if (!guardMedicalAccess(currentDonorId, proceed)) {
+                    proceed();
+                }
             }
             
             // Show confirmation modal for processing medical history
@@ -6869,6 +6876,35 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             showDonorStatusModal(donorId);
         }
 
+        function hideDonorStatusModal() {
+            try {
+                const modalEl = document.getElementById('deferralStatusModal');
+                if (!modalEl) return;
+                const inst = bootstrap.Modal.getInstance(modalEl);
+                if (inst) inst.hide();
+                modalEl.classList.remove('show');
+                modalEl.style.display = 'none';
+            } catch(_) {}
+        }
+
+        function guardMedicalAccess(donorId, onAllowed) {
+            const guard = window.AccessLockGuardInterviewer;
+            if (!guard || typeof guard.ensureAccess !== 'function') {
+                return false;
+            }
+            guard.ensureAccess({
+                scope: 'medical_history',
+                donorId,
+                lockValue: window.ACCESS_LOCK_ROLE_VALUE || 1,
+                message: 'This donor is currently being processed by an admin account. Please try again later.',
+                onAllowed,
+                onBlocked: () => {
+                    hideDonorStatusModal();
+                }
+            });
+            return true;
+        }
+
         // Function to show donor status modal
         // OPTIMIZED: Removed 800ms artificial delay, uses parallel data fetching, reuses modal instances
         function showDonorStatusModal(donorId) {
@@ -6877,8 +6913,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             const openModal = () => {
                 // Set current donor ID
                 window.currentDonorId = donorId;
-                if (window.AccessLockManager) {
-                    window.AccessLockManager.activate({ donor_id: donorId });
+                if (window.AccessLockManagerInterviewer) {
+                    window.AccessLockManagerInterviewer.activate({ donor_id: donorId });
                 }
 
                 // Get or create the donor status modal instance - reuse for better performance
@@ -6937,15 +6973,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         });
             };
 
-            if (window.AccessLockGuard) {
-                AccessLockGuard.ensureAccess({
-                    scope: 'medical_history',
-                    donorId,
-                    lockValue: 1,
-                    message: 'This donor is currently being processed by an admin account. Please try again later.',
-                    onAllowed: openModal
-                });
-            } else {
+            if (!guardMedicalAccess(donorId, openModal)) {
                 openModal();
             }
         }
@@ -6968,12 +6996,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
 <?php endif; ?>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            if (window.AccessLockManager) {
-                window.AccessLockManager.init({
+            if (window.AccessLockManagerInterviewer) {
+                window.AccessLockManagerInterviewer.init({
                     role: 'staff',
                     scopes: ['medical_history'],
                     guardSelectors: ['.view-donor-btn', '.clickable-row'],
-                    endpoint: '../../assets/php_func/access_lock_manager.php',
+                    endpoint: '../../assets/php_func/access_lock_manager-interviewer.php',
                     autoClaim: false
                 });
             }
@@ -6982,8 +7010,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             const deferralModal = document.getElementById('deferralStatusModal');
             if (deferralModal) {
                 deferralModal.addEventListener('show.bs.modal', function () {
-                    if (window.AccessLockManager && window.currentDonorId) {
-                        window.AccessLockManager.activate({ donor_id: window.currentDonorId });
+            if (window.AccessLockManagerInterviewer && window.currentDonorId) {
+                window.AccessLockManagerInterviewer.activate({ donor_id: window.currentDonorId });
                     }
                 });
             }

@@ -2,16 +2,14 @@
     'use strict';
 
     const DEFAULT_GUARDS = ['.view-donor-btn', '.view-btn', '.edit-btn', '.collect-btn', '.view-donor'];
-    const DEFAULT_ENDPOINT = window.ACCESS_LOCK_ENDPOINT || '../../assets/php_func/access_lock_manager.php';
-    const MODAL_ID = 'accessLockGuardModal';
-    const STYLE_ID = 'accessLockGuardStyle';
+    const DEFAULT_ENDPOINT = window.ACCESS_LOCK_ENDPOINT_INTERVIEWER || '../../assets/php_func/access_lock_manager-interviewer.php';
 
-    function createModal() {
-        if (document.getElementById(MODAL_ID)) {
+    function ensureModal() {
+        if (document.getElementById('accessLockGuardModalInterviewer')) {
             return;
         }
         const modal = document.createElement('div');
-        modal.id = MODAL_ID;
+        modal.id = 'accessLockGuardModalInterviewer';
         modal.setAttribute('role', 'dialog');
         modal.setAttribute('aria-modal', 'true');
         modal.setAttribute('aria-hidden', 'true');
@@ -23,7 +21,7 @@
                     <button type="button" class="access-lock-close" aria-label="Close">&times;</button>
                 </div>
                 <div class="access-lock-body">
-                    <p id="accessLockGuardMessage">This record is currently locked.</p>
+                    <p id="accessLockGuardMessageInterviewer">This donor data is being processed by an admin account.</p>
                 </div>
                 <div class="access-lock-footer">
                     <button type="button" class="access-lock-dismiss btn btn-danger btn-sm">Okay</button>
@@ -40,11 +38,11 @@
             }
         });
 
-        if (!document.getElementById(STYLE_ID)) {
+        if (!document.getElementById('accessLockGuardStyleInterviewer')) {
             const style = document.createElement('style');
-            style.id = STYLE_ID;
+            style.id = 'accessLockGuardStyleInterviewer';
             style.textContent = `
-                #${MODAL_ID} {
+                #accessLockGuardModalInterviewer {
                     position: fixed;
                     inset: 0;
                     display: none;
@@ -52,13 +50,13 @@
                     justify-content: center;
                     z-index: 11000;
                 }
-                #${MODAL_ID}.show { display: flex; }
-                #${MODAL_ID} .access-lock-backdrop {
+                #accessLockGuardModalInterviewer.show { display: flex; }
+                #accessLockGuardModalInterviewer .access-lock-backdrop {
                     position: absolute;
                     inset: 0;
                     background: rgba(0, 0, 0, 0.55);
                 }
-                #${MODAL_ID} .access-lock-dialog {
+                #accessLockGuardModalInterviewer .access-lock-dialog {
                     position: relative;
                     z-index: 2;
                     width: min(420px, 90vw);
@@ -68,7 +66,7 @@
                     overflow: hidden;
                     animation: accessLockFade 0.25s ease-out;
                 }
-                #${MODAL_ID} .access-lock-header {
+                #accessLockGuardModalInterviewer .access-lock-header {
                     padding: 14px 18px;
                     background: linear-gradient(135deg, #b22222, #8b0000);
                     color: #fff;
@@ -76,10 +74,10 @@
                     justify-content: space-between;
                     align-items: center;
                 }
-                #${MODAL_ID} .access-lock-title {
+                #accessLockGuardModalInterviewer .access-lock-title {
                     font-weight: 600;
                 }
-                #${MODAL_ID} .access-lock-close {
+                #accessLockGuardModalInterviewer .access-lock-close {
                     background: none;
                     border: none;
                     color: #fff;
@@ -87,16 +85,16 @@
                     line-height: 1;
                     cursor: pointer;
                 }
-                #${MODAL_ID} .access-lock-body {
+                #accessLockGuardModalInterviewer .access-lock-body {
                     padding: 18px;
                     color: #333;
                 }
-                #${MODAL_ID} .access-lock-footer {
+                #accessLockGuardModalInterviewer .access-lock-footer {
                     padding: 12px 18px 20px;
                     display: flex;
                     justify-content: flex-end;
                 }
-                .access-lock-disabled {
+                .access-lock-disabled-interviewer {
                     pointer-events: none !important;
                     opacity: 0.6 !important;
                 }
@@ -110,23 +108,23 @@
     }
 
     function showModal(message) {
-        createModal();
-        const modal = document.getElementById(MODAL_ID);
-        const text = modal.querySelector('#accessLockGuardMessage');
-        text.textContent = message || 'This record is currently locked.';
+        ensureModal();
+        const modal = document.getElementById('accessLockGuardModalInterviewer');
+        const text = modal.querySelector('#accessLockGuardMessageInterviewer');
+        text.textContent = message || 'This donor data is being processed by an admin account.';
         modal.classList.add('show');
         modal.setAttribute('aria-hidden', 'false');
     }
 
     function hideModal() {
-        const modal = document.getElementById(MODAL_ID);
+        const modal = document.getElementById('accessLockGuardModalInterviewer');
         if (modal) {
             modal.classList.remove('show');
             modal.setAttribute('aria-hidden', 'true');
         }
     }
 
-    const AccessLockManager = {
+    const AccessLockManagerInterviewer = {
         initialized: false,
         scopes: [],
         guardSelectors: [],
@@ -159,7 +157,7 @@
             }
 
             if (!this.scopes.length) {
-                console.warn('[AccessLockManager] No scopes supplied. Initialization skipped.');
+                console.warn('[AccessLockManagerInterviewer] No scopes supplied. Initialization skipped.');
                 return;
             }
 
@@ -199,7 +197,7 @@
                     this.releaseSent = false;
                 })
                 .catch((err) => {
-                    console.error('[AccessLockManager] Claim failed:', err);
+                    console.error('[AccessLockManagerInterviewer] Claim failed:', err);
                     this.active = false;
                 })
                 .finally(() => this.fetchStatus());
@@ -211,7 +209,7 @@
             }
             this.sendRequest({ action: 'release' })
                 .catch((err) => {
-                    console.error('[AccessLockManager] Release failed:', err);
+                    console.error('[AccessLockManagerInterviewer] Release failed:', err);
                 })
                 .finally(() => {
                     this.active = false;
@@ -230,7 +228,7 @@
                     const blob = new Blob([payload], { type: 'application/json' });
                     navigator.sendBeacon(this.endpoint, blob);
                 } catch (err) {
-                    console.error('[AccessLockManager] Beacon release failed:', err);
+                    console.error('[AccessLockManagerInterviewer] Beacon release failed:', err);
                 }
             } else {
                 this.sendRequest({ action: 'release' }).catch(() => {});
@@ -252,7 +250,7 @@
                     }
                 })
                 .catch((err) => {
-                    console.error('[AccessLockManager] Status check failed:', err);
+                    console.error('[AccessLockManagerInterviewer] Status check failed:', err);
                 });
         },
 
@@ -287,12 +285,8 @@
             }
         },
 
-        notifyBlocked() {
-            if (this.role === 'staff') {
-                showModal('This donor data is being processed by an admin account.');
-            } else {
-                showModal('This donor data is currently handled by a staff account.');
-            }
+        notifyBlocked(customMessage) {
+            showModal(customMessage || 'This donor data is being processed by an admin account.');
         },
 
         buildRecordsPayload(explicitRecords) {
@@ -366,10 +360,10 @@
             this.guardSelectors.forEach((selector) => {
                 document.querySelectorAll(selector).forEach((element) => {
                     if (this.blocked) {
-                        element.classList.add('access-lock-disabled');
+                        element.classList.add('access-lock-disabled-interviewer');
                         element.setAttribute('aria-disabled', 'true');
                     } else {
-                        element.classList.remove('access-lock-disabled');
+                        element.classList.remove('access-lock-disabled-interviewer');
                         element.removeAttribute('aria-disabled');
                     }
                 });
@@ -377,7 +371,7 @@
         }
     };
 
-    const AccessLockAPI = {
+    const AccessLockAPIInterviewer = {
         call({ action, scopes, access, records, endpoint = DEFAULT_ENDPOINT }) {
             if (!Array.isArray(scopes) || !scopes.length) {
                 return Promise.reject(new Error('Scopes are required for access lock API'));
@@ -403,9 +397,6 @@
                     throw new Error(text || 'Request failed');
                 }
                 return response.json();
-            }).catch((err) => {
-                console.error('[AccessLockAPI] Request failed:', err);
-                throw err;
             });
         },
         claim({ scopes, access = 1, records, endpoint }) {
@@ -419,7 +410,7 @@
         }
     };
 
-    window.AccessLockManager = AccessLockManager;
-    window.AccessLockAPI = AccessLockAPI;
+    window.AccessLockManagerInterviewer = AccessLockManagerInterviewer;
+    window.AccessLockAPIInterviewer = AccessLockAPIInterviewer;
 })(window, document);
 

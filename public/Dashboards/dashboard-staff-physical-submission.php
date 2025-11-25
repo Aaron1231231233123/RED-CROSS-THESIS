@@ -4669,7 +4669,11 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             try { window.__holdPhysAccessLock = false; } catch(_) {}
             try {
                 if (window.AccessLockManager) {
-                    window.AccessLockManager.deactivate();
+                    if (typeof window.AccessLockManager.__physicianForceRelease === 'function') {
+                        window.AccessLockManager.__physicianForceRelease();
+                    } else {
+                        window.AccessLockManager.deactivate();
+                    }
                 }
             } catch(_) {}
         }
@@ -6431,6 +6435,11 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         const donorIdInput = document.querySelector('#modalMedicalHistoryForm input[name="donor_id"]');
                         const donorId = donorIdInput ? donorIdInput.value : null;
                         
+                        // Explicitly allow donor profile to reopen
+                        window.__preventDonorProfileOpen = false;
+                        window.__sidebarNavigationActive = false;
+                        window.__navigationTarget = 'donor-profile';
+                        window.__explicitDonorProfileOpen = true;
                         if (typeof window.showApprovedThenReturn === 'function') {
                             try { 
                                 // Store context for success flow
@@ -7003,6 +7012,19 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     autoClaim: false
                 });
             }
+            if (window.AccessLockManager && !window.AccessLockManager.__physicianGuardApplied) {
+                window.AccessLockManager.__physicianGuardApplied = true;
+                const originalDeactivate = window.AccessLockManager.deactivate.bind(window.AccessLockManager);
+                window.AccessLockManager.__physicianForceRelease = originalDeactivate;
+                window.AccessLockManager.deactivate = function(...args) {
+                    if (window.__holdPhysAccessLock) {
+                        return;
+                    }
+                    return originalDeactivate(...args);
+                };
+            }
+            window.addEventListener('beforeunload', () => { window.__holdPhysAccessLock = false; });
+            window.addEventListener('pagehide', () => { window.__holdPhysAccessLock = false; });
             ['donorProfileModal','physicalExaminationModal','physicalExamApproveConfirmModal'].forEach(setupLockReleaseModal);
             let physicalDonorId = null;
             window.currentPhysicalDonorId = window.currentPhysicalDonorId || null;
