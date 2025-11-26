@@ -8,6 +8,20 @@ header("Expires: 0");
 session_start();
 include_once '../../assets/conn/db_conn.php';
 require_once 'module/optimized_functions.php';
+require_once '../../assets/php_func/buffer_blood_manager.php';
+require_once '../../assets/php_func/admin_blood_bank_auto_dispose.php';
+require_once __DIR__ . '/module/blood_inventory_data.php';
+
+// Auto-dispose expired blood bank units on page load to keep counts aligned
+try {
+    $disposeResult = admin_blood_bank_auto_dispose();
+    if ($disposeResult['success'] && $disposeResult['disposed_count'] > 0) {
+        error_log("Home Dashboard: Auto-disposed {$disposeResult['disposed_count']} expired unit(s)");
+    }
+} catch (Exception $e) {
+    error_log("Home Dashboard: Error during auto-dispose: " . $e->getMessage());
+    // Continue loading page even if auto-dispose fails
+}
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
@@ -29,14 +43,16 @@ include_once __DIR__ . '/module/optimized_functions.php';
 $startTime = microtime(true);
 
 // OPTIMIZATION: Smart caching with intelligent change detection
-$cacheKey = 'home_dashboard_v3_' . date('Y-m-d'); // Daily cache key (bumped to v3)
+$cacheKey = 'home_dashboard_v5_' . date('Y-m-d'); // Daily cache key (bumped to v5)
 $cacheFile = sys_get_temp_dir() . '/' . $cacheKey . '.json';
 $cacheMetaFile = sys_get_temp_dir() . '/' . $cacheKey . '_meta.json';
 
-// Cache enabled with improved change detection
+// Cache disabled to keep counts perfectly in sync with Blood Bank dashboard
+$cacheEnabled = false;
 $useCache = false;
 $needsFullRefresh = false;
 $needsCountRefresh = false;
+$maxCacheAge = 0;
 
 // TEMPORARY: Force cache refresh for GIS debugging
 if (isset($_GET['debug_gis']) && $_GET['debug_gis'] == '1') {
@@ -54,16 +70,26 @@ if (isset($_GET['refresh']) && $_GET['refresh'] == '1') {
 }
 
 // Check if cache exists and is valid
-if (file_exists($cacheFile) && file_exists($cacheMetaFile)) {
+if ($cacheEnabled && file_exists($cacheFile) && file_exists($cacheMetaFile)) {
     $cacheMeta = json_decode(file_get_contents($cacheMetaFile), true);
-    $cacheAge = time() - $cacheMeta['timestamp'];
+    $cacheTimestamp = isset($cacheMeta['timestamp']) ? (int)$cacheMeta['timestamp'] : 0;
+    $cacheAge = time() - $cacheTimestamp;
     
-    // Simplified change detection - only check cache age
     $hasChanges = false;
-    
-    // PERFORMANCE FIX: Extended cache lifetime from 15 minutes to 2 hours
-    if ($cacheAge > 7200) { // 2 hours (was 900 = 15 minutes)
+    if ($cacheAge > $maxCacheAge) {
         $hasChanges = true;
+    } else {
+        $statusCheckResponse = supabaseRequest("blood_bank_units?select=status,updated_at&order=updated_at.desc&limit=10");
+        $currentStatusHash = md5(json_encode($statusCheckResponse ?: []));
+        $handedOverCheckResponse = supabaseRequest("blood_bank_units?select=unit_id,status&status=eq.handed_over");
+        $currentHandedOverHash = md5(json_encode($handedOverCheckResponse ?: []));
+        
+        if (($cacheMeta['statusHash'] ?? null) !== $currentStatusHash) {
+            $hasChanges = true;
+        }
+        if (($cacheMeta['handedOverHash'] ?? null) !== $currentHandedOverHash) {
+            $hasChanges = true;
+        }
     }
     
     if (!$hasChanges) {
@@ -76,10 +102,16 @@ if (file_exists($cacheFile) && file_exists($cacheMetaFile)) {
             $bloodInStockCount = $cachedData['bloodInStockCount'] ?? 0;
             $bloodByType = $cachedData['bloodByType'] ?? [];
             $bloodInventory = $cachedData['bloodInventory'] ?? [];
+            $bufferContext = $cachedData['bufferContext'] ?? null;
+            $bufferReserveCount = $cachedData['bufferReserveCount'] ?? 0;
+            $bufferTypes = $cachedData['bufferTypes'] ?? [];
             $totalDonorCount = $cachedData['totalDonorCount'] ?? 0;
             $cityDonorCounts = $cachedData['cityDonorCounts'] ?? [];
             $heatmapData = $cachedData['heatmapData'] ?? [];
             $donorLookup = $cachedData['donorLookup'] ?? [];
+            $activeInventory = array_values(array_filter($bloodInventory, function($unit) {
+                return empty($unit['is_buffer']);
+            }));
             
             // Debug cache loading
             error_log("CACHE LOADED (v3) - Total Donor Count: " . $totalDonorCount . " (Age: " . round($cacheAge/60) . " mins)");
@@ -95,89 +127,31 @@ if (file_exists($cacheFile) && file_exists($cacheMetaFile)) {
             if (file_exists($cacheFile)) unlink($cacheFile);
             if (file_exists($cacheMetaFile)) unlink($cacheMetaFile);
         }
+    } else {
+        // Cache stale or data changed - delete to rebuild
+        if (file_exists($cacheFile)) unlink($cacheFile);
+        if (file_exists($cacheMetaFile)) unlink($cacheMetaFile);
     }
 }
 
-// OPTIMIZED: Simplified data fetching using only necessary tables
-// ----------------------------------------------------
-// PART 1: GET HOSPITAL REQUESTS COUNT (OPTIMIZED)
-// ----------------------------------------------------
 $hospitalRequestsCount = 0;
 $bloodRequestsResponse = supabaseRequest("blood_requests?status=eq.Pending&select=request_id");
 if (isset($bloodRequestsResponse['data']) && is_array($bloodRequestsResponse['data'])) {
     $hospitalRequestsCount = count($bloodRequestsResponse['data']);
 }
 
-// ----------------------------------------------------
-// PART 2-3: GET BLOOD RECEIVED, INVENTORY, AND BLOOD TYPE COUNTS IN ONE PASS
-// ----------------------------------------------------
-$bloodInventory = [];
-$bloodInStockCount = 0;
-$bloodReceivedCount = 0;
-$seenDonorIds = [];
-$bloodByType = [
-    'A+' => 0,
-    'A-' => 0,
-    'B+' => 0,
-    'B-' => 0,
-    'O+' => 0,
-    'O-' => 0,
-    'AB+' => 0,
-    'AB-' => 0
-];
-
-// Single query without ORDER BY for speed
-$bloodBankUnitsResponse = supabaseRequest("blood_bank_units?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,created_at,updated_at&unit_serial_number=not.is.null");
-$bloodBankUnitsData = isset($bloodBankUnitsResponse['data']) ? $bloodBankUnitsResponse['data'] : [];
-
-if (is_array($bloodBankUnitsData) && !empty($bloodBankUnitsData)) {
-    foreach ($bloodBankUnitsData as $item) {
-        // Count unique donors (successful donations)
-        $donorId = $item['donor_id'];
-        if (!isset($seenDonorIds[$donorId])) {
-            $seenDonorIds[$donorId] = true;
-            $bloodReceivedCount++;
-        }
-
-        // Parse dates once
-        $collectionDate = new DateTime($item['collected_at']);
-        $expirationDate = new DateTime($item['expires_at']);
-        $today = new DateTime();
-
-        // Skip expired or handed over units for inventory/availability
-        $isExpired = ($today > $expirationDate);
-        $isHandedOver = ($item['status'] === 'handed_over');
-        if ($isExpired || $isHandedOver) {
-            continue;
-        }
-
-        // Count available inventory
-        $bloodInStockCount += 1;
-
-        // Update blood type availability
-        $bt = $item['blood_type'] ?? '';
-        if (isset($bloodByType[$bt])) {
-            $bloodByType[$bt] += 1;
-        }
-
-        // Build simplified inventory list used by UI
-        $bloodInventory[] = [
-            'unit_id' => $item['unit_id'],
-            'donor_id' => $donorId,
-            'serial_number' => $item['unit_serial_number'],
-            'blood_type' => $bt,
-            'bags' => 1,
-            'bag_type' => $item['bag_type'] ?: 'Standard',
-            'bag_brand' => $item['bag_brand'] ?: 'N/A',
-            'collection_date' => $collectionDate->format('Y-m-d'),
-            'expiration_date' => $expirationDate->format('Y-m-d'),
-            'status' => 'Valid',
-            'unit_status' => $item['status'],
-            'created_at' => $item['created_at'],
-            'updated_at' => $item['updated_at'],
-        ];
-    }
-}
+// Shared inventory snapshot (identical data source as Blood Bank dashboard)
+$inventorySnapshot = loadBloodInventorySnapshot();
+$bloodInventory = $inventorySnapshot['bloodInventory'];
+$activeInventory = $inventorySnapshot['activeInventory'];
+$bufferOnlyInventory = $inventorySnapshot['bufferOnlyInventory'];
+$bufferContext = $inventorySnapshot['bufferContext'];
+$bufferReserveCount = $inventorySnapshot['bufferReserveCount'];
+$bufferTypes = $inventorySnapshot['bufferTypes'];
+$bloodInStockCount = $inventorySnapshot['bloodInStockCount'];
+$bloodByType = $inventorySnapshot['bloodByType'];
+$bloodReceivedCount = $inventorySnapshot['bloodReceivedCount'];
+$totalDonorCount = $inventorySnapshot['totalDonorCount'];
 
 // ----------------------------------------------------
 // PART 5: PROCESS GIS MAPPING DATA (DEFERRED FOR PERFORMANCE)
@@ -186,7 +160,7 @@ if (is_array($bloodBankUnitsData) && !empty($bloodBankUnitsData)) {
 // This significantly reduces initial page load time
 $cityDonorCounts = [];
 $heatmapData = [];
-$totalDonorCount = count($seenDonorIds); // Quick count from already-loaded data
+$totalDonorCount = $inventorySnapshot['totalDonorCount'];
 $postgisAvailable = false;
 
 // OPTIMIZATION: Performance logging and caching
@@ -203,6 +177,9 @@ $cacheData = [
     'bloodInStockCount' => $bloodInStockCount,
     'bloodByType' => $bloodByType,
     'bloodInventory' => $bloodInventory,
+    'bufferContext' => $bufferContext,
+    'bufferReserveCount' => $bufferReserveCount,
+    'bufferTypes' => $bufferTypes,
     'totalDonorCount' => $totalDonorCount,
     'cityDonorCounts' => [],  // Will be loaded via AJAX
     'heatmapData' => [],      // Will be loaded via AJAX
@@ -210,14 +187,22 @@ $cacheData = [
     'timestamp' => time()
 ];
 
-// Simplified cache metadata (no expensive API calls for change detection)
-$cacheMeta = [
-    'timestamp' => time(),
-    'version' => 'v1'
-];
-
-file_put_contents($cacheFile, json_encode($cacheData));
-file_put_contents($cacheMetaFile, json_encode($cacheMeta));
+if ($cacheEnabled) {
+    $statusCheckResponse = supabaseRequest("blood_bank_units?select=status,updated_at&order=updated_at.desc&limit=10");
+    $currentStatusHash = md5(json_encode($statusCheckResponse ?: []));
+    $handedOverCheckResponse = supabaseRequest("blood_bank_units?select=unit_id,status&status=eq.handed_over");
+    $currentHandedOverHash = md5(json_encode($handedOverCheckResponse ?: []));
+    
+    $cacheMeta = [
+        'timestamp' => time(),
+        'statusHash' => $currentStatusHash,
+        'handedOverHash' => $currentHandedOverHash,
+        'version' => 'v1'
+    ];
+    
+    file_put_contents($cacheFile, json_encode($cacheData));
+    file_put_contents($cacheMetaFile, json_encode($cacheMeta));
+}
 
 // Cache loaded marker
 cache_loaded:
@@ -646,6 +631,21 @@ h6 {
 
 .statistics-card:hover {
     transform: translateY(-2px);
+}
+
+/* Buffer badge (shared visual language with Blood Bank, but kept subtle for summary cards) */
+.buffer-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: #f7d774;
+    color: #7a4a00;
 }
 
 /* Statistics Cards Styling */
@@ -1197,135 +1197,15 @@ h6 {
             </div>
         </div>
     </div>
-    <!-- Compact Blood Bank Inventory Status Progress Bar (Full Width, with Enhanced Thresholds and Bar) -->
-    <div class="row mb-3">
-        <div class="col-12">
-            <div class="card total-overview-card compact-progress-card mb-2" style="box-shadow: 0 8px 32px 0 rgba(220,38,38,0.10), 0 1.5px 4px rgba(0,0,0,0.04); border-radius: 18px;">
-                <div class="card-body py-3 px-4">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <div class="percentage-display d-flex align-items-end">
-                            <span class="h4 mb-0 fw-bold <?php echo $statusClass; ?>-text" style="font-size: 2.2rem; line-height: 1;"><?php echo round($totalPercentage); ?>%</span>
-                        </div>
-                        <div class="status-indicator">
-                            <div class="status-badge status-<?php echo $statusClass; ?> animate-badge" style="font-size: 1.05rem; padding: 8px 20px;">
-                                <i class="fas <?php echo $totalPercentage < 30 ? 'fa-exclamation-triangle' : 'fa-check-circle'; ?>"></i>
-                                <span><?php echo $statusText; ?></span>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- Threshold Markers and Lines -->
-                    <div class="progress-thresholds position-relative mb-1" style="height: 48px;">
-                        <!-- 30% Marker and Line -->
-                        <div class="threshold-marker" style="position: absolute; left: 30%; top: 0; text-align: center; width: 60px; z-index: 2;">
-                            <span class="threshold-label">30%</span>
-                            <div class="threshold-line-extended"></div>
-                        </div>
-                        <!-- 50% Marker and Line -->
-                        <div class="threshold-marker" style="position: absolute; left: 50%; top: 0; text-align: center; width: 60px; transform: translateX(-50%); z-index: 2;">
-                            <span class="threshold-label">50%</span>
-                            <div class="threshold-line-extended"></div>
-                        </div>
-                    </div>
-                    <div class="inventory-progress-wrapper" style="margin-top: 0.5rem;">
-                        <div class="inventory-progress position-relative mb-0 enhanced-progress-bar">
-                            <div class="progress-track" style="width: 100%; height: 100%; position: absolute;">
-                                <div class="progress-fill bg-<?php echo $statusClass; ?>" style="width: <?php echo $totalPercentage; ?>%; height: 100%; border-radius: 24px; transition: width 0.6s;"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-<style>
-.compact-progress-card {
-    border-radius: 18px;
-    box-shadow: 0 8px 32px 0 rgba(220,38,38,0.10), 0 1.5px 4px rgba(0,0,0,0.04);
-    margin-bottom: 0.5rem;
-}
-.compact-progress-card .card-body {
-    padding: 0.75rem 1.5rem !important;
-}
-.percentage-display .h4 {
-    font-size: 2.2rem;
-    font-weight: 700;
-    margin-bottom: 0;
-}
-.status-badge {
-    font-size: 1.05rem;
-    padding: 8px 20px;
-}
-.enhanced-progress-bar {
-    height: 28px !important;
-    border-radius: 8px;
-    background-color: #f8f9fa;
-    box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
-    position: relative;
-}
-.inventory-progress {
-    height: 28px !important;
-    border-radius: 24px !important;
-    overflow: hidden;
-}
-.progress-fill.bg-critical {
-    border-radius: 8px !important;
-    transition: width 0.6s;
-    background: #dc2626;
-}
-.progress-fill.bg-warning {
-    border-radius: 8px !important;
-    transition: width 0.6s;
-    background: #d97706;
-}
-.progress-fill.bg-healthy {
-    border-radius: 8px !important;
-    transition: width 0.6s;
-    background: #16a34a;
-}
-.alert-danger {
-    background: #ffeaea !important;
-    color: #dc2626 !important;
-    border: none !important;
-    border-radius: 10px !important;
-    box-shadow: 0 2px 8px rgba(220,38,38,0.06);
-    font-size: 1.08rem;
-}
-.progress-thresholds {
-    height: 48px;
-    position: relative;
-}
-.threshold-marker {
-    z-index: 2;
-}
-.threshold-label {
-    display: inline-block;
-    min-width: 38px;
-    text-align: center;
-    background: #fff;
-    color: #888;
-    font-size: 1rem;
-    font-weight: 600;
-    border-radius: 12px;
-    padding: 2px 10px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-}
-.threshold-line-extended {
-    width: 4px;
-    height: 44px;
-    background: linear-gradient(to bottom, #e0e0e0 80%, #f1f5f9 100%);
-    margin: 2px auto 0 auto;
-    border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-}
-</style>
                     <!-- Available Blood per Unit Section -->
                     <div class="mb-5">
                         <h5 class="mb-4" style="font-weight: 600;">Available Blood per Unit</h5>
                         <div class="row g-4">
                             <!-- Blood Type Cards (retain home dashboard UI; add danger icon) -->
                             <?php
-                            // Calculate per-type counts using the same logic as Bloodbank
-                            $bloodTypeCounts = array_reduce($bloodInventory, function($carry, $bag) {
+                            // Calculate per-type counts using ACTIVE inventory only (exclude buffer units)
+                            $activeInventoryForCounts = isset($activeInventory) ? $activeInventory : $bloodInventory;
+                            $bloodTypeCounts = array_reduce($activeInventoryForCounts, function($carry, $bag) {
                                 if ($bag['status'] == 'Valid' && isset($carry[$bag['blood_type']])) {
                                     $carry[$bag['blood_type']] += 1; // Each unit = 1 bag
                                 }
@@ -1343,6 +1223,14 @@ h6 {
                                 }
                                 return '';
                             }
+                            // Helper to render small buffer badge when buffer units exist for a type
+                            function renderBufferPillHome($type, $bufferTypes) {
+                                $count = isset($bufferTypes[$type]) ? (int)$bufferTypes[$type] : 0;
+                                if ($count > 0) {
+                                    return '<span class="buffer-pill ms-2" title="Units held in buffer reserve">' . $count . ' in buffer</span>';
+                                }
+                                return '';
+                            }
                             ?>
                             
                             <!-- Row 1: O+, A+, B+, AB+ (retain original order/UI) -->
@@ -1351,7 +1239,10 @@ h6 {
                                     <?php echo renderDangerIconHome((int)$bloodTypeCounts['O+'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type O+</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['O+']; ?></p>
+                                        <p class="inventory-system-blood-availability">
+                                            Availability: <?php echo (int)$bloodTypeCounts['O+']; ?>
+                                            <?php echo renderBufferPillHome('O+', $bufferTypes); ?>
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -1360,7 +1251,10 @@ h6 {
                                     <?php echo renderDangerIconHome((int)$bloodTypeCounts['A+'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type A+</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['A+']; ?></p>
+                                        <p class="inventory-system-blood-availability">
+                                            Availability: <?php echo (int)$bloodTypeCounts['A+']; ?>
+                                            <?php echo renderBufferPillHome('A+', $bufferTypes); ?>
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -1369,7 +1263,10 @@ h6 {
                                     <?php echo renderDangerIconHome((int)$bloodTypeCounts['B+'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type B+</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['B+']; ?></p>
+                                        <p class="inventory-system-blood-availability">
+                                            Availability: <?php echo (int)$bloodTypeCounts['B+']; ?>
+                                            <?php echo renderBufferPillHome('B+', $bufferTypes); ?>
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -1378,7 +1275,10 @@ h6 {
                                     <?php echo renderDangerIconHome((int)$bloodTypeCounts['AB+'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type AB+</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['AB+']; ?></p>
+                                        <p class="inventory-system-blood-availability">
+                                            Availability: <?php echo (int)$bloodTypeCounts['AB+']; ?>
+                                            <?php echo renderBufferPillHome('AB+', $bufferTypes); ?>
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -1389,7 +1289,10 @@ h6 {
                                     <?php echo renderDangerIconHome((int)$bloodTypeCounts['O-'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type O-</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['O-']; ?></p>
+                                        <p class="inventory-system-blood-availability">
+                                            Availability: <?php echo (int)$bloodTypeCounts['O-']; ?>
+                                            <?php echo renderBufferPillHome('O-', $bufferTypes); ?>
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -1398,7 +1301,10 @@ h6 {
                                     <?php echo renderDangerIconHome((int)$bloodTypeCounts['A-'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type A-</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['A-']; ?></p>
+                                        <p class="inventory-system-blood-availability">
+                                            Availability: <?php echo (int)$bloodTypeCounts['A-']; ?>
+                                            <?php echo renderBufferPillHome('A-', $bufferTypes); ?>
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -1407,7 +1313,10 @@ h6 {
                                     <?php echo renderDangerIconHome((int)$bloodTypeCounts['B-'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type B-</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['B-']; ?></p>
+                                        <p class="inventory-system-blood-availability">
+                                            Availability: <?php echo (int)$bloodTypeCounts['B-']; ?>
+                                            <?php echo renderBufferPillHome('B-', $bufferTypes); ?>
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -1416,7 +1325,10 @@ h6 {
                                     <?php echo renderDangerIconHome((int)$bloodTypeCounts['AB-'], $lowThreshold); ?>
                                     <div class="card-body p-4">
                                         <h5 class="inventory-system-blood-title">Blood Type AB-</h5>
-                                        <p class="inventory-system-blood-availability">Availability: <?php echo (int)$bloodTypeCounts['AB-']; ?></p>
+                                        <p class="inventory-system-blood-availability">
+                                            Availability: <?php echo (int)$bloodTypeCounts['AB-']; ?>
+                                            <?php echo renderBufferPillHome('AB-', $bufferTypes); ?>
+                                        </p>
                                     </div>
                                 </div>
                             </div>
