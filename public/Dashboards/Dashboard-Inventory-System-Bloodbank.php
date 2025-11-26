@@ -23,6 +23,20 @@ include_once '../../assets/conn/db_conn.php';
 // OPTIMIZATION: Include shared optimized functions
 include_once __DIR__ . '/module/optimized_functions.php';
 
+function renderDangerIcon($count, $threshold, $typeLabelAttr = '')
+{
+    $isLow = $count <= $threshold;
+    $classes = 'text-danger' . ($isLow ? '' : ' d-none');
+    $dataAttr = $typeLabelAttr !== '' ? ' data-danger-icon="' . htmlspecialchars($typeLabelAttr, ENT_QUOTES, 'UTF-8') . '"' : '';
+    return '<span class="' . $classes . '" title="Low availability" style="position:absolute; top:8px; right:10px;"' . $dataAttr . '><i class="fas fa-exclamation-triangle"></i></span>';
+}
+
+function formatBufferReserveText($count) {
+    $plural = ($count === 1) ? '' : 's';
+    $countText = "<strong>{$count} buffer unit{$plural}</strong>";
+    return "{$countText} are held in reserve. They remain highlighted in the table and are excluded from the totals above.";
+}
+
 // Include auto-dispose function for expired blood units
 require_once '../../assets/php_func/admin_blood_bank_auto_dispose.php';
 require_once '../../assets/php_func/buffer_blood_manager.php';
@@ -214,6 +228,19 @@ if ($cacheEnabled) {
 // Cache loaded marker
 cache_loaded:
 
+// Blood type filter (server-side to load complete set by type)
+$recognizedBloodTypes = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+$activeBloodTypeFilter = null;
+if (!empty($_GET['blood_type'])) {
+    $requestedType = strtoupper($_GET['blood_type']);
+    if (in_array($requestedType, $recognizedBloodTypes, true)) {
+        $activeBloodTypeFilter = $requestedType;
+        $bloodInventory = array_values(array_filter($bloodInventory, function ($bag) use ($activeBloodTypeFilter) {
+            return isset($bag['blood_type']) && strtoupper($bag['blood_type']) === $activeBloodTypeFilter;
+        }));
+    }
+}
+
 // OPTIMIZATION: Implement pagination like donor management
 $itemsPerPage = 10; // Show only 10 items per page
 $currentPage = isset($_GET['page']) ? intval($_GET['page']) : 1;
@@ -225,6 +252,122 @@ if ($currentPage > $totalPages && $totalPages > 0) { $currentPage = $totalPages;
 
 $startIndex = ($currentPage - 1) * $itemsPerPage;
 $currentPageInventory = array_slice($bloodInventory, $startIndex, $itemsPerPage);
+
+$paginationStart = $totalItems > 0 ? $startIndex + 1 : 0;
+$paginationEnd = $totalItems > 0 ? min($startIndex + $itemsPerPage, $totalItems) : 0;
+$paginationInfoText = "Showing {$paginationStart} to {$paginationEnd} of {$totalItems} entries";
+
+$qs = $_GET;
+unset($qs['page']);
+$baseQs = http_build_query($qs);
+$makePageUrl = function ($page) use ($baseQs) {
+    $page = max(1, (int)$page);
+    return '?' . ($baseQs ? $baseQs . '&' : '') . 'page=' . $page;
+};
+
+ob_start();
+if ($totalPages > 1) {
+    ?>
+    <div class="d-flex justify-content-center mt-4" data-pagination-wrapper>
+        <nav aria-label="Blood Bank pagination">
+            <ul class="pagination">
+                <li class="page-item <?php echo $currentPage <= 1 ? 'disabled' : ''; ?>">
+                    <a class="page-link" href="<?php echo htmlspecialchars($makePageUrl(max(1, $currentPage - 1))); ?>" aria-label="Previous" data-pagination-link="true" data-page="<?php echo max(1, $currentPage - 1); ?>">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                </li>
+                <?php
+                $startPage = max(1, $currentPage - 1);
+                $endPage = min($totalPages, $currentPage + 2);
+                if ($currentPage <= 2) {
+                    $endPage = min($totalPages, 4);
+                }
+                if ($currentPage >= $totalPages - 1) {
+                    $startPage = max(1, $totalPages - 3);
+                }
+                if ($startPage > 1) {
+                    ?>
+                    <li class="page-item">
+                        <a class="page-link" href="<?php echo htmlspecialchars($makePageUrl(1)); ?>" data-pagination-link="true" data-page="1">1</a>
+                    </li>
+                    <?php if ($startPage > 2): ?>
+                        <li class="page-item disabled">
+                            <span class="page-link">...</span>
+                        </li>
+                    <?php endif; ?>
+                <?php }
+                for ($i = $startPage; $i <= $endPage; $i++): ?>
+                    <li class="page-item <?php echo $i === $currentPage ? 'active' : ''; ?>">
+                        <a class="page-link" href="<?php echo htmlspecialchars($makePageUrl($i)); ?>" data-pagination-link="true" data-page="<?php echo $i; ?>"><?php echo $i; ?></a>
+                    </li>
+                <?php endfor;
+                if ($endPage < $totalPages) {
+                    if ($endPage < $totalPages - 1) { ?>
+                        <li class="page-item disabled">
+                            <span class="page-link">...</span>
+                        </li>
+                    <?php }
+                    ?>
+                    <li class="page-item">
+                        <a class="page-link" href="<?php echo htmlspecialchars($makePageUrl($totalPages)); ?>" data-pagination-link="true" data-page="<?php echo $totalPages; ?>"><?php echo $totalPages; ?></a>
+                    </li>
+                <?php } ?>
+                <li class="page-item <?php echo $currentPage >= $totalPages ? 'disabled' : ''; ?>">
+                    <a class="page-link" href="<?php echo htmlspecialchars($makePageUrl(min($totalPages, $currentPage + 1))); ?>" aria-label="Next" data-pagination-link="true" data-page="<?php echo min($totalPages, $currentPage + 1); ?>">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    <?php
+}
+$paginationHtml = ob_get_clean();
+
+// Blood type counts used across full render + partial responses
+$bloodTypeCounts = array_reduce($activeInventory, function($carry, $bag) {
+    if ($bag['status'] == 'Valid' && isset($carry[$bag['blood_type']])) {
+        $carry[$bag['blood_type']] += 1;
+    }
+    return $carry;
+}, [
+    'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
+    'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
+]);
+
+$lowThreshold = 25;
+$bufferReserveText = formatBufferReserveText($bufferReserveCount);
+
+if (isset($_GET['partial']) && $_GET['partial'] === '1') {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => true,
+        'currentPageInventory' => $currentPageInventory,
+        'pagination' => [
+            'currentPage' => $currentPage,
+            'totalPages' => $totalPages,
+            'infoText' => $paginationInfoText,
+            'start' => $paginationStart,
+            'end' => $paginationEnd,
+            'totalItems' => $totalItems,
+            'itemsPerPage' => $itemsPerPage,
+            'html' => $paginationHtml
+        ],
+        'stats' => [
+            'totalBags' => $totalBags,
+            'availableTypes' => count($availableTypes),
+            'expiringBags' => $expiringBags,
+            'expiredBags' => $expiredBags
+        ],
+        'bloodTypeCounts' => $bloodTypeCounts,
+        'bufferReserveCount' => $bufferReserveCount,
+        'bufferReserveText' => $bufferReserveText,
+        'bufferContext' => $bufferContext,
+        'activeBloodTypeFilter' => $activeBloodTypeFilter,
+        'lowThreshold' => $lowThreshold
+    ]);
+    exit;
+}
 
 // OPTIMIZATION: Performance logging and caching
 $endTime = microtime(true);
@@ -591,6 +734,27 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 .blood-type-card {
     border: 1px solid #dee2e6;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.blood-type-card:focus,
+.blood-type-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.12);
+    outline: none;
+}
+
+.blood-type-card.active {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 3px rgba(220,53,69,0.25);
+}
+
+.blood-type-filter-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9rem;
 }
 
 .blood-inventory-heading {
@@ -949,7 +1113,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <div class="card text-center p-3 h-100 inventory-stat-card">
                                 <div class="card-body">
                                     <h5 class="card-title text-dark fw-bold">Total Blood Units (Active)</h5>
-                                    <h1 class="inventory-stat-number my-3"><?php echo $totalBags; ?></h1>
+                                    <h1 class="inventory-stat-number my-3" id="totalBagsCount"><?php echo $totalBags; ?></h1>
                                 </div>
                             </div>
                         </div>
@@ -959,7 +1123,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <div class="card text-center p-3 h-100 inventory-stat-card">
                                 <div class="card-body">
                                     <h5 class="card-title text-dark fw-bold">Available Types</h5>
-                                    <h1 class="inventory-stat-number my-3"><?php echo count($availableTypes); ?></h1>
+                                    <h1 class="inventory-stat-number my-3" id="availableTypesCount"><?php echo count($availableTypes); ?></h1>
                                 </div>
                             </div>
                         </div>
@@ -969,7 +1133,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <div class="card text-center p-3 h-100 inventory-stat-card">
                                 <div class="card-body">
                                     <h5 class="card-title text-dark fw-bold">Units Expiring Soon</h5>
-                                    <h1 class="inventory-stat-number my-3"><?php echo $expiringBags; ?></h1>
+                                    <h1 class="inventory-stat-number my-3" id="expiringBagsCount"><?php echo $expiringBags; ?></h1>
                                 </div>
                             </div>
                         </div>
@@ -979,7 +1143,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <div class="card text-center p-3 h-100 inventory-stat-card">
                                 <div class="card-body">
                                     <h5 class="card-title text-dark fw-bold">Expired Units</h5>
-                                    <h1 class="inventory-stat-number my-3"><?php echo $expiredBags; ?></h1>
+                                    <h1 class="inventory-stat-number my-3" id="expiredBagsCount"><?php echo $expiredBags; ?></h1>
                                 </div>
                             </div>
                         </div>
@@ -987,9 +1151,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
                     <div class="buffer-banner mb-3" data-buffer-banner>
                         <i class="fas fa-shield-alt fa-lg"></i>
-                        <div>
-                            <strong><?php echo $bufferReserveCount; ?> buffer unit<?php echo $bufferReserveCount === 1 ? '' : 's'; ?></strong> are held in reserve. They remain highlighted in the table and are excluded from the totals above.
-                        </div>
+                        <div data-buffer-reserve-text><?php echo $bufferReserveText; ?></div>
                         <button type="button" class="btn btn-outline-warning btn-sm" data-buffer-toggle>
                             <i class="fas fa-list me-1"></i>View Buffer List
                         </button>
@@ -1027,28 +1189,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     
                     <h5 class="mt-4 mb-3">Available Blood per Unit</h5>
                     
-                    <?php
-                    // OPTIMIZATION 9: Calculate blood type counts using array_reduce for efficiency
-                    $bloodTypeCounts = array_reduce($activeInventory, function($carry, $bag) {
-                        if ($bag['status'] == 'Valid' && isset($carry[$bag['blood_type']])) {
-                            $carry[$bag['blood_type']] += 1; // Each unit = 1 bag
-                        }
-                        return $carry;
-                    }, [
-                        'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
-                        'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
-                    ]);
-
-                    // Threshold for low availability indicator (danger)
-                    $lowThreshold = 25;
-                    // Helper to render a small danger icon in the card corner when under threshold
-                    function renderDangerIcon($count, $threshold) {
-                        if ($count <= $threshold) {
-                            return '<span class="text-danger" title="Low availability" style="position:absolute; top:8px; right:10px;"><i class="fas fa-exclamation-triangle"></i></span>';
-                        }
-                        return '';
-                    }
-                    ?>
                     
                     <div class="row mb-4">
                         <!-- Blood Type Cards -->
@@ -1061,19 +1201,34 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 if ($bufferTypeCount > 0) {
                                     $cardClasses .= ' buffer-type-card';
                                 }
+                                if ($activeBloodTypeFilter === $typeLabel) {
+                                    $cardClasses .= ' active';
+                                }
+                                $typeLabelAttr = htmlspecialchars($typeLabel, ENT_QUOTES, 'UTF-8');
+                                $isActiveType = $activeBloodTypeFilter === $typeLabel ? 'true' : 'false';
                         ?>
                         <div class="col-md-3 mb-3">
-                            <div class="<?php echo $cardClasses; ?>">
-                                <?php echo renderDangerIcon($availableCount, $lowThreshold); ?>
-                                <?php if ($bufferTypeCount > 0): ?>
-                                    <div class="d-flex justify-content-end mb-1">
-                                        <span class="buffer-pill" data-buffer-highlight><?php echo $bufferTypeCount; ?> in buffer</span>
-                                    </div>
-                                <?php endif; ?>
+                            <div class="<?php echo $cardClasses; ?>"
+                                data-blood-type-card="<?php echo $typeLabelAttr; ?>"
+                                role="button"
+                                tabindex="0"
+                                aria-pressed="<?php echo $isActiveType; ?>"
+                                onclick="applyBloodTypeFilter('<?php echo $typeLabelAttr; ?>')"
+                                onkeydown="handleBloodTypeCardKey(event, '<?php echo $typeLabelAttr; ?>')">
+                                <?php echo renderDangerIcon($availableCount, $lowThreshold, $typeLabelAttr); ?>
+                                <div class="d-flex justify-content-end mb-1">
+                                    <?php
+                                        $bufferPillClasses = 'buffer-pill';
+                                        if ($bufferTypeCount <= 0) {
+                                            $bufferPillClasses .= ' d-none';
+                                        }
+                                    ?>
+                                    <span class="<?php echo $bufferPillClasses; ?>" data-buffer-highlight data-buffer-type="<?php echo $typeLabelAttr; ?>"><?php echo $bufferTypeCount; ?> in buffer</span>
+                                </div>
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: <?php echo $typeLabel; ?></h5>
                                     <p class="card-text">Availability:
-                                        <span class="fw-bold"><?php echo $availableCount; ?></span>
+                                        <span class="fw-bold" data-blood-type-count="<?php echo $typeLabelAttr; ?>"><?php echo $availableCount; ?></span>
                                     </p>
                                 </div>
                             </div>
@@ -1081,12 +1236,42 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <?php endforeach; ?>
                     </div>
                     
+                    <?php
+                        $bloodTypeFilterInfoClasses = 'alert alert-warning mt-2 py-2 px-3';
+                        if (!$activeBloodTypeFilter) {
+                            $bloodTypeFilterInfoClasses .= ' d-none';
+                        }
+                    ?>
+                    <div id="bloodTypeFilterInfo" class="<?php echo $bloodTypeFilterInfoClasses; ?>">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                            <span class="blood-type-filter-pill mb-0">
+                                <i class="fas fa-filter me-1"></i>
+                                <span id="bloodTypeFilterLabel">
+                                    <?php if ($activeBloodTypeFilter): ?>
+                                        Filtering by <strong><?php echo htmlspecialchars($activeBloodTypeFilter); ?></strong>
+                                    <?php else: ?>
+                                        Select a blood type to filter inventory
+                                    <?php endif; ?>
+                                </span>
+                            </span>
+                            <div class="d-flex gap-2">
+                                <a href="<?php echo htmlspecialchars($_SERVER['PHP_SELF']); ?>" class="btn btn-sm btn-danger" onclick="event.preventDefault(); clearBloodTypeFilter();">
+                                    Clear Filter
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- Blood Bank Table -->
                     <div class="table-responsive mt-4">
+                        <div id="inventoryLoadingIndicator" class="alert alert-light border d-flex align-items-center gap-2 py-2 px-3 mb-3 d-none">
+                            <div class="spinner-border spinner-border-sm text-danger" role="status" aria-hidden="true"></div>
+                            <span class="fw-semibold text-muted">Loading the latest inventory...</span>
+                        </div>
                         <!-- Pagination Info -->
                         <div class="row mb-3">
                             <div class="col-12 text-center">
-                                <span class="text-muted">Showing <?php echo $startIndex + 1; ?> to <?php echo min($startIndex + $itemsPerPage, $totalItems); ?> of <?php echo $totalItems; ?> entries</span>
+                                <span class="text-muted" data-pagination-info><?php echo $paginationInfoText; ?></span>
                             </div>
                         </div>
                         
@@ -1108,9 +1293,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     $isBufferRow = !empty($bag['is_buffer']);
                                     $rowClasses = $isBufferRow ? 'buffer-row' : '';
                                 ?>
+                                <?php
+                                    $unitIdentifier = $unitId ?? $serialNumber ?? '';
+                                ?>
                                 <tr class="<?php echo $rowClasses; ?>"
                                     data-unit-id="<?php echo htmlspecialchars($unitId ?? $serialNumber ?? ''); ?>"
-                                    data-unit-serial="<?php echo htmlspecialchars($serialNumber); ?>">
+                                    data-unit-serial="<?php echo htmlspecialchars($serialNumber); ?>"
+                                    data-blood-type="<?php echo htmlspecialchars($bag['blood_type']); ?>">
                                     <td>
                                         <?php echo htmlspecialchars($serialNumber); ?>
                                         <?php if ($isBufferRow): ?>
@@ -1121,7 +1310,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     <td><?php echo htmlspecialchars($bag['collection_date']); ?></td>
                                     <td><?php echo htmlspecialchars($bag['expiration_date']); ?></td>
                                     <td class="text-center">
-                                        <button class="btn btn-primary btn-sm" onclick="showDonorDetails(<?php echo $startIndex + $index; ?>)">
+                                        <button class="btn btn-primary btn-sm"
+                                            data-unit-trigger
+                                            data-unit-id="<?php echo htmlspecialchars($unitIdentifier); ?>">
                                             <i class="fas fa-eye"></i>
                                         </button>
                                     </td>
@@ -1136,82 +1327,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </table>
                         
                         <!-- Pagination Controls -->
-                        <?php if ($totalPages > 1): ?>
-                        <div class="d-flex justify-content-center mt-4">
-                            <nav aria-label="Blood Bank pagination">
-                                <?php
-                                // Build query string for pagination URLs (same as donor management)
-                                $qs = $_GET;
-                                unset($qs['page']);
-                                $baseQs = http_build_query($qs);
-                                $makePageUrl = function ($page) use ($baseQs) {
-                                    $page = max(1, (int)$page);
-                                    return '?' . ($baseQs ? $baseQs . '&' : '') . 'page=' . $page;
-                                };
-                                ?>
-                                <ul class="pagination">
-                                    <!-- Previous button -->
-                                    <li class="page-item <?php echo $currentPage <= 1 ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="<?php echo htmlspecialchars($makePageUrl(max(1, $currentPage - 1))); ?>" aria-label="Previous">
-                                            <i class="fas fa-chevron-left"></i>
-                                        </a>
-                                    </li>
-                                    <!-- Page numbers -->
-                                    <?php
-                                    // Show up to 4 page numbers around current page
-                                    $startPage = max(1, $currentPage - 1);
-                                    $endPage = min($totalPages, $currentPage + 2);
-                                    
-                                    // If we're near the beginning, show more pages at the end
-                                    if ($currentPage <= 2) {
-                                        $endPage = min($totalPages, 4);
-                                    }
-                                    
-                                    // If we're near the end, show more pages at the beginning
-                                    if ($currentPage >= $totalPages - 1) {
-                                        $startPage = max(1, $totalPages - 3);
-                                    }
-                                    
-                                    // Show first page if not in range
-                                    if ($startPage > 1): ?>
-                                    <li class="page-item">
-                                        <a class="page-link" href="<?php echo htmlspecialchars($makePageUrl(1)); ?>">1</a>
-                                    </li>
-                                    <?php if ($startPage > 2): ?>
-                                    <li class="page-item disabled">
-                                        <span class="page-link">...</span>
-                                    </li>
-                                    <?php endif; ?>
-                                    <?php endif; ?>
-                                    
-                                    <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
-                                    <li class="page-item <?php echo $i === $currentPage ? 'active' : ''; ?>">
-                                        <a class="page-link" href="<?php echo htmlspecialchars($makePageUrl($i)); ?>"><?php echo $i; ?></a>
-                                    </li>
-                                    <?php endfor; ?>
-                                    
-                                    <!-- Show last page if not in range -->
-                                    <?php if ($endPage < $totalPages): ?>
-                                    <?php if ($endPage < $totalPages - 1): ?>
-                                    <li class="page-item disabled">
-                                        <span class="page-link">...</span>
-                                    </li>
-                                    <?php endif; ?>
-                                    <li class="page-item">
-                                        <a class="page-link" href="<?php echo htmlspecialchars($makePageUrl($totalPages)); ?>"><?php echo $totalPages; ?></a>
-                                    </li>
-                                    <?php endif; ?>
-                                    
-                                    <!-- Next button -->
-                                    <li class="page-item <?php echo $currentPage >= $totalPages ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="<?php echo htmlspecialchars($makePageUrl(min($totalPages, $currentPage + 1))); ?>" aria-label="Next">
-                                            <i class="fas fa-chevron-right"></i>
-                                        </a>
-                                    </li>
-                                </ul>
-                            </nav>
+                        <div data-pagination-container>
+                            <?php echo $paginationHtml; ?>
                         </div>
-                        <?php endif; ?>
                     </div>
                 </div>
             </main>
@@ -1328,81 +1446,33 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         });
     </script>
     <script>
-        // Data for all records
-        const bloodInventory = <?php echo json_encode($bloodInventory); ?>;
-        const currentPageInventory = <?php echo json_encode($currentPageInventory); ?>;
-        const currentPage = <?php echo $currentPage; ?>;
+        let currentPageInventoryData = <?php echo json_encode($currentPageInventory); ?>;
+        let currentPageNumber = <?php echo $currentPage; ?>;
         const itemsPerPage = <?php echo $itemsPerPage; ?>;
+        let activeBloodTypeFilter = <?php echo $activeBloodTypeFilter ? json_encode($activeBloodTypeFilter) : 'null'; ?>;
+        let bloodTypeCountsData = <?php echo json_encode($bloodTypeCounts); ?>;
+        let bufferReserveCountData = <?php echo $bufferReserveCount; ?>;
+        let bufferReserveTextData = <?php echo json_encode($bufferReserveText); ?>;
+        let bufferContextData = <?php echo json_encode($bufferContext); ?>;
+        let paginationInfoText = <?php echo json_encode($paginationInfoText); ?>;
+        let paginationHtmlCache = <?php echo json_encode($paginationHtml); ?>;
+        let inventoryAbortController = null;
+        const lowThreshold = <?php echo $lowThreshold; ?>;
+        const inventoryCache = new Map();
+        const CACHE_TTL = 60000; // 60 seconds
+        const unitFallbackMap = new Map();
         
-        // Function to display blood bank unit details in modal
-        function showDonorDetails(index) {
-            // Calculate the actual index in the full bloodInventory array
-            const actualIndex = (currentPage - 1) * itemsPerPage + index;
-            const bag = bloodInventory[actualIndex];
-            
-            // Show loading indicator
-            document.getElementById('modal-loading').style.display = 'block';
-            
-            // Show the modal first
-            const modal = new bootstrap.Modal(document.getElementById('bloodBankUnitDetailsModal'));
-            modal.show();
-            
-            // Fetch detailed information from API
-            fetch(`../../assets/php_func/blood_bank_unit_details_api.php?unit_id=${bag.unit_id}`)
-                .then(response => response.json())
-                .then(data => {
-                    // Hide loading indicator
-                    document.getElementById('modal-loading').style.display = 'none';
-                    
-                    if (data.error) {
-                        console.error('Error fetching unit details:', data.error);
-                        // Fallback to basic data
-                        populateBasicData(bag);
-                    } else {
-                        // Populate modal with detailed data
-                        populateDetailedData(data);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching unit details:', error);
-                    // Hide loading indicator
-                    document.getElementById('modal-loading').style.display = 'none';
-                    // Fallback to basic data
-                    populateBasicData(bag);
-                });
-        }
+        let statsElements = {};
+        let paginationInfoEl = null;
+        let paginationContainer = null;
+        let bloodTypeFilterInfo = null;
+        let bloodTypeFilterLabel = null;
+        let loadingIndicator = null;
+        let tableElement = null;
+        let searchInputElement = null;
+        let searchCategoryElement = null;
+        let searchInfoElement = null;
         
-        // Function to populate modal with detailed data from API
-        function populateDetailedData(data) {
-            // Unit Serial Number and Blood Type (large display)
-            document.getElementById('modal-unit-serial').textContent = data.unit_serial_number || 'N/A';
-            document.getElementById('modal-blood-type-display').textContent = data.blood_type || 'N/A';
-            
-            // Form fields
-            document.getElementById('modal-collection-date').value = data.collection_date || 'N/A';
-            document.getElementById('modal-expiration-date').value = data.expiration_date || 'N/A';
-            document.getElementById('modal-collected-from').value = data.collected_from || 'Blood Bank';
-            document.getElementById('modal-recipient-hospital').value = data.recipient_hospital || 'Not Assigned';
-            document.getElementById('modal-phlebotomist-name').value = data.phlebotomist_name || 'Not Available';
-            document.getElementById('modal-blood-status').value = data.blood_status || 'Available';
-        }
-        
-        // Function to populate modal with basic data (fallback)
-        function populateBasicData(bag) {
-            // Unit Serial Number and Blood Type (large display)
-            document.getElementById('modal-unit-serial').textContent = bag.serial_number || 'N/A';
-            document.getElementById('modal-blood-type-display').textContent = bag.blood_type || 'N/A';
-            
-            // Form fields
-            document.getElementById('modal-collection-date').value = bag.collection_date || 'N/A';
-            document.getElementById('modal-expiration-date').value = bag.expiration_date || 'N/A';
-            document.getElementById('modal-collected-from').value = 'Blood Bank';
-            document.getElementById('modal-recipient-hospital').value = 'Not Assigned';
-            document.getElementById('modal-phlebotomist-name').value = 'Not Available';
-            document.getElementById('modal-blood-status').value = bag.status || 'Available';
-        }
-        
-
         document.addEventListener('DOMContentLoaded', function() {
             window.showConfirmationModal = function() {
                 if (typeof window.openAdminDonorRegistrationModal === 'function') {
@@ -1413,144 +1483,499 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 }
             };
             
-            // ==========================================
-            // SEARCH FUNCTIONALITY
-            // ==========================================
-            // Get search elements
-            const searchInput = document.getElementById('searchInput');
-            const searchCategory = document.getElementById('searchCategory');
+            statsElements = {
+                totalBags: document.getElementById('totalBagsCount'),
+                availableTypes: document.getElementById('availableTypesCount'),
+                expiring: document.getElementById('expiringBagsCount'),
+                expired: document.getElementById('expiredBagsCount')
+            };
+            paginationInfoEl = document.querySelector('[data-pagination-info]');
+            paginationContainer = document.querySelector('[data-pagination-container]');
+            bloodTypeFilterInfo = document.getElementById('bloodTypeFilterInfo');
+            bloodTypeFilterLabel = document.getElementById('bloodTypeFilterLabel');
+            loadingIndicator = document.getElementById('inventoryLoadingIndicator');
+            tableElement = document.getElementById('bloodInventoryTable');
+            searchInputElement = document.getElementById('searchInput');
+            searchCategoryElement = document.getElementById('searchCategory');
             
-            if (searchInput && searchCategory) {
-                // Add event listeners for real-time search
-                searchInput.addEventListener('keyup', searchTable);
-                searchCategory.addEventListener('change', searchTable);
+            if (searchInputElement && searchCategoryElement && tableElement) {
+                let searchTimeout;
+                const triggerSearch = () => {
+                    clearTimeout(searchTimeout);
+                    searchTimeout = setTimeout(runTableSearch, 150);
+                };
+                searchInputElement.addEventListener('input', triggerSearch);
+                searchCategoryElement.addEventListener('change', triggerSearch);
             }
             
-            // OPTIMIZED: Function to search the blood inventory table with debouncing
-            let searchTimeout;
-            function searchTable() {
-                const searchInput = document.getElementById('searchInput').value.toLowerCase();
-                const searchCategory = document.getElementById('searchCategory').value;
-                const table = document.getElementById('bloodInventoryTable');
-                const rows = table.querySelectorAll('tbody tr');
-                
-                // Clear previous timeout
-                clearTimeout(searchTimeout);
-                
-                // Debounce search for better performance
-                searchTimeout = setTimeout(() => {
-                    // Check if no results message already exists
-                    let noResultsRow = document.getElementById('noResultsRow');
-                    if (noResultsRow) {
-                        noResultsRow.remove();
-                    }
-                    
-                    let visibleRows = 0;
-                    const totalRows = rows.length;
-                    
-                    // OPTIMIZED: Use more efficient iteration
-                    for (let i = 0; i < rows.length; i++) {
-                        const row = rows[i];
-                        let shouldShow = false;
-                        
-                        if (searchInput.trim() === '') {
-                            shouldShow = true;
-                        } else {
-                            const cells = row.querySelectorAll('td');
-                            if (cells.length === 0) continue;
-                            
-                            if (searchCategory === 'all') {
-                                // Search all columns
-                                for (let j = 0; j < cells.length; j++) {
-                                    if (cells[j].textContent.toLowerCase().includes(searchInput)) {
-                                        shouldShow = true;
-                                        break;
-                                    }
-                                }
-                            } else if (searchCategory === 'serial') {
-                                // Search serial number column
-                                if (cells[0].textContent.toLowerCase().includes(searchInput)) {
-                                    shouldShow = true;
-                                }
-                            } else if (searchCategory === 'blood_type') {
-                                // Search blood type column
-                                if (cells[1].textContent.toLowerCase().includes(searchInput)) {
-                                    shouldShow = true;
-                                }
-                            } else if (searchCategory === 'component') {
-                                // Search bag type column
-                                if (cells[3].textContent.toLowerCase().includes(searchInput)) {
-                                    shouldShow = true;
-                                }
-                            } else if (searchCategory === 'date') {
-                                // Search date columns
-                                const collectionDate = cells[2].textContent.toLowerCase();
-                                const expirationDate = cells[3].textContent.toLowerCase();
-                                // Create a regex for flexible date matching
-                                const datePattern = new RegExp(searchInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-                                if (datePattern.test(collectionDate) || datePattern.test(expirationDate)) {
-                                    shouldShow = true;
-                                }
-                            }
-                        }
-                        
-                        row.style.display = shouldShow ? '' : 'none';
-                        if (shouldShow) visibleRows++;
-                    }
-                    
-                    // Show "No results" message if no matches
-                    if (visibleRows === 0 && totalRows > 0) {
-                        const tbody = table.querySelector('tbody');
-                        const colspan = table.querySelector('thead tr').children.length;
-                        
-                        noResultsRow = document.createElement('tr');
-                        noResultsRow.id = 'noResultsRow';
-                        noResultsRow.innerHTML = `
-                            <td colspan="${colspan}" class="text-center">
-                                <div class="alert alert-info m-2">
-                                    No matching inventory items found
-                                    <button class="btn btn-outline-primary btn-sm ms-2" onclick="clearSearch()">
-                                        Clear Search
-                                    </button>
-                                </div>
-                            </td>
-                        `;
-                        tbody.appendChild(noResultsRow);
-                    }
-                    
-                    // Update search results info
-                    updateSearchInfo(visibleRows, totalRows);
-                }, 150); // 150ms debounce delay
-            }
-            
-            // Function to update search results info
-            function updateSearchInfo(visibleRows, totalRows) {
-                const searchContainer = document.querySelector('.search-container');
-                let searchInfo = document.getElementById('searchInfo');
-                
-                if (!searchInfo) {
-                    searchInfo = document.createElement('div');
-                    searchInfo.id = 'searchInfo';
-                    searchInfo.classList.add('text-muted', 'mt-2', 'small');
-                    searchContainer.appendChild(searchInfo);
-                }
-                
-                const searchInput = document.getElementById('searchInput').value.trim();
-                if (searchInput === '') {
-                    searchInfo.textContent = '';
+            document.addEventListener('click', function(event) {
+                const detailBtn = event.target.closest('[data-unit-trigger]');
+                if (detailBtn) {
+                    event.preventDefault();
+                    const unitId = detailBtn.getAttribute('data-unit-id');
+                    showDonorDetails(unitId);
                     return;
                 }
                 
-                searchInfo.textContent = `Showing ${visibleRows} of ${totalRows} entries`;
+                const paginationLink = event.target.closest('[data-pagination-link]');
+                if (paginationLink) {
+                    const parentItem = paginationLink.closest('.page-item');
+                    if (parentItem && parentItem.classList.contains('disabled')) {
+                        event.preventDefault();
+                        return;
+                    }
+                    const nextPage = parseInt(paginationLink.getAttribute('data-page'), 10);
+                    if (Number.isNaN(nextPage) || nextPage === currentPageNumber) {
+                        event.preventDefault();
+                        return;
+                    }
+                    event.preventDefault();
+                    fetchInventoryData({ bloodType: activeBloodTypeFilter, page: nextPage });
+                }
+            });
+            
+            window.clearSearch = function() {
+                if (searchInputElement) searchInputElement.value = '';
+                if (searchCategoryElement) searchCategoryElement.value = 'all';
+                runTableSearch();
+            };
+            
+            rebuildFallbackMap(currentPageInventoryData);
+            updateBloodTypeFilterUI();
+            updatePaginationUI();
+            runTableSearch();
+        });
+        
+        window.addEventListener('popstate', function() {
+            const url = new URL(window.location.href);
+            const bloodType = url.searchParams.get('blood_type') || null;
+            const page = parseInt(url.searchParams.get('page'), 10) || 1;
+            fetchInventoryData({ bloodType, page }, false);
+        });
+        
+        function showDonorDetails(unitIdentifier) {
+            const unitId = (unitIdentifier ?? '').toString().trim();
+            if (!unitId) {
+                console.warn('Missing unit identifier for donor details.');
+                return;
+            }
+            const fallbackBag = unitFallbackMap.get(unitId) || null;
+            document.getElementById('modal-loading').style.display = 'block';
+            const modal = new bootstrap.Modal(document.getElementById('bloodBankUnitDetailsModal'));
+            modal.show();
+            
+            fetch(`../../assets/php_func/blood_bank_unit_details_api.php?unit_id=${encodeURIComponent(unitId)}`)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('modal-loading').style.display = 'none';
+                    if (data.error) {
+                        console.error('Error fetching unit details:', data.error);
+                        if (fallbackBag) {
+                            populateBasicData(fallbackBag);
+                        }
+                    } else {
+                        populateDetailedData(data);
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('modal-loading').style.display = 'none';
+                    console.error('Error fetching unit details:', error);
+                    if (fallbackBag) {
+                        populateBasicData(fallbackBag);
+                    }
+                });
+        }
+        
+        function populateDetailedData(data) {
+            document.getElementById('modal-unit-serial').textContent = data.unit_serial_number || 'N/A';
+            document.getElementById('modal-blood-type-display').textContent = data.blood_type || 'N/A';
+            document.getElementById('modal-collection-date').value = data.collection_date || 'N/A';
+            document.getElementById('modal-expiration-date').value = data.expiration_date || 'N/A';
+            document.getElementById('modal-collected-from').value = data.collected_from || 'Blood Bank';
+            document.getElementById('modal-recipient-hospital').value = data.recipient_hospital || 'Not Assigned';
+            document.getElementById('modal-phlebotomist-name').value = data.phlebotomist_name || 'Not Available';
+            document.getElementById('modal-blood-status').value = data.blood_status || 'Available';
+        }
+        
+        function populateBasicData(bag) {
+            document.getElementById('modal-unit-serial').textContent = bag.serial_number || 'N/A';
+            document.getElementById('modal-blood-type-display').textContent = bag.blood_type || 'N/A';
+            document.getElementById('modal-collection-date').value = bag.collection_date || 'N/A';
+            document.getElementById('modal-expiration-date').value = bag.expiration_date || 'N/A';
+            document.getElementById('modal-collected-from').value = 'Blood Bank';
+            document.getElementById('modal-recipient-hospital').value = 'Not Assigned';
+            document.getElementById('modal-phlebotomist-name').value = 'Not Available';
+            document.getElementById('modal-blood-status').value = bag.status || 'Available';
+        }
+        
+        function fetchInventoryData({ bloodType = null, page = 1 } = {}, pushHistory = true) {
+            const normalizedType = bloodType ? bloodType.toUpperCase() : null;
+            const targetUrl = buildUrlWithParams(normalizedType, page);
+            const cacheKey = `${normalizedType || 'ALL'}::${page}`;
+            const cachedEntry = inventoryCache.get(cacheKey);
+            const now = Date.now();
+            if (cachedEntry && (now - cachedEntry.timestamp) < CACHE_TTL) {
+                applyInventoryPayload(cachedEntry.payload);
+                if (pushHistory) {
+                    const relativeUrl = targetUrl.pathname + (targetUrl.search ? targetUrl.search : '');
+                    window.history.pushState({ bloodType: normalizedType, page }, '', relativeUrl);
+                }
+                return;
+            }
+            const fetchUrl = new URL(targetUrl.toString());
+            fetchUrl.searchParams.set('partial', '1');
+            
+            showInventoryLoading(true);
+            if (inventoryAbortController) {
+                inventoryAbortController.abort();
+            }
+            inventoryAbortController = new AbortController();
+            
+            fetch(fetchUrl.toString(), { signal: inventoryAbortController.signal })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to load inventory data.');
+                    }
+                    return response.json();
+                })
+                .then(payload => {
+                    if (!payload?.success) {
+                        throw new Error(payload?.message || 'Unexpected server response.');
+                    }
+                    applyInventoryPayload(payload);
+                    inventoryCache.set(cacheKey, { payload, timestamp: Date.now() });
+                    if (inventoryCache.size > 12) {
+                        const oldestKey = inventoryCache.keys().next().value;
+                        inventoryCache.delete(oldestKey);
+                    }
+                    if (pushHistory) {
+                        const relativeUrl = targetUrl.pathname + (targetUrl.search ? targetUrl.search : '');
+                        window.history.pushState({ bloodType: normalizedType, page }, '', relativeUrl);
+                    }
+                })
+                .catch(error => {
+                    if (error.name === 'AbortError') {
+                        return;
+                    }
+                    console.error('Inventory refresh failed:', error);
+                    alert('Unable to load the latest inventory. Please try again.');
+                })
+                .finally(() => {
+                    showInventoryLoading(false);
+                });
+        }
+        
+        function applyInventoryPayload(payload) {
+            currentPageInventoryData = payload.currentPageInventory || [];
+            currentPageNumber = payload.pagination?.currentPage || 1;
+            activeBloodTypeFilter = payload.activeBloodTypeFilter || null;
+            bloodTypeCountsData = payload.bloodTypeCounts || bloodTypeCountsData;
+            bufferReserveCountData = payload.bufferReserveCount ?? bufferReserveCountData;
+            bufferReserveTextData = payload.bufferReserveText ?? bufferReserveTextData;
+            bufferContextData = payload.bufferContext || bufferContextData;
+            paginationInfoText = payload.pagination?.infoText || paginationInfoText;
+            paginationHtmlCache = payload.pagination?.html || '';
+            
+            updateStats(payload.stats);
+            updateBloodTypeCards();
+            updateBloodTypeFilterUI();
+            updateBufferBanner();
+            updatePaginationUI(payload.pagination);
+            updateTableRows(currentPageInventoryData);
+            runTableSearch();
+            refreshBufferContextForScripts();
+        }
+        
+        function updateStats(stats = {}) {
+            if (statsElements.totalBags) {
+                statsElements.totalBags.textContent = stats.totalBags ?? statsElements.totalBags.textContent;
+            }
+            if (statsElements.availableTypes) {
+                statsElements.availableTypes.textContent = stats.availableTypes ?? statsElements.availableTypes.textContent;
+            }
+            if (statsElements.expiring) {
+                statsElements.expiring.textContent = stats.expiringBags ?? statsElements.expiring.textContent;
+            }
+            if (statsElements.expired) {
+                statsElements.expired.textContent = stats.expiredBags ?? statsElements.expired.textContent;
+            }
+        }
+        
+        function updateBloodTypeCards() {
+            const cards = document.querySelectorAll('[data-blood-type-card]');
+            cards.forEach(card => {
+                const type = card.getAttribute('data-blood-type-card');
+                const isActive = activeBloodTypeFilter && type === activeBloodTypeFilter;
+                card.classList.toggle('active', Boolean(isActive));
+                card.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                
+                const countValue = bloodTypeCountsData?.[type] ?? 0;
+                const countEl = card.querySelector('[data-blood-type-count]');
+                if (countEl) {
+                    countEl.textContent = countValue;
+                }
+                
+                const dangerIcon = card.querySelector('[data-danger-icon]');
+                if (dangerIcon) {
+                    if (countValue <= lowThreshold) {
+                        dangerIcon.classList.remove('d-none');
+                    } else {
+                        dangerIcon.classList.add('d-none');
+                    }
+                }
+                
+                const bufferBadge = card.querySelector('[data-buffer-type]');
+                if (bufferBadge) {
+                    const bufferCount = bufferContextData?.buffer_types?.[type] ?? 0;
+                    bufferBadge.textContent = `${bufferCount} in buffer`;
+                    bufferBadge.classList.toggle('d-none', bufferCount <= 0);
+                }
+            });
+        }
+        
+        function updateBloodTypeFilterUI() {
+            if (!bloodTypeFilterInfo || !bloodTypeFilterLabel) return;
+            if (activeBloodTypeFilter) {
+                bloodTypeFilterInfo.classList.remove('d-none');
+                bloodTypeFilterLabel.innerHTML = `Filtering by <strong>${escapeHtml(activeBloodTypeFilter)}</strong>`;
+            } else {
+                bloodTypeFilterInfo.classList.add('d-none');
+                bloodTypeFilterLabel.textContent = 'Select a blood type to filter inventory';
+            }
+        }
+        
+        function updateBufferBanner() {
+            const bannerText = document.querySelector('[data-buffer-reserve-text]');
+            if (bannerText) {
+                bannerText.innerHTML = bufferReserveTextData;
+            }
+        }
+        
+        function updatePaginationUI(pagination = null) {
+            if (paginationInfoEl && paginationInfoText) {
+                paginationInfoEl.textContent = paginationInfoText;
+            }
+            if (paginationContainer) {
+                paginationContainer.innerHTML = pagination?.html || paginationHtmlCache || '';
+            }
+        }
+        
+        function updateTableRows(rows) {
+            if (!tableElement) return;
+            const tbody = tableElement.querySelector('tbody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            rebuildFallbackMap(rows);
+            
+            if (!rows || rows.length === 0) {
+                const emptyRow = document.createElement('tr');
+                emptyRow.innerHTML = '<td colspan="5" class="text-center">No blood inventory records found. Please wait for an administrator to add data.</td>';
+                tbody.appendChild(emptyRow);
+                return;
             }
             
-            // Function to clear search
-            window.clearSearch = function() {
-                document.getElementById('searchInput').value = '';
-                document.getElementById('searchCategory').value = 'all';
-                searchTable();
+            rows.forEach((bag) => {
+                const unitKey = getUnitKey(bag);
+                const row = document.createElement('tr');
+                if (bag.is_buffer) {
+                    row.classList.add('buffer-row');
+                }
+                row.setAttribute('data-unit-id', escapeHtml(unitKey));
+                row.setAttribute('data-unit-serial', escapeHtml(bag.serial_number ?? ''));
+                row.setAttribute('data-blood-type', escapeHtml(bag.blood_type ?? ''));
+                row.innerHTML = `
+                    <td>
+                        ${escapeHtml(bag.serial_number ?? '')}
+                        ${bag.is_buffer ? '<span class="buffer-pill ms-2" data-buffer-unit>Buffer</span>' : ''}
+                    </td>
+                    <td>${escapeHtml(bag.blood_type ?? '')}</td>
+                    <td>${escapeHtml(bag.collection_date ?? '')}</td>
+                    <td>${escapeHtml(bag.expiration_date ?? '')}</td>
+                    <td class="text-center">
+                        <button class="btn btn-primary btn-sm" data-unit-trigger data-unit-id="${escapeHtml(unitKey)}">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        function runTableSearch() {
+            if (!tableElement) return;
+            const rows = tableElement.querySelectorAll('tbody tr');
+            const searchValue = (searchInputElement?.value || '').toLowerCase().trim();
+            const categoryValue = searchCategoryElement?.value || 'all';
+            
+            let visibleRows = 0;
+            let totalRows = 0;
+            let noResultsRow = document.getElementById('noResultsRow');
+            if (noResultsRow) {
+                noResultsRow.remove();
             }
-        });
+            
+            rows.forEach(row => {
+                if (row.id === 'noResultsRow') {
+                    return;
+                }
+                const cells = row.querySelectorAll('td');
+                if (cells.length === 0) {
+                    return;
+                }
+                totalRows++;
+                let shouldShow = true;
+                if (searchValue) {
+                    shouldShow = rowMatchesSearch(cells, categoryValue, searchValue);
+                }
+                row.style.display = shouldShow ? '' : 'none';
+                if (shouldShow) {
+                    visibleRows++;
+                }
+            });
+            
+            if (visibleRows === 0 && totalRows > 0) {
+                const tbody = tableElement.querySelector('tbody');
+                const colspan = tableElement.querySelector('thead tr').children.length;
+                noResultsRow = document.createElement('tr');
+                noResultsRow.id = 'noResultsRow';
+                noResultsRow.innerHTML = `
+                    <td colspan="${colspan}" class="text-center">
+                        <div class="alert alert-info m-2">
+                            No matching inventory items found
+                            <button class="btn btn-outline-primary btn-sm ms-2" onclick="clearSearch()">
+                                Clear Search
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(noResultsRow);
+            }
+            
+            updateSearchInfo(visibleRows, totalRows, searchValue);
+        }
+        
+        function rowMatchesSearch(cells, category, searchValue) {
+            const haystack = text => text.toLowerCase().includes(searchValue);
+            switch (category) {
+                case 'serial':
+                    return haystack(cells[0].textContent);
+                case 'blood_type':
+                    return haystack(cells[1].textContent);
+                case 'component':
+                    return haystack(cells[3].textContent);
+                case 'date': {
+                    const collectionDate = cells[2].textContent.toLowerCase();
+                    const expirationDate = cells[3].textContent.toLowerCase();
+                    const escapeRegExp = searchValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const datePattern = new RegExp(escapeRegExp, 'i');
+                    return datePattern.test(collectionDate) || datePattern.test(expirationDate);
+                }
+                case 'all':
+                default:
+                    for (let j = 0; j < cells.length; j++) {
+                        if (haystack(cells[j].textContent)) {
+                            return true;
+                        }
+                    }
+                    return false;
+            }
+        }
+        
+        function updateSearchInfo(visibleRows, totalRows, searchValue) {
+            const searchContainer = document.querySelector('.search-container');
+            if (!searchContainer) return;
+            if (!searchInfoElement) {
+                searchInfoElement = document.createElement('div');
+                searchInfoElement.id = 'searchInfo';
+                searchInfoElement.classList.add('text-muted', 'mt-2', 'small');
+                searchContainer.appendChild(searchInfoElement);
+            }
+            if (!searchValue) {
+                searchInfoElement.textContent = '';
+                return;
+            }
+            searchInfoElement.textContent = `Showing ${visibleRows} of ${totalRows} entries`;
+        }
+        
+        function showInventoryLoading(isLoading) {
+            if (!loadingIndicator) return;
+            loadingIndicator.classList.toggle('d-none', !isLoading);
+        }
+        
+        function buildUrlWithParams(bloodType, page) {
+            const url = new URL(window.location.href);
+            if (bloodType) {
+                url.searchParams.set('blood_type', bloodType);
+            } else {
+                url.searchParams.delete('blood_type');
+            }
+            if (page && page > 1) {
+                url.searchParams.set('page', page);
+            } else {
+                url.searchParams.delete('page');
+            }
+            url.searchParams.delete('partial');
+            return url;
+        }
+        
+        function rebuildFallbackMap(rows) {
+            unitFallbackMap.clear();
+            if (!Array.isArray(rows)) {
+                return;
+            }
+            rows.forEach(bag => {
+                const key = getUnitKey(bag);
+                if (key) {
+                    unitFallbackMap.set(key, bag);
+                }
+            });
+        }
+        
+        function getUnitKey(bag) {
+            if (!bag) return '';
+            return bag.unit_id || bag.serial_number || '';
+        }
+        
+        function refreshBufferContextForScripts() {
+            if (!window.BUFFER_BLOOD_CONTEXT) return;
+            window.BUFFER_BLOOD_CONTEXT.count = bufferReserveCountData;
+            if (bufferContextData?.buffer_lookup) {
+                window.BUFFER_BLOOD_CONTEXT.unit_ids = Object.keys(bufferContextData.buffer_lookup.by_id || {});
+                window.BUFFER_BLOOD_CONTEXT.unit_serials = Object.keys(bufferContextData.buffer_lookup.by_serial || {});
+            }
+            if (bufferContextData?.buffer_types) {
+                window.BUFFER_BLOOD_CONTEXT.types = bufferContextData.buffer_types;
+            }
+        }
+        
+        function escapeHtml(value) {
+            if (value === null || value === undefined) {
+                return '';
+            }
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+        
+        function applyBloodTypeFilter(typeLabel) {
+            const normalized = typeLabel ? typeLabel.toUpperCase() : null;
+            const nextFilter = activeBloodTypeFilter === normalized ? null : normalized;
+            fetchInventoryData({ bloodType: nextFilter, page: 1 });
+        }
+        
+        function clearBloodTypeFilter() {
+            fetchInventoryData({ bloodType: null, page: 1 });
+        }
+        
+        function handleBloodTypeCardKey(event, typeLabel) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                applyBloodTypeFilter(typeLabel);
+            }
+        }
     </script>
     <script src="../../assets/js/admin-donor-registration-modal.js"></script>
     <script src="../../assets/js/admin-screening-form-modal.js"></script>
