@@ -26,6 +26,7 @@ include_once __DIR__ . '/module/optimized_functions.php';
 // Include auto-dispose function for expired blood units
 require_once '../../assets/php_func/admin_blood_bank_auto_dispose.php';
 require_once '../../assets/php_func/buffer_blood_manager.php';
+require_once __DIR__ . '/module/blood_inventory_data.php';
 
 // Auto-dispose expired blood bank units on page load
 // This marks units with expires_at <= today as "Disposed"
@@ -117,180 +118,17 @@ if ($cacheEnabled && file_exists($cacheFile) && file_exists($cacheMetaFile)) {
     }
 }
 
-// OPTIMIZED: Fetch blood inventory data with enhanced performance
-$bloodInventory = [];
-
-try {
-    // OPTIMIZATION 1: Fetch ALL blood_bank_units records using pagination to bypass 1000 record limit
-    $bloodBankUnitsData = [];
-    $offset = 0;
-    $limit = 1000;
-    $hasMore = true;
-    $maxIterations = 10; // Safety limit to prevent infinite loops
-    $iteration = 0;
-    
-    while ($hasMore && $iteration < $maxIterations) {
-        $endpoint = "blood_bank_units"
-            . "?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,hospital_request_id,created_at,updated_at"
-            . "&unit_serial_number=not.is.null"
-            . "&order=collected_at.desc&limit={$limit}&offset={$offset}";
-        $bloodBankUnitsResponse = supabaseRequest($endpoint);
-        $batchData = isset($bloodBankUnitsResponse['data']) ? $bloodBankUnitsResponse['data'] : [];
-        
-        if (empty($batchData)) {
-            $hasMore = false;
-        } else {
-            $bloodBankUnitsData = array_merge($bloodBankUnitsData, $batchData);
-            $offset += $limit;
-            $iteration++;
-            
-            // If we got less than the limit, we've reached the end
-            if (count($batchData) < $limit) {
-                $hasMore = false;
-            }
-        }
-    }
-    
-    error_log("Blood Bank Dashboard: Fetched " . count($bloodBankUnitsData) . " total records in " . $iteration . " batches");
-    
-    // OPTIMIZATION 2: Get donor data only for units we actually have (reduces data transfer)
-    if (!empty($bloodBankUnitsData)) {
-        $donorIds = array_unique(array_column($bloodBankUnitsData, 'donor_id'));
-        $donorIdsFilter = implode(',', array_map('intval', $donorIds));
-        
-        $donorResponse = supabaseRequest("donor_form?select=donor_id,surname,first_name,middle_name,birthdate,sex,civil_status&donor_id=in.({$donorIdsFilter})");
-        $donorData = isset($donorResponse['data']) ? $donorResponse['data'] : [];
-        
-        // Create lookup array for donor data
-        $donorLookup = [];
-        foreach ($donorData as $donor) {
-            $donorLookup[$donor['donor_id']] = $donor;
-        }
-    } else {
-        $donorLookup = [];
-    }
-    
-    // No need to check declined donors - blood_bank_units already contains only successful donations
-    
-    // OPTIMIZATION 3: Batch process with array functions instead of loops
-    if (is_array($bloodBankUnitsData) && !empty($bloodBankUnitsData)) {
-        // Filter out empty serial numbers
-        $filteredUnits = array_filter($bloodBankUnitsData, function($item) {
-            return !empty($item['unit_serial_number']);
-        });
-        
-        // OPTIMIZATION 7: Use array_map for parallel processing
-        $bloodInventory = array_map(function($item) use ($donorLookup) {
-            // Parse dates once
-            $collectionDate = new DateTime($item['collected_at']);
-            $expirationDate = new DateTime($item['expires_at']);
-            $today = new DateTime();
-            
-            // Determine status efficiently with normalized mapping
-            $status = 'Valid';
-            $unitStatusRaw = strtolower($item['status'] ?? '');
-            switch ($unitStatusRaw) {
-                case 'handed_over':
-                case 'handed over':
-                    $status = 'Handed Over';
-                    break;
-                case 'disposed':
-                    $status = 'Disposed';
-                    break;
-                case 'used':
-                    $status = 'Used';
-                    break;
-                case 'reserved':
-                    $status = 'Reserved';
-                    break;
-                case 'quarantined':
-                    $status = 'Quarantined';
-                    break;
-                case 'expired':
-                    $status = 'Expired';
-                    break;
-                case 'valid':
-                case '':
-                default:
-                    $status = 'Valid';
-                    break;
-            }
-            if ($status === 'Valid' && $today > $expirationDate) {  
-                $status = 'Expired';
-            }
-            
-            // Get donor info efficiently
-            $donor = $donorLookup[$item['donor_id']] ?? null;
-            $donorInfo = [
-                'surname' => 'Not Found',
-                'first_name' => '',
-                'middle_name' => '',
-                'birthdate' => '',
-                'age' => '',
-                'sex' => '',
-                'civil_status' => ''
-            ];
-            
-            if ($donor) {
-                $age = '';
-                if (!empty($donor['birthdate'])) {
-                    $birthdate = new DateTime($donor['birthdate']);
-                    $age = $birthdate->diff($today)->y;
-                }
-                
-                $donorInfo = [
-                    'surname' => $donor['surname'] ?? '',
-                    'first_name' => $donor['first_name'] ?? '',
-                    'middle_name' => $donor['middle_name'] ?? '',
-                    'birthdate' => !empty($donor['birthdate']) ? date('d/m/Y', strtotime($donor['birthdate'])) : '',
-                    'age' => $age,
-                    'sex' => $donor['sex'] ?? '',
-                    'civil_status' => $donor['civil_status'] ?? ''
-                ];
-            }
-            
-            return [
-                'unit_id' => $item['unit_id'],
-                'donor_id' => $item['donor_id'],
-                'serial_number' => $item['unit_serial_number'],
-                'blood_type' => $item['blood_type'],
-                'bags' => 1,
-                'bag_type' => $item['bag_type'] ?: 'Standard',
-                'bag_brand' => $item['bag_brand'] ?: 'N/A',
-                'collection_date' => $collectionDate->format('Y-m-d'),
-                'expiration_date' => $expirationDate->format('Y-m-d'),
-                'status' => $status,
-                'unit_status' => $item['status'],
-                'hospital_request_id' => $item['hospital_request_id'] ?? null,
-                'created_at' => $item['created_at'],
-                'updated_at' => $item['updated_at'],
-                'donor' => $donorInfo
-            ];
-        }, $filteredUnits);
-        
-        // Convert to indexed array
-        $bloodInventory = array_values($bloodInventory);
-    }
-    
-} catch (Exception $e) {
-    error_log("Error in Blood Bank data fetching: " . $e->getMessage());
-    $bloodInventory = [];
-}
-
-// If no records found, keep the bloodInventory array empty
-if (empty($bloodInventory)) {
-    $bloodInventory = [];
-}
-
-$bufferContext = getBufferBloodContext(BUFFER_BLOOD_DEFAULT_LIMIT, $bloodInventory);
-$bloodInventory = tagBufferBloodInInventory($bloodInventory, $bufferContext['buffer_lookup']);
-$bufferOnlyInventory = array_values(array_filter($bloodInventory, function($unit) {
-    return !empty($unit['is_buffer']);
-}));
-$activeInventory = array_values(array_filter($bloodInventory, function($unit) {
-    return empty($unit['is_buffer']);
-}));
-$bufferReserveCount = count($bufferOnlyInventory);
+$inventorySnapshot = loadBloodInventorySnapshot();
+$bloodInventory = $inventorySnapshot['bloodInventory'];
+$activeInventory = $inventorySnapshot['activeInventory'];
+$bufferOnlyInventory = $inventorySnapshot['bufferOnlyInventory'];
+$bufferContext = $inventorySnapshot['bufferContext'];
+$bufferReserveCount = $inventorySnapshot['bufferReserveCount'];
+$bufferTypes = $inventorySnapshot['bufferTypes'];
+$bloodInStockCount = $inventorySnapshot['bloodInStockCount'];
+$bloodByType = $inventorySnapshot['bloodByType'];
+$bloodReceivedCount = $inventorySnapshot['bloodReceivedCount'];
+$totalDonorCount = $inventorySnapshot['totalDonorCount'];
 
 // OPTIMIZATION 8: Efficient statistics calculation using array functions
 $today = new DateTime();
