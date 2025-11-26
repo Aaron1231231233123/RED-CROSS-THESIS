@@ -31,6 +31,7 @@ BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-']
 # Constants from JS/PHP
 PAGE_SIZE = 8
 RANDOM_SEED = 42  # For reproducible results (from PHP: mt_srand(42))
+TARGET_BUFFER_UNITS = 10  # Minimum stock per blood type
 
 # SARIMA imports - matching R Studio auto.arima
 try:

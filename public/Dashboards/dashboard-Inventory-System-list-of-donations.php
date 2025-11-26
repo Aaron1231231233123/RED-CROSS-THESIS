@@ -840,9 +840,7 @@ function getCacheStats() {
         /* Hide heavy sections until ready to avoid staggered row paints */
         .progressive-hide { visibility: hidden; }
     </style>
-    <script>
-        window.ACCESS_LOCK_ROLE_VALUE = 2;
-    </script>
+
     <script>
     (function() {
         function reveal() {

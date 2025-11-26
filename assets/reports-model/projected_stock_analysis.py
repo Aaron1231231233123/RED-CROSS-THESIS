@@ -34,19 +34,18 @@ try:
 except ModuleNotFoundError:
     PLOTLY_AVAILABLE = False
 
+from config import TARGET_BUFFER_UNITS
 from forecast_workflow import run_forecast_workflow
-
-TARGET_BUFFER_UNITS = 10
 OUTPUT_DIR = Path(__file__).resolve().parent / "charts"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 
 def _status_from_gap(buffer_gap: float) -> str:
     if buffer_gap >= 0:
-        return "🟢 Above Target (Safe)"
+        return "Safe"
     if buffer_gap >= -(TARGET_BUFFER_UNITS * 0.5):
-        return "🟡 Below Target (Monitor)"
-    return "🔴 Critical (Action Required)"
+        return "Monitor"
+    return "Critical"
 
 
 def _build_projected_stock_df(supply_vs_demand: pd.DataFrame) -> pd.DataFrame:
@@ -67,7 +66,7 @@ def build_projected_stock_table(supply_vs_demand_rows: List[Dict]) -> List[Dict]
 
 
 def _print_projected_stock(df: pd.DataFrame):
-    print("\n\n🎯 PROJECTED STOCK LEVEL & BUFFER ANALYSIS")
+    print("\n\nPROJECTED STOCK LEVEL & BUFFER ANALYSIS")
     print("===========================================")
     columns = [
         "Blood_Type",
@@ -86,31 +85,34 @@ def _print_projected_stock(df: pd.DataFrame):
 def _plot_static(df: pd.DataFrame):
     if not PLOTNINE_AVAILABLE:
         return
+    status_levels = ["Critical", "Monitor", "Safe"]
+    status_palette = {
+        "Critical": "#c0392b",
+        "Monitor": "#f39c12",
+        "Safe": "#27ae60",
+    }
+    df = df.copy()
+    df["Buffer_Status"] = pd.Categorical(df["Buffer_Status"], categories=status_levels, ordered=True)
+
     plot = (
         ggplot(df, aes("Blood_Type", "Projected_Stock", fill="Buffer_Status"))
         + geom_bar(stat="identity", alpha=0.8)
-        + geom_hline(yintercept=0, linetype="dashed", color="gray30", linewidth=0.8)
+        + geom_hline(yintercept=0, linetype="dashed", color="#4d4d4d", size=0.8)
         + geom_point(aes(y="Target_Stock"), shape="D", size=4, color="darkblue")
         + geom_text(
             aes(y="Target_Stock"),
             label="Target",
-            vjust=-0.8,
+            va="bottom",
             size=8,
             color="darkblue",
         )
         + geom_text(
             aes(label="Projected_Stock"),
-            vjust=1.5,
+            va="top",
             size=8,
             color="white",
         )
-        + scale_fill_manual(
-            values={
-                "🔴 Critical (Action Required)": "#c0392b",
-                "🟡 Below Target (Monitor)": "#f39c12",
-                "🟢 Above Target (Safe)": "#27ae60",
-            }
-        )
+        + scale_fill_manual(values=status_palette, limits=status_levels)
         + labs(
             title="Projected Stock Level vs Target Buffer (Next Month)",
             subtitle=f"Target Buffer: {TARGET_BUFFER_UNITS} units for all blood types | Blue diamonds = Target Stock Level",
@@ -132,9 +134,9 @@ def _plot_interactive(df: pd.DataFrame):
     if not PLOTLY_AVAILABLE:
         return
     colors = {
-        "🟢 Above Target (Safe)": "#27ae60",
-        "🟡 Below Target (Monitor)": "#f39c12",
-        "🔴 Critical (Action Required)": "#c0392b",
+        "Safe": "#27ae60",
+        "Monitor": "#f39c12",
+        "Critical": "#c0392b",
     }
 
     fig = go.Figure()
@@ -174,37 +176,49 @@ def _plot_interactive(df: pd.DataFrame):
 
     fig.update_layout(
         title=dict(
-            text=f"🎯 Projected Stock Level vs Target Buffer (Next Month)<br><sub>Target Buffer: {TARGET_BUFFER_UNITS} units for all blood types</sub>",
-            font=dict(size=16),
+            text=f"Projected Stock Level vs Target Buffer (Next Month)<br><sub>Target Buffer: {TARGET_BUFFER_UNITS} units for all blood types</sub>",
+            font=dict(size=18),
         ),
         xaxis=dict(title="Blood Type"),
         yaxis=dict(title="Stock Level (Units)", zeroline=True),
         hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.05,
+            xanchor="right",
+            x=1,
+            bgcolor="rgba(255,255,255,0.9)",
+            bordercolor="rgba(0,0,0,0.1)",
+            borderwidth=1,
+        ),
         plot_bgcolor="rgba(245,245,245,0.8)",
         bargap=0.3,
+        height=520,
+        margin=dict(l=60, r=30, t=110, b=70),
     )
 
-    fig.write_html("projected_stock.html")
+    output_path = Path(__file__).resolve().parent / "projected_stock.html"
+    fig.write_html(str(output_path))
 
 
 def _print_action_summary(df: pd.DataFrame):
-    attention = df[df["Buffer_Status"].isin(["🔴 Critical (Action Required)", "🟡 Below Target (Monitor)"])].copy()
+    attention = df[df["Buffer_Status"].isin(["Critical", "Monitor"])].copy()
     attention = attention.sort_values("Buffer_Gap")
 
     if attention.empty:
-        print("\n✅ ALL BLOOD TYPES PROJECTED TO MEET OR EXCEED TARGET BUFFER LEVELS!\n")
+        print("\nALL BLOOD TYPES PROJECTED TO MEET OR EXCEED TARGET BUFFER LEVELS!\n")
         return
 
-    print("\n⚠️ BLOOD TYPES REQUIRING ATTENTION:")
+    print("\nBLOOD TYPES REQUIRING ATTENTION:")
     print("=====================================")
     print(attention[["Blood_Type", "Projected_Stock", "Target_Stock", "Buffer_Gap", "Buffer_Status"]].to_string(index=False))
-    print("\n📋 RECOMMENDED ACTIONS:")
+    print("\nRECOMMENDED ACTIONS:")
     for _, row in attention.iterrows():
         bt = row["Blood_Type"]
         gap = int(abs(row["Buffer_Gap"]))
         status = row["Buffer_Status"]
-        if status == "🔴 Critical (Action Required)":
+        if status == "Critical":
             print(f"• {bt}: URGENT - Increase collection by {gap} units to meet target buffer")
         else:
             print(f"• {bt}: Monitor closely - {gap} units below target buffer")

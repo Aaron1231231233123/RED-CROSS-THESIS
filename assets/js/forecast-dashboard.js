@@ -132,14 +132,35 @@
         const el = document.getElementById(elementId);
         if (el && path) {
             const cacheBuster = `${path}${path.includes('?') ? '&' : '?'}cb=${Date.now()}`;
+            
+            // Add error handler for images
+            if (el.tagName === 'IMG') {
+                el.onerror = function() {
+                    this.style.display = 'none';
+                    const errorMsg = document.createElement('div');
+                    errorMsg.className = 'alert alert-warning mt-2';
+                    errorMsg.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>Chart image not available. Please click "Refresh Data" to generate charts.`;
+                    this.parentNode.appendChild(errorMsg);
+                };
+                el.onload = function() {
+                    // Remove any error messages if image loads successfully
+                    const errorMsg = this.parentNode.querySelector('.alert-warning');
+                    if (errorMsg) errorMsg.remove();
+                };
+            }
+            
             el.src = cacheBuster;
         }
     }
 
     function updateCharts(charts = {}) {
+        console.log('Updating charts with paths:', charts);
         Object.entries(chartIds).forEach(([key, id]) => {
             if (charts[key]) {
+                console.log(`Setting ${id} to ${charts[key]}`);
                 updateResource(id, charts[key]);
+            } else {
+                console.warn(`Chart path missing for ${key} (element: ${id})`);
             }
         });
         Object.entries(iframeIds).forEach(([key, id]) => {
@@ -158,12 +179,16 @@
             if (!data.success) {
                 throw new Error(data.error || 'Unable to load forecasts');
             }
+            console.log('Forecast data loaded:', data);
+            if (data.asset_errors && data.asset_errors.length > 0) {
+                console.warn('Asset generation errors:', data.asset_errors);
+            }
             updateKpis(data.summary);
             renderTable(data.forecast_rows);
             renderProjectedStock(data.projected_stock);
             updateCharts(data.charts);
         } catch (error) {
-            console.error(error);
+            console.error('Error loading forecast data:', error);
             setTableMessage(error.message || 'Failed to load forecast data', true);
         }
     }

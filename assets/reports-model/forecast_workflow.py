@@ -12,7 +12,12 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from data_processing import process_monthly_supply, process_monthly_demand
+from config import TARGET_BUFFER_UNITS
+from data_processing import (
+    process_monthly_supply,
+    process_monthly_demand,
+    process_expiration_series,
+)
 from database import DatabaseConnection
 from forecast_functions import forecast_supply, forecast_demand
 
@@ -45,24 +50,47 @@ def _build_supply_demand_table(
         demand_val = demand_row.get("Forecast_Demand", 0)
         gap = supply_val - demand_val
 
-        if gap > 50:
-            status = "Surplus"
-        elif -50 <= gap <= 50:
-            status = "Balanced"
-        else:
-            status = "Shortage"
-
         rows.append(
             {
                 "Blood_Type": blood_type,
                 "Forecast_Supply": supply_val,
                 "Forecast_Demand": demand_val,
                 "Gap": gap,
-                "Status": status,
             }
         )
 
+    _assign_statuses(rows)
     return rows
+
+
+def _assign_statuses(rows: List[Dict]):
+    if not rows:
+        return
+
+    total_supply = sum(row["Forecast_Supply"] for row in rows)
+    total_target = sum(row["Forecast_Demand"] + TARGET_BUFFER_UNITS for row in rows)
+    surplus_pool = max(0, total_supply - total_target)
+
+    # Default statuses based on sign of gap
+    for row in rows:
+        gap = row["Gap"]
+        if gap < 0:
+            row["Status"] = "Shortage"
+        else:
+            row["Status"] = "Balanced"
+
+    if surplus_pool <= 0:
+        return
+
+    positive_rows = [row for row in rows if row["Gap"] > 0]
+    positive_rows.sort(key=lambda r: r["Gap"], reverse=True)
+
+    remaining = surplus_pool
+    for row in positive_rows:
+        if remaining <= 0:
+            break
+        row["Status"] = "Surplus"
+        remaining -= row["Gap"]
 
 
 def run_forecast_workflow() -> Dict[str, List[Dict]]:
@@ -78,13 +106,25 @@ def run_forecast_workflow() -> Dict[str, List[Dict]]:
 
     monthly_supply = process_monthly_supply(blood_units)
     monthly_demand = process_monthly_demand(blood_requests, monthly_supply)
+    expiration_series = process_expiration_series(blood_units)
 
     df_monthly_donations = _monthly_dict_to_rows(monthly_supply, "units_collected")
     df_monthly_requests = _monthly_dict_to_rows(monthly_demand, "units_requested")
+    df_expiring_monthly = _monthly_dict_to_rows(
+        {k: {"ALL": v} for k, v in expiration_series.get("monthly", {}).items()},
+        "units_collected",
+    )
+    df_expiring_weekly = _monthly_dict_to_rows(
+        {k: {"ALL": v} for k, v in expiration_series.get("weekly", {}).items()},
+        "units_collected",
+    )
 
     forecast_supply_df = forecast_supply(df_monthly_donations)
     forecast_demand_df = forecast_demand(df_monthly_requests)
     supply_vs_demand_df = _build_supply_demand_table(forecast_supply_df, forecast_demand_df)
+
+    forecast_expiring_monthly = _forecast_single_series(df_expiring_monthly)
+    forecast_expiring_weekly = _forecast_single_series(df_expiring_weekly)
 
     return {
         "forecast_supply_df": forecast_supply_df,
@@ -92,7 +132,29 @@ def run_forecast_workflow() -> Dict[str, List[Dict]]:
         "supply_vs_demand_df": supply_vs_demand_df,
         "df_monthly_donations": df_monthly_donations,
         "df_monthly_requests": df_monthly_requests,
+        "forecast_expiring_monthly": forecast_expiring_monthly,
+        "forecast_expiring_weekly": forecast_expiring_weekly,
     }
+
+
+def _forecast_single_series(rows: List[Dict]) -> int:
+    if not rows:
+        return 0
+    enriched = [
+        {
+            "month": row["month"],
+            "blood_type": "ALL",
+            "units_collected": row["units_collected"],
+        }
+        for row in rows
+    ]
+    forecast = forecast_supply(enriched)
+    if not forecast:
+        return int(enriched[-1]["units_collected"])
+    for item in forecast:
+        if item["Blood_Type"] == "ALL":
+            return int(item.get("Forecast_Supply", 0))
+    return 0
 
 
 def _print_section(title: str, rows: List[Dict]):

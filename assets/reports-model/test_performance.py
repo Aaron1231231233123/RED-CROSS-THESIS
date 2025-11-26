@@ -24,3 +24,4 @@ print(f"KPIs calculated: {len(result.get('kpis', {}))}")
 
 
 
+

@@ -16,6 +16,13 @@ from typing import Dict, Iterable, List, Tuple
 import numpy as np
 
 try:
+    from pmdarima import auto_arima
+
+    PMDARIMA_AVAILABLE = True
+except ImportError:  # pragma: no cover - optional dependency
+    PMDARIMA_AVAILABLE = False
+
+try:
     from statsmodels.tsa.statespace.sarimax import SARIMAX
 
     SARIMA_AVAILABLE = True
@@ -125,8 +132,11 @@ def _run_forecasts(series: Dict[str, List[float]]) -> List[ForecastResult]:
 
 
 def _forecast_next_value(history: List[float]) -> ForecastResult | None:
-    if len(history) < MIN_OBSERVATIONS:
+    if not history:
         return None
+    if len(history) < MIN_OBSERVATIONS:
+        last_value = history[-1]
+        return ForecastResult("", last_value, last_value)
 
     last_value = history[-1]
     forecast_value = _run_auto_sarima(history)
@@ -134,6 +144,42 @@ def _forecast_next_value(history: List[float]) -> ForecastResult | None:
 
 
 def _run_auto_sarima(values: List[float]) -> float:
+    """
+    Prefer pmdarima.auto_arima (matches R's auto.arima). Fallback to manual
+    candidate search if pmdarima is unavailable.
+    """
+    if PMDARIMA_AVAILABLE:
+        try:
+            model = auto_arima(
+                values,
+                seasonal=True,
+                m=SEASONAL_PERIOD,
+                start_p=0,
+                start_q=0,
+                max_p=3,
+                max_q=3,
+                start_P=0,
+                start_Q=0,
+                max_P=2,
+                max_Q=2,
+                d=None,
+                D=None,
+                stepwise=True,
+                suppress_warnings=True,
+                error_action="ignore",
+                maxiter=75,
+                information_criterion="aicc",
+            )
+            forecast_value = model.predict(n_periods=1)[0]
+            return float(max(0.0, round(forecast_value)))
+        except Exception:
+            # fall through to manual search
+            pass
+
+    return _run_manual_sarima(values)
+
+
+def _run_manual_sarima(values: List[float]) -> float:
     if not SARIMA_AVAILABLE:
         return float(round(values[-1]))
 

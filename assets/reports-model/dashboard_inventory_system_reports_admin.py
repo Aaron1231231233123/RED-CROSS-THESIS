@@ -7,11 +7,56 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Dict, List, Tuple
+BASE_DIR = Path(__file__).parent
+PLACEHOLDER_HTML = {
+    "interactive_supply.html": "Interactive Supply Trend",
+    "interactive_demand.html": "Interactive Demand Trend",
+    "interactive_combined.html": "Interactive Supply vs Demand (Next 3 Months)",
+    "projected_stock.html": "Projected Stock Status view",
+}
+
+
+def _write_placeholder_html(filename: str, title: str, reason: str):
+    path = BASE_DIR / filename
+    if path.exists():
+        return
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{title}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 0; padding: 24px; background: #fff; color: #333; }}
+        .panel {{ border: 1px dashed #c53030; border-radius: 12px; padding: 20px; background: #fff5f5; }}
+        h2 {{ margin-top: 0; color: #941022; font-size: 1.25rem; }}
+        p {{ margin: .25rem 0; line-height: 1.4; }}
+        code {{ background: #f1f5f9; padding: 2px 4px; border-radius: 4px; }}
+    </style>
+    <meta http-equiv="refresh" content="30">
+</head>
+<body>
+    <div class="panel">
+        <h2>{title}</h2>
+        <p>This visualization is not available yet because</p>
+        <p><strong>{reason}</strong></p>
+        <p>Install the optional Plotly/visualization dependencies on the server, then click <em>Refresh Data</em> in the dashboard to regenerate this asset.</p>
+    </div>
+</body>
+</html>"""
+    path.write_text(html, encoding="utf-8")
+
+
+def _ensure_placeholder_assets(reason: str):
+    for filename, title in PLACEHOLDER_HTML.items():
+        _write_placeholder_html(filename, title, reason)
+
 
 from database import DatabaseConnection
 from forecast_workflow import run_forecast_workflow
-from projected_stock_analysis import build_projected_stock_table
+from projected_stock_analysis import build_projected_stock_table, run_projected_stock_analysis
 
 try:  # Optional dependency (plotnine) for static charts
     from forecast_visualizations import generate_charts
@@ -57,7 +102,10 @@ def _format_forecast_rows(
 
 
 def _build_summary(
-    supply_vs_demand: List[Dict], projected_stock: List[Dict], shelf_life: Dict
+    supply_vs_demand: List[Dict],
+    projected_stock: List[Dict],
+    shelf_life: Dict,
+    expiring_forecast: Dict,
 ) -> Dict:
     total_supply = sum(row.get("Forecast_Supply", 0) for row in supply_vs_demand)
     total_demand = sum(row.get("Forecast_Demand", 0) for row in supply_vs_demand)
@@ -65,7 +113,7 @@ def _build_summary(
     critical = [
         row["Blood_Type"]
         for row in projected_stock
-        if row.get("Buffer_Status", "").startswith("🔴")
+        if row.get("Buffer_Status", "").startswith("Critical")
     ]
     buffer_gap_total = sum(row.get("Buffer_Gap", 0) for row in projected_stock)
     target_stock_total = sum(row.get("Target_Stock", 0) for row in projected_stock)
@@ -77,8 +125,8 @@ def _build_summary(
         "critical_types": critical,
         "target_stock_level": int(round(target_stock_total)),
         "buffer_gap_total": int(round(buffer_gap_total)),
-        "expiring_weekly": int(shelf_life.get("expiring_weekly", 0)),
-        "expiring_monthly": int(shelf_life.get("expiring_monthly", 0)),
+        "expiring_weekly": int(expiring_forecast.get("weekly", shelf_life.get("expiring_weekly", 0))),
+        "expiring_monthly": int(expiring_forecast.get("monthly", shelf_life.get("expiring_monthly", 0))),
         "expiring_weekly_percentage": int(
             round(shelf_life.get("expiring_weekly_percentage", 0))
         ),
@@ -89,17 +137,17 @@ def _build_summary(
 
 
 def _chart_paths() -> Dict[str, str]:
-    base = "../../assets/reports-model"
-    charts = f"{base}/charts"
+    """Return HTTP-safe URLs for generated assets."""
+    base = "../api/forecast-asset.php?asset="
     return {
-        "supply": f"{charts}/supply_forecast.png",
-        "demand": f"{charts}/demand_forecast.png",
-        "comparison": f"{charts}/supply_vs_demand.png",
-        "projected_stock": f"{charts}/projected_stock.png",
-        "interactive_supply": f"{base}/interactive_supply.html",
-        "interactive_demand": f"{base}/interactive_demand.html",
-        "interactive_combined": f"{base}/interactive_combined.html",
-        "projected_stock_html": f"{base}/projected_stock.html",
+        "supply": f"{base}supply",
+        "demand": f"{base}demand",
+        "comparison": f"{base}comparison",
+        "projected_stock": f"{base}projected_stock",
+        "interactive_supply": f"{base}interactive_supply",
+        "interactive_demand": f"{base}interactive_demand",
+        "interactive_combined": f"{base}interactive_combined",
+        "projected_stock_html": f"{base}projected_stock_html",
     }
 
 
@@ -175,13 +223,21 @@ def _refresh_assets(workflow: Dict) -> List[str]:
     else:
         errors.append("static_charts: plotnine not installed")
 
+    # Generate projected stock chart
+    try:
+        run_projected_stock_analysis(workflow_results=workflow)
+    except Exception as exc:  # pragma: no cover - diagnostics
+        errors.append(f"projected_stock_chart: {exc}")
+
     if generate_interactive_plots:
         try:
             generate_interactive_plots(workflow_results=workflow)
         except Exception as exc:  # pragma: no cover - diagnostics
             errors.append(f"interactive_charts: {exc}")
+            _ensure_placeholder_assets(str(exc))
     else:
         errors.append("interactive_charts: plotly not installed")
+        _ensure_placeholder_assets("Plotly is not installed on this server.")
 
     return errors
 
@@ -193,7 +249,11 @@ def generate_dashboard_payload() -> Dict:
 
     projected_stock = build_projected_stock_table(supply_vs_demand)
     shelf_life_metrics = _fetch_shelf_data()
-    summary = _build_summary(supply_vs_demand, projected_stock, shelf_life_metrics)
+    expiring_forecast = {
+        "weekly": workflow.get("forecast_expiring_weekly", 0),
+        "monthly": workflow.get("forecast_expiring_monthly", 0),
+    }
+    summary = _build_summary(supply_vs_demand, projected_stock, shelf_life_metrics, expiring_forecast)
     forecast_rows = _format_forecast_rows(supply_vs_demand, month_label, month_key)
 
     asset_errors = _refresh_assets(workflow)

@@ -39,7 +39,9 @@ def _prepare_series(df: pd.DataFrame, value_column: str) -> Dict[str, pd.DataFra
 
 def _generate_forecast_trace(sub_df: pd.DataFrame, value_col: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     if len(sub_df) < 6:
-        return sub_df[sub_df["month"].dt.year == TARGET_YEAR], pd.DataFrame()
+        actual = sub_df[sub_df["month"].dt.year == TARGET_YEAR].copy()
+        empty_fc = pd.DataFrame(columns=["month", "forecast"])
+        return actual, empty_fc
 
     records = [
         {"month": row["month"], "blood_type": row["blood_type"], value_col: row["value"]}
@@ -177,26 +179,34 @@ def _build_combined_traces(supply_series: Dict[str, pd.DataFrame], demand_series
     return traces, buttons
 
 
-def _make_figure(traces: List[go.Scatter], buttons: List[Dict], title: str, yaxis_title: str) -> go.Figure:
+def _make_figure(
+    traces: List[go.Scatter], buttons: List[Dict], title: str | None, yaxis_title: str
+) -> go.Figure:
     fig = go.Figure(data=traces)
-    fig.update_layout(
-        title=dict(text=title, font=dict(size=16)),
+    layout_kwargs = dict(
         xaxis=dict(title="Month"),
         yaxis=dict(title=yaxis_title),
         hovermode="x unified",
         updatemenus=[
             dict(
                 y=1.15,
-                x=0.5,
-                xanchor="center",
+                x=1,
+                xanchor="right",
                 yanchor="top",
                 buttons=buttons,
                 direction="down",
                 showactive=True,
+                bgcolor="rgba(255,255,255,0.95)",
+                bordercolor="rgba(0,0,0,0.1)",
+                borderwidth=1,
+                pad=dict(r=0, t=0),
             )
         ],
         legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.02),
     )
+    if title:
+        layout_kwargs["title"] = dict(text=title, font=dict(size=16))
+    fig.update_layout(**layout_kwargs)
     return fig
 
 
@@ -234,20 +244,20 @@ def generate_interactive_plots(workflow_results: Optional[Dict] = None):
     fig_supply = _make_figure(
         supply_traces,
         supply_buttons,
-        "🩸 2025 Blood Supply & 3-Month Forecast",
-        "Units Collected",
+        title=None,
+        yaxis_title="Units Collected",
     )
     fig_demand = _make_figure(
         demand_traces,
         demand_buttons,
-        "📊 2025 Hospital Demand & 3-Month Forecast",
-        "Units Requested",
+        title=None,
+        yaxis_title="Units Requested",
     )
     fig_combined = _make_figure(
         combined_traces,
         combined_buttons,
-        "🩸 2025 Supply vs Demand & 3-Month Forecast",
-        "Blood Units",
+        title=None,
+        yaxis_title="Blood Units",
     )
 
     fig_supply.write_html("interactive_supply.html")

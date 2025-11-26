@@ -4,6 +4,7 @@ require_once '../../assets/conn/db_conn.php';
 require_once 'module/optimized_functions.php';
 require_once '../../assets/php_func/admin_hospital_request_priority_handler.php';
 require_once '../../assets/php_func/buffer_blood_manager.php';
+$all_blood_requests_cache = [];
 // Send short-term caching headers for better performance on slow networks
 header('Cache-Control: public, max-age=180, stale-while-revalidate=60');
 header('Vary: Accept-Encoding');
@@ -185,6 +186,7 @@ $startTime = microtime(true);
 $status = 'all';
 
 function fetchAllBloodRequests($limit = 50, $offset = 0, &$totalCount = null) {
+    global $all_blood_requests_cache;
     // First, get total count for pagination
     $countResponse = supabaseRequest("blood_requests?select=request_id&limit=1");
     // Get total count by fetching all (with reasonable limit)
@@ -212,6 +214,7 @@ function fetchAllBloodRequests($limit = 50, $offset = 0, &$totalCount = null) {
     }
     
     $allRequests = $response['data'];
+    $all_blood_requests_cache = $allRequests;
     $totalCount = count($allRequests); // Update with actual fetched count
     
     // Sort requests: Pending first (by when_needed deadline), then others
@@ -283,6 +286,89 @@ function fetchAllBloodRequests($limit = 50, $offset = 0, &$totalCount = null) {
     return array_slice($allRequests, $offset, $limit);
 }
 
+function buildHospitalRequestCardMetrics($requests) {
+    $counts = [];
+    $pending = 0;
+    $approved = 0;
+    $completed = 0;
+    $critical = 0;
+    $today = 0;
+    $now = time();
+    $todayStr = gmdate('Y-m-d');
+
+    foreach ($requests as $req) {
+        $bloodType = trim($req['patient_blood_type'] ?? '');
+        $rhFactor = trim($req['rh_factor'] ?? '');
+        if ($bloodType !== '' && $rhFactor !== '') {
+            $key = $bloodType . '|' . $rhFactor;
+            if (!isset($counts[$key])) {
+                $counts[$key] = 0;
+            }
+            $counts[$key]++;
+        }
+
+        $status = strtolower($req['status'] ?? '');
+        if (in_array($status, ['pending', 'rescheduled'])) {
+            $pending++;
+        } elseif (in_array($status, ['approved', 'printed'])) {
+            $approved++;
+        } elseif ($status === 'completed') {
+            $completed++;
+        }
+
+        $requestedOn = isset($req['requested_on']) ? strtotime($req['requested_on']) : false;
+        if ($requestedOn && gmdate('Y-m-d', $requestedOn) === $todayStr) {
+            $today++;
+        }
+
+        $whenNeededTs = isset($req['when_needed']) ? strtotime($req['when_needed']) : null;
+        $isAsap = !empty($req['is_asap']);
+        $withinOneDay = $whenNeededTs ? ($whenNeededTs - $now <= 86400 && $whenNeededTs >= $now) : false;
+        if ($isAsap || $withinOneDay) {
+            if (in_array($status, ['pending', 'rescheduled', 'approved', 'printed'])) {
+                $critical++;
+            }
+        }
+    }
+
+    arsort($counts);
+    $topType = reset($counts);
+    $topKey = key($counts);
+    $topDisplay = 'No data';
+    $topSubtitle = 'No request history yet';
+    if ($topType && $topKey !== null) {
+        list($bt, $rh) = explode('|', $topKey);
+        $symbol = $rh === 'Negative' ? '-' : '+';
+        $topDisplay = $bt . $symbol;
+        $topSubtitle = $topType . ' request' . ($topType > 1 ? 's' : '');
+    }
+
+    return [
+        'most_requested' => [
+            'label' => 'Most Requested Blood Type',
+            'value' => $topDisplay,
+            'subtitle' => $topSubtitle
+        ],
+        'pending' => [
+            'label' => 'Active Hospital Requests',
+            'value' => $pending,
+            'subtitle' => ($pending + $approved + $completed) > 0
+                ? round(($pending / max(1, $pending + $approved + $completed)) * 100) . '% of total'
+                : 'Awaiting new requests'
+        ],
+        'critical' => [
+            'label' => 'Critical / ASAP',
+            'value' => $critical,
+            'subtitle' => $critical > 0 ? 'Needs action in <24h' : 'All urgent cases addressed'
+        ],
+        'today' => [
+            'label' => 'New Requests Today',
+            'value' => $today,
+            'subtitle' => $today > 0 ? 'Fresh cases logged' : 'No new cases yet'
+        ]
+    ];
+}
+
 $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
 $page_size = 12;
 $offset = ($page - 1) * $page_size;
@@ -292,6 +378,7 @@ $total_pages = $total_count > 0 ? ceil($total_count / $page_size) : 1;
 
 $bufferContext = getBufferBloodContext();
 $bufferReserveCount = $bufferContext['count'];
+$dashboardCardMetrics = buildHospitalRequestCardMetrics($all_blood_requests_cache ?? []);
 
 // Batch fetch handed-over user names to avoid N+1 queries
 $handed_over_name_map = [];
@@ -819,6 +906,33 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 .input-group-text i {
     font-size: 1.1rem;
     color: #6c757d;
+}
+.request-metrics-grid .metric-card {
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background-color: #ffe6e6;
+    border: 1px solid #f8c8c8;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+.request-metrics-grid .metric-label {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #9a4a4a;
+}
+.request-metrics-grid .metric-value {
+    font-size: 48px;
+    font-weight: 700;
+    color: #dc3545;
+    margin: 10px 0;
+}
+.request-metrics-grid .metric-subtitle {
+    font-size: 0.9rem;
+    color: #b55b5b;
 }
 
 /* Main Content Styling */
@@ -1597,6 +1711,36 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         }
                     ?>
                 </h2>
+                <div class="row g-3 request-metrics-grid mb-4">
+                    <div class="col-12 col-md-6 col-xl-3">
+                        <div class="metric-card">
+                            <div class="metric-label"><?php echo htmlspecialchars($dashboardCardMetrics['most_requested']['label']); ?></div>
+                            <div class="metric-value"><?php echo htmlspecialchars($dashboardCardMetrics['most_requested']['value']); ?></div>
+                            <div class="metric-subtitle"><?php echo htmlspecialchars($dashboardCardMetrics['most_requested']['subtitle']); ?></div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 col-xl-3">
+                        <div class="metric-card">
+                            <div class="metric-label"><?php echo htmlspecialchars($dashboardCardMetrics['pending']['label']); ?></div>
+                            <div class="metric-value"><?php echo htmlspecialchars($dashboardCardMetrics['pending']['value']); ?></div>
+                            <div class="metric-subtitle"><?php echo htmlspecialchars($dashboardCardMetrics['pending']['subtitle']); ?></div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 col-xl-3">
+                        <div class="metric-card">
+                            <div class="metric-label"><?php echo htmlspecialchars($dashboardCardMetrics['critical']['label']); ?></div>
+                            <div class="metric-value"><?php echo htmlspecialchars($dashboardCardMetrics['critical']['value']); ?></div>
+                            <div class="metric-subtitle"><?php echo htmlspecialchars($dashboardCardMetrics['critical']['subtitle']); ?></div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 col-xl-3">
+                        <div class="metric-card">
+                            <div class="metric-label"><?php echo htmlspecialchars($dashboardCardMetrics['today']['label']); ?></div>
+                            <div class="metric-value"><?php echo htmlspecialchars($dashboardCardMetrics['today']['value']); ?></div>
+                            <div class="metric-subtitle"><?php echo htmlspecialchars($dashboardCardMetrics['today']['subtitle']); ?></div>
+                        </div>
+                    </div>
+                </div>
                 
                 <div class="row mb-3">
                     <div class="col-12">

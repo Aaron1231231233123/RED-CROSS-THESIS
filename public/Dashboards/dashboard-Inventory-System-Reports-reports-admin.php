@@ -164,7 +164,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
                         <div class="col-12">
                             <div class="card chart-card p-3">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <h6 class="mb-0">Interactive Supply vs Demand (Next 3 Months)</h6>
+                                    <h6 class="mb-0"><span aria-hidden="true">🩸</span> 2025 Supply vs Demand &amp; 3-Month Forecast</h6>
                                     <span class="text-muted small">Powered by Plotly</span>
                                 </div>
                                 <iframe id="interactiveCombinedFrame" src="" width="100%" height="420" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
@@ -221,13 +221,13 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
                     <div class="row g-3 charts-row mt-1">
                         <div class="col-lg-6 col-md-12">
                             <div class="card chart-card p-3">
-                                <h6>Interactive Supply Trend</h6>
+                                <h6><span aria-hidden="true">🩸</span> 2025 Blood Supply &amp; 3-Month Forecast</h6>
                                 <iframe id="interactiveSupplyFrame" src="" width="100%" height="360" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
                             </div>
                         </div>
                         <div class="col-lg-6 col-md-12">
                             <div class="card chart-card p-3">
-                                <h6>Interactive Demand Trend</h6>
+                                <h6><span aria-hidden="true">📊</span> 2025 Hospital Demand &amp; 3-Month Forecast</h6>
                                 <iframe id="interactiveDemandFrame" src="" width="100%" height="360" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
                             </div>
                         </div>
@@ -241,7 +241,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
                         <div id="projectedStockPanel" class="mt-3">
                             <p class="text-muted mb-0">Loading projected stock levels...</p>
                         </div>
-                        <iframe id="projectedStockFrame" src="" width="100%" height="360" frameborder="0" class="mt-3" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                        <iframe id="projectedStockFrame" src="" width="100%" height="520" frameborder="0" class="mt-3" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
                     </div>
                     </div>
                 </div>
