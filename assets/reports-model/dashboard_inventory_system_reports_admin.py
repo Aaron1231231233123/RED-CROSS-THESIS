@@ -265,6 +265,8 @@ def generate_dashboard_payload() -> Dict:
         "forecast_rows": forecast_rows,
         "forecast_supply": workflow["forecast_supply_df"],
         "forecast_demand": workflow["forecast_demand_df"],
+        "monthly_donations": workflow["df_monthly_donations"],
+        "monthly_requests": workflow["df_monthly_requests"],
         "projected_stock": projected_stock,
         "charts": _chart_paths(),
         "asset_errors": asset_errors,

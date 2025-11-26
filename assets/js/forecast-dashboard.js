@@ -3,6 +3,14 @@
     const tableBody = document.querySelector('#reportsTable tbody');
     const projectedPanel = document.getElementById('projectedStockPanel');
     const refreshBtn = document.getElementById('refreshReportsBtn');
+    const detailsModalEl = document.getElementById('detailsModal');
+    const detailsBody = document.getElementById('detailsBody');
+    const TABLE_COLUMNS = 7;
+    const exportBtn = document.getElementById('exportBtn');
+
+    let forecastCache = [];
+    let summaryCache = {};
+    let activeDetailContext = null;
 
     const kpiIds = {
         demand: 'kpiDemand',
@@ -29,7 +37,7 @@
 
     function setTableMessage(message, isError = false) {
         if (!tableBody) return;
-        tableBody.innerHTML = `<tr><td colspan="6" class="text-center py-4 ${isError ? 'text-danger' : ''}">
+        tableBody.innerHTML = `<tr><td colspan="${TABLE_COLUMNS}" class="text-center py-4 ${isError ? 'text-danger' : ''}">
             ${isError ? '<i class="fas fa-exclamation-triangle me-2"></i>' : '<i class="fas fa-spinner fa-spin me-2"></i>'}
             ${message}
         </td></tr>`;
@@ -55,6 +63,15 @@
             expiring_monthly = 0,
         } = summary;
 
+        summaryCache = {
+            total_forecasted_demand,
+            total_forecasted_supply,
+            projected_balance,
+            target_stock_level,
+            expiring_weekly,
+            expiring_monthly,
+        };
+
         const mappings = {
             demand: Math.round(total_forecasted_demand),
             supply: Math.round(total_forecasted_supply),
@@ -77,6 +94,22 @@
         });
     }
 
+    function formatNumber(value = 0) {
+        const num = Number(value) || 0;
+        return num.toLocaleString();
+    }
+
+    function statusBadge(status = 'Balanced') {
+        const normalized = (status || '').toLowerCase();
+        if (normalized.includes('critical') || normalized.includes('shortage')) {
+            return { label: 'Critical shortage', cls: 'status-badge status-low' };
+        }
+        if (normalized.includes('surplus')) {
+            return { label: 'Surplus', cls: 'status-badge status-surplus' };
+        }
+        return { label: 'Adequate', cls: 'status-badge status-adequate' };
+    }
+
     function renderTable(rows = []) {
         if (!tableBody) return;
         if (!rows.length) {
@@ -84,16 +117,22 @@
             return;
         }
 
+        forecastCache = rows;
+
         const fragment = document.createDocumentFragment();
-        rows.forEach(row => {
+        rows.forEach((row, idx) => {
             const tr = document.createElement('tr');
+            const badge = statusBadge(row.status || 'Balanced');
             tr.innerHTML = `
                 <td>${row.month_label || 'Next Month'}</td>
                 <td>${row.blood_type}</td>
-                <td>${row.forecasted_demand?.toLocaleString() ?? 0}</td>
-                <td>${row.forecasted_supply?.toLocaleString() ?? 0}</td>
-                <td>${row.gap?.toLocaleString() ?? 0}</td>
-                <td>${row.status || 'Balanced'}</td>
+                <td>${formatNumber(row.forecasted_demand)}</td>
+                <td>${formatNumber(row.forecasted_supply)}</td>
+                <td>${formatNumber(row.gap ?? (row.forecasted_supply - row.forecasted_demand))}</td>
+                <td><span class="${badge.cls}">${badge.label}</span></td>
+                <td><button class="btn btn-outline-danger btn-sm view-details-btn" data-index="${idx}">
+                    <i class="fas fa-eye me-1"></i>View
+                </button></td>
             `;
             fragment.appendChild(tr);
         });
@@ -170,6 +209,113 @@
         });
     }
 
+    function formatPercentage(part = 0, whole = 0) {
+        if (!whole) return '0%';
+        return `${((part / whole) * 100).toFixed(1)}%`;
+    }
+
+    function buildSummaryList(row) {
+        const balance = row.gap ?? (row.forecasted_supply - row.forecasted_demand);
+        const balanceText = `Projected balance: ${balance >= 0 ? '+' : ''}${formatNumber(balance)} units`;
+        const normalized = (row.status || '').toLowerCase();
+        let riskLevel = 'Moderate';
+        if (normalized.includes('surplus')) riskLevel = 'Low';
+        if (normalized.includes('shortage') || normalized.includes('critical')) riskLevel = 'High';
+        return `
+            <ul class="mb-0">
+                <li>Total Forecasted Demand: ${formatNumber(row.forecasted_demand)} units</li>
+                <li>Total Forecasted Donations: ${formatNumber(row.forecasted_supply)} units</li>
+                <li>${balanceText}</li>
+                <li>Risk Level: ${riskLevel}</li>
+            </ul>
+        `;
+    }
+
+    function openDetails(row) {
+        if (!detailsModalEl || !detailsBody || !row) return;
+        const totalDemand = summaryCache.total_forecasted_demand || 0;
+        const totalSupply = summaryCache.total_forecasted_supply || 0;
+        const demandPct = formatPercentage(row.forecasted_demand, totalDemand);
+        const supplyPct = formatPercentage(row.forecasted_supply, totalSupply);
+        const balance = row.gap ?? (row.forecasted_supply - row.forecasted_demand);
+        const normalized = (row.status || '').toLowerCase();
+        const alertClass = normalized.includes('shortage') || balance < 0 ? 'alert-danger'
+            : normalized.includes('surplus') ? 'alert-success' : 'alert-secondary';
+        const badge = statusBadge(row.status || 'Balanced');
+        const statusNarrative = normalized.includes('shortage')
+            ? 'Below hospital demand and buffer target.'
+            : normalized.includes('surplus')
+                ? 'Above projected demand; monitor expiries and redistribute if needed.'
+                : 'Buffer level meets the target range.';
+
+        const detailHtml = `
+            <div class="small text-muted">Date: ${row.month_label || 'Next Month'}</div>
+            <h5 class="mt-1">Forecast Details for ${row.blood_type}</h5>
+
+            <h6 class="mt-3">Demand Breakdown</h6>
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Blood Type</th>
+                            <th>Forecasted Demand</th>
+                            <th>% of Total Demand</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>${row.blood_type}</td>
+                            <td>${formatNumber(row.forecasted_demand)}</td>
+                            <td>${demandPct}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h6 class="mt-3">Donation Breakdown</h6>
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Blood Type</th>
+                            <th>Forecasted Donations</th>
+                            <th>% of Total Donations</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>${row.blood_type}</td>
+                            <td>${formatNumber(row.forecasted_supply)}</td>
+                            <td>${supplyPct}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h6 class="mt-3">Summary</h6>
+            <div class="alert ${alertClass}">
+                <strong>Projected balance:</strong> ${balance >= 0 ? '+' : ''}${formatNumber(balance)} units
+            </div>
+            <div class="mb-3">
+                ${buildSummaryList(row)}
+            </div>
+
+            <h6 class="mt-3">Status</h6>
+            <div class="alert alert-light border d-flex align-items-center gap-2">
+                <span class="${badge.cls}">${badge.label}</span>
+                <span class="text-muted ms-2">${statusNarrative}</span>
+            </div>
+        `;
+        detailsBody.innerHTML = detailHtml;
+        activeDetailContext = {
+            monthKey: row.month_key,
+            bloodType: row.blood_type,
+        };
+
+        const modal = window.bootstrap?.Modal.getOrCreateInstance(detailsModalEl);
+        modal?.show();
+    }
+
     async function loadData(force = false) {
         toggleLoading(true);
         try {
@@ -187,6 +333,11 @@
             renderTable(data.forecast_rows);
             renderProjectedStock(data.projected_stock);
             updateCharts(data.charts);
+            window.ForecastExport?.setDashboardSnapshot({
+                forecastRows: data.forecast_rows || [],
+                summary: data.summary || {},
+                projectedStock: data.projected_stock || [],
+            });
         } catch (error) {
             console.error('Error loading forecast data:', error);
             setTableMessage(error.message || 'Failed to load forecast data', true);
@@ -197,5 +348,23 @@
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => loadData(true));
     }
+
+    if (tableBody) {
+        tableBody.addEventListener('click', (event) => {
+            const btn = event.target.closest('.view-details-btn');
+            if (!btn) return;
+            const idx = Number(btn.dataset.index);
+            const row = forecastCache[idx];
+            openDetails(row);
+        });
+    }
+
+    exportBtn?.addEventListener('click', () => {
+        if (window.ForecastExport) {
+            window.ForecastExport.openOptions(activeDetailContext || {});
+        } else {
+            alert('Export module is still loading. Please try again in a moment.');
+        }
+    });
 })();
 
