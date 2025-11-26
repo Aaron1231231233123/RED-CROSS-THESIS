@@ -9,6 +9,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let currentStep = 1;
     const totalSteps = 3;
+    const SPECIFIC_GRAVITY_GDL_MIN = 12.5;
+    const SPECIFIC_GRAVITY_GDL_MAX = 18.0;
+    const SPECIFIC_GRAVITY_RELATIVE_MIN = 1.045;
+    const SPECIFIC_GRAVITY_RELATIVE_MAX = 1.075;
+
+    function isSpecificGravityEligible(value) {
+        if (typeof value !== 'number' || isNaN(value)) return false;
+        if (value >= SPECIFIC_GRAVITY_GDL_MIN && value <= SPECIFIC_GRAVITY_GDL_MAX) return true;
+        if (value >= SPECIFIC_GRAVITY_RELATIVE_MIN && value <= SPECIFIC_GRAVITY_RELATIVE_MAX) return true;
+        return false;
+    }
+
+    function getSpecificGravityRangeMessage() {
+        return `${SPECIFIC_GRAVITY_GDL_MIN}-${SPECIFIC_GRAVITY_GDL_MAX} g/dL or ${SPECIFIC_GRAVITY_RELATIVE_MIN.toFixed(3)}-${SPECIFIC_GRAVITY_RELATIVE_MAX.toFixed(3)} specific gravity`;
+    }
 
     // Centralized modal cleanup function
     function cleanupModalBackdrops() {
@@ -440,9 +455,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const hasGravity = !isNaN(gravity) && gravity > 0;
             const hasBloodType = isBloodTypeSelected;
             
-            // Check ranges: weight 50-120kg, specific gravity 12.5-18.0
+            // Check ranges: weight 50-120kg, specific gravity within accepted range
             const isWeightValid = hasWeight && weight >= 50 && weight <= 120;
-            const isGravityValid = hasGravity && gravity >= 12.5 && gravity <= 18.0;
+            const isGravityValid = hasGravity && isSpecificGravityEligible(gravity);
             
             // All conditions must be met
             const allValid = isWeightValid && isGravityValid && hasBloodType;
@@ -727,14 +742,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
             }
             
-            // Check for validation errors - weight must be between 50-120kg, specific gravity 12.5-18.0
-            // Red if: weight < 50 OR weight > 120, gravity < 12.5 OR gravity > 18.0
+            // Check for validation errors - weight must be between 50-120kg, specific gravity must be inside the accepted range
+            // Red if: weight < 50 OR weight > 120, gravity outside either accepted measurement scale
             const hasWeightError = weight < 50 || weight > 120;
-            const hasGravityError = gravity < 12.5 || gravity > 18.0;
+            const hasGravityError = !isSpecificGravityEligible(gravity);
             
             // Check if inputs are green (valid range)
             const isWeightGreen = !hasWeightError && weight >= 50 && weight <= 120;
-            const isGravityGreen = !hasGravityError && gravity >= 12.5 && gravity <= 18.0;
+            const isGravityGreen = !hasGravityError && isSpecificGravityEligible(gravity);
             
             // Update Next button state based on validation
             const nextButton = document.getElementById('screeningNextButton');
@@ -833,19 +848,14 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const gravity = parseFloat(value);
         
-        // Updated range: 12.5-18.0 g/dL
-        // Red if: gravity < 12.5 OR gravity > 18.0
-        if (gravity > 0 && (gravity < 12.5 || gravity > 18.0)) {
-            // Show warning alert - RED border
+        if (gravity > 0 && !isSpecificGravityEligible(gravity)) {
             alert.style.display = 'block';
-            alert.textContent = '⚠️ Specific gravity must be between 12.5-18.0 g/dL for donor safety.';
+            alert.textContent = `⚠️ Specific gravity must be within ${getSpecificGravityRangeMessage()} for donor safety.`;
             input.style.borderColor = '#dc3545';
-        } else if (gravity >= 12.5 && gravity <= 18.0) {
-            // Valid range - GREEN border
+        } else if (gravity > 0) {
             alert.style.display = 'none';
             input.style.borderColor = '#28a745';
         } else {
-            // Empty or zero - default border
             alert.style.display = 'none';
             input.style.borderColor = '#e9ecef';
         }

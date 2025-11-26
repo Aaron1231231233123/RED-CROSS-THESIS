@@ -9,6 +9,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let currentStep = 1;
     const totalSteps = 3;
+    const SPECIFIC_GRAVITY_GDL_MIN = 12.5;
+    const SPECIFIC_GRAVITY_GDL_MAX = 18.0;
+    const SPECIFIC_GRAVITY_RELATIVE_MIN = 1.045;
+    const SPECIFIC_GRAVITY_RELATIVE_MAX = 1.075;
+
+    function isAdminSpecificGravityInRange(value) {
+        if (typeof value !== 'number' || isNaN(value)) return false;
+        if (value >= SPECIFIC_GRAVITY_GDL_MIN && value <= SPECIFIC_GRAVITY_GDL_MAX) return true;
+        if (value >= SPECIFIC_GRAVITY_RELATIVE_MIN && value <= SPECIFIC_GRAVITY_RELATIVE_MAX) return true;
+        return false;
+    }
+
+    function getAdminSpecificGravityRangeText() {
+        return `${SPECIFIC_GRAVITY_GDL_MIN}-${SPECIFIC_GRAVITY_GDL_MAX} g/dL or ${SPECIFIC_GRAVITY_RELATIVE_MIN.toFixed(3)}-${SPECIFIC_GRAVITY_RELATIVE_MAX.toFixed(3)} specific gravity`;
+    }
 
     // Centralized modal cleanup function
     function cleanupAdminModalBackdrops() {
@@ -292,7 +307,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!hasAll) return false;
 
         const weightOk = weight >= 50;
-        const gravityOk = gravity >= 12.5 && gravity <= 18.0;
+        const gravityOk = isAdminSpecificGravityInRange(gravity);
         return weightOk && gravityOk;
     }
 
@@ -323,7 +338,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const gravity = parseFloat(specificGravityInput.value);
             
             const hasWeightError = weight < 50 && weight > 0;
-            const hasGravityError = (gravity < 12.5 || gravity > 18.0) && gravity > 0;
+            const hasGravityError = gravity > 0 && !isAdminSpecificGravityInRange(gravity);
             
             // Debug logging
             console.log('Admin Step 2 Validation:', {
@@ -396,18 +411,16 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const gravity = parseFloat(value);
         
-        if (gravity < 12.5 && gravity > 0) {
-            // Show warning alert with range information
+        if (gravity > 0 && !isAdminSpecificGravityInRange(gravity)) {
             alert.style.display = 'block';
+            alert.textContent = `⚠️ Specific gravity must stay within ${getAdminSpecificGravityRangeText()} for donor safety.`;
             input.style.borderColor = '#dc3545';
-        } else if (gravity > 18.0 && gravity > 0) {
-            // Show warning for high specific gravity
-            alert.style.display = 'block';
-            input.style.borderColor = '#dc3545';
-        } else {
-            // Hide alert and reset border
+        } else if (gravity > 0) {
             alert.style.display = 'none';
-            input.style.borderColor = gravity > 0 ? '#28a745' : '#e9ecef';
+            input.style.borderColor = '#28a745';
+        } else {
+            alert.style.display = 'none';
+            input.style.borderColor = '#e9ecef';
         }
     }
 
@@ -437,7 +450,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             
                             <ul class="list-unstyled">
                                 ${hasWeightError ? '<li><i class="fas fa-times-circle text-danger me-2"></i><strong>Body Weight:</strong> Below minimum requirement (50 kg)</li>' : ''}
-                                ${hasGravityError ? '<li><i class="fas fa-times-circle text-danger me-2"></i><strong>Specific Gravity:</strong> Outside acceptable range (12.5-18.0 g/dL)</li>' : ''}
+                                ${hasGravityError ? `<li><i class="fas fa-times-circle text-danger me-2"></i><strong>Specific Gravity:</strong> Outside acceptable range (${getAdminSpecificGravityRangeText()})</li>` : ''}
                             </ul>
                             
                             <div class="alert alert-warning">

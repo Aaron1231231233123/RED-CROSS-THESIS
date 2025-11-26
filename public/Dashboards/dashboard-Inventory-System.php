@@ -256,8 +256,9 @@ $notifCount = count($notifications);
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <!-- Admin Screening Form Modal CSS -->
+    <!-- Admin Screening / Defer Modal CSS -->
     <link href="../../assets/css/admin-screening-form-modal.css" rel="stylesheet">
+    <link href="../../assets/css/defer-donor-modal.css" rel="stylesheet">
     <style>
 /* General Body Styling */
 body {
@@ -964,6 +965,22 @@ h6 {
 </head>
 <body>
     <?php include '../../src/views/modals/admin-donor-registration-modal.php'; ?>
+    <?php
+        $screeningModalPath = '../../src/views/forms/admin_donor_initial_screening_form_modal.php';
+        if (file_exists($screeningModalPath)) {
+            include $screeningModalPath;
+        }
+
+        $deferModalPath = '../../src/views/modals/defer-donor-modal.php';
+        if (file_exists($deferModalPath)) {
+            include $deferModalPath;
+        }
+
+        $interviewerModalsPath = '../../src/views/modals/interviewer-confirmation-modals.php';
+        if (file_exists($interviewerModalsPath)) {
+            include $interviewerModalsPath;
+        }
+    ?>
     <!-- Notification Bell and Alerts -->
     <button class="notifications-toggle" id="notificationsToggle" style="position: fixed; top: 100px; right: 32px; z-index: 1100; display: none; background: none; border: none; outline: none; align-items: center; justify-content: center; padding: 0; width: 56px; height: 56px; border-radius: 50%; box-shadow: 0 2px 8px rgba(148,16,34,0.08); background: #fff; transition: box-shadow 0.2s;">
         <i class="fas fa-bell" style="font-size: 2em; color: #941022; position: relative;"></i>
@@ -3046,7 +3063,10 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
     });
     </script>
     <script src="../../assets/js/admin-donor-registration-modal.js"></script>
+    <script src="../../assets/js/defer_donor_modal.js"></script>
+    <script src="../../assets/js/initial-screening-defer-button.js"></script>
     <script src="../../assets/js/admin-screening-form-modal.js"></script>
+    <script src="../../assets/js/admin-declaration-form-modal.js"></script>
 </body>
 </html>
 </body>
