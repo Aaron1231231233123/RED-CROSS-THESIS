@@ -71,6 +71,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
 .custom-pagination .page-item:first-child .page-link{border-left:none}
 .custom-pagination .page-item.active .page-link{background:#0d6efd;color:#fff !important}
 .custom-pagination .page-link:focus{box-shadow:none}
+.modal-header{background:#941022 !important;color:#fff !important}
+.modal-header .btn-close{filter:invert(1) grayscale(100%) brightness(200%)}
     </style>
 </head>
 <body>
@@ -189,6 +191,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
                                     <th>Forecasted Donations</th>
                                     <th>Projected Balance</th>
                                     <th>Status</th>
+                                    <th>Details</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -267,6 +270,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
     </div>
 
     <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script defer src="../../assets/js/forecast-export.js"></script>
     <script defer src="../../assets/js/forecast-dashboard.js"></script>
     
     <script>
@@ -283,6 +287,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
     </script>
     <script src="../../assets/js/admin-donor-registration-modal.js"></script>
     <script src="../../assets/js/admin-screening-form-modal.js"></script>
+
 </body>
 </html>
 </html>
