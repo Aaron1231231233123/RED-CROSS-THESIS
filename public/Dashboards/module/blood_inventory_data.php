@@ -108,6 +108,9 @@ if (!function_exists('loadBloodInventorySnapshot')) {
                         case 'expired':
                             $status = 'Expired';
                             break;
+                        case 'buffer':
+                            $status = 'Buffer';
+                            break;
                         case 'valid':
                         case '':
                         default:
@@ -181,7 +184,8 @@ if (!function_exists('loadBloodInventorySnapshot')) {
             $bloodInventory = [];
         }
 
-        $bufferContext = getBufferBloodContext(BUFFER_BLOOD_DEFAULT_LIMIT, $bloodInventory);
+        $bufferContext = getBufferBloodContext(BUFFER_BLOOD_PER_TYPE_LIMIT, $bloodInventory);
+        syncBufferBloodStatuses($bloodInventory, $bufferContext);
         $bloodInventory = tagBufferBloodInInventory($bloodInventory, $bufferContext['buffer_lookup']);
         $bufferOnlyInventory = array_values(array_filter($bloodInventory, function($unit) {
             return !empty($unit['is_buffer']);

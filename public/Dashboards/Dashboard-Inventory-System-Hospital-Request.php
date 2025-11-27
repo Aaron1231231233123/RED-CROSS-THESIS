@@ -423,11 +423,13 @@ if (isset($_GET['error'])) {
 
 // Function to fetch blood units for a specific request
 function fetchBloodUnitsForRequest($request_id) {
+    global $bufferContext;
+
     try {
         // First, get the request details to know what blood type is needed
         $requestResponse = supabaseRequest("blood_requests?request_id=eq." . $request_id);
         if (!isset($requestResponse['data']) || empty($requestResponse['data'])) {
-            return [];
+            return ['units' => [], 'buffer_usage' => ['used' => false, 'message' => '', 'units' => []]];
         }
         
         $request = $requestResponse['data'][0];
@@ -499,19 +501,68 @@ function fetchBloodUnitsForRequest($request_id) {
         // Only include units that are NOT expired (expiration date >= today)
         $today = gmdate('Y-m-d\TH:i:s\Z');
         
-        // Order by expiration date (nearest expiration first) - FIFO based on expiration
-        // This ensures we use blood that expires soonest first, but only if not expired
-        $endpoint = "blood_bank_units?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,hospital_request_id&or=({$blood_type_filter})&status=eq.Valid&hospital_request_id=is.null&expires_at=gte." . rawurlencode($today) . "&order=expires_at.asc&limit=" . $needed_units;
+        // Fetch more rows than needed so we can deprioritize buffer units where possible.
+        $fetchLimit = max($needed_units * 4, 40);
         
-    $response = supabaseRequest($endpoint);
-    if (isset($response['data'])) {
-        return $response['data'];
+        $endpoint = "blood_bank_units"
+            . "?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,hospital_request_id,is_check"
+            . "&or=({$blood_type_filter})"
+            . "&status=in.(Valid,valid,Buffer,buffer)&hospital_request_id=is.null"
+            . "&expires_at=gte." . rawurlencode($today)
+            . "&order=expires_at.asc&limit=" . $fetchLimit;
+        
+        $response = supabaseRequest($endpoint);
+        if (!isset($response['data']) || empty($response['data'])) {
+            return ['units' => [], 'buffer_usage' => ['used' => false, 'message' => '', 'units' => []]];
         }
         
-        return [];
+        if (empty($bufferContext)) {
+            $bufferContext = getBufferBloodContext();
+        }
+        $bufferLookup = $bufferContext['buffer_lookup'] ?? ['by_id' => [], 'by_serial' => []];
+        
+        $nonBufferQueue = [];
+        $bufferQueue = [];
+        foreach ($response['data'] as $unit) {
+            if (!empty($unit['is_check'])) {
+                continue;
+            }
+            if (isBufferUnitFromLookup($unit, $bufferLookup)) {
+                $bufferQueue[] = $unit;
+            } else {
+                $nonBufferQueue[] = $unit;
+            }
+        }
+        
+        $orderedUnits = array_merge($nonBufferQueue, $bufferQueue);
+        $selectedUnits = array_slice($orderedUnits, 0, $needed_units);
+        
+        $bufferUnitsUsed = array_values(array_filter($selectedUnits, function ($unit) use ($bufferLookup) {
+            return isBufferUnitFromLookup($unit, $bufferLookup);
+        }));
+        
+        $message = '';
+        if (!empty($bufferUnitsUsed)) {
+            $serials = array_column($bufferUnitsUsed, 'unit_serial_number');
+            $message = sprintf(
+                'Emergency buffer in use: %d unit%s (%s) will be allocated because regular stock was insufficient.',
+                count($bufferUnitsUsed),
+                count($bufferUnitsUsed) > 1 ? 's' : '',
+                implode(', ', $serials)
+            );
+        }
+        
+        return [
+            'units' => $selectedUnits,
+            'buffer_usage' => [
+                'used' => !empty($bufferUnitsUsed),
+                'units' => $bufferUnitsUsed,
+                'message' => $message
+            ]
+        ];
     } catch (Exception $e) {
         error_log("Error fetching blood units for request: " . $e->getMessage());
-        return [];
+        return ['units' => [], 'buffer_usage' => ['used' => false, 'message' => '', 'units' => []]];
     }
 }
 
@@ -604,7 +655,9 @@ function canFulfillBloodRequest($request_id) {
     $units_requested = max(0, intval($request_data['units_requested']));
 
     // Reuse the already filtered Supabase query builder
-    $units = fetchBloodUnitsForRequest($request_id);
+    $result = fetchBloodUnitsForRequest($request_id);
+    $units = $result['units'] ?? [];
+    $bufferUsage = $result['buffer_usage'] ?? ['used' => false, 'message' => ''];
 
     // Count available by type and total
     $available_units = 0;
@@ -629,7 +682,11 @@ function canFulfillBloodRequest($request_id) {
         ? "Available: $available_units units (Requested: $units_requested)"
         : "Insufficient: $available_units available, $units_requested requested";
 
-    return [$can_fulfill, $message, $available_by_type];
+    if ($bufferUsage['used'] ?? false) {
+        $message .= ' Buffer reserve will be tapped if you proceed.';
+    }
+
+    return [$can_fulfill, $message, $available_by_type, $bufferUsage];
 }
 
 // OPTIMIZATION: Performance logging and caching
@@ -906,6 +963,45 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 .input-group-text i {
     font-size: 1.1rem;
     color: #6c757d;
+}
+
+/* Shared filter/search bar styling (mirrors hospital dashboard) */
+.filter-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.filter-dropdown {
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    padding: 8px 12px;
+    background: white;
+}
+
+.search-input-wrapper {
+    flex: 1;
+    position: relative;
+}
+
+.search-input {
+    width: 100%;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    padding: 8px 40px 8px 12px;
+    background: white;
+}
+
+.search-loading-spinner {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 10;
 }
 .request-metrics-grid .metric-card {
     border-radius: 12px;
@@ -1742,27 +1838,21 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     </div>
                 </div>
                 
-                <div class="row mb-3">
-                    <div class="col-12">
-                        <div class="search-container">
-                            <div class="input-group">
-                                <span class="input-group-text">
-                                    <i class="fas fa-search"></i>
-                                </span>
-                                <select class="form-select category-select" id="searchCategory" style="max-width: 150px;">
-                                    <option value="all">All Fields</option>
-                                    <option value="hospital">Hospital</option>
-                                    <option value="blood_type">Blood Type</option>
-                                    <option value="date">Request Date</option>
-                                    <option value="urgent">Urgent</option>
-                                </select>
-                                <input type="text" 
-                                    class="form-control" 
-                                    id="searchInput" 
-                                    placeholder="Search requests...">
-                            </div>
-                            <div id="searchInfo" class="mt-2 small text-muted"></div>
-                        </div>
+                <div class="filter-search-bar">
+                    <select class="filter-dropdown" id="statusFilterDropdown">
+                        <option value="All Status">All Status</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Approved">Approved</option>
+                        <option value="Declined">Declined</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+                    <div class="search-input-wrapper">
+                        <input type="text" class="search-input" placeholder="Search requests..." id="requestSearchBar">
+                        <span class="search-loading-spinner" id="searchLoadingSpinner" style="display: none;">
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="color: #941022;">
+                                <span class="visually-hidden">Loading...</span>
+                            </span>
+                        </span>
                     </div>
                 </div>
                 
@@ -1799,7 +1889,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             <tr>
                                 <th>No.</th>
                                 <th>Request ID</th>
-                                <th>Hospital</th>
                                 <th>Blood Type</th>
                                 <th>Quantity</th>
                                 <th>Request Date</th>
@@ -1813,7 +1902,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 $hospital_name = $request['hospital_admitted'] ? $request['hospital_admitted'] : 'Hospital';
                                 $blood_type_display = $request['patient_blood_type'] . ($request['rh_factor'] === 'Positive' ? '+' : '-');
                                 $priority_display = $request['is_asap'] ? 'Urgent' : 'Routine';
-                                $requested_on = $request['requested_on'] ? date('Y-m-d', strtotime($request['requested_on'])) : '-';
+                                $requested_on = $request['requested_on'] ? date('m/d/Y', strtotime($request['requested_on'])) : '-';
                                 $is_asap = !empty($request['is_asap']);
                                 
                                 // Calculate priority for this request
@@ -1823,7 +1912,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     $request['status'] ?? 'pending'
                                 );
                             ?>
-                            <tr data-is-asap="<?php echo $is_asap ? 'true' : 'false'; ?>"
+                            <tr class="table-row" data-row-index="<?php echo $rowNum - 1; ?>"
+                                data-is-asap="<?php echo $is_asap ? 'true' : 'false'; ?>"
                                 data-when-needed="<?php echo htmlspecialchars($request['when_needed'] ?? ''); ?>"
                                 data-status="<?php echo htmlspecialchars($request['status'] ?? 'pending'); ?>"
                                 data-priority-class="<?php echo htmlspecialchars($priority_data['urgency_class']); ?>"
@@ -1846,9 +1936,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                         echo htmlspecialchars($request['request_id']);
                                     }
                                 ?></td>
-                                <td><?php echo htmlspecialchars($hospital_name); ?></td>
                                 <td><?php echo htmlspecialchars($blood_type_display); ?></td>
-                                <td><?php echo htmlspecialchars($request['units_requested']); ?></td>
+                                <td><?php echo htmlspecialchars($request['units_requested'] . ' Bags'); ?></td>
                                 <td><?php echo htmlspecialchars($requested_on); ?></td>
                                 <td>
                                     <?php
@@ -2174,6 +2263,17 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </div>
                     </div>
                     
+                    <!-- Buffer Usage Alert -->
+                    <div id="approveBufferUsageAlert" style="display: none; margin-bottom: 15px;">
+                        <div style="background: linear-gradient(135deg, #fff8e1 0%, #fff3c4 100%); border-left: 3px solid #f7d774; padding: 12px 16px; border-radius: 6px; margin-bottom: 0;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                                <i class="fas fa-shield-alt" style="color: #a06a00; font-size: 1rem;"></i>
+                                <span style="font-weight: 600; color: #a06a00; font-size: 0.95rem;">Buffer Reserve Notice</span>
+                            </div>
+                            <p id="approveBufferUsageMessage" style="margin: 4px 0 0 0; color: #8a5300; font-size: 0.9rem; line-height: 1.5;"></p>
+                        </div>
+                    </div>
+                    
                     <!-- Loading State -->
                     <div id="approveLoadingState" class="text-center" style="padding: 20px;">
                         <i class="fas fa-spinner fa-spin fa-2x text-primary"></i>
@@ -2399,6 +2499,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         window.BUFFER_BLOOD_CONTEXT = <?php echo json_encode($bufferJsPayload); ?>;
     </script>
     <script src="../../assets/js/buffer-blood-manager.js"></script>
+    <script src="../../assets/js/filter-loading-modal.js"></script>
+    <script src="../../assets/js/search_func/filter_search_hospital_blood_requests.js"></script>
     <!-- jQuery first (if needed) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <!-- Popper.js -->
@@ -2696,111 +2798,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         const requestApprovedModal = new bootstrap.Modal(document.getElementById('requestApprovedModal'));
         const handoverConfirmModal = new bootstrap.Modal(document.getElementById('handoverConfirmModal'));
         const handoverSuccessModal = new bootstrap.Modal(document.getElementById('handoverSuccessModal'));
+        const approveBufferUsageAlert = document.getElementById('approveBufferUsageAlert');
+        const approveBufferUsageMessage = document.getElementById('approveBufferUsageMessage');
+        let pendingApprovalUnits = [];
+        let pendingApprovalRequestId = null;
         
-        // Initialize search functionality
-        const searchInput = document.getElementById('searchInput');
-        const searchCategory = document.getElementById('searchCategory');
-        
-        if (searchInput && searchCategory) {
-            // Add event listeners for real-time search
-            searchInput.addEventListener('keyup', searchRequests);
-            searchCategory.addEventListener('change', searchRequests);
-        }
-        
-        // Function to search blood requests
-        function searchRequests() {
-            const searchInput = document.getElementById('searchInput').value.toLowerCase();
-            const searchCategory = document.getElementById('searchCategory').value;
-            const requestItems = document.querySelectorAll('.email-item');
-            
-            // Check if no results message already exists
-            let noResultsMsg = document.getElementById('noResultsMsg');
-            if (noResultsMsg) {
-                noResultsMsg.remove();
-            }
-            
-            let visibleItems = 0;
-            const totalItems = requestItems.length;
-            
-            requestItems.forEach(item => {
-                let shouldShow = false;
-                if (searchInput.trim() === '') {
-                    shouldShow = true;
-                } else {
-                    const itemText = item.textContent.toLowerCase();
-                    
-                    if (searchCategory === 'all') {
-                        // Search all text in the item
-                        shouldShow = itemText.includes(searchInput);
-                    } else if (searchCategory === 'priority') {
-                        // Search only priority (Urgent/Routine)
-                        const priorityText = item.querySelector('.email-header').textContent.toLowerCase();
-                        shouldShow = priorityText.includes(searchInput);
-                    } else if (searchCategory === 'hospital') {
-                        // Search hospital name
-                        const hospitalName = item.querySelector('.email-header').textContent.toLowerCase();
-                        shouldShow = hospitalName.includes(searchInput);
-                    } else if (searchCategory === 'date') {
-                        // For date, we'd need to check if it's available in the item
-                        // Since it might not be directly visible, we do a general search
-                        // Create a regex for flexible date matching
-                        const datePattern = new RegExp(searchInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-                        shouldShow = datePattern.test(itemText);
-                    }
-                }
-                
-                item.style.display = shouldShow ? '' : 'none';
-                if (shouldShow) visibleItems++;
-            });
-            
-            // Show "No results" message if no matches
-            if (visibleItems === 0 && totalItems > 0) {
-                const container = document.querySelector('.email-container');
-                
-                noResultsMsg = document.createElement('div');
-                noResultsMsg.id = 'noResultsMsg';
-                noResultsMsg.className = 'alert alert-info m-3 text-center';
-                noResultsMsg.innerHTML = `
-                    No matching results found. 
-                    <button class="btn btn-sm btn-outline-primary ms-2" onclick="clearSearch()">
-                        Clear Search
-                    </button>
-                `;
-                container.appendChild(noResultsMsg);
-            }
-            
-            // Update search results info
-            updateSearchInfo(visibleItems, totalItems);
-        }
-        
-        // Function to update search results info
-        function updateSearchInfo(visibleItems, totalItems) {
-            const searchContainer = document.querySelector('.search-container');
-            let searchInfo = document.getElementById('searchInfo');
-            
-            if (!searchInfo) {
-                searchInfo = document.createElement('div');
-                searchInfo.id = 'searchInfo';
-                searchInfo.classList.add('text-muted', 'mt-2', 'small');
-                searchContainer.appendChild(searchInfo);
-            }
-            
-            const searchInput = document.getElementById('searchInput').value.trim();
-            if (searchInput === '') {
-                searchInfo.textContent = '';
-                return;
-            }
-            
-            searchInfo.textContent = `Showing ${visibleItems} of ${totalItems} entries`;
-        }
-        
-        // Function to clear search
-        window.clearSearch = function() {
-            document.getElementById('searchInput').value = '';
-            document.getElementById('searchCategory').value = 'all';
-            searchRequests();
-        };
-
         // Function to show donor registration modal
         window.showConfirmationModal = function() {
             if (typeof window.openAdminDonorRegistrationModal === 'function') {
@@ -2845,6 +2847,12 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             document.getElementById('approveBloodTypeInfo').style.display = 'none';
             document.getElementById('approveNoBloodAlert').style.display = 'none';
             document.getElementById('confirmApproveBtn').disabled = true;
+            if (approveBufferUsageAlert) {
+                approveBufferUsageAlert.style.display = 'none';
+            }
+            if (approveBufferUsageMessage) {
+                approveBufferUsageMessage.textContent = '';
+            }
             
             // Hide the main modal and show approval confirmation
             requestDetailsModal.hide();
@@ -2858,6 +2866,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         document.getElementById('approveLoadingState').style.display = 'none';
                         
                         if (data.success) {
+                            pendingApprovalUnits = (data.blood_units || [])
+                                .map(unit => unit.unit_id)
+                                .filter(id => !!id);
+                            pendingApprovalRequestId = requestId;
                             const bloodTypeNeeded = data.request.blood_type_needed || '-';
                             const availableUnits = data.total_units || 0;
                             const requiredUnits = data.request.units_requested || 0;
@@ -2873,14 +2885,29 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 // Sufficient blood - enable approve button
                                 document.getElementById('confirmApproveBtn').disabled = false;
                                 document.getElementById('approveNoBloodAlert').style.display = 'none';
+                                if (approveBufferUsageAlert && approveBufferUsageMessage) {
+                                    if (data.buffer_usage && data.buffer_usage.used) {
+                                        approveBufferUsageMessage.textContent = data.buffer_usage.message || 'Buffer reserve will be tapped to fulfill this request.';
+                                        approveBufferUsageAlert.style.display = 'block';
+                                    } else {
+                                        approveBufferUsageAlert.style.display = 'none';
+                                        approveBufferUsageMessage.textContent = '';
+                                    }
+                                }
                             } else {
                                 // Insufficient blood - show alert and disable button
                                 document.getElementById('approveNoBloodMessage').textContent = 
                                     `Cannot approve Request #${requestId}. Required: ${requiredUnits} units of ${bloodTypeNeeded}, but only ${availableUnits} unit(s) available.`;
                                 document.getElementById('approveNoBloodAlert').style.display = 'block';
                                 document.getElementById('confirmApproveBtn').disabled = true;
+                                if (approveBufferUsageAlert && approveBufferUsageMessage) {
+                                    approveBufferUsageAlert.style.display = 'none';
+                                    approveBufferUsageMessage.textContent = '';
+                                }
                             }
                         } else {
+                            pendingApprovalUnits = [];
+                            pendingApprovalRequestId = null;
                             // Error fetching blood units
                             document.getElementById('approveNoBloodMessage').textContent = 
                                 'Unable to check blood availability. Please try again.';
@@ -2889,6 +2916,8 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         }
                     })
                     .catch(error => {
+                        pendingApprovalUnits = [];
+                        pendingApprovalRequestId = null;
                         console.error('Error:', error);
                         // Hide loading
                         document.getElementById('approveLoadingState').style.display = 'none';
@@ -2901,11 +2930,28 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         });
 
         // Confirm Approve button logic
-        document.getElementById('confirmApproveBtn').addEventListener('click', function() {
-            // Get the request_id from the hidden field
-            var requestId = document.getElementById('modalRequestId').value;
-            
-            // Create a hidden form and submit it
+        const confirmApproveBtn = document.getElementById('confirmApproveBtn');
+        confirmApproveBtn.addEventListener('click', function() {
+            const requestId = parseInt(document.getElementById('modalRequestId').value, 10);
+            const button = this;
+            const originalText = button.innerHTML;
+
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Reserving...';
+
+            reserveUnitsForRequest(requestId)
+                .then(() => {
+                    submitApprovalForm(requestId);
+                })
+                .catch(error => {
+                    console.error('Reserve error:', error);
+                    alert(error.message || 'Unable to reserve blood units. Please try again.');
+                    button.disabled = false;
+                    button.innerHTML = originalText;
+                });
+        });
+
+        function submitApprovalForm(requestId) {
             var form = document.createElement('form');
             form.method = 'POST';
             form.action = '';
@@ -2921,7 +2967,61 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             form.appendChild(accept);
             document.body.appendChild(form);
             form.submit();
-        });
+        }
+
+        function reserveUnitsForRequest(requestId) {
+            if (!requestId) {
+                return Promise.reject(new Error('Invalid request identifier.'));
+            }
+
+            const ensureUnitsPromise = (pendingApprovalRequestId === requestId && pendingApprovalUnits.length)
+                ? Promise.resolve(pendingApprovalUnits)
+                : refreshApprovalUnits(requestId);
+
+            return ensureUnitsPromise.then(units => {
+                const unitIds = (units || []).filter(id => !!id);
+                if (!unitIds.length) {
+                    throw new Error('No available blood units to reserve for this request.');
+                }
+
+                return fetch('../api/mark-blood-units-check.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        unit_ids: unitIds,
+                        is_check: true
+                    })
+                })
+                    .then(res => {
+                        if (!res.ok) {
+                            throw new Error('Reservation request failed.');
+                        }
+                        return res.json();
+                    })
+                    .then(body => {
+                        if (!body?.success) {
+                            throw new Error(body?.error || 'Unable to reserve blood units.');
+                        }
+                        pendingApprovalUnits = [];
+                        pendingApprovalRequestId = null;
+                        return body;
+                    });
+            });
+        }
+
+        function refreshApprovalUnits(requestId) {
+            return fetchJson(`../api/get-blood-units-for-request.php?request_id=${encodeURIComponent(requestId)}&t=${Date.now()}`)
+                .then(data => {
+                    if (!data?.success) {
+                        throw new Error(data?.error || 'Unable to reload approval data.');
+                    }
+                    pendingApprovalUnits = (data.blood_units || [])
+                        .map(unit => unit.unit_id)
+                        .filter(id => !!id);
+                    pendingApprovalRequestId = requestId;
+                    return pendingApprovalUnits;
+                });
+        }
 
         // Helper: safe JSON fetch with graceful fallback to text for debugging
         async function fetchJson(url, options) {

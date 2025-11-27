@@ -50,7 +50,8 @@ try {
     $update_data = [
         'status' => 'handed_over',
         'handed_over_at' => date('Y-m-d H:i:s'),
-        'updated_at' => date('Y-m-d H:i:s')
+        'updated_at' => date('Y-m-d H:i:s'),
+        'is_check' => false
     ];
     
     // Add request_id and hospital_from if provided

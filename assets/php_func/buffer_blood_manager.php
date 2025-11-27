@@ -12,8 +12,15 @@ if (!function_exists('supabaseRequest')) {
     require_once __DIR__ . '/../../public/Dashboards/module/optimized_functions.php';
 }
 
-if (!defined('BUFFER_BLOOD_DEFAULT_LIMIT')) {
-    define('BUFFER_BLOOD_DEFAULT_LIMIT', 10);
+if (!defined('BUFFER_BLOOD_PER_TYPE_LIMIT')) {
+    define('BUFFER_BLOOD_PER_TYPE_LIMIT', 10);
+}
+
+if (!defined('BUFFER_BLOOD_RECOGNIZED_TYPES')) {
+    define('BUFFER_BLOOD_RECOGNIZED_TYPES', [
+        'A+', 'A-', 'B+', 'B-',
+        'O+', 'O-', 'AB+', 'AB-'
+    ]);
 }
 
 /**
@@ -23,14 +30,15 @@ if (!defined('BUFFER_BLOOD_DEFAULT_LIMIT')) {
  * @param array|null $inventory Optional pre-fetched inventory dataset to avoid extra queries.
  * @return array
  */
-function getBufferBloodContext($limit = BUFFER_BLOOD_DEFAULT_LIMIT, array $inventory = null)
+function getBufferBloodContext($limit = BUFFER_BLOOD_PER_TYPE_LIMIT, array $inventory = null)
 {
     $limit = max(1, (int) $limit);
 
     if ($inventory !== null) {
         $sourceUnits = $inventory;
     } else {
-        $sourceUnits = bufferBloodFetchLatestUnits($limit * 3);
+        // Fetch more than we need so we can build per-type lists before trimming.
+        $sourceUnits = bufferBloodFetchLatestUnits($limit * count(BUFFER_BLOOD_RECOGNIZED_TYPES) * 2);
     }
 
     return bufferBloodBuildContext($sourceUnits, $limit);
@@ -139,8 +147,8 @@ function bufferBloodFetchLatestUnits($limit)
 {
     $endpoint = "blood_bank_units"
         . "?select=unit_id,unit_serial_number,blood_type,bag_type,bag_brand,collected_at,expires_at,status"
-        . "&status=in.(Valid,valid)"
-        . "&order=collected_at.desc"
+        . "&status=in.(Valid,valid,Buffer,buffer)"
+        . "&order=collected_at.asc"
         . "&limit=" . max(10, (int) $limit);
 
     $response = supabaseRequest($endpoint);
@@ -158,63 +166,122 @@ function bufferBloodFetchLatestUnits($limit)
  * @param int   $limit
  * @return array
  */
-function bufferBloodBuildContext(array $units, $limit)
+function bufferBloodBuildContext(array $units, $perTypeLimit)
 {
+    $perTypeLimit = max(1, (int) $perTypeLimit);
+    $recognizedTypes = BUFFER_BLOOD_RECOGNIZED_TYPES;
+
     $normalized = [];
     foreach ($units as $unit) {
         $normalizedUnit = bufferBloodNormalizeUnit($unit);
         if (!$normalizedUnit['unit_id'] && !$normalizedUnit['serial_number']) {
             continue;
         }
+
+        // Only consider Valid/Buffer units that have not yet expired.
+        $normalizedStatus = strtolower($normalizedUnit['status']);
+        if (!in_array($normalizedStatus, ['valid', 'buffer'], true)) {
+            continue;
+        }
+        if (!empty($normalizedUnit['expires_ts']) && $normalizedUnit['expires_ts'] < time()) {
+            continue;
+        }
+
         $normalized[] = $normalizedUnit;
     }
 
-    usort($normalized, function ($a, $b) {
-        if ($a['collected_ts'] === $b['collected_ts']) {
-            return $b['expires_ts'] <=> $a['expires_ts'];
+    // Bucket units per blood type so we can trim per type independently.
+    $bucketed = [];
+    foreach ($normalized as $unit) {
+        $type = strtoupper(trim($unit['blood_type'] ?? 'Unknown'));
+        if (!in_array($type, $recognizedTypes, true)) {
+            $type = 'Unknown';
         }
-        return $b['collected_ts'] <=> $a['collected_ts'];
-    });
+        if (!isset($bucketed[$type])) {
+            $bucketed[$type] = [];
+        }
+        $bucketed[$type][] = $unit;
+    }
+
+    // Oldest collections (earliest) should become buffer first. If tie, prefer the one expiring soon.
+    foreach ($bucketed as &$unitsForType) {
+        usort($unitsForType, function ($a, $b) {
+            if ($a['collected_ts'] === $b['collected_ts']) {
+                return $a['expires_ts'] <=> $b['expires_ts'];
+            }
+            return $a['collected_ts'] <=> $b['collected_ts'];
+        });
+    }
+    unset($unitsForType);
 
     $bufferUnits = [];
     $byId = [];
     $bySerial = [];
 
-    foreach ($normalized as $unit) {
-        if (count($bufferUnits) >= $limit) {
-            break;
-        }
-
-        $idKey = $unit['unit_id'] ?: ($unit['serial_number'] ?? null);
-        if (!$idKey) {
-            continue;
-        }
-
-        if ($unit['unit_id'] && isset($byId[$unit['unit_id']])) {
-            continue;
-        }
-        if ($unit['serial_number'] && isset($bySerial[$unit['serial_number']])) {
-            continue;
-        }
-
-        $unit['is_buffer'] = true;
-        $bufferUnits[] = $unit;
-        if ($unit['unit_id']) {
-            $byId[$unit['unit_id']] = $unit;
-        }
-        if ($unit['serial_number']) {
-            $bySerial[$unit['serial_number']] = $unit;
-        }
-    }
-
     $bufferTypes = [];
-    foreach ($bufferUnits as $unit) {
-        $type = $unit['blood_type'] ?: 'Unknown';
-        $bufferTypes[$type] = ($bufferTypes[$type] ?? 0) + 1;
+    foreach ($recognizedTypes as $type) {
+        $unitsForType = $bucketed[$type] ?? [];
+        if (empty($unitsForType)) {
+            continue;
+        }
+        $selection = array_slice($unitsForType, 0, $perTypeLimit);
+        foreach ($selection as $unit) {
+            $idKey = $unit['unit_id'] ?: ($unit['serial_number'] ?? null);
+            if (!$idKey) {
+                continue;
+            }
+            if ($unit['unit_id'] && isset($byId[$unit['unit_id']])) {
+                continue;
+            }
+            if ($unit['serial_number'] && isset($bySerial[$unit['serial_number']])) {
+                continue;
+            }
+
+            $unit['is_buffer'] = true;
+            $bufferUnits[] = $unit;
+            if ($unit['unit_id']) {
+                $byId[$unit['unit_id']] = $unit;
+            }
+            if ($unit['serial_number']) {
+                $bySerial[$unit['serial_number']] = $unit;
+            }
+
+            $bufferTypes[$type] = ($bufferTypes[$type] ?? 0) + 1;
+        }
     }
+
+    // Handle any other blood types (Unknown / rare) with same per-type cap.
+    if (!empty($bucketed['Unknown'])) {
+        $selection = array_slice($bucketed['Unknown'], 0, $perTypeLimit);
+        foreach ($selection as $unit) {
+            $idKey = $unit['unit_id'] ?: ($unit['serial_number'] ?? null);
+            if (!$idKey) {
+                continue;
+            }
+            if ($unit['unit_id'] && isset($byId[$unit['unit_id']])) {
+                continue;
+            }
+            if ($unit['serial_number'] && isset($bySerial[$unit['serial_number']])) {
+                continue;
+            }
+            $unit['is_buffer'] = true;
+            $bufferUnits[] = $unit;
+            if ($unit['unit_id']) {
+                $byId[$unit['unit_id']] = $unit;
+            }
+            if ($unit['serial_number']) {
+                $bySerial[$unit['serial_number']] = $unit;
+            }
+            $bufferTypes['Unknown'] = ($bufferTypes['Unknown'] ?? 0) + 1;
+        }
+    }
+
+    usort($bufferUnits, function ($a, $b) {
+        return $a['collected_ts'] <=> $b['collected_ts'];
+    });
 
     return [
-        'limit' => $limit,
+        'limit' => $perTypeLimit,
         'count' => count($bufferUnits),
         'buffer_units' => $bufferUnits,
         'buffer_lookup' => [
@@ -224,6 +291,84 @@ function bufferBloodBuildContext(array $units, $limit)
         'buffer_types' => $bufferTypes,
         'generated_at' => gmdate('c')
     ];
+}
+
+/**
+ * Ensure Supabase reflects the current buffer assignment so other modules can honor it.
+ *
+ * @param array $inventory
+ * @param array $bufferContext
+ * @return void
+ */
+function syncBufferBloodStatuses(array $inventory, array $bufferContext)
+{
+    if (empty($inventory)) {
+        return;
+    }
+
+    $bufferLookup = $bufferContext['buffer_lookup'] ?? ['by_id' => [], 'by_serial' => []];
+    $bufferById = $bufferLookup['by_id'] ?? [];
+    $bufferBySerial = $bufferLookup['by_serial'] ?? [];
+
+    $toBuffer = [];
+    $toValid = [];
+
+    foreach ($inventory as $unit) {
+        $unitId = isset($unit['unit_id']) ? (string) $unit['unit_id'] : '';
+        $serial = '';
+        if (isset($unit['serial_number'])) {
+            $serial = (string) $unit['serial_number'];
+        } elseif (isset($unit['unit_serial_number'])) {
+            $serial = (string) $unit['unit_serial_number'];
+        }
+
+        $isBufferTarget = false;
+        if ($unitId !== '' && isset($bufferById[$unitId])) {
+            $isBufferTarget = true;
+        } elseif ($serial !== '' && isset($bufferBySerial[$serial])) {
+            $isBufferTarget = true;
+        }
+
+        $dbStatus = strtolower($unit['unit_status'] ?? $unit['status'] ?? '');
+
+        if ($isBufferTarget) {
+            if ($dbStatus !== 'buffer' && $unitId !== '') {
+                $toBuffer[$unitId] = true;
+            }
+        } else {
+            if ($dbStatus === 'buffer' && $unitId !== '') {
+                $toValid[$unitId] = true;
+            }
+        }
+    }
+
+    if (empty($toBuffer) && empty($toValid)) {
+        return;
+    }
+
+    $timestamp = gmdate('c');
+
+    foreach (array_keys($toBuffer) as $unitId) {
+        supabaseRequest(
+            "blood_bank_units?unit_id=eq." . rawurlencode($unitId),
+            'PATCH',
+            [
+                'status' => 'Buffer',
+                'updated_at' => $timestamp
+            ]
+        );
+    }
+
+    foreach (array_keys($toValid) as $unitId) {
+        supabaseRequest(
+            "blood_bank_units?unit_id=eq." . rawurlencode($unitId),
+            'PATCH',
+            [
+                'status' => 'Valid',
+                'updated_at' => $timestamp
+            ]
+        );
+    }
 }
 
 /**

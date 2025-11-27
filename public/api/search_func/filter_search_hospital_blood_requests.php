@@ -18,13 +18,16 @@ $payload = json_decode($raw, true);
 if (!$payload) $payload = [];
 
 $user_id = $_SESSION['user_id'];
+$is_admin = isset($_SESSION['role_id']) && intval($_SESSION['role_id']) === 1;
+$effective_user_id = $is_admin ? null : $user_id;
+$limit = $is_admin ? 500 : 150;
 $statuses = isset($payload['status']) && is_array($payload['status']) ? $payload['status'] : [];
 $q = isset($payload['q']) ? trim($payload['q']) : '';
 
 // Build filtered rows
 $rows = fbr_build_filtered_rows([
     'status' => $statuses
-], $user_id, 150, $q);
+], $effective_user_id, $limit, $q);
 
 // Generate HTML for table rows
 ob_start();

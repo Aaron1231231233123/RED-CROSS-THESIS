@@ -86,79 +86,95 @@ try {
     $today = gmdate('Y-m-d\TH:i:s\Z');
 
     // Order by expiration date (nearest expiration first) - FIFO based on expiration
-    // This ensures we use blood that expires soonest first, but only if not expired
+    // Fetch additional rows so we can deprioritize buffer units when possible.
+    $fetchLimit = max($needed_units * 4, 40);
     $endpoint = "blood_bank_units"
-        . "?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,hospital_request_id"
+        . "?select=unit_id,unit_serial_number,donor_id,blood_type,bag_type,bag_brand,collected_at,expires_at,status,hospital_request_id,is_check"
         . "&blood_type={$inFilter}"
-        . "&status=eq.Valid&hospital_request_id=is.null"
+        . "&status=in.(Valid,valid,Buffer,buffer)&hospital_request_id=is.null"
         . "&collected_at=gte." . rawurlencode($threshold)
         . "&expires_at=gte." . rawurlencode($today)
-        . "&order=expires_at.asc&limit={$needed_units}";
+        . "&order=expires_at.asc&limit={$fetchLimit}";
 
     $response = supabaseRequest($endpoint);
-    if (isset($response['code']) && $response['code'] >= 200 && $response['code'] < 300 && isset($response['data'])) {
-        $blood_units = $response['data'];
-        
-        $bufferContext = getBufferBloodContext();
-        $bufferUnitsUsed = [];
-        
-        // Format the response
-        $formatted_units = [];
-        foreach ($blood_units as $unit) {
-            $isBuffer = isBufferUnitFromLookup($unit, $bufferContext['buffer_lookup']);
-            if ($isBuffer) {
-                $bufferUnitsUsed[] = [
-                    'unit_id' => $unit['unit_id'],
-                    'serial_number' => $unit['unit_serial_number'],
-                    'blood_type' => $unit['blood_type']
-                ];
-            }
-            $formatted_units[] = [
-                'unit_id' => $unit['unit_id'],
-                'serial_number' => $unit['unit_serial_number'],
-                'blood_type' => $unit['blood_type'],
-                'bag_type' => $unit['bag_type'] ?: 'Standard',
-                'bag_brand' => $unit['bag_brand'] ?: 'N/A',
-                'expiration_date' => date('Y-m-d', strtotime($unit['expires_at'])),
-                'status' => $unit['status'],
-                'is_buffer' => $isBuffer
-            ];
-        }
-        
-        $bufferUsagePayload = [
-            'used' => !empty($bufferUnitsUsed),
-            'units' => $bufferUnitsUsed,
-            'unit_serials' => array_column($bufferUnitsUsed, 'serial_number'),
-            'message' => ''
-        ];
-        if ($bufferUsagePayload['used']) {
-            $bufferUsagePayload['message'] = sprintf(
-                'Using %d buffer unit%s (%s) to fulfill this request.',
-                count($bufferUnitsUsed),
-                count($bufferUnitsUsed) > 1 ? 's' : '',
-                implode(', ', $bufferUsagePayload['unit_serials'])
-            );
-            logBufferUsageEvent($bufferUnitsUsed, $request_id, $_SESSION['user_id'] ?? null, 'preview');
-        }
-        
-        echo json_encode([
-            'success' => true,
-            'request' => [
-                'request_id' => $request['request_id'],
-                'patient_name' => $request['patient_name'],
-                'hospital_admitted' => $request['hospital_admitted'],
-                'units_requested' => $needed_units,
-                'blood_type_needed' => $needed_blood_type . ($is_positive ? '+' : '-')
-            ],
-            'blood_units' => $formatted_units,
-            'total_units' => count($formatted_units),
-            'buffer_usage' => $bufferUsagePayload,
-            'buffer_reserve' => $bufferContext['count']
-        ]);
-    } else {
+    if (!(isset($response['code']) && $response['code'] >= 200 && $response['code'] < 300 && isset($response['data']))) {
         $detail = isset($response['error']) ? $response['error'] : 'Unknown error';
         throw new Exception('Failed to fetch blood units: ' . $detail);
     }
+    
+    $bufferContext = getBufferBloodContext();
+    $bufferLookup = $bufferContext['buffer_lookup'] ?? ['by_id' => [], 'by_serial' => []];
+
+    $nonBufferQueue = [];
+    $bufferQueue = [];
+    foreach ($response['data'] as $unit) {
+        if (!empty($unit['is_check'])) {
+            continue;
+        }
+
+        if (isBufferUnitFromLookup($unit, $bufferLookup)) {
+            $bufferQueue[] = $unit;
+        } else {
+            $nonBufferQueue[] = $unit;
+        }
+    }
+
+    $orderedUnits = array_merge($nonBufferQueue, $bufferQueue);
+    $selectedUnits = array_slice($orderedUnits, 0, $needed_units);
+
+    $formatted_units = [];
+    $bufferUnitsUsed = [];
+    foreach ($selectedUnits as $unit) {
+        $isBuffer = isBufferUnitFromLookup($unit, $bufferLookup);
+        if ($isBuffer) {
+            $bufferUnitsUsed[] = [
+                'unit_id' => $unit['unit_id'],
+                'serial_number' => $unit['unit_serial_number'],
+                'blood_type' => $unit['blood_type']
+            ];
+        }
+        $formatted_units[] = [
+            'unit_id' => $unit['unit_id'],
+            'serial_number' => $unit['unit_serial_number'],
+            'blood_type' => $unit['blood_type'],
+            'bag_type' => $unit['bag_type'] ?: 'Standard',
+            'bag_brand' => $unit['bag_brand'] ?: 'N/A',
+            'expiration_date' => date('Y-m-d', strtotime($unit['expires_at'])),
+            'status' => $unit['status'],
+            'is_buffer' => $isBuffer
+        ];
+    }
+    
+    $bufferUsagePayload = [
+        'used' => !empty($bufferUnitsUsed),
+        'units' => $bufferUnitsUsed,
+        'unit_serials' => array_column($bufferUnitsUsed, 'serial_number'),
+        'message' => ''
+    ];
+    if ($bufferUsagePayload['used']) {
+        $bufferUsagePayload['message'] = sprintf(
+            'Emergency buffer in use: %d unit%s (%s) will be handed over because regular stock ran out.',
+            count($bufferUnitsUsed),
+            count($bufferUnitsUsed) > 1 ? 's' : '',
+            implode(', ', $bufferUsagePayload['unit_serials'])
+        );
+        logBufferUsageEvent($bufferUnitsUsed, $request_id, $_SESSION['user_id'] ?? null, 'preview');
+    }
+    
+    echo json_encode([
+        'success' => true,
+        'request' => [
+            'request_id' => $request['request_id'],
+            'patient_name' => $request['patient_name'],
+            'hospital_admitted' => $request['hospital_admitted'],
+            'units_requested' => $needed_units,
+            'blood_type_needed' => $needed_blood_type . ($is_positive ? '+' : '-')
+        ],
+        'blood_units' => $formatted_units,
+        'total_units' => count($formatted_units),
+        'buffer_usage' => $bufferUsagePayload,
+        'buffer_reserve' => $bufferContext['count']
+    ]);
     
 } catch (Exception $e) {
     error_log("Error fetching blood units for request: " . $e->getMessage());

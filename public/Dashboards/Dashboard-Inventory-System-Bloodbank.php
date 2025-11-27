@@ -32,9 +32,7 @@ function renderDangerIcon($count, $threshold, $typeLabelAttr = '')
 }
 
 function formatBufferReserveText($count) {
-    $plural = ($count === 1) ? '' : 's';
-    $countText = "<strong>{$count} buffer unit{$plural}</strong>";
-    return "{$countText} are held in reserve. They remain highlighted in the table and are excluded from the totals above.";
+    return '<span class="text-muted small fst-italic">Protected reserve available for emergencies.</span>';
 }
 
 // Include auto-dispose function for expired blood units
@@ -1149,14 +1147,14 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         </div>
                     </div>
 
-                    <div class="buffer-banner mb-3" data-buffer-banner>
+                    <div class="buffer-banner mb-3 visually-hidden" data-buffer-banner>
                         <i class="fas fa-shield-alt fa-lg"></i>
                         <div data-buffer-reserve-text><?php echo $bufferReserveText; ?></div>
                         <button type="button" class="btn btn-outline-warning btn-sm" data-buffer-toggle>
                             <i class="fas fa-list me-1"></i>View Buffer List
                         </button>
                     </div>
-                    <div class="buffer-drawer mb-4" data-buffer-drawer>
+                    <div class="buffer-drawer mb-4 visually-hidden" data-buffer-drawer>
                         <?php if ($bufferReserveCount > 0): ?>
                             <div class="table-responsive">
                                 <table class="table table-sm mb-0">
@@ -1198,9 +1196,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 $availableCount = (int)($bloodTypeCounts[$typeLabel] ?? 0);
                                 $bufferTypeCount = (int)($bufferContext['buffer_types'][$typeLabel] ?? 0);
                                 $cardClasses = 'card p-3 h-100 blood-type-card position-relative';
-                                if ($bufferTypeCount > 0) {
-                                    $cardClasses .= ' buffer-type-card';
-                                }
                                 if ($activeBloodTypeFilter === $typeLabel) {
                                     $cardClasses .= ' active';
                                 }
@@ -1216,15 +1211,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                 onclick="applyBloodTypeFilter('<?php echo $typeLabelAttr; ?>')"
                                 onkeydown="handleBloodTypeCardKey(event, '<?php echo $typeLabelAttr; ?>')">
                                 <?php echo renderDangerIcon($availableCount, $lowThreshold, $typeLabelAttr); ?>
-                                <div class="d-flex justify-content-end mb-1">
-                                    <?php
-                                        $bufferPillClasses = 'buffer-pill';
-                                        if ($bufferTypeCount <= 0) {
-                                            $bufferPillClasses .= ' d-none';
-                                        }
-                                    ?>
-                                    <span class="<?php echo $bufferPillClasses; ?>" data-buffer-highlight data-buffer-type="<?php echo $typeLabelAttr; ?>"><?php echo $bufferTypeCount; ?> in buffer</span>
-                                </div>
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: <?php echo $typeLabel; ?></h5>
                                     <p class="card-text">Availability:
@@ -1302,9 +1288,6 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                                     data-blood-type="<?php echo htmlspecialchars($bag['blood_type']); ?>">
                                     <td>
                                         <?php echo htmlspecialchars($serialNumber); ?>
-                                        <?php if ($isBufferRow): ?>
-                                            <span class="buffer-pill ms-2" data-buffer-unit>Buffer</span>
-                                        <?php endif; ?>
                                     </td>
                                     <td><?php echo htmlspecialchars($bag['blood_type']); ?></td>
                                     <td><?php echo htmlspecialchars($bag['collection_date']); ?></td>
