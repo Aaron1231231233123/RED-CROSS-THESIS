@@ -2749,17 +2749,35 @@ function getCacheStats() {
 
             function openDetails(donorId, eligibilityId) {
                 if (!donorId) { return; }
+                // Ensure donorId is a number
+                const numericDonorId = parseInt(donorId, 10);
+                if (isNaN(numericDonorId)) {
+                    console.error('[Admin] Invalid donor ID:', donorId);
+                    return;
+                }
                 const proceed = () => {
-                    window.currentAdminDonorId = donorId;
-                    if (window.AccessLockManager) {
-                        window.AccessLockManager.activate({ donor_id: donorId });
+                    window.currentAdminDonorId = numericDonorId;
+                    console.log('[Admin] Opening donor details for ID:', numericDonorId);
+                    if (window.AccessLockManagerAdmin) {
+                        if (!window.AccessLockManagerAdmin.initialized) {
+                            console.warn('[Admin] AccessLockManagerAdmin not initialized, initializing now...');
+                            window.AccessLockManagerAdmin.init({
+                                scopes: ['blood_collection', 'medical_history', 'physical_examination'],
+                                guardSelectors: ['.view-donor', '.circular-btn', 'button[data-donor-id]', 'button[data-eligibility-id]'],
+                                endpoint: '../../assets/php_func/access_lock_manager_admin.php',
+                                autoClaim: false
+                            });
+                        }
+                        window.AccessLockManagerAdmin.activate({ donor_id: numericDonorId });
+                    } else {
+                        console.warn('[Admin] AccessLockManagerAdmin not available');
                     }
-                    baseOpenDetails(donorId, eligibilityId);
+                    baseOpenDetails(numericDonorId, eligibilityId);
                 };
-                if (window.AccessLockGuard) {
-                    AccessLockGuard.ensureAccess({
+                if (window.AccessLockGuardAdmin) {
+                    AccessLockGuardAdmin.ensureAccess({
                         scope: ['medical_history', 'physical_examination', 'blood_collection'],
-                        donorId,
+                        donorId: numericDonorId,
                         lockValue: 2,
                         messages: {
                             medical_history: 'This donor is being processed in the Interviewer stage.',
@@ -2772,12 +2790,12 @@ function getCacheStats() {
                     proceed();
                 }
             }
-            const baseOpenDetails = openDetails;
+            const baseOpenDetailsGuarded = openDetails;
             openDetails = function(donorId, eligibilityId) {
                 if (!donorId) return;
-                const proceed = () => baseOpenDetails(donorId, eligibilityId);
-                if (window.AccessLockGuard) {
-                    AccessLockGuard.ensureAccess({
+                const proceed = () => baseOpenDetailsGuarded(donorId, eligibilityId);
+                if (window.AccessLockGuardAdmin) {
+                    AccessLockGuardAdmin.ensureAccess({
                         scope: ['blood_collection', 'medical_history', 'physical_examination'],
                         donorId,
                         lockValue: 2,
@@ -3116,6 +3134,12 @@ function getCacheStats() {
      <script src="../../assets/js/admin-donor-modal.js"></script>
     <!-- Admin Donor Registration Modal -->
     <script src="../../assets/js/admin-donor-registration-modal.js"></script>
+    <!-- Admin-specific access lock manager and guard -->
+    <script>
+        window.ACCESS_LOCK_ENDPOINT_ADMIN = '../../assets/php_func/access_lock_manager_admin.php';
+    </script>
+    <script src="../../assets/js/access-lock-manager-admin.js"></script>
+    <script src="../../assets/js/access-lock-guard-admin.js"></script>
      <script>
      // Safety shim: ensure makeApiCall exists for modules (physician PE handler uses it)
      if (typeof window.makeApiCall !== 'function') {
@@ -8477,12 +8501,12 @@ function getCacheStats() {
     ?>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            if (window.AccessLockManager) {
-                window.AccessLockManager.init({
-                    role: 'admin',
+            if (window.AccessLockManagerAdmin) {
+                window.AccessLockManagerAdmin.init({
                     scopes: ['blood_collection', 'medical_history', 'physical_examination'],
                     guardSelectors: ['.view-donor', '.circular-btn', 'button[data-donor-id]', 'button[data-eligibility-id]'],
-                    endpoint: '../../assets/php_func/access_lock_manager.php'
+                    endpoint: '../../assets/php_func/access_lock_manager_admin.php',
+                    autoClaim: false
                 });
             }
             window.currentAdminDonorId = null;
@@ -8491,8 +8515,8 @@ function getCacheStats() {
                 if (!modal) return;
                 modal.addEventListener('hidden.bs.modal', function () {
                     window.currentAdminDonorId = null;
-                    if (window.AccessLockManager) {
-                        window.AccessLockManager.deactivate();
+                    if (window.AccessLockManagerAdmin) {
+                        window.AccessLockManagerAdmin.deactivate();
                     }
                 });
             });
