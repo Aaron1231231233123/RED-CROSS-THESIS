@@ -1314,58 +1314,49 @@ function handleDeferDonor() {
         return;
     }
     
-    // Close the screening modal first
-    const screeningModal = document.getElementById('screeningFormModal');
-    if (screeningModal) {
-        closeModalSafely(screeningModal);
-    }
+    // DON'T close the screening modal - keep it open behind the defer modal
+    // The defer modal will have a higher z-index and appear on top
     
-    // Wait a moment for modal to close, then open defer modal
-    setTimeout(() => {
-        // Clean up any remaining backdrops before opening defer modal
-        cleanupModalBackdrops();
-        
-        // Check if screening defer modal functions are available
-        if (typeof handleScreeningDeferDonor === 'function') {
-            handleScreeningDeferDonor();
+    // Check if screening defer modal functions are available
+    if (typeof handleScreeningDeferDonor === 'function') {
+        handleScreeningDeferDonor();
             
-            // Add listener to defer modal to restore screening form modal if closed
-            setTimeout(() => {
-                const deferModal = document.getElementById('deferDonorModal');
-                
-                if (deferModal && window.pendingScreeningModal) {
-                    deferModal.addEventListener('hidden.bs.modal', function() {
-                        // If defer modal is closed and we have pending screening modal, restore it
-                        if (window.pendingScreeningModal) {
-                            setTimeout(() => {
-                                // Clean up any remaining backdrops first
-                                cleanupModalBackdrops();
+        // Add listener to defer modal to restore screening form modal if closed
+        setTimeout(() => {
+            const deferModal = document.getElementById('deferDonorModal');
+            
+            if (deferModal && window.pendingScreeningModal) {
+                deferModal.addEventListener('hidden.bs.modal', function() {
+                    // If defer modal is closed and we have pending screening modal, restore it
+                    if (window.pendingScreeningModal) {
+                        setTimeout(() => {
+                            // Clean up any remaining backdrops first
+                            cleanupModalBackdrops();
+                            
+                            // Reopen the screening form modal
+                            const screeningModal = document.getElementById('screeningFormModal');
+                            if (screeningModal) {
+                                const modal = new bootstrap.Modal(screeningModal);
+                                modal.show();
                                 
-                                // Reopen the screening form modal
-                                const screeningModal = document.getElementById('screeningFormModal');
-                                if (screeningModal) {
-                                    const modal = new bootstrap.Modal(screeningModal);
-                                    modal.show();
-                                    
-                                    // Set the form back to step 2 (Basic Info)
-                                    setTimeout(() => {
-                                        if (window.resetToStep) {
-                                            window.resetToStep(2);
-                                        }
-                                    }, 100);
-                                }
-                                // Clear the pending modal state
-                                window.pendingScreeningModal = null;
-                            }, 300);
-                        }
-                    }, { once: true }); // Use once: true to only listen once
-                }
-            }, 100);
-        } else {
-            //console.error('handleScreeningDeferDonor function not found. Make sure initial-screening-defer-button.js is loaded.');
-            alert('Error: Defer functionality not available. Please refresh the page and try again.');
-        }
-    }, 300);
+                                // Set the form back to step 2 (Basic Info)
+                                setTimeout(() => {
+                                    if (window.resetToStep) {
+                                        window.resetToStep(2);
+                                    }
+                                }, 100);
+                            }
+                            // Clear the pending modal state
+                            window.pendingScreeningModal = null;
+                        }, 300);
+                    }
+                }, { once: true }); // Use once: true to only listen once
+            }
+        }, 100);
+    } else {
+        //console.error('handleScreeningDeferDonor function not found. Make sure initial-screening-defer-button.js is loaded.');
+        alert('Error: Defer functionality not available. Please refresh the page and try again.');
+    }
 }
 
 // Function to clear pending screening modal (call this when deferral is completed successfully)

@@ -792,7 +792,35 @@
                     if (proceedButton && proceedButton.style) {
                         // Show button for donors who can process OR have needs_review=true
                         const hasNeedsReview = currentDonorId && medicalByDonor[currentDonorId] && medicalByDonor[currentDonorId].needs_review;
-                        const showReview = allowProcessing || currentStage === 'medical_review' || hasNeedsReview;
+                        
+                        // Check if latest Next Eligible Date is today or in the past
+                        let isEligibleDateReached = false;
+                        if (donor && donor.eligibility) {
+                            const eligibilityRecords = Array.isArray(donor.eligibility) ? donor.eligibility : (donor.eligibility ? [donor.eligibility] : []);
+                            
+                            // Find the latest end_date (Next Eligible Date)
+                            let latestEndDate = null;
+                            eligibilityRecords.forEach((el) => {
+                                if (el.end_date) {
+                                    const endDate = new Date(el.end_date);
+                                    if (!latestEndDate || endDate > latestEndDate) {
+                                        latestEndDate = endDate;
+                                    }
+                                }
+                            });
+                            
+                            // Compare with today's date
+                            if (latestEndDate) {
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0); // Set to start of day for accurate comparison
+                                latestEndDate.setHours(0, 0, 0, 0);
+                                
+                                // Show button if latest eligible date is today or in the past
+                                isEligibleDateReached = latestEndDate <= today;
+                            }
+                        }
+                        
+                        const showReview = allowProcessing || currentStage === 'medical_review' || hasNeedsReview || isEligibleDateReached;
                         proceedButton.style.display = showReview ? 'inline-block' : 'none';
                         proceedButton.textContent = 'Proceed to Medical History';
                     }

@@ -124,9 +124,14 @@ function initializeScreeningDeferModal() {
         const selectedRadio = Array.from(deferralTypeRadios).find(r => r.checked);
         const deferralTypeValid = !!selectedRadio;
         
-        // For temporary deferral, also check duration
+        // Check if we're in screening mode (duration section hidden)
+        const isScreeningMode = durationSection.style.display === 'none' || 
+                               durationSection.getAttribute('data-screening-mode') === 'true';
+        
+        // For temporary deferral in screening mode, skip duration validation (will default to today's date)
         let durationValid = true;
-        if (selectedRadio && selectedRadio.value === 'Temporary Deferral') {
+        if (selectedRadio && selectedRadio.value === 'Temporary Deferral' && !isScreeningMode) {
+            // Only validate duration for physical examination mode
             durationValid = durationSelect.value !== '' || customDurationInput.value !== '';
         }
         
@@ -147,28 +152,46 @@ function initializeScreeningDeferModal() {
     deferralTypeRadios.forEach(radio => {
         radio.addEventListener('change', function() {
             const val = this.value;
+            // Check if we're in screening mode (duration section should be hidden for temporary)
+            const isScreeningMode = durationSection.style.display === 'none' || 
+                                   durationSection.getAttribute('data-screening-mode') === 'true';
+            
             if (val === 'Temporary Deferral') {
-            durationSection.style.display = 'block';
-            setTimeout(() => {
-                durationSection.classList.add('show');
-                durationSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }, 50);
-            } else {
-            durationSection.classList.remove('show');
-            customDurationSection.classList.remove('show');
-            setTimeout(() => {
-                if (!durationSection.classList.contains('show')) {
+                // For screening mode, keep duration section hidden
+                if (isScreeningMode) {
                     durationSection.style.display = 'none';
-                }
-                if (!customDurationSection.classList.contains('show')) {
+                    durationSection.classList.remove('show');
                     customDurationSection.style.display = 'none';
+                    customDurationSection.classList.remove('show');
+                } else {
+                    // For physical examination mode, show duration section
+                    durationSection.style.display = 'block';
+                    setTimeout(() => {
+                        durationSection.classList.add('show');
+                        durationSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }, 50);
                 }
-            }, 400);
-            durationSummary.style.display = 'none';
-            // Clear duration selections
-            durationOptions.forEach(opt => opt.classList.remove('active'));
-            durationSelect.value = '';
-            customDurationInput.value = '';
+            } else {
+                // For permanent deferral, only show duration if not in screening mode
+                if (isScreeningMode) {
+                    durationSection.style.display = 'none';
+                } else {
+                    durationSection.classList.remove('show');
+                    customDurationSection.classList.remove('show');
+                    setTimeout(() => {
+                        if (!durationSection.classList.contains('show')) {
+                            durationSection.style.display = 'none';
+                        }
+                        if (!customDurationSection.classList.contains('show')) {
+                            customDurationSection.style.display = 'none';
+                        }
+                    }, 400);
+                }
+                durationSummary.style.display = 'none';
+                // Clear duration selections
+                durationOptions.forEach(opt => opt.classList.remove('active'));
+                durationSelect.value = '';
+                customDurationInput.value = '';
             }
             updateScreeningSummary();
             updateScreeningDeferSubmitButtonState();
@@ -241,6 +264,10 @@ function initializeScreeningDeferModal() {
         const durationValue = durationSelect.value;
         const customDuration = customDurationInput.value;
         
+        // Check if we're in screening mode
+        const isScreeningMode = durationSection.style.display === 'none' || 
+                               durationSection.getAttribute('data-screening-mode') === 'true';
+        
         if (!selectedType) {
             durationSummary.style.display = 'none';
             return;
@@ -249,19 +276,26 @@ function initializeScreeningDeferModal() {
         let summaryMessage = '';
         
         if (selectedType === 'Temporary Deferral') {
-            let days = 0;
-            if (durationValue && durationValue !== 'custom') {
-                days = parseInt(durationValue);
-            } else if (durationValue === 'custom' && customDuration) {
-                days = parseInt(customDuration);
-            }
-            
-            if (days > 0) {
-                const endDate = new Date();
-                endDate.setDate(endDate.getDate() + days);
+            // For screening mode, temporary deferral uses today's date (no days)
+            if (isScreeningMode) {
+                const today = new Date();
+                summaryMessage = `Donor will be temporarily deferred as of ${today.toLocaleDateString()}.`;
+            } else {
+                // For physical examination mode, use duration
+                let days = 0;
+                if (durationValue && durationValue !== 'custom') {
+                    days = parseInt(durationValue);
+                } else if (durationValue === 'custom' && customDuration) {
+                    days = parseInt(customDuration);
+                }
                 
-                const dayText = days === 1 ? 'day' : 'days';
-                summaryMessage = `Donor will be deferred for ${days} ${dayText} until ${endDate.toLocaleDateString()}.`;
+                if (days > 0) {
+                    const endDate = new Date();
+                    endDate.setDate(endDate.getDate() + days);
+                    
+                    const dayText = days === 1 ? 'day' : 'days';
+                    summaryMessage = `Donor will be deferred for ${days} ${dayText} until ${endDate.toLocaleDateString()}.`;
+                }
             }
         } else if (selectedType === 'Permanent Deferral') {
             summaryMessage = 'Donor will be permanently deferred from future donations.';
@@ -317,7 +351,12 @@ function validateScreeningDeferForm() {
     // For initial screening, duration validation is skipped since duration section is hidden
     // Duration validation only applies to physical examination deferrals
     const durationSection = document.getElementById('durationSection');
-    if (selectedType === 'Temporary Deferral' && durationSection.style.display !== 'none') {
+    const isScreeningMode = durationSection.style.display === 'none' || 
+                           durationSection.getAttribute('data-screening-mode') === 'true';
+    
+    // Skip duration validation for temporary deferrals in screening mode (will default to today's date)
+    if (selectedType === 'Temporary Deferral' && !isScreeningMode) {
+        // Only validate duration for physical examination mode
         if (!durationValue) {
             showScreeningDeferToast('Validation Error', 'Please select a duration for temporary deferral.', 'error');
             document.getElementById('durationSection').scrollIntoView({ behavior: 'smooth' });
@@ -363,20 +402,22 @@ async function submitScreeningDeferral() {
     const finalScreeningId = screeningId && screeningId.trim() !== '' ? screeningId : null;
     
     // Calculate final duration
+    // MODIFIED: Temporary deferred - no days would be used
+    // Permanent deferred - should pass normally (with days if provided)
     let finalDuration = null;
     if (deferralType === 'Temporary Deferral') {
+        // For temporary deferrals, don't use duration
+        finalDuration = null;
+    } else if (deferralType === 'Permanent Deferral') {
+        // For permanent deferrals, use duration if provided
         const durationSection = document.getElementById('durationSection');
-        // Only calculate duration if duration section is visible (physical examination mode)
-        if (durationSection.style.display !== 'none') {
+        if (durationSection && durationSection.style.display !== 'none') {
             const durationValue = document.getElementById('deferralDuration').value;
             if (durationValue === 'custom') {
                 finalDuration = document.getElementById('customDuration').value;
-            } else {
+            } else if (durationValue) {
                 finalDuration = durationValue;
             }
-        } else {
-            // For initial screening, use a default duration of 2 days
-            finalDuration = '2';
         }
     }
 
@@ -438,14 +479,14 @@ async function submitScreeningDeferral() {
             temporaryDeferredText = 'Not specified';
         }
         
-        // Prepare deferral data for create_eligibility.php
+        // Prepare deferral data for defer-interviewer.php
         const deferData = {
             action: 'create_eligibility_defer',
             donor_id: parseInt(donorId),
             screening_id: finalScreeningId || allSourceData.screeningForm?.screening_id || null,
             deferral_type: deferralType,
             disapproval_reason: disapprovalReason,
-            duration: finalDuration,
+            duration: finalDuration, // Will be null for temporary deferrals, may have value for permanent deferrals
             screening_form_data: screeningFormData // Pass the screening form data
         };
         
@@ -455,8 +496,8 @@ async function submitScreeningDeferral() {
             throw new Error(`Missing required fields: donor_id=${deferData.donor_id}, deferral_type=${deferData.deferral_type}, disapproval_reason=${deferData.disapproval_reason}`);
         }
         
-        // Submit to create_eligibility.php endpoint
-        const response = await fetch('../../assets/php_func/create_eligibility.php', {
+        // Submit to defer-interviewer.php endpoint
+        const response = await fetch('../../assets/php_func/defer-interviewer.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -725,15 +766,26 @@ function openScreeningDeferModal(screeningData) {
     // Configure modal for initial screening mode
     configureDeferModalForSource('screening');
     
-    // Hide conditional sections
+    // Hide conditional sections - FORCE HIDE for screening mode
     const durationSection = document.getElementById('durationSection');
     const customDurationSection = document.getElementById('customDurationSection');
     
-    durationSection.classList.remove('show');
-    customDurationSection.classList.remove('show');
-    durationSection.style.display = 'none';
-    customDurationSection.style.display = 'none';
-    document.getElementById('durationSummary').style.display = 'none';
+    // Mark as screening mode
+    if (durationSection) {
+        durationSection.setAttribute('data-screening-mode', 'true');
+        durationSection.classList.remove('show');
+        durationSection.style.display = 'none';
+        durationSection.style.visibility = 'hidden';
+    }
+    if (customDurationSection) {
+        customDurationSection.classList.remove('show');
+        customDurationSection.style.display = 'none';
+        customDurationSection.style.visibility = 'hidden';
+    }
+    const durationSummary = document.getElementById('durationSummary');
+    if (durationSummary) {
+        durationSummary.style.display = 'none';
+    }
     
     // Reset all visual elements
     document.querySelectorAll('.deferral-card').forEach(card => {
@@ -758,9 +810,26 @@ function openScreeningDeferModal(screeningData) {
         control.classList.remove('is-invalid', 'is-valid');
     });
     
-    // Show the modal
-    const deferModal = new bootstrap.Modal(document.getElementById('deferDonorModal'));
-    deferModal.show();
+    // Show the modal with higher z-index than screening modal
+    const deferModalEl = document.getElementById('deferDonorModal');
+    if (deferModalEl) {
+        // Ensure defer modal appears above screening modal
+        deferModalEl.style.zIndex = '1070';
+        const deferModal = new bootstrap.Modal(deferModalEl, {
+            backdrop: false, // Don't create backdrop so screening modal stays visible
+            keyboard: true
+        });
+        deferModal.show();
+        
+        // Force z-index after showing
+        setTimeout(() => {
+            deferModalEl.style.zIndex = '1070';
+            const deferDialog = deferModalEl.querySelector('.modal-dialog');
+            if (deferDialog) deferDialog.style.zIndex = '1071';
+            const deferContent = deferModalEl.querySelector('.modal-content');
+            if (deferContent) deferContent.style.zIndex = '1072';
+        }, 10);
+    }
     
     // Re-initialize defer modal functionality when it opens
     setTimeout(() => {
@@ -838,26 +907,15 @@ function handleScreeningDeferDonor() {
         return;
     }
     
+    // DON'T close the screening modal - keep it open behind the defer modal
+    // The defer modal will have a higher z-index and appear on top
     
-    const screeningModal = document.getElementById('screeningFormModal');
-    if (screeningModal) {
-        if (window.closeModalSafely) {
-            window.closeModalSafely(screeningModal);
-        } else {
-            const modal = bootstrap.Modal.getInstance(screeningModal);
-            if (modal) {
-                modal.hide();
-            }
-        }
-    }
-    
-    setTimeout(() => {
-        const screeningData = {
-            donor_form_id: donorId,
-            screening_id: null // Will be fetched from API
-        };
-        openScreeningDeferModal(screeningData);
-    }, 300);
+    // Open defer modal immediately without closing screening modal
+    const screeningData = {
+        donor_form_id: donorId,
+        screening_id: null // Will be fetched from API
+    };
+    openScreeningDeferModal(screeningData);
 }
 
 // Export functions for use in other files

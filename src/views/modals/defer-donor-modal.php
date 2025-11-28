@@ -7,9 +7,9 @@
 ?>
 
 <!-- Defer Donor Modal -->
-<div class="modal fade" id="deferDonorModal" tabindex="-1" aria-labelledby="deferDonorModalLabel" aria-hidden="true" style="z-index: 10050;">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content" style="border-radius: 15px; border: none;">
+<div class="modal fade" id="deferDonorModal" tabindex="-1" aria-labelledby="deferDonorModalLabel" aria-hidden="true" style="z-index: 1070 !important;" data-bs-backdrop="false">
+    <div class="modal-dialog modal-dialog-centered" style="z-index: 1071 !important;">
+        <div class="modal-content" style="border-radius: 15px; border: none; z-index: 1072 !important; position: relative;">
             <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
                 <h5 class="modal-title" id="deferDonorModalLabel">
                     <i class="fas fa-ban me-2"></i>
