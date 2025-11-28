@@ -137,3 +137,6 @@ if (file_exists($screeningModalPath)) {
 }
 </style>
 
+<!-- Admin duplicate checker -->
+<script defer src="../../assets/js/duplicate_donor_check_admin.js"></script>
+

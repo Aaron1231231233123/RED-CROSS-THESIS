@@ -49,31 +49,17 @@ try {
 // Clear any output that might have been generated during file includes
 ob_clean();
 
-/**
- * Calculate distance between two points using Haversine formula
- */
-function calculateDistance($lat1, $lon1, $lat2, $lon2) {
-    $earthRadius = 6371; // Earth's radius in kilometers
-    
-    $dLat = deg2rad($lat2 - $lat1);
-    $dLon = deg2rad($lon2 - $lon1);
-    
-    $a = sin($dLat/2) * sin($dLat/2) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon/2) * sin($dLon/2);
-    $c = 2 * atan2(sqrt($a), sqrt(1-$a));
-    
-    return $earthRadius * $c;
-}
+$GLOBALS['notificationLogQueue'] = [];
 
 /**
- * Log notification attempt to notification_logs table
- * OPTIMIZATION: Non-blocking - use error suppression for faster execution
+ * Queue notification log entries for batch insertion
  */
 function logNotification($bloodDriveId, $donorId, $type, $status, $reason = null, $recipient = null, $payload = null, $error = null) {
     $logData = [
         'blood_drive_id' => $bloodDriveId,
         'donor_id' => $donorId,
-        'notification_type' => $type, // 'push', 'email', 'sms'
-        'status' => $status, // 'sent', 'failed', 'skipped'
+        'notification_type' => $type,
+        'status' => $status,
         'reason' => $reason,
         'recipient' => $recipient,
         'error_message' => $error,
@@ -84,9 +70,105 @@ function logNotification($bloodDriveId, $donorId, $type, $status, $reason = null
         $logData['payload_json'] = json_encode($payload);
     }
     
-    // Try to log to notification_logs table - non-blocking with error suppression
-    // This won't slow down the main notification flow
-    @supabaseRequest("notification_logs", "POST", $logData);
+    $GLOBALS['notificationLogQueue'][] = $logData;
+}
+
+/**
+ * Flush queued notification logs to Supabase in batches
+ */
+function flushNotificationLogs() {
+    if (empty($GLOBALS['notificationLogQueue'])) {
+        return;
+    }
+    
+    $chunks = array_chunk($GLOBALS['notificationLogQueue'], 200);
+    foreach ($chunks as $chunk) {
+        @supabaseRequest("notification_logs", "POST", $chunk, true, 'return=minimal');
+    }
+    
+    $GLOBALS['notificationLogQueue'] = [];
+}
+
+function formatDriveDateLabel($date) {
+    if (empty($date)) {
+        return '';
+    }
+    $timestamp = strtotime($date);
+    if ($timestamp === false) {
+        return $date;
+    }
+    return date('F j, Y', $timestamp);
+}
+
+function formatDriveTimeLabel($time) {
+    if (empty($time)) {
+        return '';
+    }
+    $timestamp = strtotime($time);
+    if ($timestamp === false) {
+        return $time;
+    }
+    return date('g:i A', $timestamp);
+}
+
+function buildNotificationPayload($venue, $driveDate, $driveTime, $override = []) {
+    $title = !empty($override['title'])
+        ? $override['title']
+        : ($venue ? "Blood Drive at {$venue}" : 'Blood Drive Notification');
+    
+    $payload = [
+        'title' => $title,
+        'venue' => $override['venue'] ?? $venue,
+        'date' => $override['date'] ?? $driveDate,
+        'time' => $override['time'] ?? $driveTime
+    ];
+    
+    $defaultMessage = 'You have a new blood drive notification.';
+    if (!empty($payload['venue']) && !empty($payload['date']) && !empty($payload['time'])) {
+        $defaultMessage = sprintf(
+            'Join us at %s on %s at %s.',
+            $payload['venue'],
+            formatDriveDateLabel($payload['date']),
+            formatDriveTimeLabel($payload['time'])
+        );
+    }
+    
+    $payload['message'] = $override['message'] ?? $defaultMessage;
+    
+    return $payload;
+}
+
+/**
+ * Create pending donor_notifications entries in batched Supabase inserts
+ */
+function createPendingDonorNotifications($donors, $payloadJson, $bloodDriveId) {
+    if (empty($donors)) {
+        return;
+    }
+    
+    $records = [];
+    foreach ($donors as $donor) {
+        if (!isset($donor['donor_id'])) {
+            continue;
+        }
+        $records[] = [
+            'donor_id' => $donor['donor_id'],
+            'payload_json' => $payloadJson,
+            'status' => 'pending',
+            'blood_drive_id' => $bloodDriveId
+        ];
+    }
+    
+    if (empty($records)) {
+        return;
+    }
+    
+    foreach (array_chunk($records, 500) as $batch) {
+        $response = supabaseRequest("donor_notifications", "POST", $batch, true, 'return=minimal');
+        if (isset($response['error'])) {
+            throw new Exception('Failed to create donor notifications: ' . ($response['error'] ?? 'Unknown error'));
+        }
+    }
 }
 
 // Handle preflight OPTIONS request
@@ -114,44 +196,39 @@ try {
     }
     
     // Validate required fields
-    $required_fields = ['location', 'drive_date', 'drive_time', 'latitude', 'longitude'];
+    $required_fields = ['venue', 'drive_date', 'drive_time'];
     foreach ($required_fields as $field) {
         if (!isset($input[$field]) || empty($input[$field])) {
             throw new Exception("Missing required field: $field");
         }
     }
     
-    $location = $input['location'];
+    $venue = trim($input['venue'] ?? ($input['location'] ?? ''));
     $drive_date = $input['drive_date'];
     $drive_time = $input['drive_time'];
-    $latitude = floatval($input['latitude']);
-    $longitude = floatval($input['longitude']);
-    $radius_km = isset($input['radius_km']) ? intval($input['radius_km']) : 10;
-    $blood_types = isset($input['blood_types']) ? $input['blood_types'] : [];
-    $custom_message = isset($input['custom_message']) ? $input['custom_message'] : '';
-    
-    // If blood_types is empty, it means "all blood types" - set to all possible types
-    if (empty($blood_types)) {
-        $blood_types = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
-    }
+    $latitude = isset($input['latitude']) && $input['latitude'] !== ''
+        ? floatval($input['latitude'])
+        : 10.72020000;
+    $longitude = isset($input['longitude']) && $input['longitude'] !== ''
+        ? floatval($input['longitude'])
+        : 122.56210000;
+    $notification_payload_input = (isset($input['notification_payload']) && is_array($input['notification_payload']))
+        ? $input['notification_payload']
+        : [];
+    $notification_payload = buildNotificationPayload($venue, $drive_date, $drive_time, $notification_payload_input);
     
     // Create blood drive record
     // Remove created_at as it has DEFAULT NOW() in the table
     $blood_drive_data = [
-        'location' => $location,
-        'latitude' => $latitude, // DECIMAL type in database
-        'longitude' => $longitude, // DECIMAL type in database
+        'location' => $venue,
+        'latitude' => $latitude,
+        'longitude' => $longitude,
         'drive_date' => $drive_date,
         'drive_time' => $drive_time,
-        'radius_km' => $radius_km,
-        'blood_types' => $blood_types, // Always include blood_types array
-        'status' => 'scheduled'
+        'radius_km' => 10,
+        'status' => 'scheduled',
+        'message_template' => $notification_payload['message']
     ];
-    
-    // Only include message_template if it's not empty
-    if (!empty($custom_message)) {
-        $blood_drive_data['message_template'] = $custom_message;
-    }
     
     // Only include created_by if we have a valid user ID
     if (isset($_SESSION['user_id']) && $_SESSION['user_id']) {
@@ -202,24 +279,22 @@ try {
     $blood_drive_id = $blood_drive_response['data'][0]['id'];
     $blood_drive_info = [
         'id' => $blood_drive_id,
-        'location' => $location,
+        'venue' => $venue,
+        'location' => $venue,
         'drive_date' => $drive_date,
         'drive_time' => $drive_time,
-        'message_template' => $custom_message
+        'message_template' => $notification_payload['message'],
+        'notification_payload' => $notification_payload
     ];
     
-    // Find eligible donors within radius
-    // OPTIMIZATION: Return early response, process notifications asynchronously
-    // For now, we'll limit the initial donor fetch to avoid timeout
+    // Fetch all donors for broadcast
     $eligible_donors = [];
     $limit = 2000; // Fetch more per batch for faster processing
     $offset = 0;
-    $max_donors_to_check = 3000; // Limit to reasonable number for performance
     
-    // Fetch donors in batches and filter by distance
     $donors_checked = 0;
     do {
-        $query = "donor_form?select=donor_id,surname,first_name,middle_name,mobile,email,permanent_latitude,permanent_longitude&permanent_latitude=not.is.null&permanent_longitude=not.is.null&limit=$limit&offset=$offset";
+        $query = "donor_form?select=donor_id,surname,first_name,middle_name,mobile,email&limit=$limit&offset=$offset";
         
         $donors_response = supabaseRequest($query);
         
@@ -229,30 +304,7 @@ try {
         
         $batch_count = count($donors_response['data']);
         $donors_checked += $batch_count;
-        
-        // Process this batch
-        foreach ($donors_response['data'] as $donor) {
-            // Calculate distance between donor and blood drive location
-            $donor_lat = floatval($donor['permanent_latitude'] ?? 0);
-            $donor_lng = floatval($donor['permanent_longitude'] ?? 0);
-            
-            if ($donor_lat == 0 || $donor_lng == 0) {
-                continue; // Skip donors without valid coordinates
-            }
-            
-            // Calculate distance - optimized
-            $distance = calculateDistance($latitude, $longitude, $donor_lat, $donor_lng);
-            
-            if ($distance <= $radius_km) {
-                $eligible_donors[] = $donor;
-            }
-        }
-        
-        // Check if we've hit our limit
-        if ($donors_checked >= $max_donors_to_check) {
-            error_log("Reached donor check limit ($max_donors_to_check). Found " . count($eligible_donors) . " eligible donors.");
-            break;
-        }
+        $eligible_donors = array_merge($eligible_donors, $donors_response['data']);
         
         $offset += $limit;
         
@@ -261,36 +313,11 @@ try {
             break;
         }
         
-    } while ($donors_checked < $max_donors_to_check);
+    } while (true);
     
-    // Get blood types for eligible donors (if blood type filtering is needed)
-    if (!empty($blood_types) && !empty($eligible_donors)) {
-        $donor_ids = array_column($eligible_donors, 'donor_id');
-        
-        // Only query if we have donor IDs
-        if (!empty($donor_ids)) {
-            // Try to get blood types from screening_form (more reliable)
-            $donor_ids_param = implode(',', $donor_ids);
-            $screening_response = supabaseRequest("screening_form?select=donor_form_id,blood_type&donor_form_id=in.(" . $donor_ids_param . ")&blood_type=not.is.null&order=created_at.desc");
-            
-            if (isset($screening_response['data']) && !empty($screening_response['data'])) {
-                $blood_type_map = [];
-                foreach ($screening_response['data'] as $screening) {
-                    $donor_form_id = $screening['donor_form_id'];
-                    // Only use the most recent blood type for each donor
-                    if (!isset($blood_type_map[$donor_form_id])) {
-                        $blood_type_map[$donor_form_id] = $screening['blood_type'];
-                    }
-                }
-                
-                // Filter donors by blood type
-                $eligible_donors = array_filter($eligible_donors, function($donor) use ($blood_type_map, $blood_types) {
-                    $donor_blood_type = $blood_type_map[$donor['donor_id']] ?? null;
-                    return in_array($donor_blood_type, $blood_types);
-                });
-            }
-        }
-    }
+    // Create pending donor_notifications entries (single payload reuse)
+    $notification_payload_json = json_encode($notification_payload);
+    createPendingDonorNotifications($eligible_donors, $notification_payload_json, $blood_drive_id);
     
     // Get push subscriptions for eligible donors
     $donor_ids = array_column($eligible_donors, 'donor_id');
@@ -322,18 +349,15 @@ try {
     
     // Create push notification payload (short, action-driven message)
     $push_payload = [
-        'title' => '🩸 Blood Drive Alert',
-        'body' => $custom_message ?: "Blood drive near you! Tap to confirm your slot.",
+        'title' => $notification_payload['title'],
+        'body' => $notification_payload['message'],
         'icon' => '/assets/image/PRC_Logo.png',
         'badge' => '/assets/image/PRC_Logo.png',
-        'data' => [
+        'data' => array_merge($notification_payload, [
             'url' => '/blood-drive-details?id=' . $blood_drive_id,
             'blood_drive_id' => $blood_drive_id,
-            'location' => $location,
-            'date' => $drive_date,
-            'time' => $drive_time,
             'type' => 'blood_drive'
-        ],
+        ]),
         'actions' => [
             [
                 'action' => 'rsvp',
@@ -384,26 +408,15 @@ try {
             $donor_id = $subscription['donor_id'];
             
             try {
-                $payload_json = json_encode($push_payload);
-                $result = $pushSender->sendNotification($subscription, $payload_json);
+                $pushPayloadJson = json_encode($push_payload);
+                $result = $pushSender->sendNotification($subscription, $pushPayloadJson);
                 
                 if ($result['success']) {
                     $results['push']['sent']++;
                     $notified_donors[$donor_id] = 'push';
                     
-                    // Log to donor_notifications table (if exists) - non-blocking
-                    // Use error suppression for faster execution
-                    $notification_data = [
-                        'donor_id' => $donor_id,
-                        'payload_json' => $payload_json,
-                        'status' => 'sent',
-                        'blood_drive_id' => $blood_drive_id
-                        // sent_at will be set automatically by database DEFAULT NOW()
-                    ];
-                    @supabaseRequest("donor_notifications", "POST", $notification_data);
-                    
                     // Log to notification_logs - non-blocking
-                    @logNotification($blood_drive_id, $donor_id, 'push', 'sent', null, $subscription['endpoint'] ?? null, $push_payload);
+                    @logNotification($blood_drive_id, $donor_id, 'push', 'sent', null, $subscription['endpoint'] ?? null, $notification_payload);
                     
                 } else {
                     $results['push']['failed']++;
@@ -412,17 +425,8 @@ try {
                         'error' => $result['error'] ?? 'Unknown error'
                     ];
                     
-                    // Log failed push to donor_notifications table - non-blocking
-                    $failed_notification_data = [
-                        'donor_id' => $donor_id,
-                        'payload_json' => $payload_json,
-                        'status' => 'failed',
-                        'blood_drive_id' => $blood_drive_id
-                    ];
-                    @supabaseRequest("donor_notifications", "POST", $failed_notification_data);
-                    
                     // Log failed push to notification_logs - non-blocking
-                    @logNotification($blood_drive_id, $donor_id, 'push', 'failed', 'push_send_failed', $subscription['endpoint'] ?? null, $push_payload, $result['error'] ?? 'Unknown error');
+                    @logNotification($blood_drive_id, $donor_id, 'push', 'failed', 'push_send_failed', $subscription['endpoint'] ?? null, $notification_payload, $result['error'] ?? 'Unknown error');
                 }
                 
             } catch (Exception $e) {
@@ -432,16 +436,7 @@ try {
                     'error' => $e->getMessage()
                 ];
                 
-                // Log exception to donor_notifications table - non-blocking
-                $exception_notification_data = [
-                    'donor_id' => $donor_id,
-                    'payload_json' => $payload_json ?? json_encode($push_payload),
-                    'status' => 'failed',
-                    'blood_drive_id' => $blood_drive_id
-                ];
-                @supabaseRequest("donor_notifications", "POST", $exception_notification_data);
-                
-                @logNotification($blood_drive_id, $donor_id, 'push', 'failed', 'exception', $subscription['endpoint'] ?? null, $push_payload, $e->getMessage());
+                @logNotification($blood_drive_id, $donor_id, 'push', 'failed', 'exception', $subscription['endpoint'] ?? null, $notification_payload, $e->getMessage());
                 error_log("Push notification error for donor $donor_id: " . $e->getMessage());
             }
         }
@@ -488,24 +483,7 @@ try {
                 $results['email']['sent']++;
                 $notified_donors[$donor_id] = 'email';
                 
-                // Log to donor_notifications table (if exists) - non-blocking
-                $email_payload = [
-                    'type' => 'blood_drive',
-                    'blood_drive_id' => $blood_drive_id,
-                    'location' => $location,
-                    'date' => $drive_date,
-                    'time' => $drive_time,
-                    'message' => $custom_message ?: "Blood drive near you! Please consider donating."
-                ];
-                $email_notification_data = [
-                    'donor_id' => $donor_id,
-                    'payload_json' => json_encode($email_payload),
-                    'status' => 'sent',
-                    'blood_drive_id' => $blood_drive_id
-                ];
-                @supabaseRequest("donor_notifications", "POST", $email_notification_data);
-                
-                @logNotification($blood_drive_id, $donor_id, 'email', 'sent', null, $donor_email);
+                @logNotification($blood_drive_id, $donor_id, 'email', 'sent', null, $donor_email, $notification_payload);
             } else {
                 $results['email']['failed']++;
                 $results['email']['errors'][] = [
@@ -513,7 +491,7 @@ try {
                     'error' => $emailResult['error'] ?? 'Unknown error',
                     'reason' => $emailResult['reason'] ?? null
                 ];
-                @logNotification($blood_drive_id, $donor_id, 'email', 'failed', $emailResult['reason'] ?? 'email_send_failed', $donor_email, null, $emailResult['error'] ?? 'Unknown error');
+                @logNotification($blood_drive_id, $donor_id, 'email', 'failed', $emailResult['reason'] ?? 'email_send_failed', $donor_email, $notification_payload, $emailResult['error'] ?? 'Unknown error');
             }
             
         } catch (Exception $e) {
@@ -523,7 +501,7 @@ try {
                 'error' => $e->getMessage()
             ];
             
-            @logNotification($blood_drive_id, $donor_id, 'email', 'failed', 'exception', $donor_email, null, $e->getMessage());
+            @logNotification($blood_drive_id, $donor_id, 'email', 'failed', 'exception', $donor_email, $notification_payload, $e->getMessage());
             error_log("Email notification error for donor $donor_id: " . $e->getMessage());
         }
         
@@ -580,6 +558,7 @@ try {
         exit();
     }
     
+    flushNotificationLogs();
     echo $response;
     ob_end_flush(); // End output buffering and send
     exit(); // Ensure script stops here
@@ -588,6 +567,7 @@ try {
     error_log("Broadcast blood drive error: " . $e->getMessage());
     error_log("Stack trace: " . $e->getTraceAsString());
     
+    flushNotificationLogs();
     ob_clean(); // Clear any output before JSON
     http_response_code(400);
     $errorResponse = json_encode([
@@ -609,6 +589,7 @@ try {
     error_log("Fatal error in broadcast-blood-drive.php: " . $e->getMessage());
     error_log("File: " . $e->getFile() . " Line: " . $e->getLine());
     
+    flushNotificationLogs();
     ob_clean();
     http_response_code(500);
     $errorResponse = json_encode([
