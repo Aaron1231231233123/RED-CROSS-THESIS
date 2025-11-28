@@ -488,10 +488,13 @@ window.proceedToAdminDeclarationForm = function(donorId) {
                 const message = 'Are you sure you want to complete the admin registration?';
                 if (window.customConfirm) {
                     window.customConfirm(message, proceedSubmission);
+                } else if (window.adminModal && typeof window.adminModal.confirm === 'function') {
+                    window.adminModal.confirm(message, proceedSubmission, {
+                        confirmText: 'Complete Registration',
+                        cancelText: 'Cancel'
+                    });
                 } else {
-                    if (confirm(message)) {
-                        proceedSubmission();
-                    }
+                    proceedSubmission();
                 }
             };
             

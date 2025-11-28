@@ -2312,10 +2312,35 @@ if (isset($_SESSION['error_message'])) {
                     });
                     
                     if (hasData) {
-                        const confirmLeave = confirm('You have unsaved data. Are you sure you want to leave this page?');
-                        if (!confirmLeave) {
-                            return false;
-                        }
+                        const closeConfig = {
+                            message: 'Are you sure you want to close this? All changes will not be saved.',
+                            title: 'Close Without Saving?',
+                            confirmText: 'Close Anyway',
+                            cancelText: 'Cancel'
+                        };
+                        const requestClose = typeof window.requestCloseWithoutSavingConfirmation === 'function'
+                            ? window.requestCloseWithoutSavingConfirmation
+                            : (() => {
+                                if (window.adminModal && typeof window.adminModal.confirm === 'function') {
+                                    return () => window.adminModal.confirm(
+                                        closeConfig.message,
+                                        null,
+                                        {
+                                            title: closeConfig.title,
+                                            confirmText: closeConfig.confirmText,
+                                            cancelText: closeConfig.cancelText
+                                        }
+                                    );
+                                }
+                                return () => Promise.resolve(false);
+                            })();
+
+                        requestClose(closeConfig).then((shouldLeave) => {
+                            if (shouldLeave) {
+                                redirectToDashboard();
+                            }
+                        });
+                        return false;
                     }
                 }
                 
@@ -2356,8 +2381,12 @@ if (isset($_SESSION['error_message'])) {
                         break;
                 }
                 
-                console.log("Redirecting to:", dashboardUrl);
-                window.location.href = dashboardUrl;
+                function redirectToDashboard() {
+                    console.log("Redirecting to:", dashboardUrl);
+                    window.location.href = dashboardUrl;
+                }
+
+                redirectToDashboard();
             }
             
             // Handle close button click (only if not in registration mode)
@@ -2584,7 +2613,32 @@ if (isset($_SESSION['error_message'])) {
             
             // Function to handle cancellation of registration
             window.confirmCancelRegistration = function() {
-                if (confirm('Are you sure you want to cancel the donor registration? All entered data will be lost.')) {
+                const cancelConfig = {
+                    message: 'Are you sure you want to close this? All changes will not be saved.',
+                    title: 'Close Without Saving?',
+                    confirmText: 'Close Anyway',
+                    cancelText: 'Cancel'
+                };
+
+                const requestDecision = typeof window.requestCloseWithoutSavingConfirmation === 'function'
+                    ? window.requestCloseWithoutSavingConfirmation
+                    : (() => {
+                        if (window.adminModal && typeof window.adminModal.confirm === 'function') {
+                            return () => window.adminModal.confirm(
+                                cancelConfig.message,
+                                null,
+                                {
+                                    title: cancelConfig.title,
+                                    confirmText: cancelConfig.confirmText,
+                                    cancelText: cancelConfig.cancelText
+                                }
+                            );
+                        }
+                        return () => Promise.resolve(false);
+                    })();
+
+                requestDecision(cancelConfig).then((shouldCancel) => {
+                    if (!shouldCancel) return;
                     // Cancel the registration by clearing session data and redirecting
                     fetch('cancel_registration.php', {
                         method: 'POST',
@@ -2606,7 +2660,7 @@ if (isset($_SESSION['error_message'])) {
                         // Fallback redirect
                         window.location.href = '../../public/Dashboards/dashboard-Inventory-System.php';
                     });
-                }
+                });
             };
         });
 
@@ -2633,5 +2687,6 @@ if (isset($_SESSION['error_message'])) {
     include '../modals/mobile-credentials-modal.php';
     ?>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../../assets/js/admin-feedback-modal.js"></script>
 </body>
 </html> 

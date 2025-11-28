@@ -143,7 +143,7 @@
             </div>
                             <div class="col-md-6 mb-3 position-relative">
                                 <label for="zip_code" class="form-label">ZIP Code <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="zip_code" name="zip_code" autocomplete="off" required maxlength="4" pattern="[0-9]{4}" placeholder="e.g., 5000">
+                                <input type="text" class="form-control" id="zip_code" name="zip_code" autocomplete="off" required maxlength="4" pattern="[0-9]{4}">
                                 <div id="zipCodeSuggestions" class="list-group position-absolute w-100" style="z-index: 1050; max-height: 220px; overflow-y: auto; display:none; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
                             </div>
         </div>

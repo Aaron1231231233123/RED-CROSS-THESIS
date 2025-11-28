@@ -875,6 +875,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_donor_form'])) 
 
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../../../assets/js/admin-feedback-modal.js"></script>
 <!-- Duplicate Donor Check JavaScript -->
 <script src="../../../assets/js/duplicate_donor_check.js"></script>
 
@@ -1147,9 +1148,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         nextButton.innerHTML = originalText;
                         nextButton.disabled = false;
                         
-                        // Ask user if they want to proceed anyway
-                        if (confirm('Unable to check for duplicates. Do you want to proceed anyway?')) {
-                            proceedToNextSection(currentSection);
+                        const duplicateErrorMessage = 'Unable to check for duplicates. Do you want to proceed anyway?';
+                        const proceedAnyway = () => proceedToNextSection(currentSection);
+                        
+                        if (window.adminModal && typeof window.adminModal.confirm === 'function') {
+                            window.adminModal.confirm(duplicateErrorMessage, proceedAnyway, {
+                                confirmText: 'Proceed',
+                                cancelText: 'Stay'
+                            });
                         }
                     });
                     return; // Stop here, let the duplicate checker handle the flow
@@ -1337,6 +1343,46 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Function to go back to previous page
     function goBackToDashboard(skipConfirmation = false) {
+        const redirectToDashboard = () => {
+            // Use the PHP-determined referrer URL for consistency
+            const userRole = "<?php echo $user_staff_roles; ?>";
+            const roleId = "<?php echo isset($_SESSION['role_id']) ? $_SESSION['role_id'] : ''; ?>";
+            const phpReferrer = "<?php echo $_SESSION['donor_form_referrer']; ?>";
+            
+            console.log("User role for redirect:", userRole);
+            console.log("Role ID:", roleId);
+            console.log("PHP Referrer:", phpReferrer);
+            
+            let dashboardUrl = "";
+            
+            // For staff users (role_id 3), use role-based redirect
+            if (roleId === '3' && userRole) {
+                switch (userRole) {
+                    case 'reviewer':
+                        dashboardUrl = "/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-medical-history-submissions.php";
+                        break;
+                    case 'interviewer':
+                        dashboardUrl = "/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-donor-submission.php";
+                        break;
+                    case 'physician':
+                        dashboardUrl = "/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-physical-submission.php";
+                        break;
+                    case 'phlebotomist':
+                        dashboardUrl = "/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-blood-collection-submission.php";
+                        break;
+                    default:
+                        dashboardUrl = phpReferrer || "/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-donor-submission.php";
+                        break;
+                }
+            } else {
+                // For admin users (role_id 1) or others, use the PHP-determined referrer
+                dashboardUrl = phpReferrer || "/RED-CROSS-THESIS/public/Dashboards/dashboard-Inventory-System.php";
+            }
+            
+            console.log("Redirecting to:", dashboardUrl);
+            window.location.href = dashboardUrl;
+        };
+        
         // First check if the user has entered data
         if (!skipConfirmation) {
             const formInputs = document.querySelectorAll('input[type="text"], input[type="date"], input[type="email"], select');
@@ -1351,50 +1397,41 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             if (hasData) {
-                const confirmLeave = confirm('You have unsaved data. Are you sure you want to leave this page?');
-                if (!confirmLeave) {
-                    return false;
-                }
+                const closeConfig = {
+                    message: 'Are you sure you want to close this? All changes will not be saved.',
+                    title: 'Close Without Saving?',
+                    confirmText: 'Close Anyway',
+                    cancelText: 'Cancel'
+                };
+
+                const requestClose = typeof window.requestCloseWithoutSavingConfirmation === 'function'
+                    ? window.requestCloseWithoutSavingConfirmation
+                    : (() => {
+                        if (window.adminModal && typeof window.adminModal.confirm === 'function') {
+                            return () => window.adminModal.confirm(
+                                closeConfig.message,
+                                null,
+                                {
+                                    title: closeConfig.title,
+                                    confirmText: closeConfig.confirmText,
+                                    cancelText: closeConfig.cancelText
+                                }
+                            );
+                        }
+                        return () => Promise.resolve(false);
+                    })();
+
+                requestClose(closeConfig).then((shouldLeave) => {
+                    if (shouldLeave) {
+                        redirectToDashboard();
+                    }
+                });
+                return false;
             }
         }
         
-        // Use the PHP-determined referrer URL for consistency
-        const userRole = "<?php echo $user_staff_roles; ?>";
-        const roleId = "<?php echo isset($_SESSION['role_id']) ? $_SESSION['role_id'] : ''; ?>";
-        const phpReferrer = "<?php echo $_SESSION['donor_form_referrer']; ?>";
-        
-        console.log("User role for redirect:", userRole);
-        console.log("Role ID:", roleId);
-        console.log("PHP Referrer:", phpReferrer);
-        
-        let dashboardUrl = "";
-        
-        // For staff users (role_id 3), use role-based redirect
-        if (roleId === '3' && userRole) {
-            switch (userRole) {
-                case 'reviewer':
-                    dashboardUrl = "/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-medical-history-submissions.php";
-                    break;
-                case 'interviewer':
-                    dashboardUrl = "/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-donor-submission.php";
-                    break;
-                case 'physician':
-                    dashboardUrl = "/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-physical-submission.php";
-                    break;
-                case 'phlebotomist':
-                    dashboardUrl = "/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-blood-collection-submission.php";
-                    break;
-                default:
-                    dashboardUrl = phpReferrer || "/RED-CROSS-THESIS/public/Dashboards/dashboard-staff-donor-submission.php";
-                    break;
-            }
-        } else {
-            // For admin users (role_id 1) or others, use the PHP-determined referrer
-            dashboardUrl = phpReferrer || "/RED-CROSS-THESIS/public/Dashboards/dashboard-Inventory-System.php";
-        }
-        
-        console.log("Redirecting to:", dashboardUrl);
-        window.location.href = dashboardUrl;
+        redirectToDashboard();
+        return true;
     }
     
     // Make goBackToDashboard globally accessible for duplicate modal

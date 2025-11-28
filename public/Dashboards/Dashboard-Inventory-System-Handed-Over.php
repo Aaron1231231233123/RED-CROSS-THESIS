@@ -1232,6 +1232,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
 
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../../assets/js/admin-feedback-modal.js"></script>
     <script>
     function loadRequestDetails(request_id, patientName, bloodType, component, rhFactor, unitsNeeded, diagnosis, hospital, physician, priority, status, requestDate, whenNeeded) {
         document.getElementById('modalRequestId').value = request_id;

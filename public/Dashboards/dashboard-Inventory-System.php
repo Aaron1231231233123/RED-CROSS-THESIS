@@ -2907,6 +2907,7 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
 
     <!-- Bootstrap 5.3 JS and Popper -->
     <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script defer src="../../assets/js/admin-feedback-modal.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             window.showConfirmationModal = function() {

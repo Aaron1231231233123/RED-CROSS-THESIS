@@ -137,22 +137,19 @@ class DuplicateDonorChecker {
             // Handle close button (×) with confirmation
             if (closeBtn) {
                 closeBtn.addEventListener('click', () => {
-                    // Add confirmation dialog for duplicate modal close
-                    if (confirm('Are you sure you want to return to the dashboard? You will lose any progress made on this form.')) {
-                        // Hide the modal
+                    requestUnsavedClose().then((shouldClose) => {
+                        if (!shouldClose) return;
                         const modalInstance = bootstrap.Modal.getInstance(modal);
                         if (modalInstance) {
                             modalInstance.hide();
                         }
                         
-                        // Navigate back to dashboard
                         if (typeof goBackToDashboard === 'function') {
-                            goBackToDashboard(true); // Skip confirmation since user already confirmed
+                            goBackToDashboard(true);
                         } else {
-                            // Fallback: try to go back in history
                             window.history.back();
                         }
-                    }
+                    });
                 });
             }
         }, 10);
@@ -192,18 +189,16 @@ class DuplicateDonorChecker {
             });
         }
         
-                    if (goBackBtn) {
+            if (goBackBtn) {
                 goBackBtn.addEventListener('click', () => {
-                    // Add confirmation dialog for duplicate modal close
-                    if (confirm('Are you sure you want to return to the dashboard? You will lose any progress made on this form.')) {
-                        // Navigate back to dashboard
+                    requestUnsavedClose().then((shouldClose) => {
+                        if (!shouldClose) return;
                         if (typeof goBackToDashboard === 'function') {
-                            goBackToDashboard(true); // Skip confirmation since user already confirmed
+                            goBackToDashboard(true);
                         } else {
-                            // Fallback: try to go back in history
                             window.history.back();
                         }
-                    }
+                    });
                 });
             }
     }
@@ -663,6 +658,33 @@ class DuplicateDonorChecker {
             clearTimeout(this.debounceTimer);
         }
     }
+}
+
+function requestUnsavedClose() {
+    const config = {
+        message: 'Are you sure you want to close this? All changes will not be saved.',
+        title: 'Close Without Saving?',
+        confirmText: 'Close Anyway',
+        cancelText: 'Cancel'
+    };
+
+    if (typeof window.requestCloseWithoutSavingConfirmation === 'function') {
+        return window.requestCloseWithoutSavingConfirmation(config);
+    }
+
+    if (window.adminModal && typeof window.adminModal.confirm === 'function') {
+        return window.adminModal.confirm(
+            config.message,
+            null,
+            {
+                title: config.title,
+                confirmText: config.confirmText,
+                cancelText: config.cancelText
+            }
+        );
+    }
+
+    return Promise.resolve(false);
 }
 
 // Global instance - will be initialized automatically

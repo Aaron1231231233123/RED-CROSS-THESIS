@@ -59,8 +59,8 @@ if (!$radio->hasAttribute('required')) {
     exit(1);
 }
 
-if (!$radio->hasAttribute('checked')) {
-    fwrite(STDERR, "[FAIL] adminDonationTypeWalkIn is not checked by default." . PHP_EOL);
+if ($radio->hasAttribute('checked')) {
+    fwrite(STDERR, "[FAIL] adminDonationTypeWalkIn should not be auto-selected." . PHP_EOL);
     exit(1);
 }
 

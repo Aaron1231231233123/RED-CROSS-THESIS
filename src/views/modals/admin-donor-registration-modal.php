@@ -15,7 +15,7 @@
                     <i class="fas fa-user-plus me-2"></i>
                     <span id="modalStepTitle">Register New Donor</span>
                 </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" id="adminRegistrationCloseBtn"></button>
+                <button type="button" class="btn-close btn-close-white" aria-label="Close" id="adminRegistrationCloseBtn"></button>
             </div>
             <div class="modal-body" id="adminRegistrationModalBody" style="min-height: 400px; max-height: 70vh; overflow-y: auto;">
                 <!-- Content will be loaded dynamically -->

@@ -696,9 +696,7 @@ window.handleMedicalHistoryApprovalFromInterviewer = function(donorId, action) {
     };
     
     if (action === 'approve') {
-        // Show confirmation first
-        if (confirm('Are you sure you want to approve this donor\'s medical history?')) {
-            // Show loading state
+        const proceedApproval = () => {
             const approveBtn = document.getElementById('viewMHApproveBtn');
             const originalText = approveBtn ? approveBtn.innerHTML : '';
             if (approveBtn) {
@@ -706,7 +704,6 @@ window.handleMedicalHistoryApprovalFromInterviewer = function(donorId, action) {
                 approveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
             }
             
-            // Direct API call to update medical history
             fetch(`../../assets/php_func/update_medical_history.php`, {
                 method: 'POST',
                 headers: {
@@ -727,9 +724,7 @@ window.handleMedicalHistoryApprovalFromInterviewer = function(donorId, action) {
                 
                 if (data.success) {
                     console.log('Medical history approved successfully');
-                    // Close modal first
                     closeMedicalHistoryModal();
-                    // Then refresh donor details modal to show updated status
                     setTimeout(() => {
                         refreshDonorDetailsAfterMHApproval(currentDonorId);
                     }, 300);
@@ -745,6 +740,15 @@ window.handleMedicalHistoryApprovalFromInterviewer = function(donorId, action) {
                 console.error('Error approving medical history:', error);
                 alert('Error approving medical history: ' + error.message);
             });
+        };
+
+        if (window.adminModal && typeof window.adminModal.confirm === 'function') {
+            window.adminModal.confirm('Are you sure you want to approve this donor\'s medical history?', proceedApproval, {
+                confirmText: 'Approve',
+                cancelText: 'Keep Reviewing'
+            });
+        } else {
+            proceedApproval();
         }
     } else if (action === 'decline') {
         // Get decline reason

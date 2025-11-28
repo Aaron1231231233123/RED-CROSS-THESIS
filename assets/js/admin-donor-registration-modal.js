@@ -70,14 +70,33 @@
             const closeBtn = document.getElementById('adminRegistrationCloseBtn');
             if (closeBtn) {
                 closeBtn.addEventListener('click', function() {
-                    if (confirm('Are you sure you want to cancel? All progress will be lost.')) {
+                    requestCloseWithoutSaving().then((shouldClose) => {
+                        if (!shouldClose) return;
                         resetModal();
-                        modalInstance.hide();
-                    }
+                        if (modalInstance) {
+                            modalInstance.hide();
+                        }
+                    });
                 });
             }
         }
     });
+
+    function requestCloseWithoutSaving() {
+        if (typeof window.requestCloseWithoutSavingConfirmation === 'function') {
+            return window.requestCloseWithoutSavingConfirmation();
+        }
+
+        if (window.adminModal && typeof window.adminModal.confirm === 'function') {
+            return window.adminModal.confirm('Are you sure you want to close this? All changes will not be saved.', null, {
+                title: 'Close Without Saving?',
+                confirmText: 'Close Anyway',
+                cancelText: 'Cancel'
+            });
+        }
+
+        return Promise.resolve(true);
+    }
 
     /**
      * Open the admin donor registration modal
