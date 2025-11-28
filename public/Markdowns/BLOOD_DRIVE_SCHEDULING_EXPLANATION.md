@@ -94,17 +94,19 @@ Tracks all notification attempts:
 **Location**: `public/Dashboards/dashboard-Inventory-System.php`
 
 The admin interface includes:
-1. **Location Selection** - Admin selects from "Top Donor Locations" (pre-populated from donor data)
+1. **Venue Input** - Admin manually types the exact venue (e.g., "Santa Barbara Gymnasium")
 2. **Date & Time Input** - Admin sets the blood drive date and time
-3. **Schedule Button** - Triggers the notification process
+3. **Notification Preview** - Auto-generated JSON payload mirroring `donor_notifications.payload_json`
+4. **Schedule Button** - Triggers the notification process
 
 **Code Location** (Lines 1534-1552):
 ```javascript
 <form id="bloodDriveForm">
-    <input type="text" id="selectedLocation" readonly />
+    <input type="text" id="venueInput" placeholder="e.g., Iloilo Provincial Capitol" />
     <input type="date" id="driveDate" />
     <input type="time" id="driveTime" />
-    <button id="scheduleDriveBtn">Schedule Blood Drive</button>
+    <pre id="notificationPreview">{ "title": "...", "venue": "...", "date": "...", "time": "...", "message": "..." }</pre>
+    <button id="scheduleDriveBtn" disabled>Schedule Blood Drive</button>
 </form>
 ```
 
@@ -117,40 +119,34 @@ When admin clicks "Schedule Blood Drive":
 ```javascript
 async function sendBloodDriveNotification() {
     // 1. Get form values
-    const location = selectedLocationInput.value;
+    const venue = venueInput.value.trim();
     const date = driveDate.value;
     const time = driveTime.value;
     
-    // 2. Get coordinates for location
-    const coords = getLocationCoordinates(location);
+    const payloadPreview = buildNotificationPayload(); // { title, venue, date, time, message }
     
-    // 3. Send POST request to API
+    // 2. Send POST request to API
     const response = await fetch('/RED-CROSS-THESIS/public/api/broadcast-blood-drive.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            location: location,
+            venue,
             drive_date: date,
             drive_time: time,
-            latitude: coords.lat,
-            longitude: coords.lng,
-            radius_km: 15, // 15km radius
-            blood_types: [], // Empty = all blood types
-            custom_message: "🩸 Blood Drive Alert! ..."
+            notification_payload: payloadPreview
         })
     });
     
-    // 4. Display results
+    // 3. Display results
     showNotificationSuccess(result);
 }
 ```
 
 **Key Points**:
-- Default radius: **15km**
-- Empty `blood_types` array = **all blood types**
-- Custom message is optional
+- Map is informational only; admins type the venue manually
+- Notification preview mirrors what gets saved to `donor_notifications.payload_json`
 - Uses async/await for non-blocking operation
-- 2-minute timeout for large donor lists
+- All donors are notified (no radial filtering)
 
 ---
 
@@ -165,7 +161,7 @@ The API processes the request in the following order:
 #### 3.1 Input Validation (Lines 108-136)
 ```php
 // Validate required fields
-$required_fields = ['location', 'drive_date', 'drive_time', 'latitude', 'longitude'];
+$required_fields = ['venue', 'drive_date', 'drive_time'];
 foreach ($required_fields as $field) {
     if (!isset($input[$field]) || empty($input[$field])) {
         throw new Exception("Missing required field: $field");
@@ -177,14 +173,14 @@ foreach ($required_fields as $field) {
 ```php
 // Prepare data
 $blood_drive_data = [
-    'location' => $location,
-    'latitude' => $latitude,
-    'longitude' => $longitude,
+    'location' => $venue,
+    'latitude' => 10.7202, // fallback to Iloilo City coordinates
+    'longitude' => 122.5621,
     'drive_date' => $drive_date,
     'drive_time' => $drive_time,
-    'radius_km' => $radius_km,
-    'blood_types' => $blood_types, // Array of blood types
-    'status' => 'scheduled'
+    'radius_km' => 10,
+    'status' => 'scheduled',
+    'message_template' => $notification_payload['message']
 ];
 
 // Insert into database
@@ -193,75 +189,44 @@ $blood_drive_id = $blood_drive_response['data'][0]['id'];
 ```
 
 **Result**: Blood drive record created with unique UUID
+> ℹ️ Because venue selection is now manual, the backend falls back to Iloilo City coordinates (10.7202, 122.5621) unless explicit latitude/longitude values are supplied. Status remains `scheduled` to satisfy the table constraint.
 
-#### 3.3 Find Eligible Donors by Location (Lines 211-264)
+#### 3.3 Gather All Donors (Lines 211-264)
 
 **Process**:
-1. Fetch donors in batches (2000 per batch, max 3000 total)
-2. Filter by geographic distance using Haversine formula
-3. Only include donors with valid coordinates within radius
+1. Fetch donors in batches (2000 per batch) without geographic filters
+2. Append every donor returned by Supabase to `$eligible_donors`
+3. Continue paginating until a batch contains fewer rows than the limit
 
 ```php
-// Fetch donors in batches
 do {
-    $query = "donor_form?select=donor_id,...,permanent_latitude,permanent_longitude
-              &permanent_latitude=not.is.null
-              &permanent_longitude=not.is.null
+    $query = "donor_form?select=donor_id,surname,first_name,middle_name,mobile,email
               &limit=2000&offset=$offset";
-    
     $donors_response = supabaseRequest($query);
-    
-    // Calculate distance for each donor
-    foreach ($donors_response['data'] as $donor) {
-        $distance = calculateDistance($latitude, $longitude, 
-                                      $donor_lat, $donor_lng);
-        
-        if ($distance <= $radius_km) {
-            $eligible_donors[] = $donor;
-        }
+
+    if (empty($donors_response['data'])) {
+        break;
     }
-} while ($donors_checked < $max_donors_to_check);
+
+    $eligible_donors = array_merge($eligible_donors, $donors_response['data']);
+    $offset += $limit;
+} while (count($donors_response['data']) === $limit);
 ```
 
-**Haversine Formula** (Lines 55-65):
+> ✅ No more radius math or blood-type filtering—every donor receives the broadcast.
+
+#### 3.4 Create Pending Notification Rows
+
+- Build a single JSON payload snapshot (title, venue, date, time, message)
+- Insert `donor_notifications` rows for every donor with `status = 'pending'`
+- Batch inserts (500 per request) keep Supabase IO minimal
+
 ```php
-function calculateDistance($lat1, $lon1, $lat2, $lon2) {
-    $earthRadius = 6371; // km
-    $dLat = deg2rad($lat2 - $lat1);
-    $dLon = deg2rad($lon2 - $lon1);
-    $a = sin($dLat/2) * sin($dLat/2) + 
-        cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * 
-        sin($dLon/2) * sin($dLon/2);
-    $c = 2 * atan2(sqrt($a), sqrt(1-$a));
-    return $earthRadius * $c;
-}
+$notification_payload_json = json_encode($notification_payload);
+createPendingDonorNotifications($eligible_donors, $notification_payload_json, $blood_drive_id);
 ```
 
-#### 3.4 Filter by Blood Type (Lines 266-293)
-
-If specific blood types are specified:
-```php
-// Get blood types from screening_form
-$screening_response = supabaseRequest(
-    "screening_form?select=donor_form_id,blood_type
-     &donor_form_id=in.($donor_ids_param)
-     &blood_type=not.is.null
-     &order=created_at.desc"
-);
-
-// Map blood types to donors (use most recent)
-foreach ($screening_response['data'] as $screening) {
-    if (!isset($blood_type_map[$donor_id])) {
-        $blood_type_map[$donor_id] = $screening['blood_type'];
-    }
-}
-
-// Filter eligible donors
-$eligible_donors = array_filter($eligible_donors, function($donor) 
-    use ($blood_type_map, $blood_types) {
-    return in_array($blood_type_map[$donor['donor_id']], $blood_types);
-});
-```
+> This guarantees UI components immediately see a pending notification linked to the new `blood_drive_id`.
 
 #### 3.5 Get Push Subscriptions (Lines 295-309)
 

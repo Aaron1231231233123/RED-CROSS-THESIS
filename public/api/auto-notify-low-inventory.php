@@ -36,13 +36,19 @@ header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 session_start();
 
+// Provide sane defaults when running via CLI for testing
+if (php_sapi_name() === 'cli' && !isset($_SERVER['REQUEST_METHOD'])) {
+    $_SERVER['REQUEST_METHOD'] = 'POST';
+}
+
 // Try to load required files with error handling
 try {
-    require_once '../../assets/conn/db_conn.php';
-    require_once '../../assets/php_func/vapid_config.php';
-    require_once '../../assets/php_func/web_push_sender.php';
-    require_once '../../assets/php_func/email_sender.php';
-    require_once '../Dashboards/module/optimized_functions.php';
+    $projectRoot = realpath(__DIR__ . '/../../');
+    require_once $projectRoot . '/assets/conn/db_conn.php';
+    require_once $projectRoot . '/assets/php_func/vapid_config.php';
+    require_once $projectRoot . '/assets/php_func/web_push_sender.php';
+    require_once $projectRoot . '/assets/php_func/email_sender.php';
+    require_once $projectRoot . '/public/Dashboards/module/optimized_functions.php';
 } catch (Exception $e) {
     ob_clean();
     http_response_code(500);
@@ -56,6 +62,103 @@ try {
 
 // Clear any output that might have been generated during file includes
 ob_clean();
+
+$GLOBALS['lowInventoryNotificationLogQueue'] = [];
+
+/**
+ * Queue entries for notification_logs to avoid blocking calls
+ */
+function queueNotificationLog($donorId, $status, $reason = null, $bloodType = null, $recipient = null, $payload = null, $errorMessage = null)
+{
+    $entry = [
+        'blood_drive_id' => null,
+        'donor_id' => $donorId,
+        'notification_type' => 'push',
+        'status' => $status,
+        'reason' => $reason ?: 'low_inventory_alert',
+        'recipient' => $recipient,
+        'payload_json' => null,
+        'error_message' => $errorMessage,
+        'created_at' => date('c')
+    ];
+
+    if ($bloodType) {
+        $entry['reason'] = ($reason ?: 'low_inventory_alert') . ':' . $bloodType;
+    }
+
+    if ($payload !== null) {
+        $entry['payload_json'] = is_array($payload) ? json_encode($payload) : $payload;
+    }
+
+    $GLOBALS['lowInventoryNotificationLogQueue'][] = $entry;
+}
+
+/**
+ * Flush queued notification log entries in batches
+ */
+function flushNotificationLogQueue()
+{
+    if (empty($GLOBALS['lowInventoryNotificationLogQueue'])) {
+        return;
+    }
+
+    $chunks = array_chunk($GLOBALS['lowInventoryNotificationLogQueue'], 200);
+    foreach ($chunks as $chunk) {
+        @supabaseRequest("notification_logs", "POST", $chunk, true, 'return=minimal');
+    }
+
+    $GLOBALS['lowInventoryNotificationLogQueue'] = [];
+}
+
+/**
+ * Normalize blood type labels to uppercase valid variants
+ */
+function normalizeBloodTypeLabel($value)
+{
+    if ($value === null) {
+        return null;
+    }
+
+    $normalized = strtoupper(trim($value));
+    $validTypes = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+    return in_array($normalized, $validTypes, true) ? $normalized : null;
+}
+
+/**
+ * Build a donor-facing push payload for a specific blood type alert
+ */
+function buildLowInventoryPushPayload($bloodType, $unitsRemaining)
+{
+    $typeLabel = normalizeBloodTypeLabel($bloodType) ?: 'O+';
+    $safeUnits = max(0, (int)$unitsRemaining);
+    $unitLabel = $safeUnits === 1 ? 'unit' : 'units';
+
+    return [
+        'title' => "{$typeLabel} donors urgently needed",
+        'body' => "Our {$typeLabel} reserve is down to {$safeUnits} {$unitLabel} at the Iloilo City blood bank. Please schedule a donation as soon as you can.",
+        'icon' => '/assets/image/PRC_Logo.png',
+        'badge' => '/assets/image/PRC_Logo.png',
+        'data' => [
+            'url' => '/public/Dashboards/Dashboard-Inventory-System-Bloodbank.php',
+            'low_inventory_type' => $typeLabel,
+            'units_available' => $safeUnits,
+            'type' => 'low_inventory'
+        ],
+        'requireInteraction' => true,
+        'tag' => 'low-inventory-' . strtolower(str_replace(['+', '-'], ['-plus', '-minus'], $typeLabel))
+    ];
+}
+
+/**
+ * Track skip reasons for reporting
+ */
+function incrementSkipReason(&$results, $reasonKey)
+{
+    if (!isset($results['push']['skip_reasons'][$reasonKey])) {
+        $results['push']['skip_reasons'][$reasonKey] = 0;
+    }
+    $results['push']['skip_reasons'][$reasonKey]++;
+}
 
 /**
  * Get current blood inventory counts by blood type
@@ -166,15 +269,19 @@ try {
     // Get JSON input (optional - can be called without parameters)
     $input = json_decode(file_get_contents('php://input'), true);
     
-    // Configuration: Threshold for low inventory (default: 25)
-    $threshold = isset($input['threshold']) ? intval($input['threshold']) : 25;
+    $defaultThreshold = 10; // Trigger when a blood type drops to 10 units or below
+    $defaultRateLimit = 14; // Notify donors every 14 days (two weeks)
     
-    // Configuration: Rate limit in days (default: 1 day, configurable to 45 days)
-    $rate_limit_days = isset($input['rate_limit_days']) ? intval($input['rate_limit_days']) : 1;
+    // Configuration: Threshold for low inventory (defaults to 10 units)
+    $threshold = isset($input['threshold']) ? intval($input['threshold']) : $defaultThreshold;
+    if ($threshold < 1) {
+        $threshold = $defaultThreshold;
+    }
     
-    // Validate rate limit (must be between 1 and 45 days)
+    // Configuration: Rate limit in days (defaults to 14 days, configurable up to 45 days)
+    $rate_limit_days = isset($input['rate_limit_days']) ? intval($input['rate_limit_days']) : $defaultRateLimit;
     if ($rate_limit_days < 1 || $rate_limit_days > 45) {
-        $rate_limit_days = 1; // Default to 1 day if invalid
+        $rate_limit_days = $defaultRateLimit;
     }
     
     // Step 1: Get current blood inventory by type
@@ -182,22 +289,27 @@ try {
     
     // Step 2: Find blood types that are at or below threshold
     $low_inventory_types = [];
+    $low_inventory_counts = [];
     foreach ($inventory as $blood_type => $count) {
         if ($count <= $threshold) {
             $low_inventory_types[] = $blood_type;
+            $low_inventory_counts[$blood_type] = $count;
         }
     }
     
     // If no blood types are low, return early
     if (empty($low_inventory_types)) {
         ob_clean();
-        echo json_encode([
+        $responsePayload = [
             'success' => true,
             'message' => 'No low inventory detected. All blood types are above threshold.',
             'threshold' => $threshold,
             'inventory' => $inventory,
-            'notifications_sent' => 0
-        ]);
+            'notifications_sent' => 0,
+            'rate_limit_days' => $rate_limit_days
+        ];
+        echo json_encode($responsePayload);
+        flushNotificationLogQueue();
         ob_end_flush();
         exit();
     }
@@ -281,9 +393,12 @@ try {
             'message' => 'No push subscriptions found. No notifications sent.',
             'threshold' => $threshold,
             'low_inventory_types' => $low_inventory_types,
+            'low_inventory_counts' => $low_inventory_counts,
             'inventory' => $inventory,
-            'notifications_sent' => 0
+            'notifications_sent' => 0,
+            'rate_limit_days' => $rate_limit_days
         ]);
+        flushNotificationLogQueue();
         ob_end_flush();
         exit();
     }
@@ -294,7 +409,7 @@ try {
     // Step 4: Batch check rate limiting (optimized - check all at once instead of per donor)
     // Get all recent notifications for these donors in batches to avoid URL length issues
     $cutoff_date = date('Y-m-d\TH:i:s\Z', strtotime("-$rate_limit_days days"));
-    $recently_notified_donors = [];
+    $recently_notified_map = [];
     
     // Process rate limiting check in batches (with error handling)
     $rate_limit_batch_size = 100;
@@ -311,7 +426,7 @@ try {
         }
         
         $donor_ids_param = implode(',', $batch);
-        $recent_notifications_query = "low_inventory_notifications?select=donor_id&donor_id=in.($donor_ids_param)&notification_date=gte.$cutoff_date&status=eq.sent";
+        $recent_notifications_query = "low_inventory_notifications?select=donor_id,blood_type&donor_id=in.($donor_ids_param)&notification_date=gte.$cutoff_date&status=eq.sent";
         $recent_notifications_response = supabaseRequest($recent_notifications_query);
         
         // If rate limit check fails, continue anyway (don't block notifications)
@@ -321,8 +436,24 @@ try {
         }
         
         if (isset($recent_notifications_response['data']) && is_array($recent_notifications_response['data'])) {
-            $batch_notified = array_unique(array_column($recent_notifications_response['data'], 'donor_id'));
-            $recently_notified_donors = array_merge($recently_notified_donors, $batch_notified);
+            foreach ($recent_notifications_response['data'] as $notification) {
+                $notifiedDonorId = $notification['donor_id'] ?? null;
+                $notifiedBloodType = strtoupper($notification['blood_type'] ?? '');
+                
+                if (!$notifiedDonorId) {
+                    continue;
+                }
+                
+                if (!isset($recently_notified_map[$notifiedDonorId])) {
+                    $recently_notified_map[$notifiedDonorId] = [];
+                }
+                
+                if ($notifiedBloodType === 'ALL' || $notifiedBloodType === '') {
+                    $recently_notified_map[$notifiedDonorId]['ALL'] = true;
+                } else {
+                    $recently_notified_map[$notifiedDonorId][$notifiedBloodType] = true;
+                }
+            }
         }
         
         $batch_count++;
@@ -330,25 +461,73 @@ try {
         usleep(10000); // 0.01 second delay
     }
     
-    $recently_notified_donors = array_unique($recently_notified_donors);
-    
-    // Get donor details only for donors we'll actually notify (optimization)
+    // Get donor details for donors with push subscriptions (blood-type targeting handled later)
     $donor_details = [];
-    $donors_to_notify = array_diff($donors_with_push, $recently_notified_donors);
+    $donors_to_notify = $donors_with_push;
     
     if (!empty($donors_to_notify)) {
         $batch_size = 100;
         $donor_ids_batches = array_chunk($donors_to_notify, $batch_size);
+        $donorFormSupportsBloodType = true;
         
         foreach ($donor_ids_batches as $batch) {
             $donor_ids_param = implode(',', $batch);
-            $donors_query = "donor_form?select=donor_id,surname,first_name,middle_name,email,mobile&donor_id=in.($donor_ids_param)";
+            $selectFields = $donorFormSupportsBloodType
+                ? 'donor_id,surname,first_name,middle_name,email,mobile,blood_type'
+                : 'donor_id,surname,first_name,middle_name,email,mobile';
+            $donors_query = "donor_form?select={$selectFields}&donor_id=in.($donor_ids_param)";
             $donors_response = supabaseRequest($donors_query);
+            
+            if ((!isset($donors_response['data']) || !is_array($donors_response['data'])) && (($donors_response['code'] ?? 0) === 400)) {
+                $errorMessage = $donors_response['error'] ?? '';
+                if (stripos($errorMessage, 'blood_type') !== false) {
+                    $donorFormSupportsBloodType = false;
+                    $donors_query = "donor_form?select=donor_id,surname,first_name,middle_name,email,mobile&donor_id=in.($donor_ids_param)";
+                    $donors_response = supabaseRequest($donors_query);
+                }
+            }
             
             if (isset($donors_response['data']) && is_array($donors_response['data'])) {
                 foreach ($donors_response['data'] as $donor) {
                     $donor_id = $donor['donor_id'];
                     $donor_details[$donor_id] = $donor;
+                    if (isset($donor_details[$donor_id]['blood_type'])) {
+                        $normalizedType = normalizeBloodTypeLabel($donor_details[$donor_id]['blood_type']);
+                        if ($normalizedType) {
+                            $donor_details[$donor_id]['blood_type'] = $normalizedType;
+                        }
+                    }
+                }
+            }
+            
+            // Backfill blood types via eligibility table when donor_form doesn't expose the column
+            $missingBloodTypeIds = [];
+            foreach ($batch as $donorId) {
+                $currentType = $donor_details[$donorId]['blood_type'] ?? null;
+                if (!normalizeBloodTypeLabel($currentType)) {
+                    $missingBloodTypeIds[] = $donorId;
+                }
+            }
+            
+            if (!empty($missingBloodTypeIds)) {
+                $eligibility_param = implode(',', $missingBloodTypeIds);
+                $eligibility_query = "eligibility?select=donor_id,blood_type,created_at&donor_id=in.($eligibility_param)&order=created_at.desc";
+                $eligibility_response = supabaseRequest($eligibility_query);
+                
+                if (isset($eligibility_response['data']) && is_array($eligibility_response['data'])) {
+                    foreach ($eligibility_response['data'] as $eligibilityRow) {
+                        $eligibilityDonorId = $eligibilityRow['donor_id'] ?? null;
+                        $eligibilityType = normalizeBloodTypeLabel($eligibilityRow['blood_type'] ?? null);
+                        if (!$eligibilityDonorId || !$eligibilityType) {
+                            continue;
+                        }
+                        
+                        // Only set if we still don't have a valid blood type
+                        $existingType = $donor_details[$eligibilityDonorId]['blood_type'] ?? null;
+                        if (!normalizeBloodTypeLabel($existingType)) {
+                            $donor_details[$eligibilityDonorId]['blood_type'] = $eligibilityType;
+                        }
+                    }
                 }
             }
             
@@ -359,16 +538,18 @@ try {
     
     // Step 5: Send notifications (with rate limiting check)
     $pushSender = new WebPushSender();
-    $emailSender = new EmailSender();
-    
-    // Create summary message for low inventory types
-    $low_types_list = implode(', ', $low_inventory_types);
-    $min_units = min(array_intersect_key($inventory, array_flip($low_inventory_types)));
     
     $results = [
-        'push' => ['sent' => 0, 'failed' => 0, 'skipped' => 0, 'errors' => []],
+        'push' => [
+            'sent' => 0,
+            'failed' => 0,
+            'skipped' => 0,
+            'errors' => [],
+            'skip_reasons' => []
+        ],
         'email' => ['sent' => 0, 'failed' => 0, 'skipped' => 0],
-        'low_inventory_types' => $low_inventory_types
+        'low_inventory_types' => $low_inventory_types,
+        'low_inventory_counts' => $low_inventory_counts
     ];
     
     // Process push notifications - send ONLY to donors in push_subscriptions
@@ -378,138 +559,128 @@ try {
     $max_to_process = 500; // Limit total notifications to prevent timeout
     
     foreach ($subscriptions as $subscription) {
-        // Limit total notifications to prevent timeout
         if ($processed_count >= $max_to_process) {
             error_log("Reached notification limit ($max_to_process). Stopping to prevent timeout.");
             break;
         }
         
         $donor_id = $subscription['donor_id'];
+        $donor = $donor_details[$donor_id] ?? null;
         
-        // Skip if already notified recently (rate limiting - checked in batch above)
-        if (in_array($donor_id, $recently_notified_donors)) {
+        if (!$donor) {
             $results['push']['skipped']++;
-            logLowInventoryNotification($donor_id, 'ALL', $min_units, 'push', 'skipped', $low_inventory_types);
+            incrementSkipReason($results, 'no_donor_profile');
+            queueNotificationLog($donor_id, 'skipped', 'no_donor_profile', null, $subscription['endpoint'] ?? null);
+            continue;
+        }
+        
+        $donorName = trim(($donor['first_name'] ?? '') . ' ' . ($donor['middle_name'] ?? '') . ' ' . ($donor['surname'] ?? ''));
+        if (empty($donorName)) {
+            $donorName = 'Valued Donor';
+        }
+        
+        $donorBloodType = normalizeBloodTypeLabel($donor['blood_type'] ?? null);
+        if (!$donorBloodType) {
+            $results['push']['skipped']++;
+            incrementSkipReason($results, 'unknown_blood_type');
+            queueNotificationLog($donor_id, 'skipped', 'unknown_blood_type', null, $subscription['endpoint'] ?? null);
+            continue;
+        }
+        
+        if (!isset($low_inventory_counts[$donorBloodType])) {
+            $results['push']['skipped']++;
+            incrementSkipReason($results, 'blood_type_not_low');
+            queueNotificationLog($donor_id, 'skipped', 'blood_type_not_low', $donorBloodType, $subscription['endpoint'] ?? null);
+            continue;
+        }
+        
+        $targetBloodType = $donorBloodType;
+        $unitsRemaining = $low_inventory_counts[$targetBloodType];
+        $push_payload = buildLowInventoryPushPayload($targetBloodType, $unitsRemaining);
+        $push_payload['data']['donor_name'] = $donorName;
+        
+        $recentAll = !empty($recently_notified_map[$donor_id]['ALL']);
+        $recentType = !empty($recently_notified_map[$donor_id][$targetBloodType]);
+        if ($recentAll || $recentType) {
+            $results['push']['skipped']++;
+            incrementSkipReason($results, 'rate_limited');
+            logLowInventoryNotification($donor_id, $targetBloodType, $unitsRemaining, 'push', 'skipped');
+            queueNotificationLog($donor_id, 'skipped', 'rate_limited', $targetBloodType, $subscription['endpoint'] ?? null, $push_payload);
             continue;
         }
         
         $processed_count++;
         
-        // Get donor details if available (for personalized message)
-        $donor = $donor_details[$donor_id] ?? null;
-        $donorName = 'Valued Donor';
-        if ($donor) {
-            $donorName = trim(($donor['first_name'] ?? '') . ' ' . ($donor['middle_name'] ?? '') . ' ' . ($donor['surname'] ?? ''));
-            if (empty(trim($donorName))) {
-                $donorName = 'Valued Donor';
-            }
-        }
-        
-        // Create push notification payload (general low inventory alert)
-        $push_payload = [
-            'title' => '🩸 Low Blood Inventory Alert',
-            'body' => "URGENT: Blood inventory is critically low ($low_types_list). Your donation is urgently needed!",
-            'icon' => '/assets/image/PRC_Logo.png',
-            'badge' => '/assets/image/PRC_Logo.png',
-            'data' => [
-                'url' => '/donation-request',
-                'low_inventory_types' => $low_inventory_types,
-                'min_units' => $min_units,
-                'type' => 'low_inventory'
-            ],
-            'requireInteraction' => true,
-            'tag' => 'low-inventory-alert'
-        ];
-        
         try {
-            // Debug: Log subscription data (without sensitive keys)
-            error_log("Processing notification for donor $donor_id");
-            error_log("Endpoint: " . ($subscription['endpoint'] ?? 'MISSING'));
-            error_log("Has keys: " . (isset($subscription['keys']) ? 'YES' : 'NO'));
-            if (isset($subscription['keys'])) {
-                error_log("Has p256dh: " . (isset($subscription['keys']['p256dh']) && !empty($subscription['keys']['p256dh']) ? 'YES (length: ' . strlen($subscription['keys']['p256dh']) . ')' : 'NO/EMPTY'));
-                error_log("Has auth: " . (isset($subscription['keys']['auth']) && !empty($subscription['keys']['auth']) ? 'YES (length: ' . strlen($subscription['keys']['auth']) . ')' : 'NO/EMPTY'));
-            }
-            
             $payload_json = json_encode($push_payload);
             $result = $pushSender->sendNotification($subscription, $payload_json);
-            
-            // Debug: Log result details
-            error_log("Notification result for donor $donor_id: success=" . ($result['success'] ? 'YES' : 'NO') . ", http_code=" . ($result['http_code'] ?? 'N/A') . ", error=" . ($result['error'] ?? 'NONE'));
             
             if ($result['success']) {
                 $results['push']['sent']++;
                 
-                // Log to donor_notifications table (same as blood drive notifications)
-                // Use error suppression for faster execution
                 $notification_data = [
                     'donor_id' => $donor_id,
                     'payload_json' => $payload_json,
                     'status' => 'sent',
-                    'sent_at' => date('c')  // Use sent_at instead of created_at
+                    'sent_at' => date('c')
                 ];
-                // Note: blood_drive_id is not included for low inventory notifications
                 @supabaseRequest("donor_notifications", "POST", $notification_data);
                 
-                // Also log to low_inventory_notifications for rate limiting
-                logLowInventoryNotification($donor_id, 'ALL', $min_units, 'push', 'sent', $low_inventory_types);
+                logLowInventoryNotification($donor_id, $targetBloodType, $unitsRemaining, 'push', 'sent');
+                queueNotificationLog($donor_id, 'sent', 'low_inventory', $targetBloodType, $subscription['endpoint'] ?? null, $push_payload);
             } else {
                 $results['push']['failed']++;
                 
-                // Log detailed error information
                 $error_msg = $result['error'] ?? 'Unknown error';
                 $http_code = $result['http_code'] ?? 0;
                 $response_body = $result['response'] ?? '';
                 
-                error_log("Push notification failed for donor $donor_id: HTTP $http_code - $error_msg");
-                if ($response_body) {
-                    error_log("Response body: " . substr($response_body, 0, 500));
-                }
-                
-                // Store error details in results for API response
                 $results['push']['errors'][] = [
                     'donor_id' => $donor_id,
+                    'blood_type' => $targetBloodType,
                     'http_code' => $http_code,
                     'error' => $error_msg,
                     'response' => substr($response_body, 0, 200)
                 ];
                 
-                // Log failed notification to donor_notifications with error details
                 $notification_data = [
                     'donor_id' => $donor_id,
                     'payload_json' => $payload_json,
                     'status' => 'failed',
-                    'sent_at' => date('c'),  // Use sent_at instead of created_at
-                    'error_message' => "HTTP $http_code: $error_msg"  // Add error message
+                    'sent_at' => date('c'),
+                    'error_message' => "HTTP $http_code: $error_msg"
                 ];
                 @supabaseRequest("donor_notifications", "POST", $notification_data);
                 
-                // Also log to low_inventory_notifications for tracking
-                logLowInventoryNotification($donor_id, 'ALL', $min_units, 'push', 'failed', $low_inventory_types);
+                logLowInventoryNotification($donor_id, $targetBloodType, $unitsRemaining, 'push', 'failed');
+                queueNotificationLog($donor_id, 'failed', 'push_send_failed', $targetBloodType, $subscription['endpoint'] ?? null, $push_payload, $error_msg);
             }
         } catch (Exception $e) {
             $results['push']['failed']++;
             
-            // Log exception to donor_notifications
             $notification_data = [
                 'donor_id' => $donor_id,
-                'payload_json' => $payload_json ?? null,
+                'payload_json' => isset($payload_json) ? $payload_json : json_encode($push_payload),
                 'status' => 'failed',
-                'sent_at' => date('c')  // Use sent_at instead of created_at
+                'sent_at' => date('c'),
+                'error_message' => $e->getMessage()
             ];
             @supabaseRequest("donor_notifications", "POST", $notification_data);
             
-            // Also log to low_inventory_notifications
-            logLowInventoryNotification($donor_id, 'ALL', $min_units, 'push', 'failed', $low_inventory_types);
+            logLowInventoryNotification($donor_id, $targetBloodType, $unitsRemaining, 'push', 'failed');
+            queueNotificationLog($donor_id, 'failed', 'exception', $targetBloodType, $subscription['endpoint'] ?? null, $push_payload, $e->getMessage());
             error_log("Push notification error for donor $donor_id: " . $e->getMessage());
         }
         
-        // Small delay to avoid overwhelming the server
-        usleep(10000); // 0.01 second delay
+        if (!isset($recently_notified_map[$donor_id])) {
+            $recently_notified_map[$donor_id] = [];
+        }
+        $recently_notified_map[$donor_id][$targetBloodType] = true;
         
-        // Batch delay every 50 notifications
+        usleep(10000);
+        
         if ($processed_count % $notification_batch_size == 0) {
-            usleep(100000); // 0.1 second delay every 50 notifications
+            usleep(100000);
         }
     }
     
@@ -520,6 +691,7 @@ try {
     // Return results
     $total_notifications = $results['push']['sent']; // Only push notifications now
     
+    flushNotificationLogQueue();
     ob_clean();
     echo json_encode([
         'success' => true,
@@ -528,10 +700,12 @@ try {
         'rate_limit_days' => $rate_limit_days,
         'inventory' => $inventory,
         'low_inventory_types' => $low_inventory_types,
+        'low_inventory_counts' => $low_inventory_counts,
         'summary' => [
             'push_sent' => $results['push']['sent'],
             'push_failed' => $results['push']['failed'],
             'push_skipped' => $results['push']['skipped'],
+            'push_skip_reasons' => $results['push']['skip_reasons'],
             'email_sent' => $results['email']['sent'],
             'email_failed' => $results['email']['failed'],
             'email_skipped' => $results['email']['skipped'],
@@ -547,6 +721,7 @@ try {
     error_log("Auto-notify low inventory error: " . $e->getMessage());
     error_log("Stack trace: " . $e->getTraceAsString());
     
+    flushNotificationLogQueue();
     ob_clean();
     http_response_code(400);
     echo json_encode([
@@ -560,6 +735,7 @@ try {
     error_log("Fatal error in auto-notify-low-inventory.php: " . $e->getMessage());
     error_log("File: " . $e->getFile() . " Line: " . $e->getLine());
     
+    flushNotificationLogQueue();
     ob_clean();
     http_response_code(500);
     echo json_encode([

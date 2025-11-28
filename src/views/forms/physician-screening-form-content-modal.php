@@ -106,8 +106,14 @@
 
         // Helper: simple confirm UI fallback
         function confirmProceed(message, onConfirm){
+            if (window.adminModal && typeof window.adminModal.confirm === 'function') {
+                return window.adminModal.confirm(message, onConfirm, {
+                    confirmText: 'Proceed',
+                    cancelText: 'Cancel'
+                });
+            }
             if (window.customConfirm) return window.customConfirm(message, onConfirm);
-            if (confirm(message)) onConfirm && onConfirm();
+            if (typeof onConfirm === 'function') onConfirm();
         }
 
         // Render-only: fetch latest screening/physical data and generate summary

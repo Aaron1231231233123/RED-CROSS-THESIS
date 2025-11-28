@@ -11,6 +11,8 @@
     const API_BASE = '../api';
     const CONTENT_API = `${API_BASE}/admin-donor-registration-content.php`;
     const SUBMIT_API = `${API_BASE}/admin-donor-registration-submit.php`;
+    const DUPLICATE_CHECK_ENDPOINT = '../../assets/php_func/check_duplicate_donor_admin.php';
+    const DUPLICATE_UPDATE_ENDPOINT = '../../assets/php_func/update_donor_needs_review.php';
 
     let currentStep = 1;
     let currentDonorId = null;
@@ -70,14 +72,33 @@
             const closeBtn = document.getElementById('adminRegistrationCloseBtn');
             if (closeBtn) {
                 closeBtn.addEventListener('click', function() {
-                    if (confirm('Are you sure you want to cancel? All progress will be lost.')) {
+                    requestCloseWithoutSaving().then((shouldClose) => {
+                        if (!shouldClose) return;
                         resetModal();
-                        modalInstance.hide();
-                    }
+                        if (modalInstance) {
+                            modalInstance.hide();
+                        }
+                    });
                 });
             }
         }
     });
+
+    function requestCloseWithoutSaving() {
+        if (typeof window.requestCloseWithoutSavingConfirmation === 'function') {
+            return window.requestCloseWithoutSavingConfirmation();
+        }
+
+        if (window.adminModal && typeof window.adminModal.confirm === 'function') {
+            return window.adminModal.confirm('Are you sure you want to close this? All changes will not be saved.', null, {
+                title: 'Close Without Saving?',
+                confirmText: 'Close Anyway',
+                cancelText: 'Cancel'
+            });
+        }
+
+        return Promise.resolve(true);
+    }
 
     /**
      * Open the admin donor registration modal
@@ -234,6 +255,9 @@
 
         // Initialize section navigation
         initializeSectionNavigation();
+
+        // Wire up duplicate checker once the form is available
+        initializeAdminDuplicateChecker();
     }
 
     /**
@@ -778,18 +802,23 @@
                 return;
             }
 
-            // Hide current section
-            currentSectionEl.classList.remove('active');
-
-            // Show next section
-            if (currentSection < 5) {
-                const nextSection = currentSection + 1;
-                const nextSectionEl = document.getElementById(`section${nextSection}`);
-                if (nextSectionEl) {
-                    nextSectionEl.classList.add('active');
-                    updateStepIndicator(nextSection);
+            const advanceToNext = () => {
+                if (currentSection < 5) {
+                    const nextSection = currentSection + 1;
+                    const nextSectionEl = document.getElementById(`section${nextSection}`);
+                    if (nextSectionEl) {
+                        currentSectionEl.classList.remove('active');
+                        nextSectionEl.classList.add('active');
+                        updateStepIndicator(nextSection);
+                    }
                 }
+            };
+
+            if (maybeHandleDuplicateCheck(currentSection, advanceToNext)) {
+                return;
             }
+
+            advanceToNext();
         };
 
         window.adminRegistrationPrevSection = function(currentSection) {
@@ -809,6 +838,75 @@
                 }
             }
         };
+    }
+
+    /**
+     * Initialize duplicate checker after the personal data form loads
+     */
+    function initializeAdminDuplicateChecker() {
+        if (typeof DuplicateDonorCheckerAdmin === 'undefined') {
+            console.warn('[Admin Registration] Duplicate checker script not loaded');
+            return;
+        }
+
+        try {
+            window.duplicateDonorCheckerAdmin = new DuplicateDonorCheckerAdmin({
+                apiEndpoint: DUPLICATE_CHECK_ENDPOINT,
+                updateApiEndpoint: DUPLICATE_UPDATE_ENDPOINT,
+                enableAutoCheck: true,
+                debounceDelay: 1500
+            });
+        } catch (error) {
+            console.error('[Admin Registration] Failed to initialize duplicate checker', error);
+        }
+    }
+
+    /**
+     * Run duplicate check before advancing past section 2
+     */
+    function maybeHandleDuplicateCheck(currentSection, proceedCallback) {
+        if (currentSection !== 2) {
+            return false;
+        }
+        if (!window.duplicateDonorCheckerAdmin || typeof window.duplicateDonorCheckerAdmin.performCheck !== 'function') {
+            return false;
+        }
+
+        const form = document.getElementById('adminDonorPersonalDataForm');
+        if (!form) {
+            return false;
+        }
+
+        const section = document.getElementById('section2');
+        const nextButton = section ? section.querySelector('.btn-primary.btn-navigate') : null;
+        const originalText = nextButton ? nextButton.innerHTML : '';
+
+        if (nextButton) {
+            nextButton.disabled = true;
+            nextButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Checking...';
+        }
+
+        form.removeAttribute('data-duplicate-checked-admin');
+
+        window.duplicateDonorCheckerAdmin.performCheck(true)
+            .then(() => {
+                const cleared = form.getAttribute('data-duplicate-checked-admin') === 'true';
+                if (cleared) {
+                    form.removeAttribute('data-duplicate-checked-admin');
+                    proceedCallback();
+                }
+            })
+            .catch((error) => {
+                console.error('Duplicate check failed:', error);
+            })
+            .finally(() => {
+                if (nextButton) {
+                    nextButton.disabled = false;
+                    nextButton.innerHTML = originalText || 'Next >';
+                }
+            });
+
+        return true;
     }
 
     /**

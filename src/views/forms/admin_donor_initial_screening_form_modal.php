@@ -59,8 +59,7 @@
                                             name="donation-type"
                                             id="adminDonationTypeWalkIn"
                                             value="Walk-in"
-                                            required
-                                            checked>
+                                            required>
                                         <label class="form-check-label" for="adminDonationTypeWalkIn">Walk-in</label>
                                     </div>
                                     <small class="text-muted">Only walk-in donations are currently available for admin processing.</small>

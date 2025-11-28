@@ -175,41 +175,37 @@ function handleApproveClick(e) {
         }
 
         // Confirm approval intent; we do not submit MH here. Screening will perform final approval.
-        if (typeof showConfirmApproveModal === 'function') {
-            showConfirmApproveModal(function(){
-                try {
-                    // Close MH modal cleanly
-                    const mhEl = document.getElementById('medicalHistoryModal');
-                    if (mhEl) {
-                        const mh = bootstrap.Modal.getInstance(mhEl) || new bootstrap.Modal(mhEl);
-                        try { mh.hide(); } catch(_) {}
-                        setTimeout(() => {
-                            try { mhEl.classList.remove('show'); mhEl.style.display = 'none'; mhEl.setAttribute('aria-hidden','true'); } catch(_) {}
-                            // Avoid manual backdrop removal; Bootstrap handles this
-                            try { /* no-op */ } catch(_) {}
-                            try { document.body.classList.remove('modal-open'); document.body.style.overflow = ''; document.body.style.paddingRight = ''; } catch(_) {}
-                        }, 40);
-                    }
-                } catch(_) {}
+        const proceedToScreening = function(){
+            try {
+                const mhEl = document.getElementById('medicalHistoryModal');
+                if (mhEl) {
+                    const mh = bootstrap.Modal.getInstance(mhEl) || new bootstrap.Modal(mhEl);
+                    try { mh.hide(); } catch(_) {}
+                    setTimeout(() => {
+                        try { mhEl.classList.remove('show'); mhEl.style.display = 'none'; mhEl.setAttribute('aria-hidden','true'); } catch(_) {}
+                        try { document.body.classList.remove('modal-open'); document.body.style.overflow = ''; document.body.style.paddingRight = ''; } catch(_) {}
+                    }, 40);
+                }
+            } catch(_) {}
 
-                // Open Initial Screening modal (physician copy)
-                setTimeout(function(){
-                    if (typeof window.showScreeningFormModal === 'function') {
-                        window.showScreeningFormModal(String(donorId));
-                    } else {
-                        showMedicalHistoryToast('Error', 'Screening modal not available. Please refresh.', 'error');
-                    }
-                }, 120);
-            });
-        } else {
-            // Fallback without custom confirmation
-            if (confirm('Proceed to Initial Screening? (Medical History approval will be finalized there)')) {
+            setTimeout(function(){
                 if (typeof window.showScreeningFormModal === 'function') {
                     window.showScreeningFormModal(String(donorId));
                 } else {
                     showMedicalHistoryToast('Error', 'Screening modal not available. Please refresh.', 'error');
                 }
-            }
+            }, 120);
+        };
+
+        if (typeof showConfirmApproveModal === 'function') {
+            showConfirmApproveModal(proceedToScreening);
+        } else if (window.adminModal && typeof window.adminModal.confirm === 'function') {
+            window.adminModal.confirm('Proceed to Initial Screening? (Medical History approval will be finalized there)', proceedToScreening, {
+                confirmText: 'Proceed',
+                cancelText: 'Cancel'
+            });
+        } else {
+            proceedToScreening();
         }
     } catch (err) {
         console.error('handleApproveClick error:', err);

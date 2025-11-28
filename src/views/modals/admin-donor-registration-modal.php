@@ -15,7 +15,7 @@
                     <i class="fas fa-user-plus me-2"></i>
                     <span id="modalStepTitle">Register New Donor</span>
                 </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" id="adminRegistrationCloseBtn"></button>
+                <button type="button" class="btn-close btn-close-white" aria-label="Close" id="adminRegistrationCloseBtn"></button>
             </div>
             <div class="modal-body" id="adminRegistrationModalBody" style="min-height: 400px; max-height: 70vh; overflow-y: auto;">
                 <!-- Content will be loaded dynamically -->
@@ -136,4 +136,7 @@ if (file_exists($screeningModalPath)) {
     margin: 15px 0;
 }
 </style>
+
+<!-- Admin duplicate checker -->
+<script defer src="../../assets/js/duplicate_donor_check_admin.js"></script>
 

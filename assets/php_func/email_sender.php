@@ -60,7 +60,7 @@ class EmailSender {
                 $donorName = 'Valued Donor';
             }
             
-            $subject = '🩸 Blood Drive Alert - ' . ($bloodDrive['location'] ?? 'Near You');
+            $subject = '🩸 Blood Drive Alert - ' . ($bloodDrive['venue'] ?? $bloodDrive['location'] ?? 'Near You');
             
             // Generate email template with error handling
             try {
@@ -141,7 +141,7 @@ class EmailSender {
      */
     private function generateEmailTemplate($donorName, $bloodDrive) {
         try {
-            $location = $bloodDrive['location'] ?? 'Selected Location';
+            $location = $bloodDrive['venue'] ?? $bloodDrive['location'] ?? 'Selected Venue';
             $date = $bloodDrive['drive_date'] ?? '';
             $time = $bloodDrive['drive_time'] ?? '';
             $bloodDriveId = $bloodDrive['id'] ?? '';

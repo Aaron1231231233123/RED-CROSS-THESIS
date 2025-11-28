@@ -2165,6 +2165,7 @@ function getCacheStats() {
     </div>
     <!-- Bootstrap 5.3 JS and Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../../assets/js/admin-feedback-modal.js"></script>
     <script>
         // Immediate cleanup to prevent loading text flash on page refresh
         (function() {
@@ -3413,8 +3414,13 @@ function getCacheStats() {
                 }
             } else {
                 // Fallback: direct approval
-                if (confirm('Are you sure you want to approve this donor\'s medical history?')) {
-                    processMedicalHistoryApproval(donorId);
+                const approvalMessage = 'Are you sure you want to approve this donor\'s medical history?';
+                const approveAction = () => processMedicalHistoryApproval(donorId);
+                if (window.adminModal && typeof window.adminModal.confirm === 'function') {
+                    window.adminModal.confirm(approvalMessage, approveAction, {
+                        confirmText: 'Approve',
+                        cancelText: 'Keep Reviewing'
+                    });
                 }
             }
         }

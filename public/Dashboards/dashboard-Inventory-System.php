@@ -1446,11 +1446,11 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                 </div>
                                 <div class="card" id="locationActionsCard">
                                     <div class="card-body p-3">
-                                        <h6 class="mb-3">Blood Drive Actions</h6>
+                                        <h6 class="mb-3">Schedule Blood Drive</h6>
                                         <form id="bloodDriveForm">
-                                            <div class="mb-2">
-                                                <label for="selectedLocation" class="form-label">Selected Location</label>
-                                                <input type="text" class="form-control" id="selectedLocation" name="selectedLocation" readonly placeholder="Select a location from Top Donor Locations">
+                                            <div class="mb-3">
+                                                <label for="venueInput" class="form-label">Venue</label>
+                                                <input type="text" class="form-control" id="venueInput" name="venue" placeholder="e.g., Santa Barbara Gymnasium">
                                             </div>
                                             <div class="row mb-3">
                                                 <div class="col-6">
@@ -1462,6 +1462,20 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                                     <input type="time" class="form-control" id="driveTime" name="driveTime">
                                                 </div>
                                             </div>
+                                            <div class="mb-3">
+                                                <label class="form-label d-flex justify-content-between align-items-center">
+                                                    <span>Notification Preview</span>
+                                                    <small class="text-muted">Auto-updates</small>
+                                                </label>
+                                                <pre id="notificationPreview" class="bg-light p-3 rounded border mb-0" style="font-size: 0.85rem; max-height: 220px; overflow:auto;">{
+    "title": "Blood Drive Notification",
+    "venue": "",
+    "date": "",
+    "time": "",
+    "message": "Fill in the form to preview the notification."
+}</pre>
+                                            </div>
+                                            <small class="text-muted d-block mb-3">All donors will receive this notification through the PWA.</small>
                                             <div class="d-flex gap-2">
                                                 <button type="button" class="btn btn-danger w-100" id="scheduleDriveBtn" disabled>Schedule Blood Drive</button>
                                             </div>
@@ -2734,15 +2748,7 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                             // Attach click event listeners to the newly created location items
                             attachLocationClickListeners();
 
-                            const selectedLocationInput = document.getElementById('selectedLocation');
-                            if (selectedLocationInput) {
-                                if (currentCityFilter === 'all') {
-                                    selectedLocationInput.value = '';
-                                } else {
-                                    selectedLocationInput.value = currentCityFilter;
-                                }
-                            }
-                            checkEnableButtons();
+                            
                         }
                     }
 
@@ -2821,48 +2827,28 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     // Function to attach click event listeners to location items
                     function attachLocationClickListeners() {
                         const locationListEl = document.getElementById('locationList');
-                        const selectedLocationInput = document.getElementById('selectedLocation');
-                        const scheduleBtn = document.getElementById('scheduleDriveBtn');
-                        const driveDate = document.getElementById('driveDate');
-                        const driveTime = document.getElementById('driveTime');
                         
-                        if (!locationListEl || !selectedLocationInput) {
-                            console.log('Location elements not found');
+                        if (!locationListEl) {
+                            console.log('Location list element not found');
                             return;
                         }
                         
                         Array.from(locationListEl.querySelectorAll('li')).forEach(li => {
-                            // Remove any existing event listeners to avoid duplicates
                             li.replaceWith(li.cloneNode(true));
                         });
                         
-                        // Re-query after cloning to get fresh elements
                         Array.from(locationListEl.querySelectorAll('li')).forEach(li => {
                             li.style.cursor = 'pointer';
                             li.addEventListener('click', function() {
                                 const clickedCity = (this.dataset.city || '').trim();
                                 const displayName = this.querySelector('strong') ? this.querySelector('strong').textContent : clickedCity;
-                                console.log('Location clicked:', displayName || 'Unknown');
+                                console.log('Location clicked for insights:', displayName || 'Unknown');
                                 
-                                // Remove highlight from all
                                 Array.from(locationListEl.querySelectorAll('li')).forEach(l => l.classList.remove('bg-light', 'fw-bold'));
-                                
-                                // Highlight selected
                                 this.classList.add('bg-light', 'fw-bold');
                                 
-                                if (clickedCity === 'all') {
-                                    currentCityFilter = 'all';
-                                    selectedLocationInput.value = '';
-                                } else {
-                                    currentCityFilter = displayName;
-                                    selectedLocationInput.value = displayName;
-                                }
-                                console.log('Selected location set to:', selectedLocationInput.value || 'All Locations');
+                                currentCityFilter = clickedCity === 'all' ? 'all' : displayName;
                                 
-                                // Enable buttons if date and time are set
-                                checkEnableButtons();
-
-                                // Update heatmap based on selected city filter
                                 if (mapInitialized) {
                                     processAddresses();
                                 }
@@ -2872,27 +2858,27 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     
                     // Function to check if buttons should be enabled
                     function checkEnableButtons() {
-                        const selectedLocationInput = document.getElementById('selectedLocation');
+                        const venueInput = document.getElementById('venueInput');
                         const scheduleBtn = document.getElementById('scheduleDriveBtn');
                         const driveDate = document.getElementById('driveDate');
                         const driveTime = document.getElementById('driveTime');
                         
-                        if (!selectedLocationInput || !scheduleBtn || !driveDate || !driveTime) {
+                        if (!venueInput || !scheduleBtn || !driveDate || !driveTime) {
                             return;
                         }
                         
-                        const hasLocation = selectedLocationInput.value.trim() !== '';
+                        const hasVenue = venueInput.value.trim() !== '';
                         const hasDate = driveDate.value.trim() !== '';
                         const hasTime = driveTime.value.trim() !== '';
                         
-                        const allFieldsSet = hasLocation && hasDate && hasTime;
+                        const allFieldsSet = hasVenue && hasDate && hasTime;
                         
                         console.log('Button check:', {
-                            hasLocation,
+                            hasVenue,
                             hasDate,
                             hasTime,
                             allFieldsSet,
-                            locationValue: selectedLocationInput.value,
+                            venueValue: venueInput.value,
                             dateValue: driveDate.value,
                             timeValue: driveTime.value
                         });
@@ -2907,6 +2893,7 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
 
     <!-- Bootstrap 5.3 JS and Popper -->
     <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script defer src="../../assets/js/admin-feedback-modal.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             window.showConfirmationModal = function() {
@@ -2928,50 +2915,98 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
     </script>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Connect form inputs to button state checking
+        const venueInput = document.getElementById('venueInput');
         const driveDate = document.getElementById('driveDate');
         const driveTime = document.getElementById('driveTime');
-        
-        if (driveDate && driveTime) {
-            driveDate.addEventListener('input', checkEnableButtons);
-            driveTime.addEventListener('input', checkEnableButtons);
-        }
-        // Real notification actions
+        const previewElement = document.getElementById('notificationPreview');
         const scheduleBtn = document.getElementById('scheduleDriveBtn');
-        
+        const originalScheduleBtnLabel = scheduleBtn ? scheduleBtn.innerHTML : '';
+
+        function formatTimeLabel(timeValue) {
+            if (!timeValue || !/^\d{2}:\d{2}/.test(timeValue)) {
+                return timeValue || '';
+            }
+            const [hourStr, minute] = timeValue.split(':');
+            let hour = parseInt(hourStr, 10);
+            const period = hour >= 12 ? 'PM' : 'AM';
+            hour = hour % 12 || 12;
+            return `${hour}:${minute} ${period}`;
+        }
+
+        function formatDateLabel(dateValue) {
+            if (!dateValue) {
+                return '';
+            }
+            const parsed = new Date(dateValue);
+            if (Number.isNaN(parsed.getTime())) {
+                return dateValue;
+            }
+            return parsed.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        }
+
+        function buildNotificationPayload() {
+            const venue = (venueInput?.value || '').trim();
+            const date = driveDate?.value || '';
+            const time = driveTime?.value || '';
+            const dateLabel = formatDateLabel(date);
+            const timeLabel = formatTimeLabel(time);
+            const title = venue ? `Blood Drive at ${venue}` : 'Blood Drive Notification';
+            const message = venue && date && time
+                ? `Join us at ${venue} on ${dateLabel || date} at ${timeLabel || time}.`
+                : 'Complete the form to generate the notification.';
+            return {
+                title,
+                venue,
+                date,
+                time,
+                message
+            };
+        }
+
+        function updateNotificationPreview() {
+            if (!previewElement) return;
+            const payload = buildNotificationPayload();
+            previewElement.textContent = JSON.stringify(payload, null, 2);
+        }
+
+        [venueInput, driveDate, driveTime].forEach(field => {
+            if (field) {
+                field.addEventListener('input', () => {
+                    checkEnableButtons();
+                    updateNotificationPreview();
+                });
+            }
+        });
+
+        updateNotificationPreview();
+        checkEnableButtons();
+
         if (scheduleBtn) {
-            scheduleBtn.addEventListener('click', function() {
-                sendBloodDriveNotification();
-            });
+            scheduleBtn.addEventListener('click', sendBloodDriveNotification);
         }
         
         // Function to send blood drive notifications
         async function sendBloodDriveNotification() {
-            const selectedLocationInput = document.getElementById('selectedLocation');
-            const driveDate = document.getElementById('driveDate');
-            const driveTime = document.getElementById('driveTime');
+            if (!scheduleBtn) {
+                return;
+            }
+            const venue = (venueInput?.value || '').trim();
+            const date = driveDate?.value || '';
+            const time = driveTime?.value || '';
             
-            const location = selectedLocationInput.value;
-            const date = driveDate.value;
-            const time = driveTime.value;
-            
-            if (!location || !date || !time) {
-                alert('Please fill in all fields: Location, Date, and Time');
+            if (!venue || !date || !time) {
+                alert('Please fill in all fields: Venue, Date, and Time');
                 return;
             }
             
-            // Get coordinates for the selected location
-            const coords = getLocationCoordinates(location);
-            if (!coords) {
-                alert('Could not find coordinates for the selected location');
-                return;
-            }
-            
-            // Show loading state
-            const scheduleBtn = document.getElementById('scheduleDriveBtn');
+            const notificationPayload = buildNotificationPayload();
             
             scheduleBtn.disabled = true;
-            scheduleBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+            scheduleBtn.classList.add('btn-loading');
+            scheduleBtn.innerHTML = `
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                <span>Sending...</span>
+            `;
             
             try {
                 const response = await fetch('/RED-CROSS-THESIS/public/api/broadcast-blood-drive.php', {
@@ -2980,74 +3015,68 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        location: location,
+                        venue,
                         drive_date: date,
                         drive_time: time,
-                        latitude: coords.lat,
-                        longitude: coords.lng,
-                        radius_km: 15, // 15km radius
-                        blood_types: [], // Empty array = all blood types
-                        custom_message: `🩸 Blood Drive Alert! A blood drive is scheduled in ${location} on ${date} at ${time}. Your blood type is urgently needed! Please consider donating.`
+                        notification_payload: notificationPayload
                     })
                 });
+                const rawText = await response.text();
+                let result = null;
+                try {
+                    result = rawText ? JSON.parse(rawText) : null;
+                } catch (parseErr) {
+                    console.error('Notification response parse error:', parseErr, rawText);
+                    throw new Error('Server returned invalid JSON. Please check server logs.');
+                }
                 
-                const result = await response.json();
-                
-                if (result.success) {
-                    // Show success message
-                    showNotificationSuccess(result);
+                if (response.ok && result?.success) {
+                    showNotificationSuccess(result, notificationPayload);
                     
-                    // Reset form
-                    selectedLocationInput.value = '';
-                    driveDate.value = '';
-                    driveTime.value = '';
+                    if (venueInput) venueInput.value = '';
+                    if (driveDate) driveDate.value = '';
+                    if (driveTime) driveTime.value = '';
+                    updateNotificationPreview();
                     checkEnableButtons();
                     
-                    // Remove highlights from location list
                     const locationListEl = document.getElementById('locationList');
-                    Array.from(locationListEl.querySelectorAll('li')).forEach(l => l.classList.remove('bg-light', 'fw-bold'));
+                    if (locationListEl) {
+                        Array.from(locationListEl.querySelectorAll('li')).forEach(l => l.classList.remove('bg-light', 'fw-bold'));
+                    }
                     
                 } else {
-                    throw new Error(result.message || 'Failed to send notifications');
+                    const serverMessage = result?.message || rawText || 'Failed to send notifications';
+                    throw new Error(serverMessage);
                 }
                 
             } catch (error) {
                 console.error('Notification error:', error);
                 alert('Failed to send notifications: ' + error.message);
             } finally {
-                // Reset button states
-                const scheduleBtn = document.getElementById('scheduleDriveBtn');
-                
                 scheduleBtn.disabled = false;
-                scheduleBtn.innerHTML = 'Schedule Blood Drive';
+                scheduleBtn.classList.remove('btn-loading');
+                scheduleBtn.innerHTML = originalScheduleBtnLabel || 'Schedule Blood Drive';
                 checkEnableButtons();
             }
         }
         
-        // Function to get coordinates for a location
-        function getLocationCoordinates(locationName) {
-            // Check if location exists in our predefined coordinates
-            for (const [city, coords] of Object.entries(locationCoordinates)) {
-                if (locationName.toLowerCase().includes(city.toLowerCase())) {
-                    return coords;
-                }
-            }
-            
-            // If not found in predefined, return Iloilo City as default
-            return { lat: 10.7202, lng: 122.5621 };
-        }
-        
         // Function to show success notification
-        function showNotificationSuccess(result) {
+        function showNotificationSuccess(result, previewPayload = null) {
             const successDiv = document.createElement('div');
             successDiv.className = 'alert alert-success alert-dismissible fade show';
             successDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 400px;';
+            const venueLabel = previewPayload?.venue || 'Scheduled Venue';
+            const summary = result.summary || {};
+            const notifiedCount = summary.total_notified ?? ((result.results?.push?.sent || 0) + (result.results?.email?.sent || 0));
+            const failedCount = summary.total_failed ?? ((result.results?.push?.failed || 0) + (result.results?.email?.failed || 0));
+            const donorsFound = summary.total_donors_found ?? result.total_donors_found ?? notifiedCount;
+
             successDiv.innerHTML = `
                 <h6><i class="fas fa-check-circle"></i> Blood Drive Notifications Sent!</h6>
-                <p class="mb-1"><strong>Location:</strong> ${result.results ? 'Multiple locations' : 'Selected location'}</p>
-                <p class="mb-1"><strong>Donors Found:</strong> ${result.total_donors_found || 0}</p>
-                <p class="mb-1"><strong>Notifications Sent:</strong> ${result.results?.sent || 0}</p>
-                <p class="mb-1"><strong>Failed:</strong> ${result.results?.failed || 0}</p>
+                <p class="mb-1"><strong>Venue:</strong> ${venueLabel}</p>
+                <p class="mb-1"><strong>Donors Notified:</strong> ${notifiedCount}</p>
+                <p class="mb-1"><strong>Failed:</strong> ${failedCount}</p>
+                <p class="mb-1"><strong>Donors Found:</strong> ${donorsFound}</p>
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             `;
             

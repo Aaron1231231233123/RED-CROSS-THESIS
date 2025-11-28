@@ -196,15 +196,13 @@ class DuplicateDonorCheckerAdmin {
         
         if (goBackBtn) {
             goBackBtn.addEventListener('click', () => {
-                // Add confirmation dialog for duplicate modal close
-                if (confirm('Are you sure you want to cancel? You will lose any progress made on this form.')) {
-                    // Hide the modal
+                this.requestUnsavedClose().then((shouldExit) => {
+                    if (!shouldExit) return;
                     const modalInstance = bootstrap.Modal.getInstance(modal);
                     if (modalInstance) {
                         modalInstance.hide();
                     }
                     
-                    // Close the admin registration modal
                     const adminModal = document.getElementById('adminDonorRegistrationModal');
                     if (adminModal) {
                         const adminModalInstance = bootstrap.Modal.getInstance(adminModal);
@@ -212,7 +210,7 @@ class DuplicateDonorCheckerAdmin {
                             adminModalInstance.hide();
                         }
                     }
-                }
+                });
             });
         }
         
@@ -225,6 +223,33 @@ class DuplicateDonorCheckerAdmin {
                 }
             });
         }
+    }
+    
+    requestUnsavedClose() {
+        const config = {
+            message: 'Are you sure you want to close this? All changes will not be saved.',
+            title: 'Close Without Saving?',
+            confirmText: 'Close Anyway',
+            cancelText: 'Cancel'
+        };
+
+        if (typeof window.requestCloseWithoutSavingConfirmation === 'function') {
+            return window.requestCloseWithoutSavingConfirmation(config);
+        }
+
+        if (window.adminModal && typeof window.adminModal.confirm === 'function') {
+            return window.adminModal.confirm(
+                config.message,
+                null,
+                {
+                    title: config.title,
+                    confirmText: config.confirmText,
+                    cancelText: config.cancelText
+                }
+            );
+        }
+
+        return Promise.resolve(false);
     }
     
     /**
