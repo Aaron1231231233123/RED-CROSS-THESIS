@@ -3311,10 +3311,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                             deferralStatusContent.innerHTML = `
                                 <div class=\"d-flex justify-content-center\">\n                                    <div class=\"spinner-border text-primary\" role=\"status\">\n                                        <span class=\"visually-hidden\">Loading...</span>\n                                    </div>\n                                </div>`;
                             
-                            // Hide proceed button in read-only mode
+                            // Show proceed button but disable it in read-only mode (not allowed to proceed)
                             const proceedButton = getProceedButton();
                             if (proceedButton && proceedButton.style) {
-                                proceedButton.style.display = 'none';
+                                proceedButton.style.display = 'inline-block';
+                                proceedButton.disabled = true;
+                                proceedButton.style.opacity = '0.8';
+                                proceedButton.style.cursor = 'not-allowed';
                                 proceedButton.textContent = 'Proceed to Medical History';
                             }
                             if (deferralStatusModal) deferralStatusModal.show();
@@ -3354,7 +3357,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                 </div>
                             </div>`;
                         const proceedButton = getProceedButton();
-                        if (proceedButton && proceedButton.style) proceedButton.style.display = 'none';
+                        if (proceedButton && proceedButton.style) {
+                            proceedButton.style.display = 'inline-block';
+                            proceedButton.disabled = true;
+                            proceedButton.style.opacity = '0.8';
+                            proceedButton.style.cursor = 'not-allowed';
+                        }
                         if (deferralStatusModal) deferralStatusModal.show();
                         fetchDonorStatusInfo(donorId);
                         // Mark for review handler
@@ -3739,15 +3747,21 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                             
                             // Fitness Result - map from eligibility status
                             let fitnessResult = 'Eligible';
-                            if (eligibility.status === 'deferred' || eligibility.status === 'temporary_deferred') {
+                            if (eligibility.status === 'deferred' || eligibility.status === 'temporary_deferred' || 
+                                (eligibility.disapproval_reason && eligibility.disapproval_reason.trim() !== '')) {
                                 fitnessResult = 'Deferred';
                             } else if (eligibility.status === 'eligible') {
                                 fitnessResult = 'Eligible';
                             }
                             
-                            // Remarks - show Approved if both medical_history_id and screening_form_id exist
+                            // Remarks - If disapproval_reason exists and is not empty/null, show Deferred
+                            // Otherwise show Approved if both medical_history_id and screening_form_id exist
                             let remarks = 'Pending';
-                            if (eligibility.medical_history_id && eligibility.screening_id) {
+                            const disapprovalReason = eligibility.disapproval_reason;
+                            if (disapprovalReason !== null && disapprovalReason !== undefined && 
+                                String(disapprovalReason).trim() !== '') {
+                                remarks = 'Deferred';
+                            } else if (eligibility.medical_history_id && eligibility.screening_id) {
                                 remarks = 'Approved';
                             }
                             
@@ -3801,6 +3815,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     // Donation History Table (based on eligibility table - show all records) - SECOND
                     const donationEligibilityRecords = Array.isArray(donor.eligibility) ? donor.eligibility : (donor.eligibility ? [donor.eligibility] : []);
                     let donationRows = '';
+                    let hasValidDonationRows = false;
                     
                     // Add a new empty row at the TOP if needs_review is true (for pending review)
                     if (donor.needs_review === true || donor.needs_review === 'true' || donor.needs_review === 1) {
@@ -3811,10 +3826,18 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                  <td class="text-center">-</td>
                                  <td class="text-center"><span class="text-warning">Pending</span></td>
                             </tr>`;
+                         hasValidDonationRows = true;
                     }
                     
                     if (donationEligibilityRecords.length > 0) {
                         donationEligibilityRecords.forEach((el, index) => {
+                            // Exclude records with status 'temporary deferred' or 'permanently deferred'
+                            const status = (el.status || '').toLowerCase().trim();
+                            if (status === 'temporary_deferred' || status === 'temporary deferred' || 
+                                status === 'permanently_deferred' || status === 'permanently deferred') {
+                                return; // Skip this record
+                            }
+                            
                             // Only show records that have actual donation data
                             if (el.start_date || el.created_at) {
                                 // Determine medical history status with color coding
@@ -3839,13 +3862,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                          <td class="text-center">${safe(formatDate(el.end_date) || '-')}</td>
                                          <td class="text-center"><span class="${statusClass}">${safe(medicalStatus)}</span></td>
                                      </tr>`;
+                                 hasValidDonationRows = true;
                             }
                         });
                     }
                     
-                    if (!donationRows) {
-                        donationRows = `<tr><td colspan="4" class="text-center text-muted">No donation history available</td></tr>`;
-                    }
+                    // Only show donation history section if there are valid rows
+                    if (hasValidDonationRows && donationRows && donationRows.trim() !== '') {
                         donorInfoHTML += `
                          <div class="mb-3">
                              <h6 class="mb-2" style="color:#b22222; font-weight:600; border-bottom: 2px solid #b22222; padding-bottom: 0.3rem;">Donation History</h6>
@@ -3863,6 +3886,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                 </table>
                                 </div>
                         </div>`;
+                    }
                     }
                     
                     // If returning, enrich assessment section with eligibility details (all records)
@@ -3903,20 +3927,28 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                             }
                             const hematology = el.collection_successful ? 'Pass' : (el.collection_successful === false ? 'Fail' : 'Pass');
                             const physician = '-'; // Default as shown in image
-                            const fitnessResult = el.status === 'eligible' ? 'Eligible' : 
-                                                el.status === 'deferred' ? 'Deferred' : 
-                                                el.status === 'temporary_deferred' ? 'Temporary Deferred' : 'Eligible';
+                            // Fitness Result - if data is Deferred, change to Deferred
+                            const fitnessResult = (el.status === 'deferred' || el.status === 'temporary_deferred' || 
+                                                  (el.disapproval_reason && el.disapproval_reason.trim() !== '')) ? 'Deferred' : 
+                                                el.status === 'eligible' ? 'Eligible' : 'Eligible';
                             let remarks = 'Pending';
-                            const parts = [];
-                            if (el.disapproval_reason) parts.push(el.disapproval_reason);
-                            if (el.donor_reaction) parts.push(el.donor_reaction);
-                            const details = parts.join(' | ');
-                            const success = el.collection_successful === true || el.status === 'eligible';
-                            const fail = el.collection_successful === false || el.status === 'deferred' || el.status === 'temporary_deferred';
-                            if (success) {
-                                remarks = 'Successful';
-                            } else if (fail) {
-                                remarks = details ? `Failed - ${details}` : 'Failed';
+                            // If disapproval_reason exists and is not empty/null, show Deferred
+                            const disapprovalReason = el.disapproval_reason;
+                            if (disapprovalReason !== null && disapprovalReason !== undefined && 
+                                String(disapprovalReason).trim() !== '') {
+                                remarks = 'Deferred';
+                            } else {
+                                const parts = [];
+                                if (el.disapproval_reason) parts.push(el.disapproval_reason);
+                                if (el.donor_reaction) parts.push(el.donor_reaction);
+                                const details = parts.join(' | ');
+                                const success = el.collection_successful === true || el.status === 'eligible';
+                                const fail = el.collection_successful === false || el.status === 'deferred' || el.status === 'temporary_deferred';
+                                if (success) {
+                                    remarks = 'Successful';
+                                } else if (fail) {
+                                    remarks = details ? `Failed - ${details}` : 'Failed';
+                                }
                             }
                             
                             allRowsHtml += '<tr><td>' + examDate + '</td><td>' + vitalSigns + '</td><td>' + hematology + '</td><td>' + physician + '</td><td>' + fitnessResult + '</td><td>' + remarks + '</td><td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showPhysicalExaminationModal(\'' + el.eligibility_id + '\')"><i class="fas fa-eye"></i></button></td></tr>';
@@ -3985,8 +4017,43 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         }
                         
                         const showReview = allowProcessing || currentStage === 'medical_review' || hasNeedsReview || isEligibleDateReached;
-                        proceedButton.style.display = showReview ? 'inline-block' : 'none';
+                        // Always show the button, but disable it when not allowed to proceed
+                        proceedButton.style.display = 'inline-block';
                         proceedButton.textContent = 'Proceed to Medical History';
+                        
+                        // Check if donor is deferred (has disapproval_reason or status is deferred)
+                        let isDeferred = false;
+                        if (donor && donor.eligibility) {
+                            const eligibilityRecords = Array.isArray(donor.eligibility) ? donor.eligibility : (donor.eligibility ? [donor.eligibility] : []);
+                            // Check the latest eligibility record for deferred status
+                            if (eligibilityRecords.length > 0) {
+                                const latestEligibility = eligibilityRecords[eligibilityRecords.length - 1];
+                                const status = (latestEligibility.status || '').toLowerCase().trim();
+                                const disapprovalReason = latestEligibility.disapproval_reason;
+                                
+                                isDeferred = (
+                                    status === 'deferred' || 
+                                    status === 'temporary_deferred' || 
+                                    status === 'temporary deferred' ||
+                                    status === 'permanently_deferred' ||
+                                    status === 'permanently deferred' ||
+                                    (disapprovalReason !== null && disapprovalReason !== undefined && String(disapprovalReason).trim() !== '')
+                                );
+                            }
+                        }
+                        
+                        // Disable button and reduce opacity to 80% (20% lower transparency) if:
+                        // 1. Donor cannot proceed (showReview is false), OR
+                        // 2. Donor is deferred
+                        if (!showReview || isDeferred) {
+                            proceedButton.disabled = true;
+                            proceedButton.style.opacity = '0.8';
+                            proceedButton.style.cursor = 'not-allowed';
+                        } else {
+                            proceedButton.disabled = false;
+                            proceedButton.style.opacity = '1.0';
+                            proceedButton.style.cursor = 'pointer';
+                        }
                     }
             // Hide Mark for Medical Review button when needs_review is already true
             try {
@@ -6787,7 +6854,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                             <div class="p-3 text-center" style="background-color:#f8f9fa; border-radius:8px; border: 2px solid ${physicalData.disapproval_reason ? '#dc3545' : '#28a745'};">
                                 <div class="fw-semibold mb-2" style="color:#b22222;">Final Remarks</div>
                                 <div class="fs-5 fw-bold" style="color: ${physicalData.disapproval_reason ? '#dc3545' : '#28a745'};">
-                                    ${physicalData.disapproval_reason ? 'Deferred' : 'Accepted'}
+                                    ${physicalData.disapproval_reason ? safe(String(physicalData.disapproval_reason).trim()) : 'Accepted'}
                                 </div>
                             </div>
                         </div>
@@ -6800,6 +6867,36 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             
             // Store eligibility ID for the proceed button
             modalContent.setAttribute('data-eligibility-id', eligibilityId);
+            
+            // Control the proceed button state based on deferred status
+            setTimeout(() => {
+                const proceedButton = document.getElementById('proceedToMedicalHistoryFromPhysical');
+                if (proceedButton) {
+                    // Check if donor is deferred (has disapproval_reason or status is deferred)
+                    const disapprovalReason = physicalData.disapproval_reason;
+                    const status = (physicalData.status || '').toLowerCase().trim();
+                    
+                    const isDeferred = (
+                        status === 'deferred' || 
+                        status === 'temporary_deferred' || 
+                        status === 'temporary deferred' ||
+                        status === 'permanently_deferred' ||
+                        status === 'permanently deferred' ||
+                        (disapprovalReason !== null && disapprovalReason !== undefined && String(disapprovalReason).trim() !== '')
+                    );
+                    
+                    // If deferred, disable button and reduce opacity to 80% (20% lower transparency)
+                    if (isDeferred) {
+                        proceedButton.disabled = true;
+                        proceedButton.style.opacity = '0.8';
+                        proceedButton.style.cursor = 'not-allowed';
+                    } else {
+                        proceedButton.disabled = false;
+                        proceedButton.style.opacity = '1.0';
+                        proceedButton.style.cursor = 'pointer';
+                    }
+                }
+            }, 100);
         }
     </script>
 
