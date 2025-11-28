@@ -151,20 +151,10 @@
 
                     // Initialize step-specific functionality
                     if (step === 1) {
-                        // Wait a bit for the HTML to be fully parsed and DOM to be ready
+                        // Wait a bit for the HTML to be fully parsed
                         setTimeout(() => {
                             initializePersonalDataStep();
-                            // Re-initialize duplicate checker after form is loaded
-                            if (window.duplicateCheckerAdmin) {
-                                // Re-setup form elements since they're now in the DOM
-                                window.duplicateCheckerAdmin.setupFormElements();
-                                window.duplicateCheckerAdmin.attachEventListeners();
-                                console.log('Duplicate checker re-initialized after form load');
-                            } else {
-                                // Initialize if not already done
-                                initializeAdminDuplicateChecker();
-                            }
-                        }, 100);
+                        }, 50);
                     } else if (step === 2) {
                         // Allow inline scripts to register global helpers before initialization
                         setTimeout(() => {
@@ -244,58 +234,6 @@
 
         // Initialize section navigation
         initializeSectionNavigation();
-        
-        // Initialize duplicate donor checker for admin
-        // Use a longer delay to ensure form is fully loaded and visible
-        setTimeout(() => {
-            initializeAdminDuplicateChecker();
-            
-            // Also set up a manual check function that can be called from sections
-            window.adminManualDuplicateCheck = function() {
-                if (window.duplicateCheckerAdmin && typeof window.duplicateCheckerAdmin.performCheck === 'function') {
-                    console.log('Manual duplicate check triggered');
-                    window.duplicateCheckerAdmin.performCheck(false);
-                } else {
-                    console.warn('Duplicate checker not available for manual check');
-                }
-            };
-        }, 200);
-    }
-    
-    /**
-     * Initialize duplicate donor checker for admin registration
-     */
-    function initializeAdminDuplicateChecker() {
-        // Check if the duplicate checker script is loaded
-        if (typeof DuplicateDonorCheckerAdmin === 'undefined') {
-            console.warn('DuplicateDonorCheckerAdmin class not found. Loading script...');
-            // Load the script dynamically
-            const script = document.createElement('script');
-            // Path relative to public/Dashboards/ directory
-            script.src = '../../assets/js/duplicate_donor_check_admin.js';
-            script.onload = function() {
-                if (typeof DuplicateDonorCheckerAdmin !== 'undefined') {
-                    window.duplicateCheckerAdmin = new DuplicateDonorCheckerAdmin({
-                        apiEndpoint: '../../assets/php_func/check_duplicate_donor_admin.php',
-                        enableAutoCheck: true,
-                        debounceDelay: 1500
-                    });
-                    console.log('Duplicate donor checker (admin) initialized');
-                }
-            };
-            script.onerror = function() {
-                console.error('Failed to load duplicate_donor_check_admin.js');
-            };
-            document.head.appendChild(script);
-        } else {
-            // Initialize if class is already available
-            window.duplicateCheckerAdmin = new DuplicateDonorCheckerAdmin({
-                apiEndpoint: '../../assets/php_func/check_duplicate_donor_admin.php',
-                enableAutoCheck: true,
-                debounceDelay: 1500
-            });
-            console.log('Duplicate donor checker (admin) initialized');
-        }
     }
 
     /**
@@ -450,6 +388,12 @@
             if (municipalityInput) {
                 municipalityInput.addEventListener('change', () => {
                     loadBarangaysForMunicipality(provinceInput.value, municipalityInput.value);
+                    // Trigger zipcode autofill after municipality changes
+                    setTimeout(() => {
+                        if (window.adminZipAutofill) {
+                            window.adminZipAutofill();
+                        }
+                    }, 800);
                 });
             }
 
@@ -467,6 +411,7 @@
             // Optional: ZIP code autofill (best-effort, uses community dataset)
             if (zipInput) {
                 // ZIP code autofill using community dataset
+                let tryFillPostalRef = null; // Store reference to function
                 (async function initializeZipAutofill() {
                     const ZIP_DATA_URL = 'https://raw.githubusercontent.com/erwinsie/ph-zipcodes/master/zipcodes.json';
                     let zipIndex = null;
@@ -512,20 +457,56 @@
                         return idx;
                     }
 
-                    function tryFillPostal() {
-                        if (!zipIndex) return;
-                        const p = (provinceInput?.value || '').trim().toLowerCase();
-                        const m = (municipalityInput?.value || '').trim().toLowerCase();
-                        const b = (barangayInput?.value || '').trim().toLowerCase();
+                    async function tryFillPostal() {
+                        if (!zipInput) return;
+                        // Only autofill if zipcode is empty
+                        if (zipInput.value.trim()) return;
+                        
+                        const p = (provinceInput?.value || '').trim();
+                        const m = (municipalityInput?.value || '').trim();
+                        const b = (barangayInput?.value || '').trim();
+
+                        // Need at least province and municipality
+                        if (!p || !m) return;
 
                         let found = null;
-                        if (p && m && b) {
-                            found = zipIndex.exact[`${p}|${m}|${b}`] || null;
+                        
+                        // First, try the dataset if available
+                        if (zipIndex) {
+                            const pLower = p.toLowerCase();
+                            const mLower = m.toLowerCase();
+                            const bLower = b.toLowerCase();
+
+                            if (pLower && mLower && bLower) {
+                                found = zipIndex.exact[`${pLower}|${mLower}|${bLower}`] || null;
+                            }
+                            if (!found && pLower && mLower) {
+                                found = zipIndex.byCity[`${pLower}|${mLower}`] || null;
+                            }
                         }
-                        if (!found && p && m) {
-                            found = zipIndex.byCity[`${p}|${m}`] || null;
+
+                        // If dataset doesn't have it, try the address API as fallback
+                        if (!found) {
+                            try {
+                                const API = '../api/suggest-address.php';
+                                const query = b ? `${b}, ${m}, ${p}, Philippines` : `${m}, ${p}, Philippines`;
+                                const response = await fetch(`${API}?q=${encodeURIComponent(query)}`);
+                                const data = await response.json();
+                                const results = data.results || [];
+                                
+                                if (results.length > 0) {
+                                    const firstResult = results[0];
+                                    const addr = firstResult.address || {};
+                                    if (addr.postcode) {
+                                        found = addr.postcode;
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn('Address API fallback failed:', e);
+                            }
                         }
-                        if (found && zipInput && !zipInput.value) {
+
+                        if (found && zipInput && !zipInput.value.trim()) {
                             zipInput.value = found;
                             // Add visual feedback when zipcode is auto-filled
                             zipInput.style.backgroundColor = '#d4edda';
@@ -542,31 +523,59 @@
                         zipIndex = buildZipIndex(dataset);
                         // Add both 'change' and 'input' event listeners for better responsiveness
                         if (provinceInput) {
-                            provinceInput.addEventListener('change', tryFillPostal);
+                            provinceInput.addEventListener('change', () => {
+                                setTimeout(tryFillPostal, 300);
+                            });
                             provinceInput.addEventListener('input', () => {
                                 // Debounce input events to avoid too many calls
                                 clearTimeout(window.zipFillTimeout);
                                 window.zipFillTimeout = setTimeout(tryFillPostal, 500);
                             });
+                            // Also listen to datalist selection
+                            provinceInput.addEventListener('blur', () => {
+                                setTimeout(tryFillPostal, 300);
+                            });
                         }
                         if (municipalityInput) {
-                            municipalityInput.addEventListener('change', tryFillPostal);
+                            municipalityInput.addEventListener('change', () => {
+                                setTimeout(tryFillPostal, 300);
+                            });
                             municipalityInput.addEventListener('input', () => {
                                 clearTimeout(window.zipFillTimeout);
                                 window.zipFillTimeout = setTimeout(tryFillPostal, 500);
                             });
+                            // Also listen to datalist selection
+                            municipalityInput.addEventListener('blur', () => {
+                                setTimeout(tryFillPostal, 300);
+                            });
                         }
                         if (barangayInput) {
-                            barangayInput.addEventListener('change', tryFillPostal);
+                            barangayInput.addEventListener('change', () => {
+                                setTimeout(tryFillPostal, 300);
+                            });
                             barangayInput.addEventListener('input', () => {
                                 clearTimeout(window.zipFillTimeout);
                                 window.zipFillTimeout = setTimeout(tryFillPostal, 500);
                             });
+                            // Also listen to datalist selection
+                            barangayInput.addEventListener('blur', () => {
+                                setTimeout(tryFillPostal, 300);
+                            });
                         }
                         // Try on load in case fields already filled
-                        tryFillPostal();
+                        setTimeout(tryFillPostal, 500);
+                        
+                        // Store reference for external access
+                        tryFillPostalRef = tryFillPostal;
                     }
                 })();
+                
+                // Make function accessible globally for this form instance
+                window.adminZipAutofill = () => {
+                    if (tryFillPostalRef) {
+                        tryFillPostalRef();
+                    }
+                };
             }
         } catch (err) {
             console.error('PSGC address autofill initialization error:', err);
@@ -768,24 +777,6 @@
                 alert('Please fill in all required fields before proceeding.');
                 return;
             }
-            
-            // Age validation: Check if age is 18 or above when leaving section 2 (Profile Details)
-            if (currentSection === 2) {
-                const ageInput = document.getElementById('age');
-                const birthdateInput = document.getElementById('birthdate');
-                
-                if (ageInput && birthdateInput && birthdateInput.value) {
-                    const age = parseInt(ageInput.value);
-                    
-                    // Check if age is below 18
-                    if (isNaN(age) || age < 18) {
-                        alert('Donors must be 18 years old or above to proceed with registration. Please verify the birthdate.');
-                        ageInput.classList.add('is-invalid');
-                        birthdateInput.classList.add('is-invalid');
-                        return; // Prevent proceeding to next section
-                    }
-                }
-            }
 
             // Hide current section
             currentSectionEl.classList.remove('active');
@@ -865,111 +856,11 @@
             }
             return;
         }
-        
-        // Age validation: Check if age is 18 or above before final submission
-        const ageInput = document.getElementById('age');
-        const birthdateInput = document.getElementById('birthdate');
-        
-        if (ageInput && birthdateInput && birthdateInput.value) {
-            const age = parseInt(ageInput.value);
-            
-            // Check if age is below 18
-            if (isNaN(age) || age < 18) {
-                alert('Donors must be 18 years old or above to proceed with registration. Please verify the birthdate.');
-                ageInput.classList.add('is-invalid');
-                birthdateInput.classList.add('is-invalid');
-                
-                // Show section 2 (Profile Details) where age is displayed
-                for (let j = 1; j <= 5; j++) {
-                    const s = document.getElementById(`section${j}`);
-                    if (s) s.classList.remove('active');
-                }
-                const section2 = document.getElementById('section2');
-                if (section2) {
-                    section2.classList.add('active');
-                    updateStepIndicator(2);
-                }
-                return;
-            }
-        }
-        
-        // Check for duplicate donor before submission
-        if (window.duplicateCheckerAdmin && typeof window.duplicateCheckerAdmin.performCheck === 'function') {
-            // Check if duplicate has been acknowledged or already checked
-            if (form.getAttribute('data-duplicate-acknowledged-admin') !== 'true' && 
-                form.getAttribute('data-duplicate-checked-admin') !== 'true') {
-                // Store original button state before checking
-                const submitBtn = form.querySelector('button[type="submit"]');
-                const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
-                if (submitBtn && !submitBtn.getAttribute('data-original-text')) {
-                    submitBtn.setAttribute('data-original-text', originalBtnText);
-                }
-                
-                // Show checking state
-                if (submitBtn) {
-                    submitBtn.disabled = true;
-                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Checking...';
-                }
-                
-                // Perform duplicate check before submission
-                window.duplicateCheckerAdmin.performCheck(true).then(() => {
-                    // After duplicate check completes, check if we should proceed
-                    // If duplicate was found, modal will be shown and user can acknowledge
-                    // If no duplicate, data-duplicate-checked-admin will be set
-                    // Use a small delay to ensure DOM updates are complete
-                    setTimeout(() => {
-                        // Check again if duplicate was acknowledged or checked
-                        if (form.getAttribute('data-duplicate-acknowledged-admin') === 'true' || 
-                            form.getAttribute('data-duplicate-checked-admin') === 'true') {
-                            // Continue with submission
-                            continuePersonalDataSubmission();
-                        } else {
-                            // If still not checked/acknowledged, it means duplicate modal is showing
-                            // User will need to click "Register as New Donor" to proceed
-                            // Re-enable submit button in case user cancels and wants to try again
-                            if (submitBtn) {
-                                submitBtn.disabled = false;
-                                submitBtn.innerHTML = submitBtn.getAttribute('data-original-text') || 'Submit &gt;';
-                            }
-                        }
-                    }, 300);
-                }).catch((error) => {
-                    console.error('Duplicate check error:', error);
-                    // On error, allow submission to continue
-                    form.setAttribute('data-duplicate-checked-admin', 'true');
-                    // Restore button state
-                    if (submitBtn) {
-                        submitBtn.disabled = false;
-                        submitBtn.innerHTML = submitBtn.getAttribute('data-original-text') || 'Submit &gt;';
-                    }
-                    continuePersonalDataSubmission();
-                });
-                return; // Don't submit yet, wait for duplicate check
-            }
-        }
-        
-        // Continue with submission (duplicate already checked/acknowledged, or checker not available)
-        continuePersonalDataSubmission();
-    }
-    
-    /**
-     * Continue with personal data submission (called after duplicate check)
-     */
-    function continuePersonalDataSubmission() {
-        const form = document.getElementById('adminDonorPersonalDataForm');
-        if (!form) {
-            console.error('Personal data form not found');
-            return;
-        }
 
         // Show loading state
         const submitBtn = form.querySelector('button[type="submit"]');
         const originalText = submitBtn ? submitBtn.innerHTML : '';
         if (submitBtn) {
-            // Store original text for potential restoration
-            if (!submitBtn.getAttribute('data-original-text')) {
-                submitBtn.setAttribute('data-original-text', originalText);
-            }
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
         }
@@ -983,30 +874,8 @@
             method: 'POST',
             body: formData
         })
-        .then(async response => {
-            // Try to parse JSON, but handle non-JSON responses
-            const text = await response.text();
-            let data;
-            try {
-                data = JSON.parse(text);
-            } catch (e) {
-                // If response is not JSON, check status code
-                if (!response.ok) {
-                    throw new Error(`Server error: ${response.status} ${response.statusText}`);
-                }
-                throw new Error('Invalid response from server');
-            }
-            
-            if (!response.ok) {
-                // Check for specific error codes
-                if (response.status === 409) {
-                    // Conflict - likely duplicate email
-                    const errorDetail = data.details || data.message || data.error || '';
-                    throw new Error(`Duplicate entry: ${errorDetail}`);
-                }
-                throw new Error(data.error || data.message || `Server error: ${response.status}`);
-            }
-            
+        .then(response => response.json())
+        .then(data => {
             if (data.success) {
                 // Store donor ID
                 currentDonorId = data.donor_id;
@@ -1020,39 +889,10 @@
         })
         .catch(error => {
             console.error('Error submitting personal data:', error);
-            
-            // Check if it's an email duplicate error
-            let errorMessage = error.message;
-            const errorLower = errorMessage.toLowerCase();
-            
-            if (errorLower.includes('duplicate key value violates unique constraint "donor_form_email_key"') || 
-                errorLower.includes('email') && (errorLower.includes('already exists') || errorLower.includes('duplicate'))) {
-                errorMessage = 'This email address is already registered to another donor. Please use a different email address or check if this donor already exists in the system.';
-                
-                // Highlight the email field
-                const emailInput = document.getElementById('email');
-                if (emailInput) {
-                    emailInput.classList.add('is-invalid');
-                    // Scroll to email field
-                    emailInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    
-                    // Show section 5 (Contact Information) where email is
-                    for (let j = 1; j <= 5; j++) {
-                        const s = document.getElementById(`section${j}`);
-                        if (s) s.classList.remove('active');
-                    }
-                    const section5 = document.getElementById('section5');
-                    if (section5) {
-                        section5.classList.add('active');
-                        updateStepIndicator(5);
-                    }
-                }
-            }
-            
-            alert('Error: ' + errorMessage);
+            alert('Error: ' + error.message);
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = originalText || submitBtn.getAttribute('data-original-text') || 'Submit &gt;';
+                submitBtn.innerHTML = originalText;
             }
         });
     }

@@ -988,6 +988,72 @@ document.addEventListener('DOMContentLoaded', function() {
             })));
         }
 
+        // Autofill zipcode based on province, municipality, and barangay
+        function autofillZipcode() {
+            if (!zip || !province || !town) return;
+            // Only autofill if zipcode is empty
+            if (zip.value.trim()) return;
+            
+            const provinceVal = province.value.trim();
+            const townVal = town.value.trim();
+            const barangayVal = barangay ? barangay.value.trim() : '';
+            
+            // Need at least province and municipality
+            if (!provinceVal || !townVal) return;
+            
+            // Build query to search for zipcode based on province, municipality, and barangay
+            const query = barangayVal 
+                ? `${barangayVal}, ${townVal}, ${provinceVal}, Philippines`
+                : `${townVal}, ${provinceVal}, Philippines`;
+            
+            fetch(`${API}?q=${encodeURIComponent(query)}`)
+                .then(r => r.json())
+                .then(data => {
+                    const results = data.results || [];
+                    if (results.length > 0) {
+                        const firstResult = results[0];
+                        const addr = firstResult.address || {};
+                        if (addr.postcode && !zip.value.trim()) {
+                            zip.value = addr.postcode;
+                            // Add visual feedback when zipcode is auto-filled
+                            zip.style.backgroundColor = '#d4edda';
+                            zip.style.borderColor = '#28a745';
+                            setTimeout(() => {
+                                zip.style.backgroundColor = '';
+                                zip.style.borderColor = '';
+                            }, 2000);
+                        }
+                    }
+                })
+                .catch(() => {});
+        }
+
+        // Add event listeners for province, town, and barangay changes to autofill zipcode
+        if (province) {
+            province.addEventListener('change', () => {
+                setTimeout(autofillZipcode, 300);
+            });
+            province.addEventListener('blur', () => {
+                setTimeout(autofillZipcode, 300);
+            });
+        }
+        if (town) {
+            town.addEventListener('change', () => {
+                setTimeout(autofillZipcode, 300);
+            });
+            town.addEventListener('blur', () => {
+                setTimeout(autofillZipcode, 300);
+            });
+        }
+        if (barangay) {
+            barangay.addEventListener('change', () => {
+                setTimeout(autofillZipcode, 300);
+            });
+            barangay.addEventListener('blur', () => {
+                setTimeout(autofillZipcode, 300);
+            });
+        }
+
         document.addEventListener('click', (e)=>{
             if (!e.target.closest('#streetSuggestions') && !e.target.closest('#barangaySuggestions') && !e.target.closest('#townSuggestions') && !e.target.closest('#provinceSuggestions')){
                 hideAll();

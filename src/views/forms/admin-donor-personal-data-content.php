@@ -145,7 +145,6 @@
                                 <label for="zip_code" class="form-label">ZIP Code <span class="text-danger">*</span></label>
                                 <input type="text" class="form-control" id="zip_code" name="zip_code" autocomplete="off" required maxlength="4" pattern="[0-9]{4}" placeholder="e.g., 5000">
                                 <div id="zipCodeSuggestions" class="list-group position-absolute w-100" style="z-index: 1050; max-height: 220px; overflow-y: auto; display:none; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
-                                <small class="form-text text-muted">4-digit ZIP code (auto-filled from address or type to search)</small>
                             </div>
         </div>
 
