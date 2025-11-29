@@ -860,25 +860,88 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             background: rgba(255, 255, 255, 0.2);
         }
 
-        /* Medical History Modal Styles - Bootstrap Modal with Red Gradient */
-        #medicalHistoryModal .modal-content {
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        /* Medical History Modal Styles - Matching Physical Examination Modal */
+        .medical-history-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 10080;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
 
-        #medicalHistoryModal .modal-header {
+        .medical-history-modal.show {
+            opacity: 1;
+        }
+
+        .medical-modal-content {
+            background: white;
+            border-radius: 15px;
+            max-width: 1200px;
+            width: 90%;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            transform: translateY(-20px);
+            transition: transform 0.3s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .medical-history-modal.show .medical-modal-content {
+            transform: translateY(0);
+        }
+
+        .medical-modal-header {
+            background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 15px 15px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             flex-shrink: 0;
             position: sticky;
             top: 0;
             z-index: 10;
         }
 
-        #medicalHistoryModal .modal-header .modal-title {
+        .medical-modal-header h3 {
             margin: 0;
             font-size: 1.5rem;
             font-weight: 600;
         }
 
-        #medicalHistoryModal .modal-body {
+        .medical-close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.3s ease;
+        }
+
+        .medical-close-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .medical-modal-body {
+            padding: 15px 20px;
+            overflow-y: auto;
+            overflow-x: hidden;
             flex: 1;
             min-height: 0;
             -webkit-overflow-scrolling: touch;
@@ -888,21 +951,21 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         }
         
         /* Custom scrollbar for medical modal body */
-        #medicalHistoryModal .modal-body::-webkit-scrollbar {
+        .medical-modal-body::-webkit-scrollbar {
             width: 8px;
         }
         
-        #medicalHistoryModal .modal-body::-webkit-scrollbar-track {
+        .medical-modal-body::-webkit-scrollbar-track {
             background: #f1f1f1;
             border-radius: 4px;
         }
         
-        #medicalHistoryModal .modal-body::-webkit-scrollbar-thumb {
+        .medical-modal-body::-webkit-scrollbar-thumb {
             background: #b22222;
             border-radius: 4px;
         }
         
-        #medicalHistoryModal .modal-body::-webkit-scrollbar-thumb:hover {
+        .medical-modal-body::-webkit-scrollbar-thumb:hover {
             background: #8b0000;
         }
         
@@ -2109,13 +2172,30 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             border-top: 1px solid #e9ecef;
             padding: 16px 20px;
         }
-        /* Ensure backdrop is visible */
+        /* Ensure backdrop is visible and ALWAYS behind active modals */
+        .modal-backdrop { z-index: 1064 !important; }
         .modal-backdrop.show { opacity: .5 !important; }
         #screeningFormModal * { pointer-events: auto; }
-        /* Note: z-index for modals is now handled dynamically via applyModalStacking() */
+        /* Remove scoped backdrop z-index (backdrops are appended to <body>) */
         
-        /* Physical Examination Modal - z-index handled dynamically */
-        /* Staff Physician Account Summary Modal - z-index handled dynamically */
+        /* Physical Examination Modal - ensure proper z-index layering */
+        #physicalExaminationModal {
+            z-index: 1065 !important;
+        }
+        #physicalExaminationModal .modal-dialog {
+            z-index: 1066 !important;
+        }
+        #physicalExaminationModal .modal-backdrop {
+            z-index: 1064 !important;
+        }
+        
+        /* Staff Physician Account Summary Modal - ensure proper z-index layering */
+        #staffPhysicianAccountSummaryModal {
+            z-index: 1065 !important;
+        }
+        #staffPhysicianAccountSummaryModal .modal-dialog {
+            z-index: 1066 !important;
+        }
     </style>
     <style>
         /* Extend screening modal UI to match MH look */
@@ -2164,7 +2244,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             width: 180px;
             background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
             border-right: 2px solid #dee2e6;
-            /* z-index handled dynamically */
+            z-index: 1061;
             padding: 0;
             overflow-y: auto;
             box-shadow: 2px 0 8px rgba(0,0,0,0.1);
@@ -2942,52 +3022,50 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
         </div>
     </div>
 
-    <!-- Medical History Modal - Bootstrap Modal with Red Gradient -->
-    <div class="modal fade" id="medicalHistoryModal" tabindex="-1" aria-labelledby="medicalHistoryModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-xl" style="max-width: 90%; margin: 1.75rem auto;">
-            <div class="modal-content" style="position: relative; overflow: hidden; border-radius: 15px; border: none;">
-                <!-- Navigation Sidebar -->
-                <div class="modal-nav-sidebar" id="medicalHistoryNavSidebar">
-                    <div class="modal-nav-header">
-                        <div class="modal-nav-header-icon-wrapper">
-                            <i class="fas fa-user-md modal-nav-header-icon"></i>
-                        </div>
-                        <div class="modal-nav-header-text">
-                            <div class="modal-nav-header-title">PHYSICIAN</div>
-                            <div class="modal-nav-header-subtitle">Workflow</div>
-                        </div>
+    <!-- Medical History Modal -->
+    <div class="medical-history-modal" id="medicalHistoryModal">
+        <div class="medical-modal-content" style="position: relative; overflow: hidden;">
+            <!-- Navigation Sidebar -->
+            <div class="modal-nav-sidebar" id="medicalHistoryNavSidebar">
+                <div class="modal-nav-header">
+                    <div class="modal-nav-header-icon-wrapper">
+                        <i class="fas fa-user-md modal-nav-header-icon"></i>
                     </div>
-                    <div class="modal-nav-items">
-                        <div class="modal-nav-item active" id="navPhysicianMedicalHistory" data-nav="medical-history">
-                            <i class="fas fa-file-medical modal-nav-item-icon"></i>
-                            <span>Medical History</span>
-                        </div>
-                        <div class="modal-nav-item" id="navPhysicianInitialScreening" data-nav="initial-screening">
-                            <i class="fas fa-clipboard-list modal-nav-item-icon"></i>
-                            <span>Initial Screening</span>
-                        </div>
-                        <div class="modal-nav-item" id="navPhysicianPhysicalExam" data-nav="physical-examination">
-                            <i class="fas fa-stethoscope modal-nav-item-icon"></i>
-                            <span>Physical Examination</span>
-                        </div>
-                        <div class="modal-nav-item" id="navPhysicianDonorProfile" data-nav="donor-profile">
-                            <i class="fas fa-user modal-nav-item-icon"></i>
-                            <span>Donor Profile</span>
-                        </div>
+                    <div class="modal-nav-header-text">
+                        <div class="modal-nav-header-title">PHYSICIAN</div>
+                        <div class="modal-nav-header-subtitle">Workflow</div>
                     </div>
                 </div>
-                
-                <div class="modal-content-with-nav" id="medicalHistoryModalContentWrapper">
-                    <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0; border: none;">
-                        <h5 class="modal-title" id="medicalHistoryModalLabel">
-                            <i class="fas fa-file-medical me-2"></i>Medical History Review & Approval
-                        </h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <div class="modal-nav-items">
+                    <div class="modal-nav-item active" id="navPhysicianMedicalHistory" data-nav="medical-history">
+                        <i class="fas fa-file-medical modal-nav-item-icon"></i>
+                        <span>Medical History</span>
                     </div>
-                    <div class="modal-body" style="padding: 15px 20px; overflow-y: auto; overflow-x: hidden;">
-                        <div id="medicalHistoryModalContent">
-                            <!-- Content will be loaded dynamically -->
-                        </div>
+                    <div class="modal-nav-item" id="navPhysicianInitialScreening" data-nav="initial-screening">
+                        <i class="fas fa-clipboard-list modal-nav-item-icon"></i>
+                        <span>Initial Screening</span>
+                    </div>
+                    <div class="modal-nav-item" id="navPhysicianPhysicalExam" data-nav="physical-examination">
+                        <i class="fas fa-stethoscope modal-nav-item-icon"></i>
+                        <span>Physical Examination</span>
+                    </div>
+                    <div class="modal-nav-item" id="navPhysicianDonorProfile" data-nav="donor-profile">
+                        <i class="fas fa-user modal-nav-item-icon"></i>
+                        <span>Donor Profile</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-content-with-nav" id="medicalHistoryModalContentWrapper">
+                <div class="medical-modal-header">
+                    <h3><i class="fas fa-file-medical me-2"></i>Medical History Review & Approval</h3>
+                    <button type="button" class="medical-close-btn" onclick="closeMedicalHistoryModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="medical-modal-body">
+                    <div id="medicalHistoryModalContent">
+                        <!-- Content will be loaded dynamically -->
                     </div>
                 </div>
             </div>
@@ -3135,126 +3213,6 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             }
         };
 
-        /**
-         * Modal Stacking Utility - Proper z-index management for nested modals
-         * This function calculates the correct z-index based on currently open modals
-         * and ensures proper stacking order without hardcoded values
-         * 
-         * ROOT CAUSE FIX: Instead of hardcoding z-index values, this dynamically calculates
-         * the correct z-index based on what modals are actually open, ensuring proper stacking
-         */
-        window.getModalStackingZIndex = function(modalElement) {
-            // Base z-index for Bootstrap modals
-            const BASE_Z_INDEX = 1050;
-            const BACKDROP_OFFSET = 10;
-            
-            // Find all currently open modals (Bootstrap modals)
-            const openBootstrapModals = document.querySelectorAll('.modal.show');
-            const allOpenModals = Array.from(openBootstrapModals);
-            
-            // Get the highest z-index from currently open modals
-            let maxZIndex = BASE_Z_INDEX;
-            allOpenModals.forEach(modal => {
-                if (modal === modalElement) return; // Skip self
-                const computedStyle = window.getComputedStyle(modal);
-                const zIndex = parseInt(computedStyle.zIndex) || 0;
-                if (zIndex > maxZIndex) {
-                    maxZIndex = zIndex;
-                }
-            });
-            
-            // Also check inline styles
-            allOpenModals.forEach(modal => {
-                if (modal === modalElement) return; // Skip self
-                const inlineZIndex = parseInt(modal.style.zIndex) || 0;
-                if (inlineZIndex > maxZIndex) {
-                    maxZIndex = inlineZIndex;
-                }
-            });
-            
-            // Calculate new z-index: highest existing + 10 (Bootstrap's increment)
-            const newZIndex = maxZIndex + 10;
-            const backdropZIndex = newZIndex - 1;
-            
-            return {
-                modal: newZIndex,
-                dialog: newZIndex + 1,
-                content: newZIndex + 2,
-                backdrop: backdropZIndex
-            };
-        }
-        
-        /**
-         * Apply proper z-index stacking to a Bootstrap modal
-         * This is the main function to use when opening modals on top of others
-         */
-        window.applyModalStacking = function(modalElement) {
-            if (!modalElement) return;
-            
-            const zIndexes = window.getModalStackingZIndex(modalElement);
-            
-            // Apply z-index to modal
-            modalElement.style.zIndex = zIndexes.modal.toString();
-            modalElement.style.position = 'fixed';
-            
-            // Apply z-index to dialog
-            const dialog = modalElement.querySelector('.modal-dialog');
-            if (dialog) {
-                dialog.style.zIndex = zIndexes.dialog.toString();
-            }
-            
-            // Apply z-index to content
-            const content = modalElement.querySelector('.modal-content');
-            if (content) {
-                content.style.zIndex = zIndexes.content.toString();
-            }
-            
-            // Update backdrop z-index after Bootstrap creates it
-            const updateBackdrop = () => {
-                const backdrops = document.querySelectorAll('.modal-backdrop');
-                if (backdrops && backdrops.length > 0) {
-                    // Set the last backdrop (for this modal) to be just below the modal
-                    backdrops[backdrops.length - 1].style.zIndex = zIndexes.backdrop.toString();
-                }
-            };
-            
-            // Update immediately and after a short delay (Bootstrap creates backdrop asynchronously)
-            setTimeout(updateBackdrop, 10);
-            setTimeout(updateBackdrop, 100);
-            
-            // Re-apply after modal is fully shown (Bootstrap might reset z-index)
-            const reapplyStacking = () => {
-                // Recalculate in case other modals opened/closed
-                const newZIndexes = window.getModalStackingZIndex(modalElement);
-                modalElement.style.zIndex = newZIndexes.modal.toString();
-                modalElement.style.position = 'fixed';
-                if (dialog) dialog.style.zIndex = newZIndexes.dialog.toString();
-                if (content) content.style.zIndex = newZIndexes.content.toString();
-                updateBackdrop();
-            };
-            
-            // Listen for shown event to reapply (Bootstrap might change z-index)
-            modalElement.addEventListener('shown.bs.modal', reapplyStacking, { once: true });
-            
-            return zIndexes;
-        }
-        
-        // Global event listener to automatically apply stacking to any Bootstrap modal when shown
-        // This ensures modals opened from anywhere get proper z-index
-        document.addEventListener('show.bs.modal', function(event) {
-            const modalElement = event.target;
-            // Only apply if it's a confirmation/approval modal that should be on top
-            const shouldStack = modalElement.id && (
-                modalElement.id.includes('Approve') || 
-                modalElement.id.includes('Decline') || 
-                modalElement.id.includes('Confirm') ||
-                modalElement.id === 'adminFeedbackModal'
-            );
-            if (shouldStack && typeof window.applyModalStacking === 'function') {
-                window.applyModalStacking(modalElement);
-            }
-        });
-        
         // Simplified medical history approval initializer for physical examination dashboard
         function initializeMedicalHistoryApproval() {
             // This function is simplified for the physical examination dashboard
@@ -3462,7 +3420,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 }
                 // Medical History modal (custom) – use our close workflow
                 try {
-                    const btn = document.querySelector('#medicalHistoryModal .btn-close');
+                    const btn = document.querySelector('#medicalHistoryModal .medical-close-btn');
                     if (btn && !btn.__returnHooked) {
                         btn.__returnHooked = true;
                         btn.addEventListener('click', function(){
@@ -3902,9 +3860,9 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 document.body.style.paddingRight = '';
             }
             
-            // Ensure proper z-index for the modal using dynamic stacking
-            if (typeof window.applyModalStacking === 'function') {
-                window.applyModalStacking(modalEl);
+            // Ensure proper z-index for the modal
+            if (modalEl.style.zIndex === '') {
+                modalEl.style.zIndex = '1055';
             }
             
             
@@ -4420,15 +4378,38 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                         // Open the modal with proper z-index
                         const modalEl = document.getElementById('staffPhysicianAccountSummaryModal');
                         if (modalEl) {
-                            // Apply dynamic modal stacking
-                            if (typeof window.applyModalStacking === 'function') {
-                                window.applyModalStacking(modalEl);
-                            }
+                            // Set z-index before opening
+                            modalEl.style.zIndex = '1065';
+                            const dlg = modalEl.querySelector('.modal-dialog');
+                            if (dlg) dlg.style.zIndex = '1066';
                             
                             const modal = bootstrap.Modal.getOrCreateInstance(modalEl, {
                                 backdrop: true,
                                 keyboard: true,
                                 focus: true
+                            });
+                            
+                            // Listen for modal shown event to fix z-index
+                            modalEl.addEventListener('shown.bs.modal', function handleModalShown() {
+                                try {
+                                    modalEl.style.zIndex = '1065';
+                                    const dlg = modalEl.querySelector('.modal-dialog');
+                                    if (dlg) dlg.style.zIndex = '1066';
+                                    const content = modalEl.querySelector('.modal-content');
+                                    if (content) content.style.zIndex = '1067';
+                                    
+                                    // Ensure backdrop is properly positioned behind the modal
+                                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                                    backdrops.forEach(backdrop => {
+                                        backdrop.style.zIndex = '1064';
+                                    });
+                                    
+                                    // Ensure body has modal-open class
+                                    document.body.classList.add('modal-open');
+                                } catch(_) {}
+                                
+                                // Remove this listener after first use
+                                modalEl.removeEventListener('shown.bs.modal', handleModalShown);
                             });
                             
                             // Update active nav item when modal is shown
@@ -4859,8 +4840,10 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                     setTimeout(() => {
                         try {
                             const modalEl = document.getElementById('physicalExaminationModal');
-                            if (modalEl && typeof window.applyModalStacking === 'function') {
-                                window.applyModalStacking(modalEl);
+                            if (modalEl) {
+                                modalEl.style.zIndex = '1065';
+                                const dlg = modalEl.querySelector('.modal-dialog');
+                                if (dlg) dlg.style.zIndex = '1066';
                             }
                             // Reset the skip cleanup flag
                             window.skipDonorProfileCleanup = false;
@@ -4898,9 +4881,9 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             const mhElement = document.getElementById('medicalHistoryModal');
             if (!mhElement) return;
             
-            // Reset all attributes and classes (Bootstrap modal)
+            // Reset all attributes and classes
             mhElement.removeAttribute('style');
-            mhElement.className = 'modal fade';
+            mhElement.className = 'medical-history-modal';
             mhElement.removeAttribute('data-bs-backdrop');
             mhElement.removeAttribute('data-bs-keyboard');
             
@@ -4972,6 +4955,9 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
             }
             window.isOpeningMedicalHistory = true;
             
+            // Don't force readonly here - only when Eye button is clicked
+            // window.forceMedicalReadonly = true; // Removed - only set when Eye button is clicked
+            
             // Track approval status for modal behavior
             try {
                 window.currentDonorId = donorId;
@@ -4989,7 +4975,12 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 if (sEl) {
                     const sInst = bootstrap.Modal.getInstance(sEl) || new bootstrap.Modal(sEl);
                     try { sInst.hide(); } catch(_) {}
+                    try { sEl.classList.remove('show'); sEl.style.display='none'; sEl.setAttribute('aria-hidden','true'); } catch(_) {}
                 }
+                // Normalize body only
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow='';
+                document.body.style.paddingRight='';
             } catch(_) {}
 
             // Hide donor profile without cleanup, then show MH above it
@@ -5009,45 +5000,31 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 dpModal.hide();
             } catch (e) { /* noop */ }
 
-            // Get the medical history modal element
+            // Ensure the medical history modal starts with a clean state
             const mhElement = document.getElementById('medicalHistoryModal');
-            if (!mhElement) {
-                window.isOpeningMedicalHistory = false;
-                return;
-            }
+            
+            // Reset any previous state
+            mhElement.removeAttribute('style');
+            mhElement.className = 'medical-history-modal';
+            
+            // Show the custom modal (like physical examination modal)
+            mhElement.style.display = 'flex';
+            setTimeout(() => {
+                mhElement.classList.add('show');
+                // Update active nav item when modal is shown
+                updatePhysicianActiveNavItem('navPhysicianMedicalHistory');
+            }, 10);
             
             // Show loading state in modal content
             const modalContent = document.getElementById('medicalHistoryModalContent');
-            if (modalContent) {
-                modalContent.innerHTML = `
-                    <div class="text-center">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="mt-2">Loading medical history...</p>
+            modalContent.innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
                     </div>
-                `;
-            }
-            
-            // Apply dynamic z-index stacking before showing
-            if (typeof window.applyModalStacking === 'function') {
-                window.applyModalStacking(mhElement);
-            }
-            
-            // Use Bootstrap Modal API to show the modal
-            const mhModal = bootstrap.Modal.getOrCreateInstance(mhElement, {
-                backdrop: true,
-                keyboard: true,
-                focus: true
-            });
-            
-            // Update active nav item when modal is shown
-            mhElement.addEventListener('shown.bs.modal', function() {
-                updatePhysicianActiveNavItem('navPhysicianMedicalHistory');
-                window.isOpeningMedicalHistory = false;
-            }, { once: true });
-            
-            mhModal.show();
+                    <p class="mt-2">Loading medical history...</p>
+                </div>
+            `;
             
             // Load medical history content
             loadMedicalHistoryContent(donorId);
@@ -5064,59 +5041,45 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 return;
             }
             
-            // Use Bootstrap Modal API to hide the modal
-            const mhModal = bootstrap.Modal.getInstance(mhElement);
-            if (mhModal) {
-                // Listen for hidden event to handle cleanup
-                mhElement.addEventListener('hidden.bs.modal', function handleHidden() {
-                    window.isOpeningMedicalHistory = false;
-                    
-                    // STRICT: Only reopen donor profile if NOT navigating via sidebar AND no prevention flags
-                    // Also check navigation target - if it's set to something other than donor-profile, NEVER open donor profile
-                    const shouldReopenDonorProfile = !isSidebarNav && 
-                                                     !window.__sidebarNavigationActive && 
-                                                     !preventDonorProfile && 
-                                                     !window.__preventDonorProfileOpen &&
-                                                     navigationTarget !== 'physical-examination' &&
-                                                     navigationTarget !== 'initial-screening' &&
-                                                     window.__navigationTarget !== 'physical-examination' &&
-                                                     window.__navigationTarget !== 'initial-screening';
-                    
-                    if (shouldReopenDonorProfile) {
-                        // Check if donor profile should be reopened (only if it was open before)
-                        const dpEl = document.getElementById('donorProfileModal');
-                        if (dpEl && window.lastDonorProfileContext) {
-                            setTimeout(() => {
-                                // Final STRICT check: ensure ALL flags are not set before reopening
-                                const finalCheck = !window.__sidebarNavigationActive && 
+            // First, hide the modal content
+            mhElement.classList.remove('show');
+            
+            // Wait for the fade-out animation to complete
+            setTimeout(() => {
+                mhElement.style.display = 'none';
+                window.isOpeningMedicalHistory = false;
+                
+                // STRICT: Only reopen donor profile if NOT navigating via sidebar AND no prevention flags
+                // Also check navigation target - if it's set to something other than donor-profile, NEVER open donor profile
+                const shouldReopenDonorProfile = !isSidebarNav && 
+                                                 !window.__sidebarNavigationActive && 
+                                                 !preventDonorProfile && 
                                                  !window.__preventDonorProfileOpen &&
+                                                 navigationTarget !== 'physical-examination' &&
+                                                 navigationTarget !== 'initial-screening' &&
                                                  window.__navigationTarget !== 'physical-examination' &&
                                                  window.__navigationTarget !== 'initial-screening';
-                                
-                                if (finalCheck) {
-                                    try {
-                                        const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
-                                        dp.show();
-                                    } catch(e) {
-                                        // Error handled silently
-                                    }
-                                }
-                            }, 200);
-                        }
-                    }
-                    
-                    // Remove this listener after use
-                    mhElement.removeEventListener('hidden.bs.modal', handleHidden);
-                }, { once: true });
                 
-                mhModal.hide();
-            } else {
-                // Fallback: manually hide if instance doesn't exist
-                mhElement.classList.remove('show');
-                setTimeout(() => {
-                    mhElement.style.display = 'none';
-                    window.isOpeningMedicalHistory = false;
-                }, 300);
+                if (shouldReopenDonorProfile) {
+                    // Check if donor profile should be reopened (only if it was open before)
+                    const dpEl = document.getElementById('donorProfileModal');
+                    if (dpEl && window.lastDonorProfileContext) {
+                        setTimeout(() => {
+                            // Final STRICT check: ensure ALL flags are not set before reopening
+                            const finalCheck = !window.__sidebarNavigationActive && 
+                                             !window.__preventDonorProfileOpen &&
+                                             window.__navigationTarget !== 'physical-examination' &&
+                                             window.__navigationTarget !== 'initial-screening';
+                            
+                            if (finalCheck) {
+                                try {
+                                    const dp = bootstrap.Modal.getInstance(dpEl) || new bootstrap.Modal(dpEl);
+                                    dp.show();
+                                } catch(e) {
+                                    // Error handled silently
+                                }
+                            }
+                        }, 200);
                     }
                 }
                 
@@ -5146,7 +5109,7 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 
                 // Force a clean state by removing any lingering classes or styles
                 mhElement.removeAttribute('style');
-                mhElement.className = 'modal fade';
+                mhElement.className = 'medical-history-modal';
                 
                 // Remove any dynamically added event listeners or data attributes
                 mhElement.removeAttribute('data-bs-backdrop');
@@ -5281,29 +5244,15 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                             const declineButtons = document.querySelectorAll('.decline-medical-history-btn');
                             declineButtons.forEach(button => {
                                 button.addEventListener('click', function() {
-                                    const declineModalEl = document.getElementById('medicalHistoryDeclineModal');
-                                    if (declineModalEl) {
-                                        // Apply proper modal stacking BEFORE showing
-                                        if (typeof window.applyModalStacking === 'function') {
-                                            window.applyModalStacking(declineModalEl);
-                                        }
-                                        const declineModal = new bootstrap.Modal(declineModalEl);
-                                        declineModal.show();
-                                    }
+                                    const declineModal = new bootstrap.Modal(document.getElementById('medicalHistoryDeclineModal'));
+                                    declineModal.show();
                                 });
                             });
                             const approveButtons = document.querySelectorAll('.approve-medical-history-btn');
                             approveButtons.forEach(button => {
                                 button.addEventListener('click', function() {
-                                    const approveModalEl = document.getElementById('medicalHistoryApproveConfirmModal');
-                                    if (approveModalEl) {
-                                        // Apply proper modal stacking BEFORE showing
-                                        if (typeof window.applyModalStacking === 'function') {
-                                            window.applyModalStacking(approveModalEl);
-                                        }
-                                        const approveModal = new bootstrap.Modal(approveModalEl);
-                                        approveModal.show();
-                                    }
+                                    const approveModal = new bootstrap.Modal(document.getElementById('medicalHistoryApproveConfirmModal'));
+                                    approveModal.show();
                                 });
                             });
                         }, 200);
@@ -6993,12 +6942,18 @@ $isAdmin = isset($_SESSION['role_id']) && $_SESSION['role_id'] == 1;
                 } catch(_) {}
                 // Use static backdrop to ensure this modal sits above and backdrop is behind it
                 const m = bootstrap.Modal.getOrCreateInstance(el, { backdrop: 'static', keyboard: false });
-                // Ensure z-index is above table overlays/backdrops using dynamic stacking
+                // Ensure z-index is above table overlays/backdrops
                 try {
-                    if (typeof window.applyModalStacking === 'function') {
-                        window.applyModalStacking(el);
-                    }
+                    el.style.zIndex = '20010';
+                    const dlg = el.querySelector('.modal-dialog');
+                    if (dlg) dlg.style.zIndex = '20011';
                 } catch(_) {}
+                // Normalize any lingering backdrops layering
+                setTimeout(() => {
+                    try {
+                        document.querySelectorAll('.modal-backdrop').forEach(b => { b.style.zIndex = '20005'; });
+                    } catch(_) {}
+                }, 10);
                 m.show();
             } catch(_) {
                 if (typeof window.customConfirm === 'function') { window.customConfirm('Proceed to Physical Examination?', onConfirm); } else { if (confirm('Proceed to Physical Examination?')) onConfirm && onConfirm(); }

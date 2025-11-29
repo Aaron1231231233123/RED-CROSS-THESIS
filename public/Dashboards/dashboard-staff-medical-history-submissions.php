@@ -1093,6 +1093,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
         window.ACCESS_LOCK_ENDPOINT_INTERVIEWER = '../../assets/php_func/access_lock_manager-interviewer.php';
     </script>
     <script src="../../assets/js/access-lock-manager-interviewer.js"></script>
+    <script src="../../assets/js/access-lock-guard-interviewer.js"></script>
     <script>
         window.ACCESS_LOCK_ROLE_VALUE = 1;
     </script>
@@ -3240,19 +3241,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             
             // Use event delegation for row clicks to work with dynamically loaded search results
             donorTableBody.addEventListener('click', function(e) {
-                // Check if access lock guard should block this click
-                if (window.AccessLockManagerInterviewer && window.AccessLockManagerInterviewer.blocked) {
-                    const target = e.target;
-                    if (window.AccessLockManagerInterviewer.matchesGuard && window.AccessLockManagerInterviewer.matchesGuard(target)) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (window.AccessLockManagerInterviewer.notifyBlocked) {
-                            window.AccessLockManagerInterviewer.notifyBlocked();
-                        }
-                        return;
-                    }
-                }
-                
                 // Find the closest tr with clickable-row class
                 const row = e.target.closest('tr.clickable-row');
                 if (!row) return;
@@ -3319,8 +3307,21 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         if (stageNoticeViewBtn) {
                             stageNoticeViewBtn.onclick = () => {
                             if (stageNoticeModal) stageNoticeModal.hide();
-                            // Use access-checked modal opening (read-only mode will be handled in modal)
-                            checkAndShowDonorStatus(donorId);
+                            // Prepare details modal in read-only mode
+                            deferralStatusContent.innerHTML = `
+                                <div class=\"d-flex justify-content-center\">\n                                    <div class=\"spinner-border text-primary\" role=\"status\">\n                                        <span class=\"visually-hidden\">Loading...</span>\n                                    </div>\n                                </div>`;
+                            
+                            // Show proceed button but disable it in read-only mode (not allowed to proceed)
+                            const proceedButton = getProceedButton();
+                            if (proceedButton && proceedButton.style) {
+                                proceedButton.style.display = 'inline-block';
+                                proceedButton.disabled = true;
+                                proceedButton.style.opacity = '0.8';
+                                proceedButton.style.cursor = 'not-allowed';
+                                proceedButton.textContent = 'Proceed to Medical History';
+                            }
+                            if (deferralStatusModal) deferralStatusModal.show();
+                            fetchDonorStatusInfo(donorId);
                         };
                         }
                         return;
@@ -3331,12 +3332,39 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         const hasNeedsReview = currentDonorId && medicalByDonor[currentDonorId] && medicalByDonor[currentDonorId].needs_review;
                         
                         if (effectiveStage === 'medical_review' || hasNeedsReview) {
-                            // Returning (Medical) OR Returning with needs_review: use access-checked modal
-                            checkAndShowDonorStatus(donorId);
+                            // Returning (Medical) OR Returning with needs_review: go straight to details with Review available
+                        deferralStatusContent.innerHTML = `
+                            <div class="d-flex justify-content-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                    </div>
+                            </div>`;
+                            const proceedButton = getProceedButton();
+                            if (proceedButton && proceedButton.style) {
+                                proceedButton.style.display = 'inline-block';
+                                proceedButton.textContent = 'Proceed to Medical History';
+                            }
+                            if (markReviewFromMain) markReviewFromMain.style.display = 'none';
+                        if (deferralStatusModal) deferralStatusModal.show();
+                        fetchDonorStatusInfo(donorId);
                             return;
                         }
-                        // Returning but not Medical and no needs_review: use access-checked modal
-                        checkAndShowDonorStatus(donorId);
+                        // Returning but not Medical and no needs_review: directly show donor modal
+                        deferralStatusContent.innerHTML = `
+                            <div class="d-flex justify-content-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>`;
+                        const proceedButton = getProceedButton();
+                        if (proceedButton && proceedButton.style) {
+                            proceedButton.style.display = 'inline-block';
+                            proceedButton.disabled = true;
+                            proceedButton.style.opacity = '0.8';
+                            proceedButton.style.cursor = 'not-allowed';
+                        }
+                        if (deferralStatusModal) deferralStatusModal.show();
+                        fetchDonorStatusInfo(donorId);
                         // Mark for review handler
                         if (markReturningReviewBtn) {
                             markReturningReviewBtn.onclick = () => {
@@ -3510,8 +3538,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                             </div>
                         </div>`;
                     
-                    // Use access-checked modal opening
-                    checkAndShowDonorStatus(donorId);
+                    const proceedButton = getProceedButton();
+                    if (proceedButton && proceedButton.style) {
+                        proceedButton.style.display = 'inline-block';
+                        proceedButton.textContent = 'Proceed to Medical History';
+                    }
+                    // Hide mark button for non-returning/new-medical flow
+                    if (markReviewFromMain) markReviewFromMain.style.display = 'none';
+                    if (deferralStatusModal) deferralStatusModal.show();
+                    fetchDonorStatusInfo(donorId);
             });
             
             // Function to fetch donor status information
@@ -4057,22 +4092,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                     // Show confirmation modal before proceeding
                     showProcessMedicalHistoryConfirmation();
                 };
-                
-                // Check access before proceeding
-                if (typeof window.checkAccessBeforeOpen === 'function') {
-                    window.checkAccessBeforeOpen(
-                        currentDonorId,
-                        proceed, // onAllowed - show confirmation modal
-                        (message) => { // onBlocked - show access lock message
-                            if (window.AccessLockManagerInterviewer && typeof window.AccessLockManagerInterviewer.notifyBlocked === 'function') {
-                                window.AccessLockManagerInterviewer.notifyBlocked(message);
-                            } else {
-                                alert(message || 'This donor data is being processed by an admin account.');
-                            }
-                        }
-                    );
-                } else {
-                    // Fallback if access check function not available
+                if (!guardMedicalAccess(currentDonorId, proceed)) {
                     proceed();
                 }
             }
@@ -6975,17 +6995,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             checkAndShowDonorStatus(donorId);
         }
 
-        // Track if modal is being opened to prevent double-calling
-        let isOpeningModal = false;
-
         // Function to check if donor is new (no eligibility record)
         function checkAndShowDonorStatus(donorId) {
             if (!donorId) return;
-            // Prevent double-calling
-            if (isOpeningModal) {
-                console.log('[checkAndShowDonorStatus] Already opening modal, skipping duplicate call');
-                return;
-            }
             showDonorStatusModal(donorId);
         }
 
@@ -7000,75 +7012,35 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
             } catch(_) {}
         }
 
-        // Function to check access before opening modal (globally accessible)
-        window.checkAccessBeforeOpen = function(donorId, onAllowed, onBlocked) {
-            if (!window.AccessLockAPIInterviewer || !donorId) {
-                // If API not available, allow (fallback)
-                if (onAllowed) onAllowed();
-                return;
+        function guardMedicalAccess(donorId, onAllowed) {
+            const guard = window.AccessLockGuardInterviewer;
+            if (!guard || typeof guard.ensureAccess !== 'function') {
+                return false;
             }
-
-            const scopes = ['medical_history'];
-            const records = scopes.map(scope => ({ scope, donor_id: donorId }));
-            const lockValue = window.ACCESS_LOCK_ROLE_VALUE || 1;
-
-            window.AccessLockAPIInterviewer.status({ scopes, records })
-                .then((response) => {
-                    let blocked = false;
-                    if (response && response.states) {
-                        const state = response.states['medical_history'];
-                        const numericState = (typeof state === 'number')
-                            ? state
-                            : (state !== null && state !== undefined && state !== '')
-                                ? parseInt(state, 10)
-                                : 0;
-                        // Block if access is set and not our lock value
-                        if (Number.isFinite(numericState) && numericState !== 0 && numericState !== lockValue) {
-                            blocked = true;
-                        }
-                    }
-
-                    if (blocked) {
-                        if (onBlocked) {
-                            onBlocked('This donor data is being processed by an admin account.');
-                        }
-                    } else {
-                        if (onAllowed) onAllowed();
-                    }
-                })
-                .catch((err) => {
-                    console.error('[checkAccessBeforeOpen] Access check failed:', err);
-                    // On error, allow (fallback to prevent blocking legitimate access)
-                    if (onAllowed) onAllowed();
-                });
-        };
+            guard.ensureAccess({
+                scope: 'medical_history',
+                donorId,
+                lockValue: window.ACCESS_LOCK_ROLE_VALUE || 1,
+                message: 'This donor is currently being processed by an admin account. Please try again later.',
+                onAllowed,
+                onBlocked: () => {
+                    hideDonorStatusModal();
+                }
+            });
+            return true;
+        }
 
         // Function to show donor status modal
         // OPTIMIZED: Removed 800ms artificial delay, uses parallel data fetching, reuses modal instances
         function showDonorStatusModal(donorId) {
             if (!donorId) return;
-            
-            // Prevent double-calling
-            if (isOpeningModal) {
-                console.log('[showDonorStatusModal] Already opening modal, skipping duplicate call');
-                return;
-            }
-            isOpeningModal = true;
 
-            // Check access BEFORE opening modal
-            window.checkAccessBeforeOpen(
-                donorId,
-                // onAllowed - open modal and activate lock
-                () => {
-                    // Set current donor ID
-                    window.currentDonorId = donorId;
-                    
-                    // Activate access lock (only if access check passed)
-                    if (window.AccessLockManagerInterviewer) {
-                        window.AccessLockManagerInterviewer.activate({ donor_id: donorId });
-                    }
-
-                    const openModal = () => {
+            const openModal = () => {
+                // Set current donor ID
+                window.currentDonorId = donorId;
+                if (window.AccessLockManagerInterviewer) {
+                    window.AccessLockManagerInterviewer.activate({ donor_id: donorId });
+                }
 
                 // Get or create the donor status modal instance - reuse for better performance
                 const deferralStatusModalEl = document.getElementById('deferralStatusModal');
@@ -7124,22 +7096,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                     </div>`;
                             }
                         });
-                    };
+            };
 
-                    openModal();
-                    isOpeningModal = false;
-                },
-                // onBlocked - show access lock message and don't open modal
-                (message) => {
-                    isOpeningModal = false;
-                    // Show access lock modal
-                    if (window.AccessLockManagerInterviewer && typeof window.AccessLockManagerInterviewer.notifyBlocked === 'function') {
-                        window.AccessLockManagerInterviewer.notifyBlocked(message);
-                    } else {
-                        alert(message || 'This donor data is being processed by an admin account.');
-                    }
-                }
-            );
+            if (!guardMedicalAccess(donorId, openModal)) {
+                openModal();
+            }
         }
 
 

@@ -162,12 +162,8 @@
             }
 
             this.attachGuards();
-            // Only auto-claim if we have a context with donor_id
-            // This prevents full-table updates when autoClaim is true
-            if (this.autoClaim && this.currentContext && this.currentContext.donor_id) {
-                this.activate(this.currentContext);
-            } else if (this.autoClaim) {
-                console.warn('[AccessLockManagerInterviewer] autoClaim is true but no context with donor_id provided. Skipping auto-claim.');
+            if (this.autoClaim) {
+                this.activate();
             }
             this.startPolling();
             const releaseHandler = () => this.releaseOnce();
@@ -180,58 +176,21 @@
             if (typeof accessOverride === 'number') {
                 this.accessValue = accessOverride;
             }
-            // CRITICAL: Require context with donor_id to prevent full-table updates
-            if (!context || !context.donor_id) {
-                console.warn('[AccessLockManagerInterviewer] Cannot activate: context with donor_id is required');
-                return;
+            if (context) {
+                this.currentContext = Object.assign({}, context);
             }
-            
-            // Check if already blocked before trying to activate
-            if (this.blocked) {
-                console.warn('[AccessLockManagerInterviewer] Cannot activate: access is currently blocked');
+            if (this.active) {
                 return;
-            }
-            
-            this.currentContext = Object.assign({}, context);
-            if (this.active && this.currentContext.donor_id === context.donor_id) {
-                console.log('[AccessLockManagerInterviewer] Already active for this donor, skipping claim');
-                return;
-            }
-            // If switching donors, release previous lock first
-            if (this.active && this.currentContext.donor_id !== context.donor_id) {
-                console.log('[AccessLockManagerInterviewer] Switching donors, releasing previous lock');
-                this.releaseLock();
             }
             this.claimLock();
         },
 
         deactivate() {
-            // Preserve context for release operation, then clear it
-            const contextToRelease = this.currentContext;
             this.currentContext = null;
-            if (contextToRelease && this.active) {
-                // Temporarily restore context for release
-                this.currentContext = contextToRelease;
-                this.releaseLock();
-                this.currentContext = null;
-            }
+            this.releaseLock();
         },
 
         claimLock() {
-            // CRITICAL: Ensure we have context with donor_id before claiming
-            if (!this.currentContext || !this.currentContext.donor_id) {
-                console.error('[AccessLockManagerInterviewer] Cannot claim: currentContext with donor_id is required');
-                this.active = false;
-                return;
-            }
-            
-            // Don't claim if already blocked
-            if (this.blocked) {
-                console.warn('[AccessLockManagerInterviewer] Cannot claim: access is currently blocked');
-                this.active = false;
-                return;
-            }
-            
             this.sendRequest({ action: 'claim', access: this.accessValue })
                 .then(() => {
                     this.active = true;
@@ -240,26 +199,12 @@
                 .catch((err) => {
                     console.error('[AccessLockManagerInterviewer] Claim failed:', err);
                     this.active = false;
-                    // If claim failed due to admin lock, set blocked state and notify user
-                    if (err.message && err.message.includes('locked by an admin')) {
-                        this.blocked = true;
-                        this.updateGuardStyles();
-                        this.notifyBlocked('This donor is currently being processed by an admin account.');
-                    }
                 })
                 .finally(() => this.fetchStatus());
         },
 
         releaseLock() {
             if (!this.active) {
-                return;
-            }
-            // If we don't have context, we can't release specific records
-            // This is okay if we're just cleaning up state
-            if (!this.currentContext || !this.currentContext.donor_id) {
-                console.warn('[AccessLockManagerInterviewer] Release called without context, skipping server release');
-                this.active = false;
-                this.releaseSent = true;
                 return;
             }
             this.sendRequest({ action: 'release' })
@@ -276,18 +221,8 @@
             if (this.releaseSent || !this.active) {
                 return;
             }
-            // Only send release if we have context with donor_id
-            if (!this.currentContext || !this.currentContext.donor_id) {
-                this.releaseSent = true;
-                return;
-            }
             this.releaseSent = true;
-            const recordsPayload = this.buildRecordsPayload();
-            if (!recordsPayload) {
-                // Can't build payload, skip beacon release
-                return;
-            }
-            const payload = JSON.stringify({ action: 'release', scopes: this.scopes, records: recordsPayload });
+            const payload = JSON.stringify({ action: 'release', scopes: this.scopes });
             if (navigator.sendBeacon) {
                 try {
                     const blob = new Blob([payload], { type: 'application/json' });
@@ -358,9 +293,7 @@
             if (Array.isArray(explicitRecords) && explicitRecords.length) {
                 return explicitRecords;
             }
-            // CRITICAL: Require currentContext with donor_id to build records payload
-            if (!this.currentContext || !this.currentContext.donor_id || !this.scopes.length) {
-                console.warn('[AccessLockManagerInterviewer] Cannot build records payload: missing currentContext with donor_id');
+            if (!this.currentContext || !this.scopes.length) {
                 return null;
             }
             return this.scopes.map((scope) => Object.assign({ scope }, this.currentContext));
