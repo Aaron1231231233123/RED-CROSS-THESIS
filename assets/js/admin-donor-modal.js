@@ -266,6 +266,42 @@ window.AdminDonorModal = (function() {
             window.currentDetailsDonorId = donorId;
             window.currentDetailsEligibilityId = eligibilityId;
 
+            // Update physical_examination needs_review=TRUE and access='2' when admin opens donor modal
+            fetch(`../../assets/php_func/update_physical_exam_admin_access.php?donor_id=${encodeURIComponent(donorId)}`, {
+                method: 'GET',
+                cache: 'no-cache'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log(`Physical examination updated for admin access - donor_id: ${donorId}`);
+                } else {
+                    console.warn(`Failed to update physical examination for admin access:`, data.error);
+                }
+            })
+            .catch(error => {
+                console.warn(`Error updating physical examination for admin access:`, error);
+                // Don't block the modal from opening if this fails
+            });
+
+            // Update blood_collection needs_review=TRUE and access='2' when admin opens donor modal
+            fetch(`../../assets/php_func/admin/update_blood_collection_admin_access.php?donor_id=${encodeURIComponent(donorId)}`, {
+                method: 'GET',
+                cache: 'no-cache'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log(`Blood collection updated for admin access - donor_id: ${donorId}`);
+                } else {
+                    console.warn(`Failed to update blood collection for admin access:`, data.error);
+                }
+            })
+            .catch(error => {
+                console.warn(`Error updating blood collection for admin access:`, error);
+                // Don't block the modal from opening if this fails
+            });
+
             // Add cache-busting timestamp to ensure fresh data
             const timestamp = Date.now();
             const url = `../../assets/php_func/donor_details_api.php?donor_id=${donorId}&eligibility_id=${eligibilityId}&_t=${timestamp}`;
@@ -704,16 +740,14 @@ window.handleMedicalHistoryApprovalFromInterviewer = function(donorId, action) {
                 approveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
             }
             
-            fetch(`../../assets/php_func/update_medical_history.php`, {
+            // Use the process_medical_history_approval.php endpoint
+            const formData = new FormData();
+            formData.append('action', 'approve_medical_history');
+            formData.append('donor_id', donorId);
+            
+            fetch(`../../assets/php_func/admin/process_medical_history_approval_admin.php`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    donor_id: donorId,
-                    medical_approval: 'Approved',
-                    updated_at: new Date().toISOString()
-                })
+                body: formData
             })
             .then(response => response.json())
             .then(data => {
@@ -724,8 +758,20 @@ window.handleMedicalHistoryApprovalFromInterviewer = function(donorId, action) {
                 
                 if (data.success) {
                     console.log('Medical history approved successfully');
+                    // Close approve confirmation modal if open
+                    const approveModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryApproveConfirmModal'));
+                    if (approveModal) {
+                        approveModal.hide();
+                    }
+                    // Close medical history modal
                     closeMedicalHistoryModal();
+                    // Show success modal
                     setTimeout(() => {
+                        const successModal = document.getElementById('medicalHistoryApprovedModal');
+                        if (successModal) {
+                            const modal = new bootstrap.Modal(successModal);
+                            modal.show();
+                        }
                         refreshDonorDetailsAfterMHApproval(currentDonorId);
                     }, 300);
                 } else {
@@ -742,7 +788,53 @@ window.handleMedicalHistoryApprovalFromInterviewer = function(donorId, action) {
             });
         };
 
-        if (window.adminModal && typeof window.adminModal.confirm === 'function') {
+        // Use the medicalHistoryApproveConfirmModal (red gradient modal with "Please Confirm")
+        const approveModal = document.getElementById('medicalHistoryApproveConfirmModal');
+        if (approveModal) {
+            // Use the modal stacking utility if available, otherwise calculate dynamically
+            if (typeof applyModalStacking === 'function') {
+                applyModalStacking(approveModal);
+            } else {
+                // Fallback: Calculate z-index based on open modals
+                const openModals = document.querySelectorAll('.modal.show, .medical-history-modal.show');
+                let maxZIndex = 1050;
+                openModals.forEach(m => {
+                    if (m === approveModal) return;
+                    const z = parseInt(window.getComputedStyle(m).zIndex) || parseInt(m.style.zIndex) || 0;
+                    if (z > maxZIndex) maxZIndex = z;
+                });
+                const newZIndex = maxZIndex + 10;
+                approveModal.style.zIndex = newZIndex.toString();
+                approveModal.style.position = 'fixed';
+                const dialog = approveModal.querySelector('.modal-dialog');
+                if (dialog) dialog.style.zIndex = (newZIndex + 1).toString();
+                const content = approveModal.querySelector('.modal-content');
+                if (content) content.style.zIndex = (newZIndex + 2).toString();
+                
+                setTimeout(() => {
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    if (backdrops.length > 0) {
+                        backdrops[backdrops.length - 1].style.zIndex = (newZIndex - 1).toString();
+                    }
+                }, 10);
+            }
+            
+            const modal = bootstrap.Modal.getOrCreateInstance(approveModal);
+            modal.show();
+            
+            // Bind confirmation handler - remove any existing handlers first
+            const confirmBtn = document.getElementById('confirmApproveMedicalHistoryBtn');
+            if (confirmBtn) {
+                // Remove existing event listeners by cloning
+                const newConfirmBtn = confirmBtn.cloneNode(true);
+                confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+                
+                newConfirmBtn.addEventListener('click', function() {
+                    proceedApproval();
+                    modal.hide();
+                });
+            }
+        } else if (window.adminModal && typeof window.adminModal.confirm === 'function') {
             window.adminModal.confirm('Are you sure you want to approve this donor\'s medical history?', proceedApproval, {
                 confirmText: 'Approve',
                 cancelText: 'Keep Reviewing'
@@ -751,57 +843,253 @@ window.handleMedicalHistoryApprovalFromInterviewer = function(donorId, action) {
             proceedApproval();
         }
     } else if (action === 'decline') {
-        // Get decline reason
-        const reason = prompt('Please provide a reason for declining this donor\'s medical history:');
-        if (reason && reason.trim()) {
-            // Show loading state
-            const declineBtn = document.getElementById('viewMHDeclineBtn');
-            const originalText = declineBtn ? declineBtn.innerHTML : '';
-            if (declineBtn) {
-                declineBtn.disabled = true;
-                declineBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+        // Use the declineMedicalHistoryModal from modal content
+        const declineModal = document.getElementById('declineMedicalHistoryModal');
+        if (declineModal) {
+            // Use the modal stacking utility if available, otherwise calculate dynamically
+            if (typeof applyModalStacking === 'function') {
+                applyModalStacking(declineModal);
+            } else {
+                // Fallback: Calculate z-index based on open modals
+                const openModals = document.querySelectorAll('.modal.show, .medical-history-modal.show');
+                let maxZIndex = 1050;
+                openModals.forEach(m => {
+                    if (m === declineModal) return;
+                    const z = parseInt(window.getComputedStyle(m).zIndex) || parseInt(m.style.zIndex) || 0;
+                    if (z > maxZIndex) maxZIndex = z;
+                });
+                const newZIndex = maxZIndex + 10;
+                declineModal.style.zIndex = newZIndex.toString();
+                declineModal.style.position = 'fixed';
+                const dialog = declineModal.querySelector('.modal-dialog');
+                if (dialog) dialog.style.zIndex = (newZIndex + 1).toString();
+                const content = declineModal.querySelector('.modal-content');
+                if (content) content.style.zIndex = (newZIndex + 2).toString();
+                
+                setTimeout(() => {
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    if (backdrops.length > 0) {
+                        backdrops[backdrops.length - 1].style.zIndex = (newZIndex - 1).toString();
+                    }
+                }, 10);
             }
             
-            // Direct API call to update medical history
-            fetch(`../../assets/php_func/update_medical_history.php`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    donor_id: donorId,
-                    medical_approval: 'Declined',
-                    disapproval_reason: reason.trim(),
-                    updated_at: new Date().toISOString()
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (declineBtn) {
-                    declineBtn.disabled = false;
-                    declineBtn.innerHTML = originalText;
-                }
+            const modal = bootstrap.Modal.getOrCreateInstance(declineModal);
+            modal.show();
+            
+            // Bind confirmation handler
+            const confirmDeclineBtn = document.getElementById('confirmDeclineBtn');
+            const declineReason = document.getElementById('declineReason');
+            const declineCharCount = document.getElementById('declineCharCount');
+            
+            // Character count and validation
+            if (declineReason && declineCharCount) {
+                declineReason.addEventListener('input', function() {
+                    const length = this.value.length;
+                    declineCharCount.textContent = `${length}/500 characters`;
+                    
+                    // Enable/disable submit button based on minimum length
+                    if (confirmDeclineBtn) {
+                        if (length >= 10) {
+                            confirmDeclineBtn.disabled = false;
+                            confirmDeclineBtn.classList.remove('btn-secondary');
+                            confirmDeclineBtn.classList.add('btn-primary');
+                        } else {
+                            confirmDeclineBtn.disabled = true;
+                            confirmDeclineBtn.classList.remove('btn-primary');
+                            confirmDeclineBtn.classList.add('btn-secondary');
+                        }
+                    }
+                });
+            }
+            
+            if (confirmDeclineBtn) {
+                // Remove existing event listeners by cloning
+                const newConfirmBtn = confirmDeclineBtn.cloneNode(true);
+                confirmDeclineBtn.parentNode.replaceChild(newConfirmBtn, confirmDeclineBtn);
                 
-                if (data.success) {
-                    console.log('Medical history declined successfully');
-                    // Close modal first
-                    closeMedicalHistoryModal();
-                    // Then refresh donor details modal to show updated status
+                newConfirmBtn.addEventListener('click', function() {
+                    const reason = declineReason ? declineReason.value.trim() : '';
+                    if (reason.length < 10) {
+                        alert('Please provide a reason with at least 10 characters.');
+                        return;
+                    }
+                    
+                    // Process decline
+                    const declineBtn = document.getElementById('viewMHDeclineBtn');
+                    const originalText = declineBtn ? declineBtn.innerHTML : '';
+                    if (declineBtn) {
+                        declineBtn.disabled = true;
+                        declineBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+                    }
+                    
+                    // Use the process_medical_history_approval.php endpoint
+                    const formData = new FormData();
+                    formData.append('action', 'decline_medical_history');
+                    formData.append('donor_id', donorId);
+                    formData.append('decline_reason', reason);
+                    
+                    fetch(`../../assets/php_func/admin/process_medical_history_approval_admin.php`, {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (declineBtn) {
+                            declineBtn.disabled = false;
+                            declineBtn.innerHTML = originalText;
+                        }
+                        
+                        if (data.success) {
+                            console.log('Medical history declined successfully');
+                            // Close decline modal
+                            modal.hide();
+                            // Close medical history modal
+                            closeMedicalHistoryModal();
+                            // Show success modal
+                            setTimeout(() => {
+                                const declinedModal = document.getElementById('medicalHistoryDeclinedModal');
+                                if (declinedModal) {
+                                    const successModal = new bootstrap.Modal(declinedModal);
+                                    successModal.show();
+                                }
+                                refreshDonorDetailsAfterMHApproval(currentDonorId);
+                            }, 300);
+                        } else {
+                            alert('Failed to decline medical history: ' + (data.message || 'Unknown error'));
+                        }
+                    })
+                    .catch(error => {
+                        if (declineBtn) {
+                            declineBtn.disabled = false;
+                            declineBtn.innerHTML = originalText;
+                        }
+                        console.error('Error declining medical history:', error);
+                        alert('Error declining medical history: ' + error.message);
+                    });
+                });
+            }
+        } else {
+            // Fallback: Try to find the modal again after a short delay (it might be loading)
+            setTimeout(() => {
+                const retryModal = document.getElementById('declineMedicalHistoryModal');
+                if (retryModal) {
+                    // Retry with the modal
+                    retryModal.style.zIndex = '1070';
+                    const dialog = retryModal.querySelector('.modal-dialog');
+                    if (dialog) {
+                        dialog.style.zIndex = '1071';
+                    }
+                    const modal = new bootstrap.Modal(retryModal);
+                    modal.show();
+                    
+                    // Update backdrop z-index
                     setTimeout(() => {
-                        refreshDonorDetailsAfterMHApproval(currentDonorId);
-                    }, 300);
+                        const backdrops = document.querySelectorAll('.modal-backdrop');
+                        if (backdrops && backdrops.length > 0) {
+                            backdrops[backdrops.length - 1].style.zIndex = '1069';
+                        }
+                    }, 10);
+                    
+                    // Bind confirmation handler
+                    const confirmDeclineBtn = document.getElementById('confirmDeclineBtn');
+                    const declineReason = document.getElementById('declineReason');
+                    const declineCharCount = document.getElementById('declineCharCount');
+                    
+                    // Character count and validation
+                    if (declineReason && declineCharCount) {
+                        declineReason.addEventListener('input', function() {
+                            const length = this.value.length;
+                            declineCharCount.textContent = `${length}/500 characters`;
+                            
+                            // Enable/disable submit button based on minimum length
+                            if (confirmDeclineBtn) {
+                                if (length >= 10) {
+                                    confirmDeclineBtn.disabled = false;
+                                    confirmDeclineBtn.classList.remove('btn-secondary');
+                                    confirmDeclineBtn.classList.add('btn-primary');
+                                } else {
+                                    confirmDeclineBtn.disabled = true;
+                                    confirmDeclineBtn.classList.remove('btn-primary');
+                                    confirmDeclineBtn.classList.add('btn-secondary');
+                                }
+                            }
+                        });
+                    }
+                    
+                    if (confirmDeclineBtn) {
+                        // Remove existing event listeners by cloning
+                        const newConfirmBtn = confirmDeclineBtn.cloneNode(true);
+                        confirmDeclineBtn.parentNode.replaceChild(newConfirmBtn, confirmDeclineBtn);
+                        
+                        newConfirmBtn.addEventListener('click', function() {
+                            const reason = declineReason ? declineReason.value.trim() : '';
+                            if (reason.length < 10) {
+                                alert('Please provide a reason with at least 10 characters.');
+                                return;
+                            }
+                            
+                            // Process decline (same as above)
+                            const declineBtn = document.getElementById('viewMHDeclineBtn');
+                            const originalText = declineBtn ? declineBtn.innerHTML : '';
+                            if (declineBtn) {
+                                declineBtn.disabled = true;
+                                declineBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+                            }
+                            
+                            // Use the process_medical_history_approval.php endpoint
+                            const formData = new FormData();
+                            formData.append('action', 'decline_medical_history');
+                            formData.append('donor_id', donorId);
+                            formData.append('decline_reason', reason);
+                            
+                            fetch(`../../assets/php_func/admin/process_medical_history_approval_admin.php`, {
+                                method: 'POST',
+                                body: formData
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (declineBtn) {
+                                    declineBtn.disabled = false;
+                                    declineBtn.innerHTML = originalText;
+                                }
+                                
+                                if (data.success) {
+                                    console.log('Medical history declined successfully');
+                                    // Close decline modal
+                                    modal.hide();
+                                    // Close medical history modal
+                                    closeMedicalHistoryModal();
+                                    // Show success modal
+                                    setTimeout(() => {
+                                        const declinedModal = document.getElementById('medicalHistoryDeclinedModal');
+                                        if (declinedModal) {
+                                            const successModal = new bootstrap.Modal(declinedModal);
+                                            successModal.show();
+                                        }
+                                        refreshDonorDetailsAfterMHApproval(currentDonorId);
+                                    }, 300);
+                                } else {
+                                    alert('Failed to decline medical history: ' + (data.message || 'Unknown error'));
+                                }
+                            })
+                            .catch(error => {
+                                if (declineBtn) {
+                                    declineBtn.disabled = false;
+                                    declineBtn.innerHTML = originalText;
+                                }
+                                console.error('Error declining medical history:', error);
+                                alert('Error declining medical history: ' + error.message);
+                            });
+                        });
+                    }
                 } else {
-                    alert('Failed to decline medical history: ' + (data.message || 'Unknown error'));
+                    // Final fallback: Show error message
+                    console.error('Decline modal not found. Please refresh the page.');
+                    alert('Error: Decline modal not available. Please refresh the page.');
                 }
-            })
-            .catch(error => {
-                if (declineBtn) {
-                    declineBtn.disabled = false;
-                    declineBtn.innerHTML = originalText;
-                }
-                console.error('Error declining medical history:', error);
-                alert('Error declining medical history: ' + error.message);
-            });
+            }, 100);
+            return; // Exit early to prevent the old prompt code from running
         }
     }
 };
@@ -868,84 +1156,14 @@ window.openPhysicalExaminationView = function(donorId) {
                 }
                 console.log('[Admin] Physical examination data loaded:', examData);
                 
-                // Use the compact summary modal instead of the form modal
-                const summaryModal = document.getElementById('staffPhysicianAccountSummaryModal');
-                if (summaryModal) {
-                    // Populate the compact summary modal with data
-                    if (examData.blood_pressure) {
-                        const bpEl = document.getElementById('summary-view-blood-pressure');
-                        if (bpEl) bpEl.textContent = examData.blood_pressure;
-                    }
-                    
-                    if (examData.pulse_rate) {
-                        const pulseEl = document.getElementById('summary-view-pulse-rate');
-                        if (pulseEl) pulseEl.textContent = examData.pulse_rate;
-                    }
-                    
-                    if (examData.body_temp) {
-                        const tempEl = document.getElementById('summary-view-body-temp');
-                        if (tempEl) tempEl.textContent = examData.body_temp;
-                    }
-                    
-                    if (examData.gen_appearance) {
-                        const genAppEl = document.getElementById('summary-view-gen-appearance');
-                        if (genAppEl) genAppEl.textContent = examData.gen_appearance;
-                    }
-                    
-                    if (examData.skin) {
-                        const skinEl = document.getElementById('summary-view-skin');
-                        if (skinEl) skinEl.textContent = examData.skin;
-                    }
-                    
-                    if (examData.heent) {
-                        const heentEl = document.getElementById('summary-view-heent');
-                        if (heentEl) heentEl.textContent = examData.heent;
-                    }
-                    
-                    if (examData.heart_and_lungs) {
-                        const heartLungsEl = document.getElementById('summary-view-heart-lungs');
-                        if (heartLungsEl) heartLungsEl.textContent = examData.heart_and_lungs;
-                    }
-                    
-                    if (examData.remarks) {
-                        const remarksEl = document.getElementById('summary-view-remarks');
-                        if (remarksEl) remarksEl.textContent = examData.remarks;
-                    }
-                    
-                    // Populate physician name if available
-                    if (examData.physician) {
-                        const physicianNameEl = document.getElementById('summary-physician-name');
-                        const physicianSigEl = document.getElementById('summary-view-physician-signature');
-                        if (physicianNameEl) physicianNameEl.textContent = examData.physician;
-                        if (physicianSigEl) physicianSigEl.textContent = examData.physician;
-                    }
-                    
-                    // Update examination date if available
-                    if (examData.created_at || examData.updated_at) {
-                        const examDate = examData.updated_at || examData.created_at;
-                        if (examDate) {
-                            try {
-                                const dateObj = new Date(examDate);
-                                const formattedDate = dateObj.toLocaleDateString('en-US', { 
-                                    year: 'numeric', 
-                                    month: 'long', 
-                                    day: 'numeric' 
-                                });
-                                const dateEl = summaryModal.querySelector('.report-date');
-                                if (dateEl) dateEl.textContent = formattedDate;
-                            } catch (e) {
-                                console.warn('[Admin] Could not format examination date:', e);
-                            }
-                        }
-                    }
-                    
-                    // Open the compact summary modal
-                    const modal = bootstrap.Modal.getOrCreateInstance(summaryModal, { backdrop: 'static', keyboard: false });
-                    modal.show();
-                    console.log('[Admin] Opened compact physical examination summary modal');
+                // Use the compact physicianSectionModal (matching Initial Screening Form style)
+                // This is the standalone view modal, not the edit modal with steps
+                if (typeof window.viewPhysicianDetails === 'function') {
+                    window.viewPhysicianDetails(donorId);
+                    console.log('[Admin] Opened compact physical examination summary modal via viewPhysicianDetails');
                 } else {
-                    console.error('[Admin] Compact summary modal not found, falling back to form modal');
-                    // Fallback to form modal if compact modal doesn't exist
+                    console.error('[Admin] viewPhysicianDetails function not found, falling back to form modal');
+                    // Fallback to form modal if viewPhysicianDetails doesn't exist
                     if (window.physicalExaminationModalAdmin && typeof window.physicalExaminationModalAdmin.openModal === 'function') {
                         examData.viewMode = true;
                         window.physicalExaminationModalAdmin.openModal(examData);

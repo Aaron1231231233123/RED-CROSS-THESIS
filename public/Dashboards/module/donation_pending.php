@@ -9,11 +9,6 @@ if (isset($_GET['debug']) && $_GET['debug'] == '1') {
     error_log("DEBUG - donation_pending.php module loaded at " . date('Y-m-d H:i:s'));
 }
 
-// Also write to a custom log file for easier debugging when debug flag is set
-if (isset($_GET['debug']) && $_GET['debug'] == '1') {
-    file_put_contents('../../assets/logs/donation_pending_debug.log', "[" . date('Y-m-d H:i:s') . "] donation_pending.php module loaded\n", FILE_APPEND | LOCK_EX);
-}
-
 // Include database connection
 include_once '../../assets/conn/db_conn.php';
 
@@ -166,20 +161,19 @@ try {
             error_log("First donor record fields: " . print_r(array_keys($donorResponse['data'][0]), true));
         }
         
-        // Log all donor IDs being processed
+        // Log all donor IDs being processed (only in debug mode)
         $donorIds = array_column($donorResponse['data'], 'donor_id');
-        error_log("DEBUG - Processing " . count($donorIds) . " donors. Donor IDs: " . implode(', ', $donorIds));
-        file_put_contents('../../assets/logs/donation_pending_debug.log', "[" . date('Y-m-d H:i:s') . "] Processing " . count($donorIds) . " donors. Donor IDs: " . implode(', ', $donorIds) . "\n", FILE_APPEND | LOCK_EX);
-        
-        // Check if our specific donor IDs are in the fetched data
-        $targetDonorIds = [176, 169, 170, 144, 140, 142, 135, 120, 189];
-        $foundTargetIds = array_intersect($targetDonorIds, $donorIds);
-        if (!empty($foundTargetIds)) {
-            error_log("DEBUG - Found target donor IDs in fetched data: " . implode(', ', $foundTargetIds));
-            file_put_contents('../../assets/logs/donation_pending_debug.log', "[" . date('Y-m-d H:i:s') . "] Found target donor IDs in fetched data: " . implode(', ', $foundTargetIds) . "\n", FILE_APPEND | LOCK_EX);
-        } else {
-            error_log("DEBUG - Target donor IDs NOT found in fetched data. They may be outside the limit/offset range.");
-            file_put_contents('../../assets/logs/donation_pending_debug.log', "[" . date('Y-m-d H:i:s') . "] Target donor IDs NOT found in fetched data. They may be outside the limit/offset range.\n", FILE_APPEND | LOCK_EX);
+        if (isset($_GET['debug']) && $_GET['debug'] == '1') {
+            error_log("DEBUG - Processing " . count($donorIds) . " donors. Donor IDs: " . implode(', ', $donorIds));
+            
+            // Check if our specific donor IDs are in the fetched data
+            $targetDonorIds = [176, 169, 170, 144, 140, 142, 135, 120, 189];
+            $foundTargetIds = array_intersect($targetDonorIds, $donorIds);
+            if (!empty($foundTargetIds)) {
+                error_log("DEBUG - Found target donor IDs in fetched data: " . implode(', ', $foundTargetIds));
+            } else {
+                error_log("DEBUG - Target donor IDs NOT found in fetched data. They may be outside the limit/offset range.");
+            }
         }
         
         // Process each donor

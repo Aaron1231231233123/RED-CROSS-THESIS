@@ -57,6 +57,80 @@ function formatDataForSupabase($data) {
     return $data;
 }
 
+// Helper function to create or update physical_examination row with null values
+function createOrUpdatePhysicalExamination($donor_id, $screening_id) {
+    try {
+        $now_iso = date('Y-m-d H:i:s');
+        
+        // Check if physical_examination record already exists
+        $check_ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?select=physical_exam_id&donor_id=eq.' . $donor_id . '&order=created_at.desc&limit=1');
+        curl_setopt($check_ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($check_ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY
+        ]);
+        $check_resp = curl_exec($check_ch);
+        $check_http = curl_getinfo($check_ch, CURLINFO_HTTP_CODE);
+        curl_close($check_ch);
+
+        $existing_exam = ($check_http === 200) ? (json_decode($check_resp, true) ?: []) : [];
+        $has_existing = is_array($existing_exam) && !empty($existing_exam);
+
+        // Insert or Update physical_examination
+        if ($has_existing) {
+            // UPDATE existing record - only update needs_review, screening_id, and updated_at
+            $pe_ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination?donor_id=eq.' . $donor_id);
+            curl_setopt($pe_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            
+            $pe_body = [
+                'screening_id' => $screening_id,
+                'needs_review' => true,
+                'access' => '2', // Admin access
+                'updated_at' => $now_iso,
+                'remarks' => 'Pending'
+            ];
+        } else {
+            // INSERT new record - include all required fields, others are null
+            $pe_ch = curl_init(SUPABASE_URL . '/rest/v1/physical_examination');
+            curl_setopt($pe_ch, CURLOPT_POST, true);
+            
+            $pe_body = [
+                'donor_id' => $donor_id,
+                'screening_id' => $screening_id,
+                'needs_review' => true,
+                'access' => '2', // Admin access
+                'remarks' => 'Pending',
+                'created_at' => $now_iso,
+                'updated_at' => $now_iso
+                // All other fields (blood_pressure, pulse_rate, body_temp, gen_appearance, skin, heent, heart_and_lungs, physician, blood_bag_type, etc.) are null by default
+            ];
+        }
+        
+        curl_setopt($pe_ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($pe_ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=minimal'
+        ]);
+        curl_setopt($pe_ch, CURLOPT_POSTFIELDS, json_encode($pe_body));
+        
+        $pe_resp = curl_exec($pe_ch);
+        $pe_http = curl_getinfo($pe_ch, CURLINFO_HTTP_CODE);
+        curl_close($pe_ch);
+        
+        if ($pe_http >= 200 && $pe_http < 300) {
+            error_log("Physical examination record created/updated successfully for donor_id: $donor_id, screening_id: $screening_id");
+        } else {
+            error_log("Warning: Failed to create/update physical examination for donor_id: $donor_id. HTTP Code: $pe_http, Response: " . substr($pe_resp, 0, 500));
+            // Don't throw exception - this is not critical for screening form submission
+        }
+    } catch (Exception $e) {
+        error_log("Error creating/updating physical examination: " . $e->getMessage());
+        // Don't throw exception - this is not critical for screening form submission
+    }
+}
+
 // Function to process admin screening form submission
 function processAdminScreeningForm() {
     header('Content-Type: application/json');
@@ -262,6 +336,10 @@ function processAdminScreeningForm() {
             
             if ($http_code >= 200 && $http_code < 300) {
                 error_log("Admin screening form updated successfully for donor_id: $donor_id");
+                
+                // Create or update physical_examination row with null values
+                createOrUpdatePhysicalExamination($donor_id, $existing_screening_id);
+                
                 echo json_encode([
                     'success' => true,
                     'screening_id' => $existing_screening_id,
@@ -306,6 +384,9 @@ function processAdminScreeningForm() {
                 if (is_array($response_data) && isset($response_data[0]['screening_id'])) {
                     $screening_id = $response_data[0]['screening_id'];
                     error_log("Admin screening form created successfully for donor_id: $donor_id, screening_id: $screening_id");
+                    
+                    // Create or update physical_examination row with null values
+                    createOrUpdatePhysicalExamination($donor_id, $screening_id);
                     
                     echo json_encode([
                         'success' => true,

@@ -684,6 +684,7 @@ if ($http_code === 200) {
 </div>
 
 <!-- Decline Medical History Confirmation Modal -->
+<!-- Z-index is set dynamically via applyModalStacking() function to ensure proper stacking -->
 <div class="modal fade" id="declineMedicalHistoryModal" tabindex="-1" aria-labelledby="declineMedicalHistoryModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none;">
@@ -723,6 +724,7 @@ if ($http_code === 200) {
 </div>
 
 <!-- Approve Medical History Confirmation Modal -->
+<!-- Z-index is set dynamically via applyModalStacking() function to ensure proper stacking -->
 <div class="modal fade" id="approveMedicalHistoryModal" tabindex="-1" aria-labelledby="approveMedicalHistoryModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none;">
@@ -1216,7 +1218,16 @@ setTimeout(() => {
             const steps = form ? form.querySelectorAll('.form-step') : [];
             steps.forEach(s => s.classList.remove('active'));
             const active = form ? form.querySelector(`.form-step[data-step="${currentStep}"]`) : null;
-            if (active) active.classList.add('active');
+            if (active) {
+                active.classList.add('active');
+                active.style.display = 'block';
+            }
+            // Hide all other steps
+            steps.forEach(s => {
+                if (s !== active) {
+                    s.style.display = 'none';
+                }
+            });
 
             // Indicators
             stepIndicators.forEach(i => {
@@ -1242,15 +1253,27 @@ setTimeout(() => {
                 if (currentStep === totalSteps) {
                     // Check if we're in admin registration flow
                     const isRegistrationFlow = window.__adminDonorRegistrationFlow === true;
-                    if (isViewOnly && !isRegistrationFlow) {
-                        // In view-only mode (but not registration), show "Close" button instead of "Submit"
+                    // Check if medical history is completed (has data but not approved/declined)
+                    const isCompleted = window.currentViewMHCompleted === true;
+                    // Check if approve/decline buttons should be shown (completed but not approved)
+                    const showApproveDecline = (window.currentViewMHScreeningRecord && !window.currentViewMHApproved) || 
+                                              (isCompleted && !window.currentViewMHApproved);
+                    
+                    if (showApproveDecline) {
+                        // If approve/decline buttons are shown, hide next button - only show Previous button
+                        nextButton.style.display = 'none';
+                    } else if ((isViewOnly && !isRegistrationFlow) || (isCompleted && !showApproveDecline)) {
+                        // In view-only mode (approved) or completed without approve/decline buttons, show "Close" button
                         nextButton.innerHTML = '<i class="fas fa-times me-1"></i>Close';
+                        nextButton.style.display = 'inline-block';
                     } else {
                         // In registration flow or normal mode, show "Submit"
                         nextButton.innerHTML = '<i class="fas fa-check me-1"></i>Submit';
+                        nextButton.style.display = 'inline-block';
                     }
                 } else {
                     nextButton.innerHTML = 'Next <i class="fas fa-arrow-right ms-1"></i>';
+                    nextButton.style.display = 'inline-block';
                 }
             }
             
@@ -1296,19 +1319,33 @@ setTimeout(() => {
                     // Final step
                     // Check if we're in admin registration flow
                     const isRegistrationFlow = window.__adminDonorRegistrationFlow === true;
-                    if (isViewOnly && !isRegistrationFlow) {
-                        // In view-only mode (but not registration), close the modal instead of submitting
-                        console.log('View-only mode: Closing medical history modal');
+                    // Check if medical history is completed (has data but not approved/declined)
+                    const isCompleted = window.currentViewMHCompleted === true;
+                    // Check if approve/decline buttons should be shown (completed but not approved)
+                    const showApproveDecline = (window.currentViewMHScreeningRecord && !window.currentViewMHApproved) || 
+                                              (isCompleted && !window.currentViewMHApproved);
+                    
+                    if ((isViewOnly && !isRegistrationFlow) || (isCompleted && !showApproveDecline)) {
+                        // In view-only mode (approved) or completed without approve/decline buttons, close the modal
+                        console.log('View-only or completed mode: Closing medical history modal');
                         if (typeof closeMedicalHistoryModal === 'function') {
                             closeMedicalHistoryModal();
                         } else {
                             // Fallback: simple close
-                            const modal = document.getElementById('medicalHistoryModal');
+                            const modal = document.getElementById('medicalHistoryModal') || document.getElementById('medicalHistoryModalAdmin');
                             if (modal) {
-                                modal.classList.remove('show');
-                                modal.style.display = 'none';
+                                const bsModal = bootstrap.Modal.getInstance(modal);
+                                if (bsModal) {
+                                    bsModal.hide();
+                                } else {
+                                    modal.classList.remove('show');
+                                    modal.style.display = 'none';
+                                }
                             }
                         }
+                    } else if (showApproveDecline) {
+                        // If approve/decline buttons are shown, don't submit - buttons handle the action
+                        console.log('Approve/decline buttons handle the action - staying on last step');
                     } else {
                         // Normal mode or registration flow: dispatch submit event
                         console.log('Final step reached - dispatching submit event');
@@ -1776,9 +1813,46 @@ function mhInitializeAdminFlow() {
     // Handle approve button click
     if (approveButton) {
         approveButton.addEventListener('click', function() {
-            // Show approve confirmation modal
-            const approveModal = new bootstrap.Modal(document.getElementById('approveMedicalHistoryModal'));
-            approveModal.show();
+            // Show approve confirmation modal (red gradient "Please Confirm" modal)
+            const approveModal = document.getElementById('medicalHistoryApproveConfirmModal');
+            if (approveModal) {
+                const modal = bootstrap.Modal.getOrCreateInstance(approveModal);
+                
+                // Apply proper modal stacking AFTER modal is shown (Bootstrap creates backdrop then)
+                const applyStackingAfterShow = () => {
+                    if (typeof applyModalStacking === 'function') {
+                        applyModalStacking(approveModal);
+                    } else {
+                        // Fallback: Calculate z-index based on open modals
+                        const openModals = document.querySelectorAll('.modal.show, .medical-history-modal.show');
+                        let maxZIndex = 1050;
+                        openModals.forEach(m => {
+                            if (m === approveModal) return;
+                            const z = parseInt(window.getComputedStyle(m).zIndex) || parseInt(m.style.zIndex) || 0;
+                            if (z > maxZIndex) maxZIndex = z;
+                        });
+                        const newZIndex = maxZIndex + 10;
+                        approveModal.style.zIndex = newZIndex.toString();
+                        approveModal.style.position = 'fixed';
+                        const dialog = approveModal.querySelector('.modal-dialog');
+                        if (dialog) dialog.style.zIndex = (newZIndex + 1).toString();
+                        const content = approveModal.querySelector('.modal-content');
+                        if (content) content.style.zIndex = (newZIndex + 2).toString();
+                        
+                        setTimeout(() => {
+                            const backdrops = document.querySelectorAll('.modal-backdrop');
+                            if (backdrops.length > 0) {
+                                backdrops[backdrops.length - 1].style.zIndex = (newZIndex - 1).toString();
+                            }
+                        }, 10);
+                    }
+                };
+                
+                // Apply stacking when modal is shown
+                approveModal.addEventListener('shown.bs.modal', applyStackingAfterShow, { once: true });
+                
+                modal.show();
+            }
         });
     }
     
@@ -1914,10 +1988,14 @@ function mhInitializeDeclineModal() {
 
 // Initialize approve modal functionality
 function mhInitializeApproveModal() {
-    const confirmApproveBtn = document.getElementById('confirmApproveBtn');
+    const confirmApproveBtn = document.getElementById('confirmApproveMedicalHistoryBtn');
     
     if (confirmApproveBtn) {
-        confirmApproveBtn.addEventListener('click', function() {
+        // Remove existing event listeners by cloning
+        const newConfirmBtn = confirmApproveBtn.cloneNode(true);
+        confirmApproveBtn.parentNode.replaceChild(newConfirmBtn, confirmApproveBtn);
+        
+        newConfirmBtn.addEventListener('click', function() {
             // Process approval
             mhProcessApproval();
         });
@@ -1956,7 +2034,7 @@ function mhProcessDecline(reason) {
     formData.append('donor_id', donorId);
     formData.append('decline_reason', reason);
     
-    fetch('../../assets/php_func/process_medical_history_approval.php', {
+    fetch('../../assets/php_func/admin/process_medical_history_approval_admin.php', {
         method: 'POST',
         body: formData
     })
@@ -2008,10 +2086,12 @@ function mhProcessApproval() {
     console.log('Processing medical history approval');
     
     // Show loading state
-    const confirmApproveBtn = document.getElementById('confirmApproveBtn');
-    const originalText = confirmApproveBtn.innerHTML;
-    confirmApproveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
-    confirmApproveBtn.disabled = true;
+    const confirmApproveBtn = document.getElementById('confirmApproveMedicalHistoryBtn');
+    const originalText = confirmApproveBtn ? confirmApproveBtn.innerHTML : '';
+    if (confirmApproveBtn) {
+        confirmApproveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+        confirmApproveBtn.disabled = true;
+    }
     
     // Get donor ID from the form
     const form = document.getElementById('modalMedicalHistoryForm');
@@ -2020,8 +2100,10 @@ function mhProcessApproval() {
     
     if (!donorId) {
         console.error('No donor ID found for approval processing');
-        confirmApproveBtn.innerHTML = originalText;
-        confirmApproveBtn.disabled = false;
+        if (confirmApproveBtn) {
+            confirmApproveBtn.innerHTML = originalText;
+            confirmApproveBtn.disabled = false;
+        }
         mhShowQuietErrorToast('Error: No donor ID found');
         return;
     }
@@ -2034,7 +2116,7 @@ function mhProcessApproval() {
     formData.append('action', 'approve_medical_history');
     formData.append('donor_id', donorId);
     
-    fetch('../../assets/php_func/process_medical_history_approval.php', {
+    fetch('../../assets/php_func/admin/process_medical_history_approval_admin.php', {
         method: 'POST',
         body: formData
     })
@@ -2044,7 +2126,7 @@ function mhProcessApproval() {
             console.log('Medical history approved successfully');
             
             // Close approve modal
-            const approveModal = bootstrap.Modal.getInstance(document.getElementById('approveMedicalHistoryModal'));
+            const approveModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryApproveConfirmModal'));
             if (approveModal) {
                 approveModal.hide();
             }
@@ -2095,8 +2177,10 @@ function mhProcessApproval() {
     })
     .finally(() => {
         // Reset button state
-        confirmApproveBtn.innerHTML = originalText;
-        confirmApproveBtn.disabled = false;
+        if (confirmApproveBtn) {
+            confirmApproveBtn.innerHTML = originalText;
+            confirmApproveBtn.disabled = false;
+        }
     });
 }
 

@@ -187,6 +187,38 @@
         };
 
         injectStyles();
+        
+        // Use dynamic z-index calculation based on open modals
+        if (modalElement) {
+            // Use the modal stacking utility if available, otherwise calculate dynamically
+            if (typeof applyModalStacking === 'function') {
+                applyModalStacking(modalElement);
+            } else {
+                // Fallback: Calculate z-index based on open modals
+                const openModals = document.querySelectorAll('.modal.show, .medical-history-modal.show');
+                let maxZIndex = 1050;
+                openModals.forEach(m => {
+                    if (m === modalElement) return;
+                    const z = parseInt(window.getComputedStyle(m).zIndex) || parseInt(m.style.zIndex) || 0;
+                    if (z > maxZIndex) maxZIndex = z;
+                });
+                const newZIndex = maxZIndex + 10;
+                modalElement.style.zIndex = newZIndex.toString();
+                modalElement.style.position = 'fixed';
+                const dialog = modalElement.querySelector('.modal-dialog');
+                if (dialog) dialog.style.zIndex = (newZIndex + 1).toString();
+                const content = modalElement.querySelector('.modal-content');
+                if (content) content.style.zIndex = (newZIndex + 2).toString();
+                
+                setTimeout(() => {
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    if (backdrops.length > 0) {
+                        backdrops[backdrops.length - 1].style.zIndex = (newZIndex - 1).toString();
+                    }
+                }, 10);
+            }
+        }
+        
         const instance = getModalInstance();
         instance.show();
 

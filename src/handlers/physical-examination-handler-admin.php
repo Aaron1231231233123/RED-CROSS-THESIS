@@ -251,12 +251,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     
                     if (!$collection_exists) {
                         // Create blood collection record only if it doesn't exist
+                        // Set access='0' and needs_review=false initially
+                        // These will be updated when admin opens donor modal (access='2', needs_review=true)
+                        // Then reset when admin submits blood collection (access='0', needs_review=false)
                         $collectionData = [
                             'physical_exam_id' => $physical_exam_id,
-                            'needs_review' => true,
+                            'access' => '0',
+                            'needs_review' => false,
                             'status' => 'pending',
                             'created_at' => date('Y-m-d\TH:i:s.000\Z'),
                             'updated_at' => date('Y-m-d\TH:i:s.000\Z')
+                            // All other fields (blood_bag_type, blood_bag_brand, amount_taken, is_successful, 
+                            // donor_reaction, management_done, unit_serial_number, start_time, end_time, 
+                            // phlebotomist, etc.) will be null/empty and updated when admin processes it
                         ];
                         
                         // Add screening_id if available

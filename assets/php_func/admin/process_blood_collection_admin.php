@@ -1,9 +1,10 @@
 <?php
-// Enable error reporting for debugging
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-ini_set('log_errors', 1);
-ini_set('error_log', '../../logs/debug.log');
+// Start output buffering to catch any unexpected output
+ob_start();
+
+// Suppress all error output to ensure clean response (matching staff behavior)
+error_reporting(0);
+ini_set('display_errors', 0);
 
 // Include database connection
 require_once '../../conn/db_conn.php';
@@ -247,9 +248,27 @@ try {
     $blood_bag_type     = $_POST['blood_bag_type'] ?? null;
     $original_bag_type  = $_POST['blood_bag_type'] ?? null; // keep raw for brand inference
     $amount_taken       = isset($_POST['amount_taken']) ? (int)$_POST['amount_taken'] : 1;
-    // Admin workflow: always treat collection as successful (status step removed in admin UI)
-    $is_successful      = true;
-    error_log("Blood Collection Admin - Forcing is_successful=true for admin submission");
+    // Admin workflow: handle is_successful like staff version (accepts 'YES' string or boolean)
+    $is_successful_raw  = $_POST['is_successful'] ?? null;
+    $is_successful      = null;
+    if ($is_successful_raw !== null) {
+        if (is_bool($is_successful_raw)) {
+            $is_successful = $is_successful_raw;
+        } elseif (is_numeric($is_successful_raw)) {
+            $is_successful = ((int)$is_successful_raw) === 1;
+        } elseif (is_string($is_successful_raw)) {
+            $normalized = strtolower(trim($is_successful_raw));
+            if (in_array($normalized, ['yes', 'true', '1', 'success', 'successful', 'y', 't'], true)) {
+                $is_successful = true;
+            } elseif (in_array($normalized, ['no', 'false', '0', 'fail', 'failed', 'unsuccessful', 'n', 'f'], true)) {
+                $is_successful = false;
+            }
+        }
+    }
+    // Admin workflow: always treat collection as successful if not explicitly set
+    if ($is_successful === null) {
+        $is_successful = true;
+    }
     $donor_reaction     = $_POST['donor_reaction'] ?? null;
     $management_done    = $_POST['management_done'] ?? null;
     $unit_serial_number = $_POST['unit_serial_number'] ?? null;
@@ -343,19 +362,18 @@ try {
     }
 
     if (!$physical_exam_id) {
-        error_log("Blood Collection Admin - Missing physical_exam_id after resolution attempts");
         throw new Exception('Missing required parameters: physical_exam_id');
     }
     if (!$blood_bag_type) {
-        error_log("Blood Collection Admin - Missing blood_bag_type");
         throw new Exception('Missing required parameters: blood_bag_type');
     }
+    if ($is_successful === null) {
+        throw new Exception('Missing required parameters: is_successful');
+    }
     if (!$unit_serial_number) {
-        error_log("Blood Collection Admin - Missing unit_serial_number");
         throw new Exception('Missing required parameters: unit_serial_number');
     }
     if (!$start_time_raw || !$end_time_raw) {
-        error_log("Blood Collection Admin - Missing start_time/end_time");
         throw new Exception('Missing required parameters: start_time/end_time');
     }
 
@@ -379,9 +397,9 @@ try {
             $blood_bag_brand = 'APHERESIS';
         }
     }
-    // Enforce brand to be one of allowed values (admin can allow empty brand)
+    // Enforce brand to be one of allowed values
     $allowedBrands = ['KARMI', 'TERUMO', 'SPECIAL BAG', 'APHERESIS'];
-    if (!empty($blood_bag_brand) && !in_array($blood_bag_brand, $allowedBrands, true)) {
+    if (empty($blood_bag_brand) || !in_array($blood_bag_brand, $allowedBrands, true)) {
         throw new Exception('Invalid blood_bag_brand. Allowed: ' . implode(', ', $allowedBrands) . '. Derived from type: ' . ($blood_bag_type ?? 'N/A'));
     }
 
@@ -511,137 +529,31 @@ try {
         }
     }
 
-    // Admin-only validation: allow marking Successful only if legacy phlebotomist shows success
-    // or an existing blood_collection for this donor is already successful
+    // 3) If successful, force needs_review to false (matching staff behavior)
     if ($is_successful === true) {
-        error_log("Blood Collection Admin - Validating successful submission for donor_id: " . $donor_id . ", physical_exam_id: " . $physical_exam_id);
-        $headers = [
-            'apikey: ' . SUPABASE_API_KEY,
-            'Authorization: Bearer ' . SUPABASE_API_KEY,
-            'Accept: application/json'
-        ];
-
-        $legacySuccess = false;
-        $existingDbSuccess = false;
-
-        // Check legacy eligibility collection_status for donor (most recent)
-        if (!empty($donor_id)) {
-            try {
-                $ch = curl_init(SUPABASE_URL . '/rest/v1/eligibility?donor_id=eq.' . urlencode((string)$donor_id) . '&select=collection_status,updated_at,created_at&order=updated_at.desc,created_at.desc&limit=1');
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-                $resp = curl_exec($ch);
-                $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                curl_close($ch);
-                if ($http === 200 && $resp) {
-                    $arr = json_decode($resp, true) ?: [];
-                    if (!empty($arr) && isset($arr[0]['collection_status'])) {
-                        $cs = strtolower(trim((string)$arr[0]['collection_status']));
-                        if ($cs !== '' && strpos($cs, 'success') !== false) {
-                            $legacySuccess = true;
-                        }
-                    }
-                }
-            } catch (Exception $e) {
-                error_log('Blood Collection Admin - Legacy eligibility check failed: ' . $e->getMessage());
-            }
-        }
-
-        // Check if any existing blood_collection is already successful for this physical exam
-        // NOTE: blood_collection table does NOT have donor_id column, only physical_exam_id
-        try {
-            $queryBase = null;
-            if (!empty($physical_exam_id)) {
-                $queryBase = SUPABASE_URL . '/rest/v1/blood_collection?physical_exam_id=eq.' . urlencode((string)$physical_exam_id);
-                error_log("Blood Collection Admin - Checking existing successful collections for physical_exam_id: " . $physical_exam_id);
-            } else {
-                error_log("Blood Collection Admin - No physical_exam_id available for validation");
-            }
-            if ($queryBase) {
-                // First, check for any existing successful collections
-                $queryUrl = $queryBase . '&select=is_successful&is_successful=eq.true&order=created_at.desc&limit=1';
-                error_log("Blood Collection Admin - Query URL (successful only): " . $queryUrl);
-                $ch = curl_init($queryUrl);
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-                $resp = curl_exec($ch);
-                $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                curl_close($ch);
-                error_log("Blood Collection Admin - Existing success check response - Code: " . $http . ", Response: " . $resp);
-                if ($http === 200 && $resp) {
-                    $arr = json_decode($resp, true) ?: [];
-                    error_log("Blood Collection Admin - Parsed response: " . json_encode($arr));
-                    if (!empty($arr) && isset($arr[0]['is_successful']) && ($arr[0]['is_successful'] === true || $arr[0]['is_successful'] === 'true' || $arr[0]['is_successful'] === 1)) {
-                        $existingDbSuccess = true;
-                        error_log("Blood Collection Admin - Found existing successful collection");
-                    } else {
-                        error_log("Blood Collection Admin - No existing successful collection found or is_successful not true");
-                    }
-                } else {
-                    error_log("Blood Collection Admin - Query failed or returned empty response");
-                }
-                
-                // If no successful collection found, check for ANY existing collection
-                if (!$existingDbSuccess) {
-                    $queryUrlAny = $queryBase . '&select=blood_collection_id,is_successful,created_at&order=created_at.desc&limit=1';
-                    error_log("Blood Collection Admin - Query URL (any collection): " . $queryUrlAny);
-                    $ch = curl_init($queryUrlAny);
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-                    $resp = curl_exec($ch);
-                    $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                    curl_close($ch);
-                    error_log("Blood Collection Admin - Any collection check response - Code: " . $http . ", Response: " . $resp);
-                    if ($http === 200 && $resp) {
-                        $arr = json_decode($resp, true) ?: [];
-                        error_log("Blood Collection Admin - Any collection parsed response: " . json_encode($arr));
-                        if (!empty($arr)) {
-                            error_log("Blood Collection Admin - Found existing collection (not necessarily successful)");
-                            // For admin purposes, if there's ANY existing collection, allow marking as successful
-                            // This handles the case where a record exists but is_successful is null
-                            $existingDbSuccess = true;
-                        }
-                    }
-                }
-            } else {
-                error_log("Blood Collection Admin - No query base available (donor_id and physical_exam_id both empty)");
-            }
-        } catch (Exception $e) {
-            error_log('Blood Collection Admin - Existing DB success check failed: ' . $e->getMessage());
-        }
-
-        error_log("Blood Collection Admin - Validation results - legacySuccess: " . ($legacySuccess ? 'true' : 'false') . ", existingDbSuccess: " . ($existingDbSuccess ? 'true' : 'false'));
-        
-        if (!($legacySuccess || $existingDbSuccess)) {
-            error_log("Blood Collection Admin - Validation failed - neither legacy nor existing success found");
-            
-            // Admin bypass: If user is admin and there's any existing collection, allow it
-            $isAdmin = isset($_SESSION['role']) && ($_SESSION['role'] === 'admin' || $_SESSION['role'] === 'Admin');
-            if ($isAdmin) {
-                error_log("Blood Collection Admin - Admin bypass: Allowing successful submission despite validation failure");
-                // Don't throw exception, continue with submission
-            } else {
-                throw new Exception('Cannot mark as Successful: legacy phlebotomist status not Successful and no existing successful blood collection found.');
-            }
-        } else {
-            error_log("Blood Collection Admin - Validation passed - proceeding with successful submission");
-        }
+        $needs_review = false;
     }
 
-    // Build payload for Supabase blood_collection
-    $nowIso = (new DateTime())->format('c');
-    $statusInput = $_POST['status'] ?? '';
-    if (is_string($statusInput)) {
-        $statusInput = trim($statusInput);
+    // Determine collection status to persist (respect DB constraint) - matching staff behavior
+    $status = $_POST['status'] ?? '';
+    if (is_string($status)) {
+        $status = trim($status);
     }
-    $statusLower = strtolower($statusInput);
+    $statusLower = strtolower($status);
     $allowedStatuses = [
         'pending' => 'pending',
         'incomplete' => 'Incomplete',
         'failed' => 'Failed',
         'yet to be collected' => 'Yet to be collected'
     ];
-    $status = $allowedStatuses[$statusLower] ?? 'pending';
+    if (isset($allowedStatuses[$statusLower])) {
+        $status = $allowedStatuses[$statusLower];
+    } else {
+        $status = 'pending';
+    }
+
+    // Build payload for Supabase blood_collection
+    $nowIso = (new DateTime())->format('c');
 
     $payload = [
         'physical_exam_id'   => $physical_exam_id,
@@ -655,9 +567,9 @@ try {
         'start_time'         => $start_time_iso,
         'end_time'           => $end_time_iso,
         'status'             => $status,
-        'needs_review'       => (bool)$needs_review,
         'phlebotomist'       => $phlebotomist,
         'updated_at'         => $nowIso
+        // Note: access and needs_review are set separately after submission
     ];
 
     // Check if a collection already exists for this physical_exam_id
@@ -707,6 +619,31 @@ try {
             $detail = $resp ?: $curlErr ?: '';
             error_log("Blood Collection Admin - Update failed: " . $detail);
             throw new Exception('Failed to update blood collection' . ($detail ? (': ' . substr($detail, 0, 600)) : ''));
+        }
+
+        // Reset access='0' and needs_review=FALSE after successful admin submission
+        $reset_ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?blood_collection_id=eq.' . urlencode($bc_id));
+        curl_setopt($reset_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+        curl_setopt($reset_ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($reset_ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_API_KEY,
+            'Authorization: Bearer ' . SUPABASE_API_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=minimal'
+        ]);
+        curl_setopt($reset_ch, CURLOPT_POSTFIELDS, json_encode([
+            'access' => '0',
+            'needs_review' => false,
+            'updated_at' => $nowIso
+        ]));
+        $reset_resp = curl_exec($reset_ch);
+        $reset_code = curl_getinfo($reset_ch, CURLINFO_HTTP_CODE);
+        curl_close($reset_ch);
+        
+        if ($reset_code >= 200 && $reset_code < 300) {
+            error_log("Blood Collection Admin - Access and needs_review reset to 0/FALSE after update");
+        } else {
+            error_log("Blood Collection Admin - Warning: Failed to reset access/needs_review. HTTP Code: $reset_code");
         }
 
         // Check if all processes are complete and update eligibility to approved
@@ -765,9 +702,41 @@ try {
             throw new Exception('Failed to create blood collection' . ($detail ? (': ' . substr($detail, 0, 600)) : ''));
         }
 
+        // Reset access='0' and needs_review=FALSE after successful admin submission
+        $createdData = json_decode($resp, true);
+        $createdBcId = null;
+        if (is_array($createdData) && !empty($createdData)) {
+            $createdBcId = is_array($createdData[0] ?? null) ? ($createdData[0]['blood_collection_id'] ?? null) : ($createdData['blood_collection_id'] ?? null);
+        }
+        
+        if ($createdBcId) {
+            $reset_ch = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?blood_collection_id=eq.' . urlencode($createdBcId));
+            curl_setopt($reset_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            curl_setopt($reset_ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($reset_ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_API_KEY,
+                'Authorization: Bearer ' . SUPABASE_API_KEY,
+                'Content-Type: application/json',
+                'Prefer: return=minimal'
+            ]);
+            curl_setopt($reset_ch, CURLOPT_POSTFIELDS, json_encode([
+                'access' => '0',
+                'needs_review' => false,
+                'updated_at' => $nowIso
+            ]));
+            $reset_resp = curl_exec($reset_ch);
+            $reset_code = curl_getinfo($reset_ch, CURLINFO_HTTP_CODE);
+            curl_close($reset_ch);
+            
+            if ($reset_code >= 200 && $reset_code < 300) {
+                error_log("Blood Collection Admin - Access and needs_review reset to 0/FALSE after create");
+            } else {
+                error_log("Blood Collection Admin - Warning: Failed to reset access/needs_review. HTTP Code: $reset_code");
+            }
+        }
+
         // Check if all processes are complete and update eligibility to approved
         if ($is_successful === true && $donor_id) {
-            $createdData = json_decode($resp, true);
             checkAndUpdateEligibilityToApproved($donor_id, $physical_exam_id, $createdData);
         }
 
@@ -792,14 +761,15 @@ try {
     }
 
 } catch (Exception $e) {
-    // Log the error for debugging
-    error_log("Blood Collection Admin - Exception: " . $e->getMessage());
-    error_log("Blood Collection Admin - Stack trace: " . $e->getTraceAsString());
-    
-    // Return error response
+    // Return error response (matching staff behavior)
     echo json_encode([
         'success' => false,
         'message' => $e->getMessage()
     ]);
+} finally {
+    // Flush buffered output (do not discard, or the client receives an empty body)
+    if (ob_get_level() > 0) {
+        ob_end_flush();
+    }
 }
 ?>

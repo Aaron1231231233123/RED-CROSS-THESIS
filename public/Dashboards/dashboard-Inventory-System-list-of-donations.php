@@ -116,6 +116,8 @@ function generateSkeletonHTML() {
         .modal-backdrop {
             z-index: 1040;
         }
+        /* Note: Z-index for confirmation modals is now handled dynamically via applyModalStacking() function
+           This ensures proper stacking based on currently open modals rather than hardcoded values */
     </style>';
 }
 
@@ -3080,10 +3082,7 @@ function getCacheStats() {
     // Medical History approval/decline modals
     include_once '../../src/views/modals/medical-history-approval-modals.php';
     include_once '../../src/views/modals/physical-examination-modal-admin.php'; // Admin-specific modal
-    // Compact Physical Examination Summary Modal (for view mode)
-    if (file_exists('../../src/views/modals/staff-physician-account-summary-modal.php')) {
-        include_once '../../src/views/modals/staff-physician-account-summary-modal.php';
-    }
+    // Note: staff-physician-account-summary-modal.php is NOT included here - we use the compact physicianSectionModal instead
     // Interviewer confirmation modals
     include_once '../../src/views/modals/interviewer-confirmation-modals.php';
     // Admin screening modal (admin-specific)
@@ -3195,8 +3194,8 @@ function getCacheStats() {
                 console.log('Unified Staff Workflow System initialized for dashboard');
             }
             // Initialize blood collection modal for admin
-            if (typeof BloodCollectionModal !== 'undefined') {
-                window.bloodCollectionModal = new BloodCollectionModal();
+            if (typeof BloodCollectionModalAdmin !== 'undefined') {
+                window.bloodCollectionModalAdmin = new BloodCollectionModalAdmin();
                 console.log('Blood Collection Modal initialized for admin');
             }
             // Initialize physical examination modal for admin
@@ -3386,6 +3385,127 @@ function getCacheStats() {
                 });
             }
         }
+        /**
+         * Modal Stacking Utility - Proper z-index management for nested modals
+         * This function calculates the correct z-index based on currently open modals
+         * and ensures proper stacking order without hardcoded values
+         * 
+         * ROOT CAUSE FIX: Instead of hardcoding z-index values, this dynamically calculates
+         * the correct z-index based on what modals are actually open, ensuring proper stacking
+         */
+        window.getModalStackingZIndex = function(modalElement) {
+            // Base z-index for Bootstrap modals
+            const BASE_Z_INDEX = 1050;
+            const BACKDROP_OFFSET = 10;
+            
+            // Find all currently open modals (Bootstrap and custom)
+            const openBootstrapModals = document.querySelectorAll('.modal.show');
+            const openCustomModals = document.querySelectorAll('.medical-history-modal.show');
+            const allOpenModals = Array.from(openBootstrapModals).concat(Array.from(openCustomModals));
+            
+            // Get the highest z-index from currently open modals
+            let maxZIndex = BASE_Z_INDEX;
+            allOpenModals.forEach(modal => {
+                if (modal === modalElement) return; // Skip self
+                const computedStyle = window.getComputedStyle(modal);
+                const zIndex = parseInt(computedStyle.zIndex) || 0;
+                if (zIndex > maxZIndex) {
+                    maxZIndex = zIndex;
+                }
+            });
+            
+            // Also check inline styles
+            allOpenModals.forEach(modal => {
+                if (modal === modalElement) return; // Skip self
+                const inlineZIndex = parseInt(modal.style.zIndex) || 0;
+                if (inlineZIndex > maxZIndex) {
+                    maxZIndex = inlineZIndex;
+                }
+            });
+            
+            // Calculate new z-index: highest existing + 10 (Bootstrap's increment)
+            const newZIndex = maxZIndex + 10;
+            const backdropZIndex = newZIndex - 1;
+            
+            return {
+                modal: newZIndex,
+                dialog: newZIndex + 1,
+                content: newZIndex + 2,
+                backdrop: backdropZIndex
+            };
+        }
+        
+        /**
+         * Apply proper z-index stacking to a Bootstrap modal
+         * This is the main function to use when opening modals on top of others
+         */
+        window.applyModalStacking = function(modalElement) {
+            if (!modalElement) return;
+            
+            const zIndexes = window.getModalStackingZIndex(modalElement);
+            
+            // Apply z-index to modal
+            modalElement.style.zIndex = zIndexes.modal.toString();
+            modalElement.style.position = 'fixed';
+            
+            // Apply z-index to dialog
+            const dialog = modalElement.querySelector('.modal-dialog');
+            if (dialog) {
+                dialog.style.zIndex = zIndexes.dialog.toString();
+            }
+            
+            // Apply z-index to content
+            const content = modalElement.querySelector('.modal-content');
+            if (content) {
+                content.style.zIndex = zIndexes.content.toString();
+            }
+            
+            // Update backdrop z-index after Bootstrap creates it
+            const updateBackdrop = () => {
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                if (backdrops && backdrops.length > 0) {
+                    // Set the last backdrop (for this modal) to be just below the modal
+                    backdrops[backdrops.length - 1].style.zIndex = zIndexes.backdrop.toString();
+                }
+            };
+            
+            // Update immediately and after a short delay (Bootstrap creates backdrop asynchronously)
+            setTimeout(updateBackdrop, 10);
+            setTimeout(updateBackdrop, 100);
+            
+            // Re-apply after modal is fully shown (Bootstrap might reset z-index)
+            const reapplyStacking = () => {
+                // Recalculate in case other modals opened/closed
+                const newZIndexes = window.getModalStackingZIndex(modalElement);
+                modalElement.style.zIndex = newZIndexes.modal.toString();
+                modalElement.style.position = 'fixed';
+                if (dialog) dialog.style.zIndex = newZIndexes.dialog.toString();
+                if (content) content.style.zIndex = newZIndexes.content.toString();
+                updateBackdrop();
+            };
+            
+            // Listen for shown event to reapply (Bootstrap might change z-index)
+            modalElement.addEventListener('shown.bs.modal', reapplyStacking, { once: true });
+            
+            return zIndexes;
+        }
+        
+        // Global event listener to automatically apply stacking to any Bootstrap modal when shown
+        // This ensures modals opened from anywhere get proper z-index
+        document.addEventListener('show.bs.modal', function(event) {
+            const modalElement = event.target;
+            // Only apply if it's a confirmation/approval modal that should be on top
+            const shouldStack = modalElement.id && (
+                modalElement.id.includes('Approve') || 
+                modalElement.id.includes('Decline') || 
+                modalElement.id.includes('Confirm') ||
+                modalElement.id === 'adminFeedbackModal'
+            );
+            if (shouldStack && typeof window.applyModalStacking === 'function') {
+                window.applyModalStacking(modalElement);
+            }
+        });
+        
         // Function to handle medical history approval/decline
         function handleMedicalHistoryApproval(donorId, action) {
             console.log(`Handling medical history ${action} for donor:`, donorId);
@@ -3399,24 +3519,68 @@ function getCacheStats() {
         }
         // Function to show medical history approval confirmation
         function showMedicalHistoryApprovalConfirmation(donorId) {
-            // Use the existing medical history approval modal
+            // Use the medicalHistoryApproveConfirmModal (red gradient modal with "Please Confirm")
             const confirmModal = document.getElementById('medicalHistoryApproveConfirmModal');
             if (confirmModal) {
-                const modal = new bootstrap.Modal(confirmModal);
+                // Create and show Bootstrap modal first
+                const modal = bootstrap.Modal.getOrCreateInstance(confirmModal);
+                
+                // Apply proper modal stacking AFTER modal is shown (Bootstrap creates backdrop then)
+                const applyStackingAfterShow = () => {
+                    if (typeof applyModalStacking === 'function') {
+                        applyModalStacking(confirmModal);
+                    } else {
+                        // Fallback: Calculate z-index based on open modals
+                        const openModals = document.querySelectorAll('.modal.show');
+                        let maxZIndex = 1050;
+                        openModals.forEach(m => {
+                            if (m === confirmModal) return;
+                            const z = parseInt(window.getComputedStyle(m).zIndex) || parseInt(m.style.zIndex) || 0;
+                            if (z > maxZIndex) maxZIndex = z;
+                        });
+                        const newZIndex = maxZIndex + 10;
+                        confirmModal.style.zIndex = newZIndex.toString();
+                        confirmModal.style.position = 'fixed';
+                        const dialog = confirmModal.querySelector('.modal-dialog');
+                        if (dialog) dialog.style.zIndex = (newZIndex + 1).toString();
+                        const content = confirmModal.querySelector('.modal-content');
+                        if (content) content.style.zIndex = (newZIndex + 2).toString();
+                        
+                        setTimeout(() => {
+                            const backdrops = document.querySelectorAll('.modal-backdrop');
+                            if (backdrops.length > 0) {
+                                backdrops[backdrops.length - 1].style.zIndex = (newZIndex - 1).toString();
+                            }
+                        }, 10);
+                    }
+                };
+                
+                // Apply stacking when modal is shown
+                confirmModal.addEventListener('shown.bs.modal', applyStackingAfterShow, { once: true });
+                
                 modal.show();
-                // Bind confirmation handler
+                
+                // Bind confirmation handler - remove any existing handlers first
                 const confirmBtn = document.getElementById('confirmApproveMedicalHistoryBtn');
                 if (confirmBtn) {
-                    confirmBtn.onclick = function() {
+                    // Remove existing event listeners by cloning
+                    const newConfirmBtn = confirmBtn.cloneNode(true);
+                    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+                    
+                    newConfirmBtn.addEventListener('click', function() {
                         processMedicalHistoryApproval(donorId);
                         modal.hide();
-                    };
+                    });
                 }
             } else {
-                // Fallback: direct approval
+                // Fallback: use adminModal.confirm
                 const approvalMessage = 'Are you sure you want to approve this donor\'s medical history?';
                 const approveAction = () => processMedicalHistoryApproval(donorId);
                 if (window.adminModal && typeof window.adminModal.confirm === 'function') {
+                    const fallbackModal = document.getElementById('adminFeedbackModal');
+                    if (fallbackModal) {
+                        applyModalStacking(fallbackModal);
+                    }
                     window.adminModal.confirm(approvalMessage, approveAction, {
                         confirmText: 'Approve',
                         cancelText: 'Keep Reviewing'
@@ -3427,17 +3591,32 @@ function getCacheStats() {
         // Function to show medical history decline modal
         function showMedicalHistoryDeclineModal(donorId) {
             // Use the existing medical history decline modal
-            const declineModal = document.getElementById('medicalHistoryDeclineModal');
+            const declineModal = document.getElementById('declineMedicalHistoryModal');
             if (declineModal) {
-                const modal = new bootstrap.Modal(declineModal);
+                // Apply proper modal stacking BEFORE showing
+                applyModalStacking(declineModal);
+                
+                // Create and show Bootstrap modal
+                const modal = bootstrap.Modal.getOrCreateInstance(declineModal);
                 modal.show();
+                
                 // Bind decline handler
-                const submitBtn = document.getElementById('submitDeclineBtn');
+                const submitBtn = document.getElementById('confirmDeclineBtn');
                 if (submitBtn) {
-                    submitBtn.onclick = function() {
-                        processMedicalHistoryDecline(donorId);
+                    // Remove existing event listeners by cloning
+                    const newSubmitBtn = submitBtn.cloneNode(true);
+                    submitBtn.parentNode.replaceChild(newSubmitBtn, submitBtn);
+                    
+                    newSubmitBtn.addEventListener('click', function() {
+                        const reasonInput = document.getElementById('declineReason');
+                        const reason = reasonInput ? reasonInput.value.trim() : '';
+                        if (reason.length < 10) {
+                            alert('Please provide a reason with at least 10 characters.');
+                            return;
+                        }
+                        processMedicalHistoryDecline(donorId, reason);
                         modal.hide();
-                    };
+                    });
                 }
             } else {
                 // Fallback: direct decline
@@ -3450,20 +3629,14 @@ function getCacheStats() {
         // Function to process medical history approval
         function processMedicalHistoryApproval(donorId) {
             console.log('Processing medical history approval for donor:', donorId);
-            // Update medical history status to approved
-            const updateData = {
-                medical_approval: 'Approved',
-                updated_at: new Date().toISOString()
-            };
-            fetch(`../../assets/php_func/update_medical_history.php`, {
+            // Use admin-specific endpoint for medical history approval
+            const formData = new FormData();
+            formData.append('action', 'approve_medical_history');
+            formData.append('donor_id', donorId);
+            
+            fetch(`../../assets/php_func/admin/process_medical_history_approval_admin.php`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    donor_id: donorId,
-                    ...updateData
-                })
+                body: formData
             })
             .then(response => response.json())
             .then(data => {
@@ -3489,20 +3662,15 @@ function getCacheStats() {
                 const reasonInput = document.getElementById('declineReason');
                 reason = reasonInput ? reasonInput.value : 'No reason provided';
             }
-            const updateData = {
-                medical_approval: 'Declined',
-                disapproval_reason: reason,
-                updated_at: new Date().toISOString()
-            };
-            fetch(`../../assets/php_func/update_medical_history.php`, {
+            // Use admin-specific endpoint for medical history decline
+            const formData = new FormData();
+            formData.append('action', 'decline_medical_history');
+            formData.append('donor_id', donorId);
+            formData.append('decline_reason', reason);
+            
+            fetch(`../../assets/php_func/admin/process_medical_history_approval_admin.php`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    donor_id: donorId,
-                    ...updateData
-                })
+                body: formData
             })
             .then(response => response.json())
             .then(data => {
@@ -3858,14 +4026,29 @@ function getCacheStats() {
             }
         });
         window.openPhysicianPhysicalExam = function(context) {
-            // Redirect to admin physical examination form
-            window.location.href = `../../src/views/forms/physical-examination-form-admin.php?donor_id=${encodeURIComponent(context?.donor_id || '')}`;
+            // ALWAYS use the compact Physical Examination Summary modal (matching Initial Screening Form style)
+            // This is a VIEW-ONLY function - never use the edit modal with steps
+            const donorId = context?.donor_id || context || '';
+            if (!donorId) {
+                console.error('No donor ID provided to openPhysicianPhysicalExam');
+                alert('Error: No donor ID provided');
+                return;
+            }
+            console.log('[VIEW] openPhysicianPhysicalExam called for donor:', donorId);
+            console.log('[VIEW] Using viewPhysicianDetails to open physicianSectionModal (NOT edit modal)');
+            // Use the compact view function - this opens physicianSectionModal, NOT physicalExaminationModalAdmin
+            if (typeof window.viewPhysicianDetails === 'function') {
+                window.viewPhysicianDetails(donorId);
+            } else {
+                console.error('[VIEW] viewPhysicianDetails function not found!');
+                alert('Error: View function not available. Please refresh the page.');
+            }
         };
         window.openPhlebotomistCollection = async function(context) {
             try {
                 const donorId = context?.donor_id || '';
                 
-                if (window.bloodCollectionModal && typeof window.bloodCollectionModal.openModal === 'function') {
+                if (window.bloodCollectionModalAdmin && typeof window.bloodCollectionModalAdmin.openModal === 'function') {
                     const modalData = {
                         donor_id: donorId
                     };
@@ -3909,7 +4092,7 @@ function getCacheStats() {
                     
                     // No collection exists or error, open edit modal
                     console.log('[Admin] Opening blood collection edit modal');
-                    await window.bloodCollectionModal.openModal(modalData);
+                    await window.bloodCollectionModalAdmin.openModal(modalData);
                 } else {
                     window.location.href = `dashboard-staff-blood-collection-submission.php?donor_id=${encodeURIComponent(donorId)}`;
                 }
@@ -4888,7 +5071,11 @@ function getCacheStats() {
                     const isApproved = eligibilityStatus === 'approved' || eligibilityStatus === 'eligible' || 
                                      medicalApproval === 'approved';
                     
-                    console.log('Donor approval status:', { eligibilityStatus, medicalApproval, isApproved, hasScreeningRecord });
+                    // Check if medical history is completed (has data but not approved)
+                    const hasMedicalHistory = medicalHistory && Object.keys(medicalHistory).length > 0;
+                    const isCompleted = hasMedicalHistory && medicalApproval !== 'approved' && medicalApproval !== 'declined';
+                    
+                    console.log('Donor approval status:', { eligibilityStatus, medicalApproval, isApproved, hasScreeningRecord, hasMedicalHistory, isCompleted });
                     
                     // Set view-only flag for approved donors
                     // For examination status: show form with navigation and approve/decline buttons
@@ -4897,11 +5084,13 @@ function getCacheStats() {
                     window.currentViewMHDonorId = donorId;
                     window.currentViewMHScreeningRecord = hasScreeningRecord;
                     window.currentViewMHApproved = isApproved;
+                    window.currentViewMHCompleted = isCompleted;
                     
                     // For examination status (has screening but not approved), use view_only=0 to show full form
                     // This allows navigation buttons and approve/decline buttons to work
+                    // For completed status (has MH but not approved), also use view_only=0 to show approve/decline buttons
                     const viewOnlyParam = isApproved ? '1' : '0';
-                    console.log('Loading MH form with view_only:', viewOnlyParam, 'isApproved:', isApproved, 'hasScreeningRecord:', hasScreeningRecord);
+                    console.log('Loading MH form with view_only:', viewOnlyParam, 'isApproved:', isApproved, 'hasScreeningRecord:', hasScreeningRecord, 'isCompleted:', isCompleted);
                     
                     // Fetch the admin medical history content with view-only parameter
                     fetch(`../../src/views/forms/medical-history-modal-content-admin.php?donor_id=${encodeURIComponent(donorId)}&view_only=${viewOnlyParam}`)
@@ -5052,10 +5241,10 @@ function getCacheStats() {
                                     console.log('MH form loaded in interactive mode (not view-only)');
                                 }
                                 
-                                // Add approve/decline buttons if screening exists and not approved
+                                // Add approve/decline buttons if screening exists and not approved, OR if medical history is completed but not approved
                                 // Hide submit button and show approve/decline instead
                                 // Keep next/prev buttons visible for traversal
-                                if (hasScreeningRecord && !isApproved) {
+                                if ((hasScreeningRecord && !isApproved) || (isCompleted && !isApproved)) {
                                     // Set flag to prevent next button from changing to "Submit"
                                     window.mhShowApproveDecline = true;
                                     
@@ -5393,45 +5582,6 @@ function getCacheStats() {
                                                 console.log('✅ Overrode updateStepDisplay to keep next button and show approve/decline');
                                             }
                                             
-                                            // Also override the next button click handler to prevent submission
-                                            const nextBtn = document.getElementById('modalNextButton');
-                                            if (nextBtn) {
-                                                // Remove any existing click handlers and add our own
-                                                const newNextBtn = nextBtn.cloneNode(true);
-                                                nextBtn.parentNode.replaceChild(newNextBtn, nextBtn);
-                                                
-                                                newNextBtn.addEventListener('click', function(e) {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    
-                                                    const form = document.getElementById('modalMedicalHistoryForm');
-                                                    const currentStep = form ? parseInt(form.querySelector('.form-step.active')?.getAttribute('data-step') || '1') : 1;
-                                                    const totalSteps = form ? form.querySelectorAll('.form-step').length : 6;
-                                                    
-                                                    if (currentStep < totalSteps) {
-                                                        // Move to next step
-                                                        const nextStep = currentStep + 1;
-                                                        const currentStepEl = form.querySelector(`.form-step[data-step="${currentStep}"]`);
-                                                        const nextStepEl = form.querySelector(`.form-step[data-step="${nextStep}"]`);
-                                                        
-                                                        if (currentStepEl && nextStepEl) {
-                                                            currentStepEl.classList.remove('active');
-                                                            nextStepEl.classList.add('active');
-                                                            
-                                                            // Update step display
-                                                            if (window.updateStepDisplay) {
-                                                                window.updateStepDisplay();
-                                                            }
-                                                            
-                                                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                                                        }
-                                                    } else {
-                                                        // On last step, don't submit - just stay on last step
-                                                        // Approve/decline buttons handle the action
-                                                        console.log('On last step - approve/decline buttons handle the action');
-                                                    }
-                                                });
-                                            }
                                             
                                             // Keep next/prev buttons visible - don't hide them
                                             const nextButton = document.getElementById('modalNextButton');
@@ -5826,8 +5976,10 @@ function getCacheStats() {
                     document.body.style.overflow='';
                     document.body.style.paddingRight='';
                 } catch(_) {}
-                // Ensure admin MH modal appears above anything else
-                try { modalEl.style.zIndex = '2000'; } catch(_) {}
+                // Apply proper modal stacking (dynamic z-index calculation)
+                if (typeof window.applyModalStacking === 'function') {
+                    window.applyModalStacking(modalEl);
+                }
                 const bs = new bootstrap.Modal(modalEl, { backdrop: false, keyboard: true, focus: true });
                 bs.show();
                 // Force visibility in case a global CSS sets .modal { visibility:hidden }
@@ -5928,10 +6080,12 @@ function getCacheStats() {
         async function physicianApproveMedicalHistory(donorId){
             try {
                 if (!donorId) return;
-                const res = await fetch('../../assets/php_func/update_medical_history.php', {
+                const formData = new FormData();
+                formData.append('action', 'approve_medical_history');
+                formData.append('donor_id', donorId);
+                const res = await fetch('../../assets/php_func/admin/process_medical_history_approval_admin.php', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ donor_id: donorId, medical_approval: 'Approved', updated_at: new Date().toISOString() })
+                    body: formData
                 });
                 const json = await res.json().catch(() => null);
                 if (!json || !json.success) throw new Error((json && json.message) || 'Approval failed');
@@ -5981,10 +6135,13 @@ function getCacheStats() {
                 if (!donorId) return;
                 const reason = prompt('Enter reason for decline:');
                 if (!reason) return;
-                const res = await fetch('../../assets/php_func/update_medical_history.php', {
+                const formData = new FormData();
+                formData.append('action', 'decline_medical_history');
+                formData.append('donor_id', donorId);
+                formData.append('decline_reason', reason);
+                const res = await fetch('../../assets/php_func/admin/process_medical_history_approval_admin.php', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ donor_id: donorId, medical_approval: 'Declined', disapproval_reason: reason, updated_at: new Date().toISOString() })
+                    body: formData
                 });
                 const json = await res.json().catch(() => null);
                 if (!json || !json.success) throw new Error((json && json.message) || 'Decline failed');
@@ -7277,7 +7434,7 @@ function getCacheStats() {
             
             try {
                 // Try to open the blood collection modal if it exists
-                if (window.bloodCollectionModal && typeof window.bloodCollectionModal.openModal === 'function') {
+                if (window.bloodCollectionModalAdmin && typeof window.bloodCollectionModalAdmin.openModal === 'function') {
                     const modalData = { 
                         donor_id: donorId
                     };
@@ -7286,14 +7443,14 @@ function getCacheStats() {
                         modalData.physical_exam_id = physicalExamId;
                     }
                     console.log('Opening modal with data:', modalData);
-                    window.bloodCollectionModal.openModal(modalData);
+                    window.bloodCollectionModalAdmin.openModal(modalData);
                     return;
                 }
-            } catch (e) { console.warn('bloodCollectionModal.openModal not available, falling back', e); }
+            } catch (e) { console.warn('bloodCollectionModalAdmin.openModal not available, falling back', e); }
             
             // Fallback: try to show the modal directly
             try {
-                const modalElement = document.getElementById('bloodCollectionModal');
+                const modalElement = document.getElementById('bloodCollectionModalAdmin');
                 if (modalElement) {
                     const modal = new bootstrap.Modal(modalElement);
                     modal.show();
@@ -7309,8 +7466,8 @@ function getCacheStats() {
         if (typeof window.showCollectionCompleteModal !== 'function') {
             window.showCollectionCompleteModal = function() {
                 try {
-                    if (window.bloodCollectionModal && typeof window.bloodCollectionModal.submitForm === 'function') {
-                        window.bloodCollectionModal.submitForm();
+                    if (window.bloodCollectionModalAdmin && typeof window.bloodCollectionModalAdmin.submitForm === 'function') {
+                        window.bloodCollectionModalAdmin.submitForm();
                     }
                 } catch (e) { console.error('Submit handler not available', e); }
             };
@@ -7458,9 +7615,20 @@ function getCacheStats() {
         };
 
         window.showPhysicianSection = function(donorId, eligibilityId) {
-            console.log('=== SHOWING PHYSICIAN SECTION ===');
+            console.log('=== SHOWING PHYSICIAN SECTION (VIEW MODE) ===');
             console.log('Donor ID:', donorId);
             console.log('Eligibility ID:', eligibilityId);
+            console.log('Opening physicianSectionModal (standalone view modal, NOT edit modal with steps)');
+            
+            // Ensure the edit modal is NOT open
+            const editModalEl = document.getElementById('physicalExaminationModalAdmin');
+            if (editModalEl) {
+                const editModal = bootstrap.Modal.getInstance(editModalEl);
+                if (editModal && editModal._isShown) {
+                    console.log('[VIEW] Closing edit modal that was incorrectly opened');
+                    editModal.hide();
+                }
+            }
             
             const modalEl = document.getElementById('physicianSectionModal');
             const contentEl = document.getElementById('physicianSectionModalContent');
@@ -7474,7 +7642,7 @@ function getCacheStats() {
             // Show loading spinner
             contentEl.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
             
-            // Show the modal
+            // Show the modal - this is the standalone view modal, NOT the edit modal
             const bsModal = new bootstrap.Modal(modalEl);
             bsModal.show();
             
@@ -7498,115 +7666,79 @@ function getCacheStats() {
                     const screeningForm = data.screening_form || {};
                     const safe = (v, fb = '-') => (v === null || v === undefined || v === '' ? fb : v);
                     
-                    // Create physician section HTML
+                    // Create physical examination summary HTML (matching Initial Screening Form style exactly)
                     const physicianSectionHTML = `
-                        <div class="physician-section">
-                            <h6 class="physician-section-title">
-                                <i class="fas fa-user-md"></i>
-                                Physical Examination
-                            </h6>
-                            <p class="physician-section-description">
-                                Review the physical examination details for this donor
-                            </p>
-                            
-                            <div class="physician-info-grid">
+                        <div class="screening-summary-section">
+                            <div class="screening-info-grid">
                                 <!-- Vital Signs -->
-                                <div class="physician-category">
-                                    <div class="physician-category-header">
+                                <div class="screening-category">
+                                    <div class="screening-category-header">
                                         Vital Signs
                                     </div>
-                                    <div class="physician-category-content">
-                                        <div class="physician-field-compact">
-                                            <span class="physician-field-label">Blood Pressure:</span>
-                                            <span class="physician-field-value">${safe(physicalExam.blood_pressure || eligibility.blood_pressure, '120/80')} mmHg</span>
+                                    <div class="screening-category-content">
+                                        <div class="screening-field">
+                                            <span class="screening-field-label">Blood Pressure:</span>
+                                            <span class="screening-field-value">${safe(physicalExam.blood_pressure || eligibility.blood_pressure, '120/80')} mmHg</span>
                                         </div>
-                                        <div class="physician-field-compact">
-                                            <span class="physician-field-label">Pulse Rate:</span>
-                                            <span class="physician-field-value">${safe(physicalExam.pulse_rate || eligibility.pulse_rate, '72')} bpm</span>
+                                        <div class="screening-field">
+                                            <span class="screening-field-label">Pulse Rate:</span>
+                                            <span class="screening-field-value">${safe(physicalExam.pulse_rate || eligibility.pulse_rate, '72')} bpm</span>
                                         </div>
-                                        <div class="physician-field-compact">
-                                            <span class="physician-field-label">Body Temperature:</span>
-                                            <span class="physician-field-value">${safe(physicalExam.body_temp || eligibility.body_temp, '36.5')}°C</span>
+                                        <div class="screening-field">
+                                            <span class="screening-field-label">Body Temperature:</span>
+                                            <span class="screening-field-value">${safe(physicalExam.body_temp || eligibility.body_temp, '36.5')}°C</span>
                                         </div>
-                                        <div class="physician-field-compact">
-                                            <span class="physician-field-label">Body Weight:</span>
-                                            <span class="physician-field-value">${safe(physicalExam.body_weight || eligibility.body_weight || screeningForm.body_weight, '65')} kg</span>
+                                        <div class="screening-field">
+                                            <span class="screening-field-label">Body Weight:</span>
+                                            <span class="screening-field-value">${safe(physicalExam.body_weight || eligibility.body_weight || screeningForm.body_weight, '65')} kg</span>
                                         </div>
                                     </div>
                                 </div>
                                 
-                                <!-- Physical Examination -->
-                                <div class="physician-category">
-                                    <div class="physician-category-header">
-                                        Physical Examination
+                                <!-- Examination Findings -->
+                                <div class="screening-category">
+                                    <div class="screening-category-header">
+                                        Examination Findings
                                     </div>
-                                    <div class="physician-category-content">
-                                        <div class="physician-field-compact">
-                                            <span class="physician-field-label">General Appearance:</span>
-                                            <span class="physician-field-value">${safe(physicalExam.gen_appearance || eligibility.gen_appearance, 'Okay')}</span>
+                                    <div class="screening-category-content">
+                                        <div class="screening-field">
+                                            <span class="screening-field-label">General Appearance:</span>
+                                            <span class="screening-field-value">${safe(physicalExam.gen_appearance || eligibility.gen_appearance, 'Okay')}</span>
                                         </div>
-                                        <div class="physician-field-compact">
-                                            <span class="physician-field-label">Skin:</span>
-                                            <span class="physician-field-value">${safe(physicalExam.skin || eligibility.skin, 'Okay')}</span>
+                                        <div class="screening-field">
+                                            <span class="screening-field-label">Skin:</span>
+                                            <span class="screening-field-value">${safe(physicalExam.skin || eligibility.skin, 'Okay')}</span>
                                         </div>
-                                        <div class="physician-field-compact">
-                                            <span class="physician-field-label">HEENT:</span>
-                                            <span class="physician-field-value">${safe(physicalExam.heent || eligibility.heent, 'Okay')}</span>
+                                        <div class="screening-field">
+                                            <span class="screening-field-label">HEENT:</span>
+                                            <span class="screening-field-value">${safe(physicalExam.heent || eligibility.heent, 'Okay')}</span>
                                         </div>
-                                        <div class="physician-field-compact">
-                                            <span class="physician-field-label">Heart and Lungs:</span>
-                                            <span class="physician-field-value">${safe(physicalExam.heart_and_lungs || eligibility.heart_and_lungs, 'Okay')}</span>
+                                        <div class="screening-field">
+                                            <span class="screening-field-label">Heart and Lungs:</span>
+                                            <span class="screening-field-value">${safe(physicalExam.heart_and_lungs || eligibility.heart_and_lungs, 'Okay')}</span>
                                         </div>
                                     </div>
                                 </div>
                                 
                                 <!-- Blood Information -->
-                                <div class="physician-category">
-                                    <div class="physician-category-header">
+                                <div class="screening-category">
+                                    <div class="screening-category-header">
                                         Blood Information
                                     </div>
-                                    <div class="physician-category-content">
-                                        <div class="physician-field-compact">
-                                            <span class="physician-field-label">Blood Type:</span>
-                                            <span class="physician-field-value">${safe(physicalExam.blood_type || eligibility.blood_type || donor.blood_type || screeningForm.blood_type, 'A+')}</span>
+                                    <div class="screening-category-content">
+                                        <div class="screening-field">
+                                            <span class="screening-field-label">Blood Type:</span>
+                                            <span class="blood-type-plain">${safe(physicalExam.blood_type || eligibility.blood_type || donor.blood_type || screeningForm.blood_type, 'A+')}</span>
                                         </div>
-                                        <div class="physician-field-compact">
-                                            <span class="physician-field-label">Blood Bag Type:</span>
-                                            <span class="physician-field-value">${safe(physicalExam.blood_bag_type || eligibility.blood_bag_type, '450ml')}</span>
+                                        <div class="screening-field">
+                                            <span class="screening-field-label">Blood Bag Type:</span>
+                                            <span class="screening-field-value">${safe(physicalExam.blood_bag_type || eligibility.blood_bag_type, '450ml')}</span>
                                         </div>
-                                        <div class="physician-field-compact">
-                                            <span class="physician-field-label">Specific Gravity:</span>
-                                            <span class="physician-field-value">${safe(physicalExam.specific_gravity || eligibility.specific_gravity || screeningForm.specific_gravity, '1.050')}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Physician Information -->
-                                <div class="physician-category">
-                                    <div class="physician-category-header">
-                                        Physician Information
-                                    </div>
-                                    <div class="physician-category-content">
-                                        <div class="physician-field">
-                                            <span class="physician-field-label">Physician:</span>
-                                            <span class="physician-field-value">${safe(physicalExam.physician || eligibility.physician, 'Dr. Smith')}</span>
-                                        </div>
-                                        <div class="physician-field">
-                                            <span class="physician-field-label">Examination Date:</span>
-                                            <span class="physician-field-value">${safe(physicalExam.created_at || eligibility.created_at, new Date().toLocaleDateString())}</span>
+                                        <div class="screening-field">
+                                            <span class="screening-field-label">Specific Gravity:</span>
+                                            <span class="screening-field-value">${safe(physicalExam.specific_gravity || eligibility.specific_gravity || screeningForm.specific_gravity, '1.050')}</span>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Physician Remarks -->
-                            <div class="physician-remarks">
-                                <div class="physician-remarks-label">
-                                    <i class="fas fa-stethoscope"></i>
-                                    Physician Remarks
-                                </div>
-                                <div class="physician-remarks-content">
-                                    ${safe(physicalExam.remarks || physicalExam.remark || eligibility.remarks || eligibility.remark, 'No specific remarks noted. Donor appears healthy and suitable for blood donation.')}
                                 </div>
                             </div>
                         </div>
@@ -8307,15 +8439,15 @@ function getCacheStats() {
     <div class="modal fade" id="physicianSectionModal" tabindex="-1" aria-labelledby="physicianSectionModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg" style="max-width: 600px;">
             <div class="modal-content" style="border: none; border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
-                <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #b22222 100%); color: white; border-radius: 15px 15px 0 0; padding: 1rem; border: none;">
+                <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #b22222 100%); color: white; border-radius: 15px 15px 0 0; padding: 1.5rem; border: none;">
                     <div>
-                        <h5 class="modal-title mb-0" id="physicianSectionModalLabel" style="font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+                        <h5 class="modal-title mb-0" id="physicianSectionModalLabel" style="font-size: 1.25rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
                             <i class="fas fa-user-md"></i>
-                            Physical Examination
+                            Physical Examination Summary
                         </h5>
-                        <small class="text-white-50" style="font-size: 0.8rem; opacity: 0.9; margin: 0.25rem 0 0 0;">To be filled up by the physician</small>
+                        <small class="text-white-50" style="font-size: 0.875rem; opacity: 0.9; margin: 0.25rem 0 0 0;">To be filled up by the physician</small>
                     </div>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="background: none; border: none; color: white; font-size: 1.2rem; opacity: 0.8;"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="background: none; border: none; color: white; font-size: 1.5rem; opacity: 0.8;"></button>
                 </div>
                 
                 <div class="modal-body" id="physicianSectionModalContent" style="padding: 1.5rem; background: white;">

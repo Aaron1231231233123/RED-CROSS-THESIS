@@ -13,6 +13,22 @@
 #phlebotomistBloodCollectionDetailsModal { z-index: 1085 !important; }
 /* Ensure confirmation modals sit above screening */
 #submitMedicalHistoryConfirmModal, #initialScreeningConfirmationModal, #processMedicalHistoryConfirmModal { z-index: 1090 !important; }
+/* Ensure medical history approval confirmation modal appears above medical history modal (1100/9999) */
+#medicalHistoryApproveConfirmModal {
+    z-index: 10000 !important;
+    position: fixed !important;
+}
+#medicalHistoryApproveConfirmModal.show {
+    z-index: 10000 !important;
+}
+#medicalHistoryApproveConfirmModal .modal-dialog {
+    z-index: 10001 !important;
+    position: relative !important;
+}
+#medicalHistoryApproveConfirmModal .modal-content {
+    z-index: 10002 !important;
+    position: relative !important;
+}
 .modal-content { pointer-events: auto !important; }
 .modal-content * { pointer-events: auto !important; }
 
@@ -22,6 +38,10 @@
     z-index: 1060 !important;
 }
 
+/* Exception: Medical history approval confirmation modal must appear above medical history modal */
+#medicalHistoryApproveConfirmModal.show {
+    z-index: 10000 !important;
+}
 
 .modal {
     z-index: 1060 !important;
@@ -42,12 +62,13 @@
 }
 
 /* Screening Summary Modal Styles */
-#screeningSummaryModal .modal-dialog {
+#screeningSummaryModal .modal-dialog,
+#physicianSectionModal .modal-dialog {
     max-width: 600px;
 }
 
 .screening-summary-section {
-    margin-bottom: 2rem;
+    margin-bottom: 0;
 }
 
 .screening-summary-title {
@@ -57,6 +78,7 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    font-size: 1.1rem;
 }
 
 .screening-summary-description {
@@ -67,33 +89,34 @@
 
 .screening-info-grid {
     display: grid;
-    gap: 1rem;
+    gap: 0.75rem;
 }
 
 .screening-category {
     border: 1px solid #e9ecef;
     border-radius: 8px;
     overflow: hidden;
+    background: white;
 }
 
 .screening-category-header {
     background: #f8f9fa;
     color: #dc3545;
     font-weight: 600;
-    padding: 0.75rem 1rem;
+    padding: 0.5rem 0.75rem;
     border-bottom: 1px solid #e9ecef;
     font-size: 0.9rem;
 }
 
 .screening-category-content {
-    padding: 1rem;
+    padding: 0.75rem;
 }
 
 .screening-field {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.5rem 0;
+    padding: 0.35rem 0;
     border-bottom: 1px solid #f8f9fa;
 }
 
@@ -117,6 +140,110 @@
     color: #6c757d;
     font-size: 0.9rem;
     text-align: right;
+}
+
+/* Ensure these styles apply to physicianSectionModal as well */
+#physicianSectionModal .screening-summary-section,
+#physicianSectionModal .screening-info-grid,
+#physicianSectionModal .screening-category,
+#physicianSectionModal .screening-field {
+    /* Inherit all styles from above */
+}
+
+/* Fix Physical Examination Modal Admin Step 3 (Review) - Make it compact, no scroll */
+#physicalExaminationModalAdmin .modal-content {
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+#physicalExaminationModalAdmin .modal-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 0.75rem !important;
+    max-height: calc(90vh - 200px);
+}
+
+/* Make Step 3 content more compact */
+#physicalExaminationModalAdmin #physical-step-3-admin {
+    padding: 0.5rem !important;
+}
+
+#physicalExaminationModalAdmin .physical-step-content {
+    padding: 1rem !important;
+}
+
+#physicalExaminationModalAdmin .physical-review-section {
+    margin: 0;
+    padding: 0;
+}
+
+#physicalExaminationModalAdmin .physical-review-card {
+    padding: 0.75rem !important;
+    margin-bottom: 0.5rem !important;
+    border-radius: 6px;
+}
+
+#physicalExaminationModalAdmin .physical-review-title {
+    font-size: 0.9rem !important;
+    margin-bottom: 0.5rem !important;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+#physicalExaminationModalAdmin .physical-review-group {
+    margin-bottom: 0.5rem !important;
+}
+
+#physicalExaminationModalAdmin .physical-review-subtitle {
+    font-size: 0.8rem !important;
+    margin-bottom: 0.25rem !important;
+    padding: 0.25rem 0;
+}
+
+#physicalExaminationModalAdmin .physical-review-item {
+    padding: 0.2rem 0 !important;
+    font-size: 0.8rem !important;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#physicalExaminationModalAdmin .physical-review-label {
+    font-size: 0.8rem !important;
+    margin: 0;
+}
+
+#physicalExaminationModalAdmin .physical-review-value {
+    font-size: 0.8rem !important;
+    margin: 0;
+}
+
+#physicalExaminationModalAdmin .physical-review-note {
+    font-size: 0.7rem !important;
+    margin: 0.5rem 0 0 0 !important;
+    padding-top: 0.5rem;
+    border-top: 1px solid #e9ecef;
+}
+
+#physicalExaminationModalAdmin .row.g-4 {
+    --bs-gutter-y: 0.5rem;
+    --bs-gutter-x: 0.5rem;
+}
+
+#physicalExaminationModalAdmin .col-lg-8,
+#physicalExaminationModalAdmin .col-lg-4 {
+    padding: 0.25rem;
+}
+
+#physicalExaminationModalAdmin .physical-step-inner h4 {
+    font-size: 1rem !important;
+    margin-bottom: 0.25rem !important;
+}
+
+#physicalExaminationModalAdmin .physical-step-inner .text-muted {
+    font-size: 0.8rem !important;
+    margin-bottom: 0.5rem !important;
 }
 
 /* Physician Section Modal Styles */
