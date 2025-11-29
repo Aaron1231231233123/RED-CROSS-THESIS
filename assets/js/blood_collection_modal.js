@@ -3,7 +3,7 @@ class BloodCollectionModal {
     constructor() {
         this.modal = null;
         this.currentStep = 1;
-        this.totalSteps = 4;
+        this.totalSteps = 3; // Changed from 4 to 3 (removed blood bag selection step)
         this.bloodCollectionData = null;
         this.isSubmitting = false; // Prevent duplicate submissions
         this.init();
@@ -236,6 +236,7 @@ class BloodCollectionModal {
         const donorNameDisplay = document.getElementById('blood-donor-name-display');
         const collectionDateDisplay = document.getElementById('blood-collection-date-display');
         const unitSerialDisplay = document.getElementById('blood-unit-serial-display');
+        const bloodTypeDisplay = document.getElementById('blood-type-display');
 
         if (donorNameDisplay) {
             const fullName = `${donorData.surname || ''} ${donorData.first_name || ''} ${donorData.middle_name || ''}`.trim();
@@ -255,6 +256,12 @@ class BloodCollectionModal {
         if (unitSerialDisplay) {
             const serialInput = document.getElementById('blood-unit-serial');
             unitSerialDisplay.textContent = serialInput?.value || 'Generating...';
+        }
+
+        // Populate blood type display
+        if (bloodTypeDisplay) {
+            const bloodType = donorData.blood_type || '-';
+            bloodTypeDisplay.textContent = bloodType;
         }
 
         // Also update the serial display in Step 1
@@ -277,8 +284,18 @@ class BloodCollectionModal {
             step.classList.remove('active');
         });
         
+        // Map step numbers: 1 -> step-1, 2 -> step-2-collection, 3 -> step-3
+        let stepId;
+        if (stepNumber === 1) {
+            stepId = 'blood-step-1';
+        } else if (stepNumber === 2) {
+            stepId = 'blood-step-2-collection'; // Collection Process
+        } else if (stepNumber === 3) {
+            stepId = 'blood-step-3'; // Review & Submit
+        }
+        
         // Show current step
-        const currentStepContent = document.getElementById(`blood-step-${stepNumber}`);
+        const currentStepContent = document.getElementById(stepId);
         if (currentStepContent) {
             currentStepContent.classList.add('active');
         }
@@ -335,7 +352,7 @@ class BloodCollectionModal {
                 this.updateNavigationButtons();
                 
                 // Update summary if we're at the review step
-                if (this.currentStep === 4) {
+                if (this.currentStep === 3) {
                     this.updateFormSummary();
                 }
             }
@@ -358,7 +375,7 @@ class BloodCollectionModal {
             this.showStep(step);
             this.updateNavigationButtons();
             
-            if (step === 4) {
+            if (step === 3) {
                 this.updateFormSummary();
             }
         }
@@ -404,8 +421,12 @@ class BloodCollectionModal {
             }
         }
         
+        // Default blood bag values
+        const bloodBagType = formData.blood_bag_type || 'S-KARMI';
+        const bloodBagBrand = formData.blood_bag_brand || 'KARMI';
+        
         const summaryElements = {
-            'summary-blood-bag': formData.blood_bag_type || '-',
+            'summary-blood-bag': bloodBagType,
             'summary-successful': 'Successful', // Always successful
             'summary-start-time': formData.start_time || '-',
             'summary-end-time': formData.end_time || '-',
@@ -431,6 +452,14 @@ class BloodCollectionModal {
 
         // Always set is_successful to true (YES)
         data.is_successful = 'YES';
+
+        // Set default blood bag values if not present
+        if (!data.blood_bag_brand) {
+            data.blood_bag_brand = 'KARMI';
+        }
+        if (!data.blood_bag_type) {
+            data.blood_bag_type = 'S-KARMI';
+        }
 
         // Add hidden data
         data.physical_exam_id = this.bloodCollectionData.physical_exam_id;

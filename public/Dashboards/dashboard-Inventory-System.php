@@ -1231,14 +1231,71 @@ h6 {
                                 'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
                                 'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
                             ]);
-                            // Threshold for low availability indicator
-                            $lowThreshold = 25;
-                            // Inline helper to render a small danger icon when low
-                            function renderDangerIconHome($count, $threshold) {
-                                if ($count <= $threshold) {
-                                    return '<span class="text-danger" title="Low availability" style="position:absolute; top:8px; right:10px;"><i class="fas fa-exclamation-triangle"></i></span>';
+                            
+                            // Fetch Target Stock Levels per blood type for current month
+                            $targetStockLevels = [
+                                'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
+                                'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
+                            ];
+                            
+                            try {
+                                // Construct URL the same way as blood bank dashboard
+                                $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                                $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+                                $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+                                // Extract base path: /RED-CROSS-THESIS/public from /RED-CROSS-THESIS/public/Dashboards/file.php
+                                $basePath = dirname(dirname($scriptName)); // Go up from Dashboards to public
+                                // Build URL matching developer tool: ../api/get-target-stock-levels.php
+                                $targetStockApiUrl = "{$protocol}://{$host}{$basePath}/api/get-target-stock-levels.php?t=" . time();
+                                
+                                $ch = curl_init($targetStockApiUrl);
+                                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                                curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+                                curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+                                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                                    'Cache-Control: no-cache',
+                                    'Pragma: no-cache'
+                                ]);
+                                $targetStockResponse = curl_exec($ch);
+                                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                                $curlError = curl_error($ch);
+                                curl_close($ch);
+                                
+                                if ($curlError) {
+                                    error_log("Home Dashboard - Target Stock API CURL Error: " . $curlError . " | URL: " . $targetStockApiUrl);
                                 }
-                                return '';
+                                
+                                if ($httpCode === 200 && $targetStockResponse) {
+                                    $targetStockData = json_decode($targetStockResponse, true);
+                                    if ($targetStockData && isset($targetStockData['success']) && $targetStockData['success']) {
+                                        $fetchedLevels = $targetStockData['target_stock_levels'] ?? [];
+                                        if (!empty($fetchedLevels)) {
+                                            $targetStockLevels = array_merge($targetStockLevels, $fetchedLevels);
+                                        }
+                                    }
+                                }
+                            } catch (Exception $e) {
+                                error_log("Home Dashboard - Failed to fetch target stock levels: " . $e->getMessage());
+                            }
+                            
+                            // Inline helper to render a small danger icon when below target stock
+                            function renderDangerIconHome($count, $targetStock = 0, $typeLabelAttr = '') {
+                                // Show exclamation ONLY if current stock is below target stock level
+                                // If targetStock is 0, we don't have target data, so don't show exclamation
+                                // If targetStock > 0 and count < targetStock, show exclamation
+                                $isBelowTarget = ($targetStock > 0) && ($count < $targetStock);
+                                $classes = 'text-danger' . ($isBelowTarget ? '' : ' d-none');
+                                $dataAttr = $typeLabelAttr !== '' ? ' data-danger-icon="' . htmlspecialchars($typeLabelAttr, ENT_QUOTES, 'UTF-8') . '"' : '';
+                                $title = '';
+                                if ($targetStock > 0) {
+                                    $title = $isBelowTarget 
+                                        ? "Current stock ({$count}) is below target stock level ({$targetStock})" 
+                                        : "Stock level is adequate (Current: {$count}, Target: {$targetStock})";
+                                } else {
+                                    $title = "Target stock level not available";
+                                }
+                                return '<span class="' . $classes . '" title="' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '" style="position:absolute; top:8px; right:10px;"' . $dataAttr . '><i class="fas fa-exclamation-triangle"></i></span>';
                             }
                             // Helper to render small buffer badge when buffer units exist for a type
                             function renderBufferPillHome($type, $bufferTypes) {
@@ -1251,104 +1308,33 @@ h6 {
                             ?>
                             
                             <!-- Row 1: O+, A+, B+, AB+ (retain original order/UI) -->
+                            <?php
+                            $bloodTypeOrder = ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-'];
+                            foreach ($bloodTypeOrder as $typeLabel):
+                                $availableCount = (int)($bloodTypeCounts[$typeLabel] ?? 0);
+                                $targetStockForType = (int)($targetStockLevels[$typeLabel] ?? 0);
+                                $typeLabelAttr = htmlspecialchars($typeLabel, ENT_QUOTES, 'UTF-8');
+                                $bloodTypeClass = 'blood-type-' . strtolower(str_replace(['+', '-'], ['-pos', '-neg'], $typeLabel));
+                            ?>
                             <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-o-pos" style="position: relative;">
-                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['O+'], $lowThreshold); ?>
+                                <div class="card inventory-system-blood-card <?php echo $bloodTypeClass; ?>" 
+                                    style="position: relative;"
+                                    data-blood-type-card="<?php echo $typeLabelAttr; ?>"
+                                    data-target-stock="<?php echo $targetStockForType; ?>">
+                                    <?php echo renderDangerIconHome($availableCount, $targetStockForType, $typeLabelAttr); ?>
                                     <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type O+</h5>
+                                        <h5 class="inventory-system-blood-title">Blood Type <?php echo $typeLabel; ?></h5>
                                         <p class="inventory-system-blood-availability">
-                                            Availability: <?php echo (int)$bloodTypeCounts['O+']; ?>
-                                            <?php echo renderBufferPillHome('O+', $bufferTypes); ?>
+                                            Availability: <span class="fw-bold" data-blood-type-count="<?php echo $typeLabelAttr; ?>"><?php echo $availableCount; ?></span>
+                                            <?php echo renderBufferPillHome($typeLabel, $bufferTypes); ?>
+                                            <?php if ($targetStockForType > 0): ?>
+                                                <br><small class="text-muted">Target: <?php echo $targetStockForType; ?> units</small>
+                                            <?php endif; ?>
                                         </p>
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-a-pos" style="position: relative;">
-                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['A+'], $lowThreshold); ?>
-                                    <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type A+</h5>
-                                        <p class="inventory-system-blood-availability">
-                                            Availability: <?php echo (int)$bloodTypeCounts['A+']; ?>
-                                            <?php echo renderBufferPillHome('A+', $bufferTypes); ?>
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-b-pos" style="position: relative;">
-                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['B+'], $lowThreshold); ?>
-                                    <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type B+</h5>
-                                        <p class="inventory-system-blood-availability">
-                                            Availability: <?php echo (int)$bloodTypeCounts['B+']; ?>
-                                            <?php echo renderBufferPillHome('B+', $bufferTypes); ?>
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-ab-pos" style="position: relative;">
-                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['AB+'], $lowThreshold); ?>
-                                    <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type AB+</h5>
-                                        <p class="inventory-system-blood-availability">
-                                            Availability: <?php echo (int)$bloodTypeCounts['AB+']; ?>
-                                            <?php echo renderBufferPillHome('AB+', $bufferTypes); ?>
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Row 2: O-, A-, B-, AB- -->
-                            <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-o-neg" style="position: relative;">
-                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['O-'], $lowThreshold); ?>
-                                    <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type O-</h5>
-                                        <p class="inventory-system-blood-availability">
-                                            Availability: <?php echo (int)$bloodTypeCounts['O-']; ?>
-                                            <?php echo renderBufferPillHome('O-', $bufferTypes); ?>
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-a-neg" style="position: relative;">
-                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['A-'], $lowThreshold); ?>
-                                    <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type A-</h5>
-                                        <p class="inventory-system-blood-availability">
-                                            Availability: <?php echo (int)$bloodTypeCounts['A-']; ?>
-                                            <?php echo renderBufferPillHome('A-', $bufferTypes); ?>
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-b-neg" style="position: relative;">
-                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['B-'], $lowThreshold); ?>
-                                    <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type B-</h5>
-                                        <p class="inventory-system-blood-availability">
-                                            Availability: <?php echo (int)$bloodTypeCounts['B-']; ?>
-                                            <?php echo renderBufferPillHome('B-', $bufferTypes); ?>
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="card inventory-system-blood-card blood-type-ab-neg" style="position: relative;">
-                                    <?php echo renderDangerIconHome((int)$bloodTypeCounts['AB-'], $lowThreshold); ?>
-                                    <div class="card-body p-4">
-                                        <h5 class="inventory-system-blood-title">Blood Type AB-</h5>
-                                        <p class="inventory-system-blood-availability">
-                                            Availability: <?php echo (int)$bloodTypeCounts['AB-']; ?>
-                                            <?php echo renderBufferPillHome('AB-', $bufferTypes); ?>
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
+                            <?php endforeach; ?>
                         </div>
                     </div>
                     <?php
@@ -2895,22 +2881,92 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
     <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script defer src="../../assets/js/admin-feedback-modal.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            window.showConfirmationModal = function() {
-                if (typeof window.openAdminDonorRegistrationModal === 'function') {
-                    window.openAdminDonorRegistrationModal();
-                } else {
-                    console.error('Admin donor registration modal not available yet');
-                    alert('Registration modal is still loading. Please try again in a moment.');
+        // Make target stock levels and blood type counts available to JavaScript
+        const targetStockLevels = <?php echo json_encode($targetStockLevels); ?>;
+        const bloodTypeCountsData = <?php echo json_encode($bloodTypeCounts); ?>;
+        
+        // Debug: Log target stock levels to console
+        console.log('Home Dashboard - Target Stock Levels loaded:', targetStockLevels);
+        console.log('Home Dashboard - Blood Type Counts:', bloodTypeCountsData);
+        
+        // Function to update blood type cards (similar to blood bank dashboard)
+        function updateBloodTypeCards() {
+            const cards = document.querySelectorAll('[data-blood-type-card]');
+            cards.forEach(card => {
+                const type = card.getAttribute('data-blood-type-card');
+                
+                const countValue = bloodTypeCountsData?.[type] ?? 0;
+                const countEl = card.querySelector('[data-blood-type-count]');
+                if (countEl) {
+                    countEl.textContent = countValue;
                 }
-            };
-            
+                
+                // Update target stock display
+                const targetStock = targetStockLevels?.[type] ?? 0;
+                if (card) {
+                    card.setAttribute('data-target-stock', targetStock);
+                    const cardText = card.querySelector('.inventory-system-blood-availability');
+                    if (cardText && targetStock > 0) {
+                        let targetSmall = cardText.querySelector('small.text-muted');
+                        if (!targetSmall || !targetSmall.textContent.includes('Target:')) {
+                            // Create new target stock display
+                            const br = document.createElement('br');
+                            targetSmall = document.createElement('small');
+                            targetSmall.className = 'text-muted';
+                            cardText.appendChild(br);
+                            cardText.appendChild(targetSmall);
+                        }
+                        targetSmall.textContent = `Target: ${targetStock} units`;
+                    } else if (cardText && targetStock === 0) {
+                        // Remove target stock display if not available
+                        const targetSmall = cardText.querySelector('small.text-muted');
+                        if (targetSmall && targetSmall.textContent.includes('Target:')) {
+                            const br = targetSmall.previousSibling;
+                            if (br && br.nodeName === 'BR') {
+                                br.remove();
+                            }
+                            targetSmall.remove();
+                        }
+                    }
+                }
+                
+                const dangerIcon = card.querySelector('[data-danger-icon]');
+                if (dangerIcon) {
+                    // Only check target stock level (removed lowThreshold check)
+                    const isBelowTarget = targetStock > 0 && countValue < targetStock;
+                    // Debug logging
+                    if (type === 'A+' || type === 'A-') {
+                        console.log(`Home Dashboard - Blood Type ${type}: Current=${countValue}, Target=${targetStock}, BelowTarget=${isBelowTarget}`);
+                    }
+                    if (isBelowTarget) {
+                        dangerIcon.classList.remove('d-none');
+                        dangerIcon.setAttribute('title', `Current stock (${countValue}) is below target stock level (${targetStock})`);
+                    } else {
+                        dangerIcon.classList.add('d-none');
+                    }
+                }
+            });
+        }
+        
+    document.addEventListener('DOMContentLoaded', function() {
+        window.showConfirmationModal = function() {
+            if (typeof window.openAdminDonorRegistrationModal === 'function') {
+                window.openAdminDonorRegistrationModal();
+            } else {
+                console.error('Admin donor registration modal not available yet');
+                alert('Registration modal is still loading. Please try again in a moment.');
+            }
+        };
+        
             // Function to open QR Registration page
             window.openQRRegistration = function() {
                 const qrRegistrationUrl = '../../src/views/forms/qr-registration.php';
                 // Open in a new window/tab
                 window.open(qrRegistrationUrl, 'QRRegistration', 'width=1200,height=800,scrollbars=yes,resizable=yes');
             };
+            
+            // Update blood type cards on page load
+            updateBloodTypeCards();
         });
     </script>
     <script>

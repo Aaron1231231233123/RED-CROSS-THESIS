@@ -23,12 +23,23 @@ include_once '../../assets/conn/db_conn.php';
 // OPTIMIZATION: Include shared optimized functions
 include_once __DIR__ . '/module/optimized_functions.php';
 
-function renderDangerIcon($count, $threshold, $typeLabelAttr = '')
+function renderDangerIcon($count, $threshold, $typeLabelAttr = '', $targetStock = 0)
 {
-    $isLow = $count <= $threshold;
-    $classes = 'text-danger' . ($isLow ? '' : ' d-none');
+    // Show exclamation ONLY if current stock is below target stock level (removed threshold check)
+    // If targetStock is 0, we don't have target data, so don't show exclamation
+    // If targetStock > 0 and count < targetStock, show exclamation
+    $isBelowTarget = ($targetStock > 0) && ($count < $targetStock);
+    $classes = 'text-danger' . ($isBelowTarget ? '' : ' d-none');
     $dataAttr = $typeLabelAttr !== '' ? ' data-danger-icon="' . htmlspecialchars($typeLabelAttr, ENT_QUOTES, 'UTF-8') . '"' : '';
-    return '<span class="' . $classes . '" title="Low availability" style="position:absolute; top:8px; right:10px;"' . $dataAttr . '><i class="fas fa-exclamation-triangle"></i></span>';
+    $title = '';
+    if ($targetStock > 0) {
+        $title = $isBelowTarget 
+            ? "Current stock ({$count}) is below target stock level ({$targetStock})" 
+            : "Stock level is adequate (Current: {$count}, Target: {$targetStock})";
+    } else {
+        $title = "Target stock level not available";
+    }
+    return '<span class="' . $classes . '" title="' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '" style="position:absolute; top:8px; right:10px;"' . $dataAttr . '><i class="fas fa-exclamation-triangle"></i></span>';
 }
 
 function formatBufferReserveText($count) {
@@ -336,6 +347,75 @@ $bloodTypeCounts = array_reduce($activeInventory, function($carry, $bag) {
 $lowThreshold = 25;
 $bufferReserveText = formatBufferReserveText($bufferReserveCount);
 
+// Fetch Target Stock Levels per blood type for current month
+$targetStockLevels = [
+    'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
+    'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
+];
+
+try {
+    // Construct URL the same way the developer tool does (relative path via HTTP)
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+    // Extract base path: /RED-CROSS-THESIS/public from /RED-CROSS-THESIS/public/Dashboards/file.php
+    $basePath = dirname(dirname($scriptName)); // Go up from Dashboards to public
+    // Build URL matching developer tool: ../api/get-target-stock-levels.php
+    $targetStockApiUrl = "{$protocol}://{$host}{$basePath}/api/get-target-stock-levels.php?t=" . time();
+    
+    error_log("Target Stock API URL: " . $targetStockApiUrl);
+    
+    $ch = curl_init($targetStockApiUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Cache-Control: no-cache',
+        'Pragma: no-cache'
+    ]);
+    $targetStockResponse = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+    
+    if ($curlError) {
+        error_log("Target Stock API CURL Error: " . $curlError . " | URL: " . $targetStockApiUrl);
+    }
+    
+    if ($httpCode === 200 && $targetStockResponse) {
+        $targetStockData = json_decode($targetStockResponse, true);
+        if ($targetStockData && isset($targetStockData['success']) && $targetStockData['success']) {
+            $fetchedLevels = $targetStockData['target_stock_levels'] ?? [];
+            if (!empty($fetchedLevels)) {
+                $targetStockLevels = array_merge($targetStockLevels, $fetchedLevels);
+                // Check if we got valid (non-zero) data
+                $hasNonZero = false;
+                foreach ($targetStockLevels as $bt => $value) {
+                    if ($value > 0) {
+                        $hasNonZero = true;
+                        break;
+                    }
+                }
+                if ($hasNonZero) {
+                    error_log("Target Stock Levels loaded successfully: " . json_encode($targetStockLevels));
+                } else {
+                    error_log("Target Stock API WARNING: All target stock levels are 0. Debug info: " . json_encode($targetStockData['debug'] ?? []));
+                    error_log("Full API response: " . substr($targetStockResponse, 0, 2000));
+                }
+            } else {
+                error_log("Target Stock API returned empty target_stock_levels. Full response: " . $targetStockResponse);
+            }
+        } else {
+            error_log("Target Stock API returned success=false: " . ($targetStockData['error'] ?? 'Unknown error') . " | Full response: " . substr($targetStockResponse, 0, 1000));
+        }
+    } else {
+        error_log("Target Stock API HTTP Error: Code $httpCode, URL: $targetStockApiUrl, Response: " . substr($targetStockResponse, 0, 500));
+    }
+} catch (Exception $e) {
+    error_log("Failed to fetch target stock levels: " . $e->getMessage() . " | Trace: " . $e->getTraceAsString());
+}
+
 if (isset($_GET['partial']) && $_GET['partial'] === '1') {
     header('Content-Type: application/json');
     echo json_encode([
@@ -358,6 +438,7 @@ if (isset($_GET['partial']) && $_GET['partial'] === '1') {
             'expiredBags' => $expiredBags
         ],
         'bloodTypeCounts' => $bloodTypeCounts,
+        'targetStockLevels' => $targetStockLevels,
         'bufferReserveCount' => $bufferReserveCount,
         'bufferReserveText' => $bufferReserveText,
         'bufferContext' => $bufferContext,
@@ -1195,6 +1276,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             foreach ($bloodTypeOrder as $typeLabel):
                                 $availableCount = (int)($bloodTypeCounts[$typeLabel] ?? 0);
                                 $bufferTypeCount = (int)($bufferContext['buffer_types'][$typeLabel] ?? 0);
+                                $targetStockForType = (int)($targetStockLevels[$typeLabel] ?? 0);
+                                // Debug logging for first blood type to verify data loading
+                                if ($typeLabel === 'A+') {
+                                    error_log("DEBUG Target Stock for A+: {$targetStockForType}, Available: {$availableCount}, All targets: " . json_encode($targetStockLevels));
+                                }
                                 $cardClasses = 'card p-3 h-100 blood-type-card position-relative';
                                 if ($activeBloodTypeFilter === $typeLabel) {
                                     $cardClasses .= ' active';
@@ -1205,16 +1291,20 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                         <div class="col-md-3 mb-3">
                             <div class="<?php echo $cardClasses; ?>"
                                 data-blood-type-card="<?php echo $typeLabelAttr; ?>"
+                                data-target-stock="<?php echo $targetStockForType; ?>"
                                 role="button"
                                 tabindex="0"
                                 aria-pressed="<?php echo $isActiveType; ?>"
                                 onclick="applyBloodTypeFilter('<?php echo $typeLabelAttr; ?>')"
                                 onkeydown="handleBloodTypeCardKey(event, '<?php echo $typeLabelAttr; ?>')">
-                                <?php echo renderDangerIcon($availableCount, $lowThreshold, $typeLabelAttr); ?>
+                                <?php echo renderDangerIcon($availableCount, $lowThreshold, $typeLabelAttr, $targetStockForType); ?>
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">Blood Type: <?php echo $typeLabel; ?></h5>
                                     <p class="card-text">Availability:
                                         <span class="fw-bold" data-blood-type-count="<?php echo $typeLabelAttr; ?>"><?php echo $availableCount; ?></span>
+                                        <?php if ($targetStockForType > 0): ?>
+                                            <br><small class="text-muted">Target: <?php echo $targetStockForType; ?> units</small>
+                                        <?php endif; ?>
                                     </p>
                                 </div>
                             </div>
@@ -1442,6 +1532,10 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         let paginationHtmlCache = <?php echo json_encode($paginationHtml); ?>;
         let inventoryAbortController = null;
         const lowThreshold = <?php echo $lowThreshold; ?>;
+        const targetStockLevels = <?php echo json_encode($targetStockLevels); ?>;
+        // Debug: Log target stock levels to console
+        console.log('Target Stock Levels loaded:', targetStockLevels);
+        console.log('Blood Type Counts:', bloodTypeCountsData);
         const inventoryCache = new Map();
         const CACHE_TTL = 60000; // 60 seconds
         const unitFallbackMap = new Map();
@@ -1654,6 +1748,9 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
             currentPageNumber = payload.pagination?.currentPage || 1;
             activeBloodTypeFilter = payload.activeBloodTypeFilter || null;
             bloodTypeCountsData = payload.bloodTypeCounts || bloodTypeCountsData;
+            if (payload.targetStockLevels) {
+                Object.assign(targetStockLevels, payload.targetStockLevels);
+            }
             bufferReserveCountData = payload.bufferReserveCount ?? bufferReserveCountData;
             bufferReserveTextData = payload.bufferReserveText ?? bufferReserveTextData;
             bufferContextData = payload.bufferContext || bufferContextData;
@@ -1699,10 +1796,47 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     countEl.textContent = countValue;
                 }
                 
+                // Update target stock display
+                const targetStock = targetStockLevels?.[type] ?? 0;
+                const cardElement = card;
+                if (cardElement) {
+                    cardElement.setAttribute('data-target-stock', targetStock);
+                    const cardText = cardElement.querySelector('.card-text');
+                    if (cardText && targetStock > 0) {
+                        let targetSmall = cardText.querySelector('small.text-muted');
+                        if (!targetSmall) {
+                            // Create new target stock display
+                            const br = document.createElement('br');
+                            targetSmall = document.createElement('small');
+                            targetSmall.className = 'text-muted';
+                            cardText.appendChild(br);
+                            cardText.appendChild(targetSmall);
+                        }
+                        targetSmall.textContent = `Target: ${targetStock} units`;
+                    } else if (cardText && targetStock === 0) {
+                        // Remove target stock display if not available
+                        const targetSmall = cardText.querySelector('small.text-muted');
+                        if (targetSmall && targetSmall.textContent.includes('Target:')) {
+                            const br = targetSmall.previousSibling;
+                            if (br && br.nodeName === 'BR') {
+                                br.remove();
+                            }
+                            targetSmall.remove();
+                        }
+                    }
+                }
+                
                 const dangerIcon = card.querySelector('[data-danger-icon]');
                 if (dangerIcon) {
-                    if (countValue <= lowThreshold) {
+                    // Only check target stock level (removed lowThreshold check)
+                    const isBelowTarget = targetStock > 0 && countValue < targetStock;
+                    // Debug logging
+                    if (type === 'A+' || type === 'A-') {
+                        console.log(`Blood Type ${type}: Current=${countValue}, Target=${targetStock}, BelowTarget=${isBelowTarget}`);
+                    }
+                    if (isBelowTarget) {
                         dangerIcon.classList.remove('d-none');
+                        dangerIcon.setAttribute('title', `Current stock (${countValue}) is below target stock level (${targetStock})`);
                     } else {
                         dangerIcon.classList.add('d-none');
                     }

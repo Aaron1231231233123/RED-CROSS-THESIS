@@ -122,38 +122,9 @@ function buildFilterQuery(array $filters): string
 
 function updateAccessValue(string $table, int $value, array $filters = [])
 {
-    // CRITICAL: Never allow full-table updates - require filters to prevent overriding admin locks
-    if (empty($filters)) {
-        error_log("[AccessLockManagerInterviewer] ERROR: Refusing to update access without filters for table {$table}");
-        throw new RuntimeException('Refusing to update access without filters. Records with donor_id must be provided.');
-    }
-
     $filter = buildFilterQuery($filters);
     if (empty($filter)) {
-        error_log("[AccessLockManagerInterviewer] ERROR: Failed to build filter query for table {$table}");
-        throw new RuntimeException('Failed to build filter query. Records with donor_id must be provided.');
-    }
-
-    // Before updating, check if any records already have access=2 (admin lock)
-    // This prevents interviewer from overriding admin locks
-    $checkUrl = SUPABASE_URL . "/rest/v1/{$table}{$filter}";
-    // Add select parameter correctly (use & if filter already has ?, otherwise use ?)
-    $checkUrl .= (strpos($filter, '?') !== false ? '&' : '?') . 'select=access,is_admin&limit=1';
-    [$checkCode, $checkResponse] = executeSupabaseRequest($checkUrl);
-    if ($checkCode === 200) {
-        $checkData = json_decode($checkResponse, true);
-        if (is_array($checkData) && !empty($checkData)) {
-            $existingAccess = isset($checkData[0]['access']) ? (int)$checkData[0]['access'] : 0;
-            $isAdmin = isset($checkData[0]['is_admin']) ? 
-                ($checkData[0]['is_admin'] === true || $checkData[0]['is_admin'] === 'true' || $checkData[0]['is_admin'] === 'True') : 
-                false;
-            
-            // If admin has locked this record (access=2 or is_admin=True), prevent interviewer from claiming
-            if ($existingAccess === 2 || $isAdmin) {
-                error_log("[AccessLockManagerInterviewer] BLOCKED: Cannot claim access - record is locked by admin (access={$existingAccess}, is_admin=" . ($isAdmin ? 'true' : 'false') . ")");
-                throw new RuntimeException('Cannot claim access: This record is currently locked by an admin account.');
-            }
-        }
+        $filter = '?access=gte.0';
     }
 
     $url = SUPABASE_URL . "/rest/v1/{$table}{$filter}";
@@ -210,32 +181,26 @@ try {
             if ($accessValue === 2 && $roleId !== 1) {
                 throw new RuntimeException('Only admin accounts can claim admin access');
             }
-            // CRITICAL: Require records for all claim operations to prevent full-table updates
-            if (empty($records)) {
-                error_log('[AccessLockManagerInterviewer] ERROR: Claim operation requires records with donor_id');
-                throw new RuntimeException('Claim operation requires records with donor_id. Cannot perform full-table updates.');
-            }
-            foreach ($records as $record) {
-                updateAccessValue($record['table'], $accessValue, resolveRecordFilters($record));
+            if (!empty($records)) {
+                foreach ($records as $record) {
+                    updateAccessValue($record['table'], $accessValue, resolveRecordFilters($record));
+                }
+            } else {
+                foreach ($normalizedScopes as $scope => $table) {
+                    updateAccessValue($table, $accessValue);
+                }
             }
             echo json_encode(['success' => true, 'message' => 'Access claimed', 'access' => $accessValue]);
             break;
 
         case 'release':
-            // Require records for release operations to prevent full-table updates
-            if (empty($records)) {
-                error_log('[AccessLockManagerInterviewer] ERROR: Release operation requires records with donor_id');
-                throw new RuntimeException('Release operation requires records with donor_id. Cannot perform full-table updates.');
-            }
-            foreach ($records as $record) {
-                // Only release if we own the lock (access=1), don't release admin locks (access=2)
-                $filters = resolveRecordFilters($record);
-                $currentAccess = fetchAccessValue($record['table'], $filters);
-                if ($currentAccess === 1) {
-                    // Only release our own locks, not admin locks
-                    updateAccessValue($record['table'], 0, $filters);
-                } else {
-                    error_log("[AccessLockManagerInterviewer] Skipping release - record has access={$currentAccess} (not our lock)");
+            if (!empty($records)) {
+                foreach ($records as $record) {
+                    updateAccessValue($record['table'], 0, resolveRecordFilters($record));
+                }
+            } else {
+                foreach ($normalizedScopes as $table) {
+                    updateAccessValue($table, 0);
                 }
             }
             echo json_encode(['success' => true, 'message' => 'Access released']);
