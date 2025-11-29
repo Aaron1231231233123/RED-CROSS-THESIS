@@ -1269,14 +1269,10 @@ foreach ($display_records as $index => $record) {
         .donor-info-row {
             padding: 25px 0;
             border-bottom: 2px solid #f1f3f4;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 20px;
         }
 
         .donor-main-info {
-            flex: 1;
+            width: 100%;
         }
 
         .donor-name {
@@ -1308,47 +1304,6 @@ foreach ($display_records as $index => $record) {
             display: flex;
             align-items: center;
             font-family: 'Courier New', monospace;
-        }
-
-        /* Blood Type Display */
-        .blood-type-display-container {
-            background: #8b0000;
-            border-radius: 6px;
-            padding: 6px 14px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 2px 6px rgba(139, 0, 0, 0.3);
-            min-width: 100px;
-            max-width: 120px;
-            flex-shrink: 0;
-            transition: all 0.3s ease;
-        }
-
-        .blood-type-display-container:hover {
-            box-shadow: 0 3px 10px rgba(139, 0, 0, 0.4);
-            transform: translateY(-1px);
-        }
-
-        .blood-type-label {
-            color: white;
-            font-size: 0.6rem;
-            font-weight: 500;
-            margin-bottom: 2px;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-            opacity: 0.95;
-            line-height: 1.2;
-        }
-
-        .blood-type-value {
-            color: white;
-            font-size: 1.2rem;
-            font-weight: 700;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-            letter-spacing: 0.2px;
-            line-height: 1.1;
         }
 
 
@@ -1849,28 +1804,6 @@ foreach ($display_records as $index => $record) {
 
             .blood-step-label {
                 font-size: 10px;
-            }
-
-            /* Donor Info Row Mobile */
-            .donor-info-row {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .blood-type-display-container {
-                align-self: flex-end;
-                min-width: 90px;
-                max-width: 100px;
-                padding: 5px 10px;
-            }
-
-            .blood-type-value {
-                font-size: 1rem;
-            }
-
-            .blood-type-label {
-                font-size: 0.55rem;
-                margin-bottom: 1px;
             }
 
             /* Blood Collection Report Mobile */
@@ -2515,10 +2448,14 @@ foreach ($display_records as $index => $record) {
                     </div>
                     <div class="blood-step" data-step="2">
                         <div class="blood-step-number">2</div>
-                        <div class="blood-step-label">Collection Process</div>
+                        <div class="blood-step-label">Blood Bag</div>
                     </div>
                     <div class="blood-step" data-step="3">
                         <div class="blood-step-number">3</div>
+                        <div class="blood-step-label">Collection Process</div>
+                    </div>
+                    <div class="blood-step" data-step="4">
+                        <div class="blood-step-number">4</div>
                         <div class="blood-step-label">Review & Submit</div>
                     </div>
                 </div>
@@ -2539,23 +2476,19 @@ foreach ($display_records as $index => $record) {
                             <div class="donor-info-row">
                                 <div class="donor-main-info">
                                     <h4 class="donor-name" id="blood-donor-name-display">Loading...</h4>
-                                    <div class="donor-metadata">
-                                        <span class="collection-date">
-                                            <i class="fas fa-calendar-alt me-2"></i>
-                                            <span id="blood-collection-date-display">Loading...</span>
-                                        </span>
-                                        <span class="unit-serial-info">
-                                            <i class="fas fa-barcode me-2"></i>
-                                            <span>Serial: </span>
-                                            <span id="blood-unit-serial-display">Generating...</span>
-                                        </span>
-                                    </div>
+                                                                <div class="donor-metadata">
+                                <span class="collection-date">
+                                    <i class="fas fa-calendar-alt me-2"></i>
+                                    <span id="blood-collection-date-display">Loading...</span>
+                                </span>
+                                <span class="unit-serial-info">
+                                    <i class="fas fa-barcode me-2"></i>
+                                    <span>Serial: </span>
+                                    <span id="blood-unit-serial-display">Generating...</span>
+                                </span>
+                            </div>
                                 </div>
-                                <!-- Blood Type Display -->
-                                <div class="blood-type-display-container">
-                                    <div class="blood-type-label">Blood Type</div>
-                                    <div class="blood-type-value" id="blood-type-display">-</div>
-                                </div>
+
                             </div>
                         </div>
 
@@ -2572,14 +2505,117 @@ foreach ($display_records as $index => $record) {
                     </div>
                 </div>
 
-                <!-- Step 2: Blood Bag Selection (HIDDEN - Default values set) -->
-                <div class="blood-step-content" id="blood-step-2" style="display: none;">
-                    <!-- Hidden - Blood bag selection removed, defaults to KARMI S -->
+                <!-- Step 2: Blood Bag Selection -->
+                <div class="blood-step-content" id="blood-step-2">
+                    <h4>Step 2: Blood Bag Selection</h4>
+                    <p class="text-muted">Select the appropriate blood bag type</p>
+                    
+                    <div class="modern-form-container">
+                        <!-- Blood Bag Selection -->
+                        <div class="form-group-modern">
+                            <label class="form-label-modern">
+                                <i class="fas fa-vial me-2"></i>
+                                Blood Bag Type
+                            </label>
+                            <div class="blood-bag-grid">
+                                <!-- KARMI Options -->
+                                <div class="bag-brand-section">
+                                    <h6 class="brand-title">KARMI</h6>
+                                    <div class="bag-options">
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="S-KARMI" required>
+                                            <div class="option-content">
+                                                <span class="option-code">S</span>
+                                                <span class="option-name">Single</span>
+                                            </div>
+                                        </label>
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="D-KARMI" required>
+                                            <div class="option-content">
+                                                <span class="option-code">D</span>
+                                                <span class="option-name">Double</span>
+                                            </div>
+                                        </label>
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="T-KARMI" required>
+                                            <div class="option-content">
+                                                <span class="option-code">T</span>
+                                                <span class="option-name">Triple</span>
+                                            </div>
+                                        </label>
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="Q-KARMI" required>
+                                            <div class="option-content">
+                                                <span class="option-code">Q</span>
+                                                <span class="option-name">Quadruple</span>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- TERUMO Options -->
+                                <div class="bag-brand-section">
+                                    <h6 class="brand-title">TERUMO</h6>
+                                    <div class="bag-options">
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="S-TERUMO" required>
+                                            <div class="option-content">
+                                                <span class="option-code">S</span>
+                                                <span class="option-name">Single</span>
+                                            </div>
+                                        </label>
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="D-TERUMO" required>
+                                            <div class="option-content">
+                                                <span class="option-code">D</span>
+                                                <span class="option-name">Double</span>
+                                            </div>
+                                        </label>
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="T-TERUMO" required>
+                                            <div class="option-content">
+                                                <span class="option-code">T</span>
+                                                <span class="option-name">Triple</span>
+                                            </div>
+                                        </label>
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="Q-TERUMO" required>
+                                            <div class="option-content">
+                                                <span class="option-code">Q</span>
+                                                <span class="option-name">Quadruple</span>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- SPECIAL BAG Options -->
+                                <div class="bag-brand-section">
+                                    <h6 class="brand-title">SPECIAL BAG</h6>
+                                    <div class="bag-options">
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="FK T&B-SPECIAL BAG" required>
+                                            <div class="option-content">
+                                                <span class="option-code">FK</span>
+                                                <span class="option-name">T&B</span>
+                                            </div>
+                                        </label>
+                                        <label class="bag-option">
+                                            <input type="radio" name="blood_bag_type" value="TRM T&B-SPECIAL BAG" required>
+                                            <div class="option-content">
+                                                <span class="option-code">TRM</span>
+                                                <span class="option-name">T&B</span>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Step 2: Collection Process -->
-                <div class="blood-step-content" id="blood-step-2-collection">
-                    <h4>Step 2: Collection Process</h4>
+                <!-- Step 3: Collection Process -->
+                <div class="blood-step-content" id="blood-step-3">
+                    <h4>Step 3: Collection Process</h4>
                     <p class="text-muted">Record collection details and timing</p>
                     
                     <div class="row">
@@ -2604,15 +2640,11 @@ foreach ($display_records as $index => $record) {
                     
                     <!-- Hidden field for amount_taken - always 1 unit -->
                     <input type="hidden" name="amount_taken" value="1">
-                    
-                    <!-- Hidden fields for default blood bag values -->
-                    <input type="hidden" name="blood_bag_brand" value="KARMI">
-                    <input type="hidden" name="blood_bag_type" value="S-KARMI">
                 </div>
 
-                <!-- Step 3: Review & Submit -->
-                <div class="blood-step-content" id="blood-step-3">
-                    <h4>Step 3: Review & Submit</h4>
+                <!-- Step 4: Review & Submit -->
+                <div class="blood-step-content" id="blood-step-4">
+                    <h4>Step 4: Review & Submit</h4>
                     <p class="text-muted">Review all information before submitting</p>
                     
                     <!-- Hidden field for is_successful - always true by default -->
@@ -2623,10 +2655,6 @@ foreach ($display_records as $index => $record) {
 
                     <!-- Hidden phlebotomist (auto-filled from logged-in user) -->
                     <input type="hidden" id="blood-phlebotomist" name="phlebotomist">
-                    
-                    <!-- Hidden fields for default blood bag values -->
-                    <input type="hidden" name="blood_bag_brand" value="KARMI">
-                    <input type="hidden" name="blood_bag_type" value="S-KARMI">
                     
                     <div class="blood-collection-report">
                         <!-- Report Header -->

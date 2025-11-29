@@ -243,40 +243,42 @@ $current_date = date('F d, Y');
             max-width: 800px;
             margin: 0 auto;
             background: white;
-            padding: 30px;
+            padding: 20px 20px 10px 20px;
         }
         .receipt-header {
             text-align: center;
             margin-bottom: 30px;
         }
         .receipt-title {
-            font-size: 28px;
+            font-size: 24px;
             font-weight: bold;
-            margin-bottom: 5px;
+            margin-bottom: 3px;
             color: #333;
+            line-height: 1.2;
         }
         .organization-name {
-            font-size: 18px;
+            font-size: 16px;
             color: #666;
-            margin-bottom: 30px;
+            margin-bottom: 0;
+            line-height: 1.2;
         }
         .receipt-info {
-            margin-bottom: 25px;
+            margin-bottom: 15px;
         }
         .info-row {
             display: flex;
-            margin-bottom: 8px;
+            margin-bottom: 5px;
         }
         .info-label {
             font-weight: bold;
-            width: 200px;
+            width: 220px;
             color: #333;
         }
         .info-value {
             color: #333;
         }
         .instructions-section {
-            margin: 30px 0;
+            margin: 20px 0;
         }
         .instructions-title {
             font-weight: bold;
@@ -289,7 +291,8 @@ $current_date = date('F d, Y');
             line-height: 1.5;
         }
         .signature-section {
-            margin-top: 50px;
+            margin-top: 25px;
+            margin-bottom: 0;
             display: flex;
             justify-content: space-between;
         }
@@ -299,7 +302,7 @@ $current_date = date('F d, Y');
         }
         .signature-line {
             border-top: 1px solid #333;
-            margin-top: 40px;
+            margin-top: 25px;
             padding-top: 5px;
         }
         .signature-label {
@@ -313,11 +316,12 @@ $current_date = date('F d, Y');
             margin-top: 5px;
         }
         .note-section {
-            margin-top: 20px;
+            margin-top: 10px;
+            margin-bottom: 0;
             text-align: center;
             font-style: italic;
             color: #666;
-            font-size: 14px;
+            font-size: 12px;
         }
         .no-print {
             margin-top: 20px;
@@ -360,12 +364,17 @@ $current_date = date('F d, Y');
         .receipt-header-images {
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 20px;
+            align-items: center;
+            margin-bottom: 10px;
         }
         .receipt-header-images .user-image-container {
-            width: 120px;
-            height: 120px;
+            width: 100px;
+            height: 100px;
+            min-width: 100px;
+            min-height: 100px;
+            max-width: 100px;
+            max-height: 100px;
+            aspect-ratio: 1 / 1;
             border: 2px solid #ddd;
             border-radius: 50%;
             overflow: hidden;
@@ -375,6 +384,10 @@ $current_date = date('F d, Y');
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-shrink: 0;
+            box-sizing: border-box;
+            padding: 0;
+            margin: 0;
         }
         .receipt-header-images .user-image-container:hover {
             border-color: #941022;
@@ -385,23 +398,45 @@ $current_date = date('F d, Y');
             height: 100%;
             object-fit: cover;
             border-radius: 50%;
+            display: block;
+            margin: 0;
+            padding: 0;
         }
         .receipt-header-images .prc-logo-container {
-            width: 120px;
-            height: 120px;
+            width: 100px;
+            height: 100px;
+            min-width: 100px;
+            min-height: 100px;
+            max-width: 100px;
+            max-height: 100px;
+            aspect-ratio: 1 / 1;
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-shrink: 0;
+            background-color: transparent;
+            box-sizing: border-box;
+            border: none;
+            border-radius: 50%;
+            overflow: hidden;
+            padding: 0;
+            margin: 0;
         }
         .receipt-header-images .prc-logo-container img {
-            max-width: 100%;
-            max-height: 100%;
+            width: 100%;
+            height: 100%;
             object-fit: contain;
+            object-position: center;
+            display: block;
+            margin: 0;
+            padding: 0;
+            border-radius: 0;
         }
         .receipt-header-content {
             text-align: center;
             flex: 1;
-            margin: 0 20px;
+            margin: 0 15px;
+            padding: 0;
         }
         .download-btn {
             background-color: #28a745;
@@ -477,9 +512,167 @@ $current_date = date('F d, Y');
         .toast-notification.warning .btn-close {
             filter: none;
         }
+        /* PDF-specific optimizations */
+        .receipt-container {
+            box-sizing: border-box;
+        }
+        .receipt-container * {
+            box-sizing: border-box;
+        }
+         .receipt-container.pdf-export {
+             padding: 20px !important;
+         }
+         .receipt-container.pdf-export .no-print {
+             display: none !important;
+             visibility: hidden !important;
+             opacity: 0 !important;
+             height: 0 !important;
+             overflow: hidden !important;
+         }
+         .receipt-container.pdf-export .receipt-header-images {
+             margin-bottom: 15px !important;
+             display: flex !important;
+             justify-content: space-between !important;
+             align-items: center !important;
+             gap: 0 !important;
+         }
+         .receipt-container.pdf-export .receipt-header-images .user-image-container {
+             width: 100px !important;
+             height: 100px !important;
+             min-width: 100px !important;
+             min-height: 100px !important;
+             max-width: 100px !important;
+             max-height: 100px !important;
+             aspect-ratio: 1 / 1 !important;
+             box-sizing: border-box !important;
+             border: none !important;
+             padding: 0 !important;
+             margin: 0 !important;
+             display: flex !important;
+             align-items: center !important;
+             justify-content: center !important;
+             border-radius: 50% !important;
+             overflow: hidden !important;
+             flex-shrink: 0 !important;
+         }
+         .receipt-container.pdf-export .receipt-header-images .prc-logo-container {
+             width: 130px !important;
+             height: 130px !important;
+             min-width: 130px !important;
+             min-height: 130px !important;
+             max-width: 130px !important;
+             max-height: 130px !important;
+             aspect-ratio: 1 / 1 !important;
+             box-sizing: border-box !important;
+             border: none !important;
+             padding: 0 !important;
+             margin: 0 !important;
+             margin-left: auto !important;
+             display: flex !important;
+             align-items: center !important;
+             justify-content: center !important;
+             border-radius: 50% !important;
+             overflow: hidden !important;
+             flex-shrink: 0 !important;
+             flex-grow: 0 !important;
+             position: relative !important;
+         }
+         .receipt-container.pdf-export .receipt-header-images .user-image-container img {
+             width: 100% !important;
+             height: 100% !important;
+             display: block !important;
+             margin: 0 !important;
+             padding: 0 !important;
+             object-fit: contain !important;
+             object-position: center !important;
+             border-radius: 0 !important;
+         }
+         .receipt-container.pdf-export .receipt-header-images .prc-logo-container img {
+             max-width: 100% !important;
+             max-height: 100% !important;
+             width: auto !important;
+             height: auto !important;
+             display: block !important;
+             margin: 0 auto !important;
+             padding: 0 !important;
+             object-fit: contain !important;
+             object-position: center center !important;
+             border-radius: 0 !important;
+         }
+         .receipt-container.pdf-export .receipt-header-content {
+             margin: 0 20px !important;
+         }
+         .receipt-container.pdf-export .receipt-title {
+             font-size: 28px !important;
+             margin-bottom: 6px !important;
+             line-height: 1.3 !important;
+         }
+         .receipt-container.pdf-export .organization-name {
+             font-size: 18px !important;
+             margin-bottom: 0 !important;
+             line-height: 1.3 !important;
+         }
+         .receipt-container.pdf-export .receipt-info {
+             margin-bottom: 14px !important;
+         }
+         .receipt-container.pdf-export .info-row {
+             margin-bottom: 8px !important;
+             font-size: 15px !important;
+             line-height: 1.5 !important;
+         }
+         .receipt-container.pdf-export .info-label {
+             font-size: 15px !important;
+             width: 220px !important;
+         }
+         .receipt-container.pdf-export .info-value {
+             font-size: 15px !important;
+         }
+         .receipt-container.pdf-export {
+             padding-bottom: 10px !important;
+         }
+         .receipt-container.pdf-export .instructions-section {
+             margin: 18px 0 !important;
+         }
+         .receipt-container.pdf-export .instructions-title {
+             font-size: 17px !important;
+             margin-bottom: 8px !important;
+             font-weight: bold !important;
+         }
+         .receipt-container.pdf-export .instructions-text {
+             font-size: 15px !important;
+             line-height: 1.6 !important;
+             margin-left: 20px !important;
+         }
+         .receipt-container.pdf-export .signature-section {
+             margin-top: 20px !important;
+             margin-bottom: 0 !important;
+         }
+         .receipt-container.pdf-export .signature-block {
+             width: 45% !important;
+         }
+         .receipt-container.pdf-export .signature-line {
+             margin-top: 30px !important;
+             border-top: 2px solid #333 !important;
+         }
+         .receipt-container.pdf-export .signature-label {
+             font-size: 15px !important;
+             font-weight: bold !important;
+             margin-top: 8px !important;
+         }
+         .receipt-container.pdf-export .signature-subtitle {
+             font-size: 13px !important;
+             margin-top: 4px !important;
+         }
+         .receipt-container.pdf-export .note-section {
+             margin-top: 15px !important;
+             margin-bottom: 0 !important;
+             font-size: 14px !important;
+             line-height: 1.5 !important;
+        }
         @media print {
             .no-print { display: none !important; }
             .toast-notification { display: none !important; }
+            .modal { display: none !important; }
             body { 
                 background: white !important; 
                 margin: 0 !important;
@@ -487,12 +680,150 @@ $current_date = date('F d, Y');
             }
             .receipt-container {
                 margin: 0 !important;
-                padding: 20px !important;
+                padding: 15px 15px 10px 15px !important;
                 max-width: none !important;
+                page-break-inside: avoid;
+            }
+            .receipt-header-images {
+                margin-bottom: 15px !important;
+                display: flex !important;
+                justify-content: space-between !important;
+                align-items: center !important;
+                gap: 0 !important;
+            }
+            .receipt-header-images .user-image-container {
+                width: 100px !important;
+                height: 100px !important;
+                min-width: 100px !important;
+                min-height: 100px !important;
+                max-width: 100px !important;
+                max-height: 100px !important;
+                aspect-ratio: 1 / 1 !important;
+                box-sizing: border-box !important;
+                border: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                border-radius: 50% !important;
+                overflow: hidden !important;
+                flex-shrink: 0 !important;
+            }
+            .receipt-header-images .prc-logo-container {
+                width: 130px !important;
+                height: 130px !important;
+                min-width: 130px !important;
+                min-height: 130px !important;
+                max-width: 130px !important;
+                max-height: 130px !important;
+                aspect-ratio: 1 / 1 !important;
+                box-sizing: border-box !important;
+                border: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                margin-left: auto !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                border-radius: 50% !important;
+                overflow: hidden !important;
+                flex-shrink: 0 !important;
+                flex-grow: 0 !important;
+                position: relative !important;
+            }
+            .receipt-header-images .user-image-container img {
+                width: 100% !important;
+                height: 100% !important;
+                display: block !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                object-fit: contain !important;
+                object-position: center !important;
+                border-radius: 0 !important;
+            }
+            .receipt-header-images .prc-logo-container img {
+                max-width: 100% !important;
+                max-height: 100% !important;
+                width: auto !important;
+                height: auto !important;
+                display: block !important;
+                margin: 0 auto !important;
+                padding: 0 !important;
+                object-fit: contain !important;
+                object-position: center center !important;
+                border-radius: 0 !important;
+            }
+            .receipt-header-content {
+                margin: 0 20px !important;
+            }
+            .receipt-title {
+                font-size: 28px !important;
+                margin-bottom: 6px !important;
+                line-height: 1.3 !important;
+            }
+            .organization-name {
+                font-size: 18px !important;
+                margin-bottom: 0 !important;
+                line-height: 1.3 !important;
+            }
+            .receipt-info {
+                margin-bottom: 14px !important;
+            }
+            .info-row {
+                margin-bottom: 8px !important;
+                font-size: 15px !important;
+                line-height: 1.5 !important;
+            }
+            .info-label {
+                font-size: 15px !important;
+                width: 220px !important;
+            }
+            .info-value {
+                font-size: 15px !important;
+            }
+            .instructions-section {
+                margin: 18px 0 !important;
+            }
+            .instructions-title {
+                font-size: 17px !important;
+                margin-bottom: 8px !important;
+                font-weight: bold !important;
+            }
+            .instructions-text {
+                margin-left: 20px !important;
+                font-size: 15px !important;
+                line-height: 1.6 !important;
+            }
+            .signature-section {
+                margin-top: 20px !important;
+                margin-bottom: 0 !important;
+            }
+            .signature-block {
+                width: 45% !important;
+            }
+            .signature-line {
+                margin-top: 30px !important;
+                border-top: 2px solid #333 !important;
+            }
+            .signature-label {
+                font-size: 15px !important;
+                font-weight: bold !important;
+                margin-top: 8px !important;
+            }
+            .signature-subtitle {
+                font-size: 13px !important;
+                margin-top: 4px !important;
+            }
+            .note-section {
+                margin-top: 15px !important;
+                margin-bottom: 0 !important;
+                font-size: 14px !important;
+                line-height: 1.5 !important;
             }
             @page { 
                 size: A4; 
-                margin: 1cm; 
+                margin: 0.8cm 0.8cm 0.6cm 0.8cm; 
             }
         }
     </style>
@@ -509,7 +840,16 @@ $current_date = date('F d, Y');
                 <div class="organization-name">Philippine Red Cross – Blood Services</div>
             </div>
             <div class="prc-logo-container">
-                <img src="../../../assets/image/PRC_Logo.png" alt="Philippine Red Cross Logo">
+                <?php 
+                // Get absolute URL for PRC logo
+                $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+                $host = $_SERVER['HTTP_HOST'];
+                $scriptPath = dirname($_SERVER['SCRIPT_NAME']);
+                // Go up 3 levels from current script location
+                $basePath = dirname(dirname(dirname($scriptPath)));
+                $logoPath = $protocol . '://' . $host . $basePath . '/assets/image/PRC_Logo.png';
+                ?>
+                <img src="<?php echo $logoPath; ?>" alt="Philippine Red Cross Logo" id="prcLogoImg" crossorigin="anonymous">
             </div>
         </div>
 
@@ -725,6 +1065,57 @@ $current_date = date('F d, Y');
         </div>
     </div>
 
+    <!-- PDF Download Success Modal -->
+    <div class="modal fade" id="pdfSuccessModal" tabindex="-1" aria-labelledby="pdfSuccessModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header" style="background-color: #941022; color: white;">
+                    <h5 class="modal-title" id="pdfSuccessModalLabel">PDF Downloaded Successfully</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="pdfSuccessMessage">PDF downloaded successfully!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF Download Error Modal -->
+    <div class="modal fade" id="pdfErrorModal" tabindex="-1" aria-labelledby="pdfErrorModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header" style="background-color: #dc3545; color: white;">
+                    <h5 class="modal-title" id="pdfErrorModalLabel">
+                        <i class="fas fa-exclamation-circle me-2"></i>Error
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0" id="pdfErrorMessage">Error generating PDF. Please try again.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF Generating Modal -->
+    <div class="modal fade" id="pdfGeneratingModal" tabindex="-1" aria-labelledby="pdfGeneratingModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header" style="background-color: #17a2b8; color: white;">
+                    <h5 class="modal-title" id="pdfGeneratingModalLabel">
+                        <i class="fas fa-spinner fa-spin me-2"></i>Generating PDF
+                    </h5>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">Please wait while we generate your PDF...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Custom Notification Toast -->
     <div class="toast-notification" id="notificationToast" role="alert" aria-live="assertive" aria-atomic="true">
         <div class="toast-header">
@@ -738,6 +1129,8 @@ $current_date = date('F d, Y');
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- html2pdf.js for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script>
         const userImageUrl = <?php echo json_encode($user_image_url); ?>;
         let selectedImageFile = null;
@@ -791,181 +1184,369 @@ $current_date = date('F d, Y');
         }
 
         function downloadReceipt() {
-            // Get receipt content
-            const receiptContent = document.querySelector('.receipt-container').innerHTML;
-            const requestId = <?php echo json_encode($request_id); ?>;
-            const currentDate = new Date().toISOString().split('T')[0];
-            const fileName = `Blood_Request_Receipt_${requestId}_${currentDate}.html`;
+            // Get patient name and date issued for filename
+            const patientName = <?php echo json_encode($request['patient_name'] ?? 'Patient'); ?>;
+            const dateIssued = <?php echo json_encode(date('Y-m-d', strtotime($request['when_needed']))); ?>;
             
-            // Create full HTML document
-            const fullHTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blood Request Receipt</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background: white;
-            color: #333;
-        }
-        .receipt-container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-        }
-        .receipt-header-images {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 20px;
-        }
-        .receipt-header-images .user-image-container {
-            width: 120px;
-            height: 120px;
-            border: 2px solid #ddd;
-            border-radius: 50%;
-            overflow: hidden;
-            background-color: #f8f9fa;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .receipt-header-images .user-image-container img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            border-radius: 50%;
-        }
-        .receipt-header-images .prc-logo-container {
-            width: 120px;
-            height: 120px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .receipt-header-images .prc-logo-container img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-        }
-        .receipt-header-content {
-            text-align: center;
-            flex: 1;
-            margin: 0 20px;
-        }
-        .receipt-title {
-            font-size: 28px;
-            font-weight: bold;
-            margin-bottom: 5px;
-            color: #333;
-        }
-        .organization-name {
-            font-size: 18px;
-            color: #666;
-            margin-bottom: 30px;
-        }
-        .receipt-info {
-            margin-bottom: 25px;
-        }
-        .info-row {
-            display: flex;
-            margin-bottom: 8px;
-        }
-        .info-label {
-            font-weight: bold;
-            width: 200px;
-            color: #333;
-        }
-        .info-value {
-            color: #333;
-        }
-        .instructions-section {
-            margin: 30px 0;
-        }
-        .instructions-title {
-            font-weight: bold;
-            font-size: 16px;
-            margin-bottom: 10px;
-            color: #333;
-        }
-        .instructions-text {
-            margin-left: 20px;
-            line-height: 1.5;
-        }
-        .signature-section {
-            margin-top: 50px;
-            display: flex;
-            justify-content: space-between;
-        }
-        .signature-block {
-            width: 45%;
-            text-align: center;
-        }
-        .signature-line {
-            border-top: 1px solid #333;
-            margin-top: 40px;
-            padding-top: 5px;
-        }
-        .signature-label {
-            font-size: 14px;
-            color: #333;
-            font-weight: bold;
-        }
-        .signature-subtitle {
-            font-size: 12px;
-            color: #666;
-            margin-top: 5px;
-        }
-        .note-section {
-            margin-top: 20px;
-            text-align: center;
-            font-style: italic;
-            color: #666;
-            font-size: 14px;
-        }
-        @media print {
-            body { 
-                background: white !important; 
-                margin: 0 !important;
-                padding: 0 !important;
-            }
-            .receipt-container {
-                margin: 0 !important;
-                padding: 20px !important;
-                max-width: none !important;
-            }
-            @page { 
-                size: A4; 
-                margin: 1cm; 
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="receipt-container">
-        ${receiptContent}
-    </div>
-</body>
-</html>`;
+            // Clean patient name for filename (remove special characters)
+            const cleanPatientName = patientName.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30);
+            const fileName = `Blood_Request_${cleanPatientName}_${dateIssued}.pdf`;
             
-            // Create blob and download
-            const blob = new Blob([fullHTML], { type: 'text/html;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = fileName;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
+            // Get the element to convert
+            const element = document.querySelector('.receipt-container');
             
-            showNotification('Receipt downloaded successfully!', 'success', 3000);
+            // Temporarily add PDF-specific class for styling
+            element.classList.add('pdf-export');
+            
+            // Show generating modal
+            const generatingModal = new bootstrap.Modal(document.getElementById('pdfGeneratingModal'));
+            generatingModal.show();
+            
+            // Safety timeout to ensure modal closes even if something goes wrong
+            const safetyTimeout = setTimeout(() => {
+                console.warn('Safety timeout: Forcing modal to close');
+                generatingModal.hide();
+                
+                // Remove PDF class
+                element.classList.remove('pdf-export');
+                
+                // Restore no-print elements
+                noPrintElements.forEach((el, index) => {
+                    if (originalStyles[index]) {
+                        el.style.removeProperty('display');
+                        el.style.removeProperty('visibility');
+                        el.style.removeProperty('height');
+                        el.style.removeProperty('overflow');
+                        el.style.removeProperty('opacity');
+                        el.style.removeProperty('position');
+                        el.style.removeProperty('left');
+                    }
+                });
+            }, 35000); // 35 second safety timeout
+            
+            // Clear safety timeout when modal is successfully closed
+            const originalHide = generatingModal.hide.bind(generatingModal);
+            generatingModal.hide = function() {
+                clearTimeout(safetyTimeout);
+                originalHide();
+            };
+            
+            // Hide no-print elements before PDF generation - use multiple methods to ensure they're hidden
+            const noPrintElements = element.querySelectorAll('.no-print');
+            const originalStyles = [];
+            noPrintElements.forEach((el, index) => {
+                originalStyles[index] = {
+                    display: window.getComputedStyle(el).display,
+                    visibility: window.getComputedStyle(el).visibility,
+                    height: window.getComputedStyle(el).height,
+                    opacity: window.getComputedStyle(el).opacity
+                };
+                el.style.setProperty('display', 'none', 'important');
+                el.style.setProperty('visibility', 'hidden', 'important');
+                el.style.setProperty('height', '0', 'important');
+                el.style.setProperty('overflow', 'hidden', 'important');
+                el.style.setProperty('opacity', '0', 'important');
+                el.style.setProperty('position', 'absolute', 'important');
+                el.style.setProperty('left', '-9999px', 'important');
+            });
+            
+            // Convert relative image paths to absolute URLs before PDF generation
+            const prcLogoImg = document.getElementById('prcLogoImg');
+            if (prcLogoImg) {
+                const currentSrc = prcLogoImg.getAttribute('src') || prcLogoImg.src;
+                // If it's a relative path, convert to absolute
+                if (currentSrc && !currentSrc.startsWith('http') && !currentSrc.startsWith('data:') && !currentSrc.startsWith('/')) {
+                    const baseUrl = window.location.origin;
+                    const currentPath = window.location.pathname;
+                    const pathParts = currentPath.split('/').filter(p => p);
+                    // Remove the last 3 parts (src/views/forms)
+                    if (pathParts.length >= 3) {
+                        pathParts.pop(); // forms
+                        pathParts.pop(); // views
+                        pathParts.pop(); // src
+                    }
+                    const basePath = '/' + pathParts.join('/');
+                    const newSrc = baseUrl + basePath + '/assets/image/PRC_Logo.png';
+                    prcLogoImg.src = newSrc;
+                    prcLogoImg.setAttribute('crossorigin', 'anonymous');
+                } else if (currentSrc && currentSrc.startsWith('../../../')) {
+                    // Handle relative path with ../
+                    const baseUrl = window.location.origin;
+                    const currentPath = window.location.pathname;
+                    const pathParts = currentPath.split('/').filter(p => p);
+                    // Go up 3 levels
+                    for (let i = 0; i < 3 && pathParts.length > 0; i++) {
+                        pathParts.pop();
+                    }
+                    const basePath = '/' + pathParts.join('/');
+                    const newSrc = baseUrl + basePath + '/assets/image/PRC_Logo.png';
+                    prcLogoImg.src = newSrc;
+                    prcLogoImg.setAttribute('crossorigin', 'anonymous');
+                }
+            }
+            
+            // Wait for all images to load before generating PDF
+            const images = element.querySelectorAll('img');
+            const imagePromises = Array.from(images).map(img => {
+                if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+                return new Promise((resolve) => {
+                    const timeout = setTimeout(() => {
+                        console.warn('Image load timeout:', img.src);
+                        resolve();
+                    }, 3000);
+                    img.onload = () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    };
+                    img.onerror = () => {
+                        clearTimeout(timeout);
+                        console.error('Image failed to load:', img.src);
+                        resolve(); // Continue even if image fails
+                    };
+                    // Force reload if image hasn't loaded
+                    if (!img.complete) {
+                        const src = img.src;
+                        img.src = '';
+                        setTimeout(() => {
+                            img.src = src;
+                        }, 100);
+                    }
+                });
+            });
+            
+            Promise.all(imagePromises).then(() => {
+                // Additional wait for styles to apply
+                setTimeout(() => {
+                    // Configure PDF options
+                    const opt = {
+                        margin: [0.6, 0.6, 0.4, 0.6],
+                        filename: fileName,
+                        image: { type: 'jpeg', quality: 0.98 },
+                        html2canvas: { 
+                            scale: 2,
+                            useCORS: true,
+                            logging: false,
+                            letterRendering: true,
+                            allowTaint: false,
+                            backgroundColor: '#ffffff',
+                            width: element.scrollWidth,
+                            height: element.scrollHeight,
+                            windowWidth: element.scrollWidth,
+                            windowHeight: element.scrollHeight,
+                            x: 0,
+                            y: 0,
+                            scrollX: 0,
+                            scrollY: 0,
+                            onclone: function(clonedDoc) {
+                                // Ensure no-print elements are hidden in cloned document
+                                const clonedNoPrint = clonedDoc.querySelectorAll('.no-print');
+                                clonedNoPrint.forEach(el => {
+                                    el.style.display = 'none';
+                                    el.style.visibility = 'hidden';
+                                    el.style.height = '0';
+                                    el.style.overflow = 'hidden';
+                                });
+                                
+                                // Fix image paths in cloned document - ensure absolute URLs
+                                const clonedImages = clonedDoc.querySelectorAll('img');
+                                clonedImages.forEach(clonedImg => {
+                                    // Find the original image by ID or src
+                                    const clonedId = clonedImg.id;
+                                    let originalImg = null;
+                                    if (clonedId) {
+                                        originalImg = document.getElementById(clonedId);
+                                    }
+                                    if (!originalImg) {
+                                        // Try to find by matching src
+                                        const allImages = document.querySelectorAll('img');
+                                        allImages.forEach(img => {
+                                            if (img.src === clonedImg.src || img.getAttribute('src') === clonedImg.getAttribute('src')) {
+                                                originalImg = img;
+                                            }
+                                        });
+                                    }
+                                    
+                                    if (originalImg && originalImg.src) {
+                                        // Use the original image's absolute URL
+                                        clonedImg.src = originalImg.src;
+                                        clonedImg.setAttribute('crossorigin', 'anonymous');
+                                    } else if (clonedImg.src && !clonedImg.src.startsWith('http') && !clonedImg.src.startsWith('data:')) {
+                                        // Convert relative path to absolute
+                                        const baseUrl = window.location.origin;
+                                        const currentPath = window.location.pathname;
+                                        const pathParts = currentPath.split('/').filter(p => p);
+                                        if (pathParts.length >= 3) {
+                                            pathParts.pop(); // forms
+                                            pathParts.pop(); // views
+                                            pathParts.pop(); // src
+                                        }
+                                        const basePath = '/' + pathParts.join('/');
+                                        clonedImg.src = baseUrl + basePath + '/assets/image/PRC_Logo.png';
+                                        clonedImg.setAttribute('crossorigin', 'anonymous');
+                                    }
+                                });
+                            }
+                        },
+                    jsPDF: { 
+                        unit: 'cm', 
+                        format: 'a4', 
+                        orientation: 'portrait',
+                        compress: true
+                    },
+                    pagebreak: { 
+                        mode: ['avoid-all', 'css', 'legacy'],
+                        before: '.page-break-before',
+                        after: '.page-break-after',
+                        avoid: ['.receipt-container', '.signature-section', '.instructions-section']
+                    }
+                };
+                
+                // Add timeout to prevent hanging
+                const pdfTimeout = setTimeout(() => {
+                    console.error('PDF generation timeout');
+                    // Close generating modal
+                    generatingModal.hide();
+                    
+                    // Remove PDF class
+                    element.classList.remove('pdf-export');
+                    
+                    // Restore no-print elements
+                    noPrintElements.forEach((el, index) => {
+                        if (originalStyles[index]) {
+                            el.style.removeProperty('display');
+                            el.style.removeProperty('visibility');
+                            el.style.removeProperty('height');
+                            el.style.removeProperty('overflow');
+                            el.style.removeProperty('opacity');
+                            el.style.removeProperty('position');
+                            el.style.removeProperty('left');
+                        }
+                    });
+                    
+                    // Show error modal
+                    const errorModal = new bootstrap.Modal(document.getElementById('pdfErrorModal'));
+                    const errorMessage = document.getElementById('pdfErrorMessage');
+                    if (errorMessage) {
+                        errorMessage.textContent = 'PDF generation timed out. Please try again.';
+                    }
+                    errorModal.show();
+                    
+                    // Auto-close error modal after 3 seconds
+                    setTimeout(() => {
+                        errorModal.hide();
+                    }, 3000);
+                }, 30000); // 30 second timeout
+                
+                // Generate and download PDF
+                html2pdf().set(opt).from(element).save().then(() => {
+                    clearTimeout(pdfTimeout);
+                    
+                    // Remove PDF class
+                    element.classList.remove('pdf-export');
+                    
+                    // Restore no-print elements
+                    noPrintElements.forEach((el, index) => {
+                        if (originalStyles[index]) {
+                            el.style.removeProperty('display');
+                            el.style.removeProperty('visibility');
+                            el.style.removeProperty('height');
+                            el.style.removeProperty('overflow');
+                            el.style.removeProperty('opacity');
+                            el.style.removeProperty('position');
+                            el.style.removeProperty('left');
+                        }
+                    });
+                    
+                    // Close generating modal
+                    generatingModal.hide();
+                    
+                    // Show success modal
+                    const successModal = new bootstrap.Modal(document.getElementById('pdfSuccessModal'), {
+                        backdrop: 'static',
+                        keyboard: false
+                    });
+                    const successMessage = document.getElementById('pdfSuccessMessage');
+                    if (successMessage) {
+                        successMessage.textContent = 'PDF downloaded successfully!';
+                    }
+                    successModal.show();
+                    
+                    // Auto-close success modal after 2 seconds
+                    setTimeout(() => {
+                        successModal.hide();
+                    }, 2000);
+                }).catch((error) => {
+                    clearTimeout(pdfTimeout);
+                    
+                    // Remove PDF class on error
+                    element.classList.remove('pdf-export');
+                    
+                    // Restore no-print elements on error
+                    noPrintElements.forEach((el, index) => {
+                        if (originalStyles[index]) {
+                            el.style.removeProperty('display');
+                            el.style.removeProperty('visibility');
+                            el.style.removeProperty('height');
+                            el.style.removeProperty('overflow');
+                            el.style.removeProperty('opacity');
+                            el.style.removeProperty('position');
+                            el.style.removeProperty('left');
+                        }
+                    });
+                    
+                    console.error('PDF generation error:', error);
+                    
+                    // Close generating modal
+                    generatingModal.hide();
+                    
+                    // Show error modal
+                    const errorModal = new bootstrap.Modal(document.getElementById('pdfErrorModal'));
+                    const errorMessage = document.getElementById('pdfErrorMessage');
+                    if (errorMessage) {
+                        errorMessage.textContent = 'Error generating PDF: ' + (error.message || 'Please try again.');
+                    }
+                    errorModal.show();
+                    
+                    // Auto-close error modal after 3 seconds
+                    setTimeout(() => {
+                        errorModal.hide();
+                    }, 3000);
+                });
+                }, 500);
+            }).catch(error => {
+                console.error('Image preloading failed:', error);
+                
+                // Remove PDF class
+                element.classList.remove('pdf-export');
+                
+                // Restore no-print elements
+                noPrintElements.forEach((el, index) => {
+                    if (originalStyles[index]) {
+                        el.style.removeProperty('display');
+                        el.style.removeProperty('visibility');
+                        el.style.removeProperty('height');
+                        el.style.removeProperty('overflow');
+                        el.style.removeProperty('opacity');
+                        el.style.removeProperty('position');
+                        el.style.removeProperty('left');
+                    }
+                });
+                
+                // Close generating modal
+                generatingModal.hide();
+                
+                // Show error modal
+                const errorModal = new bootstrap.Modal(document.getElementById('pdfErrorModal'));
+                const errorMessage = document.getElementById('pdfErrorMessage');
+                if (errorMessage) {
+                    errorMessage.textContent = 'Error loading images for PDF. Please try again.';
+                }
+                errorModal.show();
+                setTimeout(() => {
+                    errorModal.hide();
+                }, 3000);
+            });
+            
         }
 
         function handlePrint() {
