@@ -1282,7 +1282,7 @@ $current_date = date('F d, Y');
                     const newSrc = baseUrl + basePath + '/assets/image/PRC_Logo.png';
                     prcLogoImg.src = newSrc;
                     prcLogoImg.setAttribute('crossorigin', 'anonymous');
-                }
+        }
             }
             
             // Wait for all images to load before generating PDF
@@ -1355,14 +1355,14 @@ $current_date = date('F d, Y');
                                     let originalImg = null;
                                     if (clonedId) {
                                         originalImg = document.getElementById(clonedId);
-                                    }
+        }
                                     if (!originalImg) {
                                         // Try to find by matching src
                                         const allImages = document.querySelectorAll('img');
                                         allImages.forEach(img => {
                                             if (img.src === clonedImg.src || img.getAttribute('src') === clonedImg.getAttribute('src')) {
                                                 originalImg = img;
-                                            }
+        }
                                         });
                                     }
                                     
@@ -1383,7 +1383,7 @@ $current_date = date('F d, Y');
                                         const basePath = '/' + pathParts.join('/');
                                         clonedImg.src = baseUrl + basePath + '/assets/image/PRC_Logo.png';
                                         clonedImg.setAttribute('crossorigin', 'anonymous');
-                                    }
+        }
                                 });
                             }
                         },
@@ -1480,7 +1480,7 @@ $current_date = date('F d, Y');
                     
                     // Remove PDF class on error
                     element.classList.remove('pdf-export');
-                    
+            
                     // Restore no-print elements on error
                     noPrintElements.forEach((el, index) => {
                         if (originalStyles[index]) {

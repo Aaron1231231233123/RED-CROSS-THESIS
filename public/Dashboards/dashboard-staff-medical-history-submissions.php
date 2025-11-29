@@ -7002,8 +7002,31 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
 
         // Function to check access before opening modal (globally accessible)
         window.checkAccessBeforeOpen = function(donorId, onAllowed, onBlocked) {
-            if (!window.AccessLockAPIInterviewer || !donorId) {
-                // If API not available, allow (fallback)
+            if (!donorId) {
+                if (onBlocked) {
+                    onBlocked('Invalid donor ID.');
+                }
+                return;
+            }
+
+            // CRITICAL: Check if AccessLockManagerInterviewer is already blocked for this donor
+            if (window.AccessLockManagerInterviewer && window.AccessLockManagerInterviewer.blocked) {
+                console.warn('[checkAccessBeforeOpen] Access is already blocked, preventing modal open');
+                if (onBlocked) {
+                    onBlocked('This donor data is being processed by an admin account.');
+                }
+                return;
+            }
+
+            if (!window.AccessLockAPIInterviewer) {
+                // If API not available, check manager state
+                if (window.AccessLockManagerInterviewer && window.AccessLockManagerInterviewer.blocked) {
+                    if (onBlocked) {
+                        onBlocked('This donor data is being processed by an admin account.');
+                    }
+                    return;
+                }
+                // Fallback: allow if no access lock system available
                 if (onAllowed) onAllowed();
                 return;
             }
@@ -7028,7 +7051,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                         }
                     }
 
+                    // Double-check manager state before allowing
+                    if (!blocked && window.AccessLockManagerInterviewer && window.AccessLockManagerInterviewer.blocked) {
+                        blocked = true;
+                    }
+
                     if (blocked) {
+                        console.warn('[checkAccessBeforeOpen] Access blocked, preventing modal open');
                         if (onBlocked) {
                             onBlocked('This donor data is being processed by an admin account.');
                         }
@@ -7038,7 +7067,14 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 })
                 .catch((err) => {
                     console.error('[checkAccessBeforeOpen] Access check failed:', err);
-                    // On error, allow (fallback to prevent blocking legitimate access)
+                    // On error, check manager state - if blocked, don't allow
+                    if (window.AccessLockManagerInterviewer && window.AccessLockManagerInterviewer.blocked) {
+                        if (onBlocked) {
+                            onBlocked('This donor data is being processed by an admin account.');
+                        }
+                        return;
+                    }
+                    // Fallback: allow if no access lock system available and not blocked
                     if (onAllowed) onAllowed();
                 });
         };
@@ -7047,7 +7083,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
         // OPTIMIZED: Removed 800ms artificial delay, uses parallel data fetching, reuses modal instances
         function showDonorStatusModal(donorId) {
             if (!donorId) return;
-            
+
             // Prevent double-calling
             if (isOpeningModal) {
                 console.log('[showDonorStatusModal] Already opening modal, skipping duplicate call');
@@ -7060,15 +7096,24 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 donorId,
                 // onAllowed - open modal and activate lock
                 () => {
-                    // Set current donor ID
-                    window.currentDonorId = donorId;
+                // Set current donor ID
+                window.currentDonorId = donorId;
                     
                     // Activate access lock (only if access check passed)
-                    if (window.AccessLockManagerInterviewer) {
-                        window.AccessLockManagerInterviewer.activate({ donor_id: donorId });
-                    }
+                if (window.AccessLockManagerInterviewer) {
+                    window.AccessLockManagerInterviewer.activate({ donor_id: donorId });
+                }
 
                     const openModal = () => {
+                        // FINAL SAFETY CHECK: Verify access is still allowed before opening modal
+                        if (window.AccessLockManagerInterviewer && window.AccessLockManagerInterviewer.blocked) {
+                            console.warn('[showDonorStatusModal] Access became blocked, preventing modal open');
+                            isOpeningModal = false;
+                            if (window.AccessLockManagerInterviewer.notifyBlocked) {
+                                window.AccessLockManagerInterviewer.notifyBlocked('This donor data is being processed by an admin account.');
+                            }
+                            return;
+                        }
 
                 // Get or create the donor status modal instance - reuse for better performance
                 const deferralStatusModalEl = document.getElementById('deferralStatusModal');
@@ -7124,9 +7169,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                                     </div>`;
                             }
                         });
-                    };
+            };
 
-                    openModal();
+                openModal();
                     isOpeningModal = false;
                 },
                 // onBlocked - show access lock message and don't open modal
@@ -7173,11 +7218,47 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
                 .forEach(setupLockReleaseModal);
             const deferralModal = document.getElementById('deferralStatusModal');
             if (deferralModal) {
-                deferralModal.addEventListener('show.bs.modal', function () {
-            if (window.AccessLockManagerInterviewer && window.currentDonorId) {
-                window.AccessLockManagerInterviewer.activate({ donor_id: window.currentDonorId });
+                deferralModal.addEventListener('show.bs.modal', function (event) {
+                    // CRITICAL: Prevent modal from opening if access is blocked
+                    if (window.AccessLockManagerInterviewer && window.AccessLockManagerInterviewer.blocked) {
+                        console.warn('[deferralStatusModal] Access is blocked, preventing modal from opening');
+                        event.preventDefault();
+                        event.stopImmediatePropagation();
+                        const modalInstance = bootstrap.Modal.getInstance(deferralModal);
+                        if (modalInstance) {
+                            modalInstance.hide();
+                        }
+                        if (window.AccessLockManagerInterviewer.notifyBlocked) {
+                            window.AccessLockManagerInterviewer.notifyBlocked('This donor data is being processed by an admin account.');
+                        }
+                        return;
+                    }
+                    
+                    if (window.AccessLockManagerInterviewer && window.currentDonorId) {
+                        window.AccessLockManagerInterviewer.activate({ donor_id: window.currentDonorId });
                     }
                 });
+                
+                // Monitor for access lock changes and close modal if access becomes blocked
+                if (window.AccessLockManagerInterviewer) {
+                    const originalToggleBlocked = window.AccessLockManagerInterviewer.toggleBlocked;
+                    if (originalToggleBlocked) {
+                        window.AccessLockManagerInterviewer.toggleBlocked = function(shouldBlock) {
+                            originalToggleBlocked.call(this, shouldBlock);
+                            // If access becomes blocked and modal is open, close it
+                            if (shouldBlock && deferralModal && deferralModal.classList.contains('show')) {
+                                console.warn('[deferralStatusModal] Access became blocked, closing modal');
+                                const modalInstance = bootstrap.Modal.getInstance(deferralModal);
+                                if (modalInstance) {
+                                    modalInstance.hide();
+                                }
+                                if (this.notifyBlocked) {
+                                    this.notifyBlocked('This donor data is being processed by an admin account.');
+                                }
+                            }
+                        };
+                    }
+                }
             }
         });
     </script>

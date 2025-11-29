@@ -212,7 +212,7 @@
             if (contextToRelease && this.active) {
                 // Temporarily restore context for release
                 this.currentContext = contextToRelease;
-                this.releaseLock();
+            this.releaseLock();
                 this.currentContext = null;
             }
         },
