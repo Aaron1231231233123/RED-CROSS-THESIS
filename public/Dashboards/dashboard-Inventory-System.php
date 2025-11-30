@@ -1296,22 +1296,6 @@ h6 {
                         </div>
                     </div>
                     <?php
-// Show critical alert if status is critical
-if ($statusClass === 'critical') {
-    // List all blood types that are critically low (use uniform counts)
-    $criticalTypes = [];
-    foreach ($bloodTypeCounts as $type => $count) {
-        if ($count < 30) $criticalTypes[] = $type;
-    }
-    if (!empty($criticalTypes)) {
-        echo '<div class="alert alert-danger mt-3 mb-0 p-3 d-flex align-items-center" style="background: #ffeaea; color: #dc2626; border-radius: 10px; border: none; box-shadow: 0 2px 8px rgba(220,38,38,0.06);">';
-        echo '<i class="fas fa-exclamation-circle me-3" style="font-size: 1.5rem;"></i>';
-        echo '<div><strong>Critical Alert</strong><br>';
-        echo implode(', ', $criticalTypes) . ' blood types require immediate attention!';
-        echo '</div></div>';
-    }
-}
-
 // Ensure $postgisAvailable is always defined before HTML output
 if (!isset($postgisAvailable)) {
     $postgisAvailable = false;
@@ -1353,6 +1337,11 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                 <?php endif; ?>
                             </div>
                             <div class="filters d-flex gap-3">
+                                <select id="genderFilter" class="form-select form-select-sm">
+                                    <option value="all">All Genders</option>
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                </select>
                                 <select id="bloodTypeFilter" class="form-select form-select-sm">
                                     <option value="all">All Blood Types</option>
                                     <option value="A+">A+</option>
@@ -2188,6 +2177,7 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     let markers = null; // Will be initialized when map loads
 
                     // Elements for filters
+                    const genderFilter = document.getElementById('genderFilter');
                     const bloodTypeFilter = document.getElementById('bloodTypeFilter');
 
                     // Summary fields
@@ -2206,11 +2196,11 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     let cityDonorCounts = {};
                     let heatmapData = [];
                     
-                    // Function to load GIS data with blood type filter
-                    function loadGISData(bloodType = 'all') {
-                        console.log('🚀 Loading GIS data in background...', bloodType !== 'all' ? `(blood filter: ${bloodType})` : '');
+                    // Function to load GIS data with blood type and gender filters
+                    function loadGISData(bloodType = 'all', gender = 'all') {
+                        console.log('🚀 Loading GIS data in background...', bloodType !== 'all' ? `(blood filter: ${bloodType})` : '', gender !== 'all' ? `(gender filter: ${gender})` : '');
                         flaggedOutsidePoints = [];
-                        const url = '/RED-CROSS-THESIS/public/api/load-gis-data-dashboard.php?blood_type=' + encodeURIComponent(bloodType);
+                        const url = '/RED-CROSS-THESIS/public/api/load-gis-data-dashboard.php?blood_type=' + encodeURIComponent(bloodType) + '&gender=' + encodeURIComponent(gender);
                         fetch(url)
                             .then(response => response.json())
                             .then(data => {
@@ -2265,7 +2255,7 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                     }
                     
                     // Load initial GIS data
-                    loadGISData('all');
+                    loadGISData('all', 'all');
                     
                     // Debug logging
                     console.log('Initial City Donor Counts:', cityDonorCounts);
@@ -2704,12 +2694,21 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                         processAddresses();
                     }
 
-                    // Add event listeners - reload GIS data when blood type filter changes
+                    // Add event listeners - reload GIS data when filters change
+                    genderFilter.addEventListener('change', function() {
+                        const selectedGender = this.value;
+                        const selectedBloodType = bloodTypeFilter.value;
+                        console.log('👤 Gender filter changed to:', selectedGender);
+                        // Reload GIS data with both filters
+                        loadGISData(selectedBloodType, selectedGender);
+                    });
+                    
                     bloodTypeFilter.addEventListener('change', function() {
                         const selectedBloodType = this.value;
+                        const selectedGender = genderFilter.value;
                         console.log('🩸 Blood type filter changed to:', selectedBloodType);
-                        // Reload GIS data with the selected blood type filter
-                        loadGISData(selectedBloodType);
+                        // Reload GIS data with both filters
+                        loadGISData(selectedBloodType, selectedGender);
                     });
 
                     // PERFORMANCE FIX: Lazy load map when user scrolls to it

@@ -14,14 +14,14 @@ include_once '../../assets/conn/db_conn.php';
 include_once '../Dashboards/module/optimized_functions.php';
 
 // Function to get optimized GIS data using PostGIS
-function getOptimizedGISData($bloodTypeFilter = 'all') {
+function getOptimizedGISData($bloodTypeFilter = 'all', $genderFilter = 'all') {
     try {
         // Check if PostGIS is available by looking for geography columns
         $checkPostGIS = supabaseRequest("donor_form?select=permanent_geom&limit=1");
         
         if (empty($checkPostGIS['data'])) {
             // PostGIS not available, fallback to regular query
-            return getFallbackGISData($bloodTypeFilter);
+            return getFallbackGISData($bloodTypeFilter, $genderFilter);
         }
         
         // Get approved/eligible donors from eligibility table
@@ -49,7 +49,7 @@ function getOptimizedGISData($bloodTypeFilter = 'all') {
         
         if (empty($eligibleDonors)) {
             // No eligible donors found
-            return processGISResults([], $bloodTypeFilter);
+            return processGISResults([], $bloodTypeFilter, $genderFilter);
         }
         
         // Get donor IDs as array for filtering
@@ -59,11 +59,14 @@ function getOptimizedGISData($bloodTypeFilter = 'all') {
         // Get ONLY approved/eligible donors (with or without coordinates)
         // Supabase PostgREST supports in.() with comma-separated values
         $donorIds = implode(',', $donorIdArray);
-        $query = "donor_form?select=donor_id,permanent_address,office_address,permanent_latitude,permanent_longitude,office_latitude,office_longitude,permanent_geom,office_geom&donor_id=in.(" . $donorIds . ")";
+        $query = "donor_form?select=donor_id,permanent_address,office_address,permanent_latitude,permanent_longitude,office_latitude,office_longitude,permanent_geom,office_geom,sex&donor_id=in.(" . $donorIds . ")";
+        if ($genderFilter !== 'all' && !empty($genderFilter)) {
+            $query .= "&sex=eq." . urlencode($genderFilter);
+        }
         $results = supabaseRequest($query);
         
         if (empty($results['data'])) {
-            return getFallbackGISData($bloodTypeFilter);
+            return getFallbackGISData($bloodTypeFilter, $genderFilter);
         }
         
         // Process results with coordinates and add blood_type from eligibility
@@ -97,16 +100,16 @@ function getOptimizedGISData($bloodTypeFilter = 'all') {
             ];
         }
         
-        return processGISResults($filteredResults, $bloodTypeFilter);
+        return processGISResults($filteredResults, $bloodTypeFilter, $genderFilter);
         
     } catch (Exception $e) {
         error_log("PostGIS query error: " . $e->getMessage());
-        return getFallbackGISData($bloodTypeFilter);
+        return getFallbackGISData($bloodTypeFilter, $genderFilter);
     }
 }
 
 // Fallback function for when PostGIS is not available
-function getFallbackGISData($bloodTypeFilter = 'all') {
+function getFallbackGISData($bloodTypeFilter = 'all', $genderFilter = 'all') {
     try {
         // Get approved/eligible donors from eligibility table
         // ROOT CAUSE FIX: Only show donors with status='approved' or 'eligible' AND blood_collection_id is set (complete process)
@@ -132,14 +135,18 @@ function getFallbackGISData($bloodTypeFilter = 'all') {
         }
         
         if (empty($eligibleDonors)) {
-            return processGISResults([], $bloodTypeFilter);
+            return processGISResults([], $bloodTypeFilter, $genderFilter);
         }
         
         // Get donor IDs as comma-separated list for Supabase in.() filter
         $donorIds = implode(',', array_keys($eligibleDonors));
         
         // Get all eligible donors with addresses and coordinates (if available)
-        $donorFormResponse = supabaseRequest("donor_form?select=donor_id,permanent_address,office_address,permanent_latitude,permanent_longitude,office_latitude,office_longitude&donor_id=in.(" . $donorIds . ")");
+        $donorFormQuery = "donor_form?select=donor_id,permanent_address,office_address,permanent_latitude,permanent_longitude,office_latitude,office_longitude,sex&donor_id=in.(" . $donorIds . ")";
+        if ($genderFilter !== 'all' && !empty($genderFilter)) {
+            $donorFormQuery .= "&sex=eq." . urlencode($genderFilter);
+        }
+        $donorFormResponse = supabaseRequest($donorFormQuery);
         $donorData = $donorFormResponse['data'] ?? [];
         
         $results = [];
@@ -164,16 +171,16 @@ function getFallbackGISData($bloodTypeFilter = 'all') {
             ];
         }
         
-        return processGISResults($results, $bloodTypeFilter);
+        return processGISResults($results, $bloodTypeFilter, $genderFilter);
         
     } catch (Exception $e) {
         error_log("Fallback GIS data error: " . $e->getMessage());
-        return processGISResults([], $bloodTypeFilter);
+        return processGISResults([], $bloodTypeFilter, $genderFilter);
     }
 }
 
 // Process GIS results and return formatted data
-function processGISResults($results, $bloodTypeFilter = 'all') {
+function processGISResults($results, $bloodTypeFilter = 'all', $genderFilter = 'all') {
     $cityDonorCounts = [];
     $heatmapData = [];
     
@@ -765,9 +772,10 @@ function processGISResults($results, $bloodTypeFilter = 'all') {
 
 // Handle the request
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    // Get blood type filter from query parameter
+    // Get filters from query parameters
     $bloodTypeFilter = $_GET['blood_type'] ?? 'all';
-    $gisData = getOptimizedGISData($bloodTypeFilter);
+    $genderFilter = $_GET['gender'] ?? 'all';
+    $gisData = getOptimizedGISData($bloodTypeFilter, $genderFilter);
     echo json_encode($gisData);
 } else {
     http_response_code(405);

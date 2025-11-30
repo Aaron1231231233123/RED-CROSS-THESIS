@@ -69,6 +69,43 @@ function calculateSummaryStats($blood_requests) {
     return $stats;
 }
 
+// Function to fetch user image from users table
+function fetchUserImage($user_id) {
+    if (empty($user_id)) {
+        return null;
+    }
+    
+    $ch = curl_init();
+    
+    $headers = [
+        'apikey: ' . SUPABASE_API_KEY,
+        'Authorization: Bearer ' . SUPABASE_API_KEY
+    ];
+    
+    $url = SUPABASE_URL . '/rest/v1/users?user_id=eq.' . $user_id . '&select=user_image';
+    
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    
+    $response = curl_exec($ch);
+    $error = curl_error($ch);
+    
+    curl_close($ch);
+    
+    if ($error) {
+        return null;
+    }
+    
+    $data = json_decode($response, true);
+    
+    if (!empty($data) && is_array($data) && isset($data[0]['user_image']) && !empty($data[0]['user_image'])) {
+        return $data[0]['user_image'];
+    }
+    
+    return null;
+}
+
 // Fetch blood requests for the current user
 $blood_requests = fetchBloodRequests($_SESSION['user_id']);
 
@@ -85,6 +122,10 @@ if (!empty($blood_requests) && is_array($blood_requests)) {
     }
 }
 $hospital_location = $_SESSION['hospital_location'] ?? ($_SESSION['hospital_name'] ?? ($_SESSION['user_first_name'] ?? ''));
+
+// Fetch user image from users table
+$user_image = fetchUserImage($_SESSION['user_id'] ?? '');
+$header_logo_src = !empty($user_image) ? $user_image : '../../assets/image/PRC_Logo.png';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -778,7 +819,7 @@ th:last-child .sort-indicator {
     <!-- Header -->
     <div class="dashboard-header">
          <div class="header-left">
-             <img src="../../assets/image/PRC_Logo.png" alt="PRC" class="header-logo">
+             <img src="<?php echo htmlspecialchars($header_logo_src); ?>" alt="PRC" class="header-logo">
              <div class="title-row">
                  <h1 class="header-title">Hospital Request Dashboard</h1>
                  <div class="header-date"><?php echo date('l, F j, Y'); ?></div>
