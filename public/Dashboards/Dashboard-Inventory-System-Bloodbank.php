@@ -347,74 +347,12 @@ $bloodTypeCounts = array_reduce($activeInventory, function($carry, $bag) {
 $lowThreshold = 25;
 $bufferReserveText = formatBufferReserveText($bufferReserveCount);
 
-// Fetch Target Stock Levels per blood type for current month
+// PERFORMANCE: Target Stock Levels are now loaded asynchronously via JavaScript
+// to avoid blocking page load. Default to 0, will be updated after page loads.
 $targetStockLevels = [
     'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
     'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
 ];
-
-try {
-    // Construct URL the same way the developer tool does (relative path via HTTP)
-    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
-    // Extract base path: /RED-CROSS-THESIS/public from /RED-CROSS-THESIS/public/Dashboards/file.php
-    $basePath = dirname(dirname($scriptName)); // Go up from Dashboards to public
-    // Build URL matching developer tool: ../api/get-target-stock-levels.php
-    $targetStockApiUrl = "{$protocol}://{$host}{$basePath}/api/get-target-stock-levels.php?t=" . time();
-    
-    error_log("Target Stock API URL: " . $targetStockApiUrl);
-    
-    $ch = curl_init($targetStockApiUrl);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 20);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Cache-Control: no-cache',
-        'Pragma: no-cache'
-    ]);
-    $targetStockResponse = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlError = curl_error($ch);
-    curl_close($ch);
-    
-    if ($curlError) {
-        error_log("Target Stock API CURL Error: " . $curlError . " | URL: " . $targetStockApiUrl);
-    }
-    
-    if ($httpCode === 200 && $targetStockResponse) {
-        $targetStockData = json_decode($targetStockResponse, true);
-        if ($targetStockData && isset($targetStockData['success']) && $targetStockData['success']) {
-            $fetchedLevels = $targetStockData['target_stock_levels'] ?? [];
-            if (!empty($fetchedLevels)) {
-                $targetStockLevels = array_merge($targetStockLevels, $fetchedLevels);
-                // Check if we got valid (non-zero) data
-                $hasNonZero = false;
-                foreach ($targetStockLevels as $bt => $value) {
-                    if ($value > 0) {
-                        $hasNonZero = true;
-                        break;
-                    }
-                }
-                if ($hasNonZero) {
-                    error_log("Target Stock Levels loaded successfully: " . json_encode($targetStockLevels));
-                } else {
-                    error_log("Target Stock API WARNING: All target stock levels are 0. Debug info: " . json_encode($targetStockData['debug'] ?? []));
-                    error_log("Full API response: " . substr($targetStockResponse, 0, 2000));
-                }
-            } else {
-                error_log("Target Stock API returned empty target_stock_levels. Full response: " . $targetStockResponse);
-            }
-        } else {
-            error_log("Target Stock API returned success=false: " . ($targetStockData['error'] ?? 'Unknown error') . " | Full response: " . substr($targetStockResponse, 0, 1000));
-        }
-    } else {
-        error_log("Target Stock API HTTP Error: Code $httpCode, URL: $targetStockApiUrl, Response: " . substr($targetStockResponse, 0, 500));
-    }
-} catch (Exception $e) {
-    error_log("Failed to fetch target stock levels: " . $e->getMessage() . " | Trace: " . $e->getTraceAsString());
-}
 
 if (isset($_GET['partial']) && $_GET['partial'] === '1') {
     header('Content-Type: application/json');
@@ -1532,9 +1470,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         let paginationHtmlCache = <?php echo json_encode($paginationHtml); ?>;
         let inventoryAbortController = null;
         const lowThreshold = <?php echo $lowThreshold; ?>;
-        const targetStockLevels = <?php echo json_encode($targetStockLevels); ?>;
-        // Debug: Log target stock levels to console
-        console.log('Target Stock Levels loaded:', targetStockLevels);
+        // PERFORMANCE: Load target stock levels asynchronously to avoid blocking page load
+        let targetStockLevels = <?php echo json_encode($targetStockLevels); ?>;
+        
+        // Debug: Log initial target stock levels
+        console.log('Target Stock Levels (initial):', targetStockLevels);
         console.log('Blood Type Counts:', bloodTypeCountsData);
         const inventoryCache = new Map();
         const CACHE_TTL = 60000; // 60 seconds
@@ -1850,6 +1790,37 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 }
             });
         }
+        
+        // PERFORMANCE: Load target stock levels asynchronously after functions are defined
+        (async function loadTargetStockLevels() {
+            try {
+                const protocol = window.location.protocol;
+                const host = window.location.host;
+                const basePath = window.location.pathname.substring(0, window.location.pathname.indexOf('/Dashboards'));
+                const apiUrl = `${protocol}//${host}${basePath}/api/get-target-stock-levels.php?t=${Date.now()}`;
+                
+                const response = await fetch(apiUrl, {
+                    cache: 'default', // Allow browser cache
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.target_stock_levels) {
+                        // Update target stock levels
+                        Object.assign(targetStockLevels, data.target_stock_levels);
+                        console.log('Target Stock Levels loaded asynchronously:', targetStockLevels);
+                        // Update cards with new target stock levels
+                        updateBloodTypeCards();
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to load target stock levels asynchronously:', error);
+                // Continue with default values (all zeros)
+            }
+        })();
         
         function updateBloodTypeFilterUI() {
             if (!bloodTypeFilterInfo || !bloodTypeFilterLabel) return;

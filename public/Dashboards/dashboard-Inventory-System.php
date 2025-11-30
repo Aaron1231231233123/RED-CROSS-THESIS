@@ -1232,61 +1232,12 @@ h6 {
                                 'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
                             ]);
                             
-                            // Fetch Target Stock Levels per blood type for current month
+                            // PERFORMANCE: Target Stock Levels are now loaded asynchronously via JavaScript
+                            // to avoid blocking page load. Default to 0, will be updated after page loads.
                             $targetStockLevels = [
                                 'A+' => 0, 'A-' => 0, 'B+' => 0, 'B-' => 0,
                                 'O+' => 0, 'O-' => 0, 'AB+' => 0, 'AB-' => 0
                             ];
-                            
-                            try {
-                                // Construct URL the same way as blood bank dashboard
-                                $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-                                $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-                                $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
-                                // Extract base path: /RED-CROSS-THESIS/public from /RED-CROSS-THESIS/public/Dashboards/file.php
-                                $basePath = dirname(dirname($scriptName)); // Go up from Dashboards to public
-                                // Build URL matching developer tool: ../api/get-target-stock-levels.php
-                                $targetStockApiUrl = "{$protocol}://{$host}{$basePath}/api/get-target-stock-levels.php?t=" . time();
-                                
-                                error_log("Home Dashboard - Target Stock API URL: " . $targetStockApiUrl);
-                                
-                                $ch = curl_init($targetStockApiUrl);
-                                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                                curl_setopt($ch, CURLOPT_TIMEOUT, 20);
-                                curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-                                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-                                curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                                    'Cache-Control: no-cache',
-                                    'Pragma: no-cache'
-                                ]);
-                                $targetStockResponse = curl_exec($ch);
-                                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                                $curlError = curl_error($ch);
-                                curl_close($ch);
-                                
-                                if ($curlError) {
-                                    error_log("Home Dashboard - Target Stock API CURL Error: " . $curlError . " | URL: " . $targetStockApiUrl);
-                                }
-                                
-                                if ($httpCode === 200 && $targetStockResponse) {
-                                    $targetStockData = json_decode($targetStockResponse, true);
-                                    if ($targetStockData && isset($targetStockData['success']) && $targetStockData['success']) {
-                                        $fetchedLevels = $targetStockData['target_stock_levels'] ?? [];
-                                        if (!empty($fetchedLevels)) {
-                                            $targetStockLevels = array_merge($targetStockLevels, $fetchedLevels);
-                                            error_log("Home Dashboard - Target Stock Levels loaded: " . json_encode($targetStockLevels));
-                                        } else {
-                                            error_log("Home Dashboard - Target Stock API returned empty target_stock_levels. Full response: " . $targetStockResponse);
-                                        }
-                                    } else {
-                                        error_log("Home Dashboard - Target Stock API returned success=false: " . ($targetStockData['error'] ?? 'Unknown error'));
-                                    }
-                                } else {
-                                    error_log("Home Dashboard - Target Stock API HTTP Error: Code $httpCode, URL: $targetStockApiUrl");
-                                }
-                            } catch (Exception $e) {
-                                error_log("Home Dashboard - Failed to fetch target stock levels: " . $e->getMessage());
-                            }
                             
                             // Inline helper to render a small danger icon when below target stock
                             function renderDangerIconHome($count, $targetStock = 0, $typeLabelAttr = '') {
@@ -1336,9 +1287,7 @@ h6 {
                                         <p class="inventory-system-blood-availability">
                                             Availability: <span class="fw-bold" data-blood-type-count="<?php echo $typeLabelAttr; ?>"><?php echo $availableCount; ?></span>
                                             <?php echo renderBufferPillHome($typeLabel, $bufferTypes); ?>
-                                            <?php if ($targetStockForType > 0): ?>
-                                                <br><small class="text-muted">Target: <?php echo $targetStockForType; ?> units</small>
-                                            <?php endif; ?>
+                                            <br><small class="text-muted" data-target-stock-display style="display: none;">Target: 0 units</small>
                                         </p>
                                     </div>
                                 </div>
@@ -1457,7 +1406,7 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                                                     <input type="time" class="form-control" id="driveTime" name="driveTime">
                                                 </div>
                                             </div>
-                                            <div class="mb-3">
+                                            <div class="mb-3" style="display: none;">
                                                 <label class="form-label d-flex justify-content-between align-items-center">
                                                     <span>Notification Preview</span>
                                                     <small class="text-muted">Auto-updates</small>
@@ -2911,15 +2860,15 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                 window.open(qrRegistrationUrl, 'QRRegistration', 'width=1200,height=800,scrollbars=yes,resizable=yes');
             };
             
-            // Make target stock levels and blood type counts available to JavaScript
-            const targetStockLevels = <?php echo json_encode($targetStockLevels); ?>;
+            // PERFORMANCE: Load target stock levels asynchronously to avoid blocking page load
+            let targetStockLevels = <?php echo json_encode($targetStockLevels); ?>;
             const bloodTypeCountsData = <?php echo json_encode($bloodTypeCounts); ?>;
             
-            // Debug: Log target stock levels to console
-            console.log('Home Dashboard - Target Stock Levels loaded:', targetStockLevels);
+            // Debug: Log initial target stock levels
+            console.log('Home Dashboard - Target Stock Levels (initial):', targetStockLevels);
             console.log('Home Dashboard - Blood Type Counts:', bloodTypeCountsData);
             
-            // Function to update blood type cards (similar to blood bank dashboard)
+            // Function to update blood type cards (same as blood bank dashboard)
             function updateBloodTypeCards() {
                 const cards = document.querySelectorAll('[data-blood-type-card]');
                 cards.forEach(card => {
@@ -2931,31 +2880,33 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                         countEl.textContent = countValue;
                     }
                     
-                    // Update target stock display
+                    // Update target stock display (same logic as blood bank dashboard)
                     const targetStock = targetStockLevels?.[type] ?? 0;
-                    if (card) {
-                        card.setAttribute('data-target-stock', targetStock);
-                        const cardText = card.querySelector('.inventory-system-blood-availability');
-                        if (cardText && targetStock > 0) {
-                            let targetSmall = cardText.querySelector('small.text-muted');
-                            if (!targetSmall || !targetSmall.textContent.includes('Target:')) {
-                                // Create new target stock display
-                                const br = document.createElement('br');
-                                targetSmall = document.createElement('small');
-                                targetSmall.className = 'text-muted';
-                                cardText.appendChild(br);
-                                cardText.appendChild(targetSmall);
-                            }
-                            targetSmall.textContent = `Target: ${targetStock} units`;
-                        } else if (cardText && targetStock === 0) {
-                            // Remove target stock display if not available
-                            const targetSmall = cardText.querySelector('small.text-muted');
-                            if (targetSmall && targetSmall.textContent.includes('Target:')) {
-                                const br = targetSmall.previousSibling;
-                                if (br && br.nodeName === 'BR') {
-                                    br.remove();
+                    const cardElement = card;
+                    if (cardElement) {
+                        cardElement.setAttribute('data-target-stock', targetStock);
+                        const cardText = cardElement.querySelector('.inventory-system-blood-availability');
+                        if (cardText) {
+                            // Find the target stock display element (created in PHP with data attribute)
+                            let targetSmall = cardText.querySelector('small[data-target-stock-display]');
+                            
+                            if (targetStock > 0) {
+                                if (!targetSmall) {
+                                    // Create new target stock display if it doesn't exist
+                                    const br = document.createElement('br');
+                                    targetSmall = document.createElement('small');
+                                    targetSmall.className = 'text-muted';
+                                    targetSmall.setAttribute('data-target-stock-display', '');
+                                    cardText.appendChild(br);
+                                    cardText.appendChild(targetSmall);
                                 }
-                                targetSmall.remove();
+                                targetSmall.textContent = `Target: ${targetStock} units`;
+                                targetSmall.style.display = '';
+                            } else {
+                                // Hide target stock display if not available
+                                if (targetSmall) {
+                                    targetSmall.style.display = 'none';
+                                }
                             }
                         }
                     }
@@ -2980,6 +2931,52 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
             
             // Update blood type cards on page load
             updateBloodTypeCards();
+            
+            // PERFORMANCE: Load target stock levels asynchronously after functions are defined
+            (async function loadTargetStockLevels() {
+                try {
+                    const protocol = window.location.protocol;
+                    const host = window.location.host;
+                    const pathname = window.location.pathname;
+                    const basePath = pathname.substring(0, pathname.indexOf('/Dashboards'));
+                    const apiUrl = `${protocol}//${host}${basePath}/api/get-target-stock-levels.php?t=${Date.now()}`;
+                    
+                    console.log('Home Dashboard - Fetching target stock levels from:', apiUrl);
+                    
+                    const response = await fetch(apiUrl, {
+                        cache: 'default', // Allow browser cache
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Home Dashboard - API Response:', data);
+                    
+                    if (data.success && data.target_stock_levels) {
+                        // Check if we got non-zero values
+                        const hasNonZero = Object.values(data.target_stock_levels).some(v => v > 0);
+                        if (hasNonZero) {
+                            // Update target stock levels
+                            Object.assign(targetStockLevels, data.target_stock_levels);
+                            console.log('Home Dashboard - Target Stock Levels loaded asynchronously:', targetStockLevels);
+                            // Update cards with new target stock levels
+                            updateBloodTypeCards();
+                        } else {
+                            console.warn('Home Dashboard - Target stock levels are all zero. API response:', data);
+                        }
+                    } else {
+                        console.warn('Home Dashboard - API returned success=false or missing target_stock_levels:', data);
+                    }
+                } catch (error) {
+                    console.error('Home Dashboard - Failed to load target stock levels asynchronously:', error);
+                    // Continue with default values (all zeros)
+                }
+            })();
         });
     </script>
     <script>
