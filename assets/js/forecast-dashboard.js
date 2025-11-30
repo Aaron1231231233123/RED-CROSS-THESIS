@@ -7,10 +7,14 @@
     const detailsBody = document.getElementById('detailsBody');
     const TABLE_COLUMNS = 7;
     const exportBtn = document.getElementById('exportBtn');
+    const yearFilterCombined = document.getElementById('yearFilterCombined');
+    const yearFilterSupply = document.getElementById('yearFilterSupply');
+    const yearFilterDemand = document.getElementById('yearFilterDemand');
 
     let forecastCache = [];
     let summaryCache = {};
     let activeDetailContext = null;
+    let selectedYear = new Date().getFullYear(); // Default to current year
 
     const kpiIds = {
         demand: 'kpiDemand',
@@ -319,7 +323,8 @@
     async function loadData(force = false) {
         toggleLoading(true);
         try {
-            const url = `${API_URL}?ts=${Date.now()}${force ? `&refresh=${Date.now()}` : ''}`;
+            const yearParam = selectedYear ? `&year=${selectedYear}` : '';
+            const url = `${API_URL}?ts=${Date.now()}${yearParam}${force ? `&refresh=${Date.now()}` : ''}`;
             const response = await fetch(url, { cache: 'no-cache' });
             const data = await response.json();
             if (!data.success) {
@@ -344,7 +349,70 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', () => loadData());
+    function initializeYearFilter() {
+        const filters = [yearFilterCombined, yearFilterSupply, yearFilterDemand].filter(f => f !== null);
+        if (filters.length === 0) return;
+        
+        const currentYear = new Date().getFullYear();
+        // Start from 2023 (or earlier) to include all historical data
+        // This ensures we can filter by any year that has data
+        const startYear = 2023;
+        
+        // Populate all year filters
+        filters.forEach(filter => {
+            // Clear existing options
+            filter.innerHTML = '';
+            
+            // Populate with years from startYear to current year
+            for (let year = startYear; year <= currentYear; year++) {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                if (year === currentYear) {
+                    option.selected = true;
+                    selectedYear = currentYear;
+                }
+                filter.appendChild(option);
+            }
+            
+            // Add event listener for year changes
+            filter.addEventListener('change', (e) => {
+                selectedYear = parseInt(e.target.value, 10);
+                // Update all filters to the same year
+                filters.forEach(f => {
+                    if (f !== filter) {
+                        f.value = selectedYear;
+                    }
+                });
+                updateChartTitles(selectedYear);
+                // Force refresh to regenerate charts with new year filter
+                loadData(true);
+            });
+        });
+    }
+
+    function updateChartTitles(year) {
+        const combinedTitle = document.getElementById('combinedChartTitle');
+        const supplyTitle = document.getElementById('supplyChartTitle');
+        const demandTitle = document.getElementById('demandChartTitle');
+        
+        if (combinedTitle) {
+            combinedTitle.textContent = `${year} Supply vs Demand & 3-Month Forecast`;
+        }
+        if (supplyTitle) {
+            supplyTitle.textContent = `${year} Blood Supply & 3-Month Forecast`;
+        }
+        if (demandTitle) {
+            demandTitle.textContent = `${year} Hospital Demand & 3-Month Forecast`;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        initializeYearFilter();
+        updateChartTitles(selectedYear);
+        loadData();
+    });
+    
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => loadData(true));
     }

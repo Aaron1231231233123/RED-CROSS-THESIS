@@ -6,10 +6,14 @@ Generates JSON plus refreshed chart assets for the admin UI.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Tuple
 BASE_DIR = Path(__file__).parent
+
+# Get forecast year from environment variable (defaults to current year)
+FORECAST_YEAR = int(os.getenv('FORECAST_YEAR', str(datetime.now().year)))
 PLACEHOLDER_HTML = {
     "interactive_supply.html": "Interactive Supply Trend",
     "interactive_demand.html": "Interactive Demand Trend",
@@ -231,7 +235,11 @@ def _refresh_assets(workflow: Dict) -> List[str]:
 
     if generate_interactive_plots:
         try:
-            generate_interactive_plots(workflow_results=workflow)
+            # Pass FORECAST_YEAR to interactive plots to filter display by year
+            # Forecast still uses ALL historical data for accuracy, but display is filtered
+            # If FORECAST_YEAR is not set, default to current year for better readability
+            filter_year = FORECAST_YEAR if FORECAST_YEAR else datetime.now().year
+            generate_interactive_plots(workflow_results=workflow, filter_year=filter_year)
         except Exception as exc:  # pragma: no cover - diagnostics
             errors.append(f"interactive_charts: {exc}")
             _ensure_placeholder_assets(str(exc))

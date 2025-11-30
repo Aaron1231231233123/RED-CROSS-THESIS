@@ -85,6 +85,12 @@ try {
         throw new Exception('Python script path not found: ' . $pythonScript);
     }
     
+    // Get year parameter from request (default to current year if not provided)
+    $year = isset($_GET['year']) ? intval($_GET['year']) : date('Y');
+    
+    // Set environment variable for Python script (works on both Windows and Unix)
+    putenv('FORECAST_YEAR=' . $year);
+    
     // Build command with proper escaping for Windows
     // IMPORTANT: Only capture stdout (JSON output), redirect stderr to error log
     // This prevents debug messages from breaking JSON parsing
